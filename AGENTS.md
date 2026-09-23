@@ -1,7 +1,7 @@
 # HƯỚNG DẪN QUY CHUẨN DÀNH CHO AI AGENT (ANTIGRAVITY & SUBAGENTS)
 > **Dự án:** NutriBot - Hệ thống Tư vấn Dinh dưỡng Cá nhân hóa (SWP391 - Nhóm 7)  
 > **Repository:** `tg20th/swp391-group7-nutribot`  
-> **Jira Project Key:** `G7` (`https://danyngo06.atlassian.net`)
+> **Jira Project Key:** `NB` (`https://danyngo06.atlassian.net`)
 
 ---
 
@@ -23,20 +23,20 @@ Dự án được thực hiện bởi 4 thành viên. Khi code hoặc tạo bran
 ### 2.1. Đặt tên Branch:
 Mỗi khi phát triển một task mới, Agent hoặc lập trình viên phải tạo branch theo đúng cú pháp:
 ```bash
-feat/G7-<mã_task>-<tên_ngắn>-<tên_thành_viên>
-fix/G7-<mã_task>-<tên_ngắn>-<tên_thành_viên>
+feat/NB-<mã_task>-<tên_ngắn>-<tên_thành_viên>
+fix/NB-<mã_task>-<tên_ngắn>-<tên_thành_viên>
 ```
 *Ví dụ:*
-- `feat/G7-02-register-truong`
-- `feat/G7-10-bmi-thang`
-- `feat/G7-32-fastapi-lan`
-- `feat/G7-16-blog-ui-khanh`
+- `feat/NB-02-register-truong`
+- `feat/NB-10-bmi-thang`
+- `feat/NB-32-fastapi-lan`
+- `feat/NB-16-blog-ui-khanh`
 
 ### 2.2. QUY CHUẨN COMMIT MESSAGE (BẮT BUỘC - 100% TIẾNG VIỆT):
 Agent **BẮT BUỘC** viết commit message bằng **100% Tiếng Việt**, tuân thủ nghiêm ngặt chuẩn kỹ thuật **Git 50/72**:
 
 ```text
-<loại>(G7-<mã_task>-<TẦNG>): <Tiêu đề ngắn 50 - 72 ký tự tiếng Việt> [#done]
+<loại>(NB-<mã_task>-<TẦNG>): <Tiêu đề ngắn 50 - 72 ký tự tiếng Việt> [#done]
 
 - <Gạch đầu dòng 1: Chi tiết file/tính năng đã tạo hoặc chỉnh sửa>
 - <Gạch đầu dòng 2: Xử lý logic nghiệp vụ, xác thực hoặc bảo mật>
@@ -53,7 +53,7 @@ Agent **BẮT BUỘC** viết commit message bằng **100% Tiếng Việt**, tu�
 
 #### Ví dụ Commit chuẩn mẫu:
 ```bash
-git commit -m "feat(G7-02-BE): hoàn thành API đăng ký và mã hóa mật khẩu #done
+git commit -m "feat(NB-02-BE): hoàn thành API đăng ký và mã hóa mật khẩu #done
 
 - Tạo AuthController với endpoint POST /api/v1/auth/register
 - Mã hóa mật khẩu người dùng bằng BCryptPasswordEncoder
@@ -78,7 +78,7 @@ git commit -m "feat(G7-02-BE): hoàn thành API đăng ký và mã hóa mật kh
      ```
    - Schema cơ sở dữ liệu: Luôn tham chiếu bảng và cột từ file [`backend/sql/Database.sql`](backend/sql/Database.sql) và [`backend/sql/SampleData.sql`](backend/sql/SampleData.sql).
 2. **Tuân thủ PROJECT_TODO.md:**
-   - Luôn kiểm tra file [`PROJECT_TODO.md`](file:///c:/Users/PC/Documents/26FA/SWP391/Project/swp391_group7_nutribot/PROJECT_TODO.md) trước khi code để nắm rõ: mã task `G7-xx`, mô tả nghiệp vụ, các file cần tạo, và danh sách task phụ thuộc (`Blocked by`).
+   - Luôn kiểm tra file [`PROJECT_TODO.md`](file:///c:/Users/PC/Documents/26FA/SWP391/Project/swp391_group7_nutribot/PROJECT_TODO.md) trước khi code để nắm rõ: mã task `NB-xx`, mô tả nghiệp vụ, các file cần tạo, và danh sách task phụ thuộc (`Blocked by`).
    - Sau khi hoàn thành task, cập nhật dấu tick `[x]` vào file `PROJECT_TODO.md`.
 
 3. **Công nghệ chuẩn của dự án:**

@@ -1,7 +1,7 @@
 # SỔ TAY QUY TRÌNH PHÁT TRIỂN & PHỐI HỢP DỰ ÁN (CONTRIBUTING GUIDE)
 > **Dự án:** NutriBot - Hệ thống Tư vấn Dinh dưỡng Cá nhân hóa (SWP391 - Nhóm 7)  
 > **Repository:** [https://github.com/tg20th/swp391-group7-nutribot](https://github.com/tg20th/swp391-group7-nutribot)  
-> **Jira Workspace:** [https://danyngo06.atlassian.net](https://danyngo06.atlassian.net) (Project Key: **`G7`**)
+> **Jira Workspace:** [https://danyngo06.atlassian.net](https://danyngo06.atlassian.net) (Project Key: **`NB`**)
 
 Tài liệu này quy định toàn bộ quy trình làm việc chuẩn Agile/Scrum và DevOps dành cho cả 4 thành viên (Trường, Thắng, Lan, Khánh) cũng như các AI Coding Agent (Antigravity, Claude Code trên IntelliJ, Cursor).
 
@@ -44,19 +44,19 @@ Không bao giờ code trực tiếp trên nhánh `master`. Luôn tạo nhánh m�
 ```bash
 git checkout master
 git pull origin master
-git checkout -b feat/G7-<mã_task>-<tên_ngắn>-<tên_bạn>
+git checkout -b feat/NB-<mã_task>-<tên_ngắn>-<tên_bạn>
 ```
 *Ví dụ:*
-- `feat/G7-02-register-truong`
-- `feat/G7-10-bmi-thang`
-- `feat/G7-32-fastapi-lan`
-- `feat/G7-16-blog-ui-khanh`
+- `feat/NB-02-register-truong`
+- `feat/NB-10-bmi-thang`
+- `feat/NB-32-fastapi-lan`
+- `feat/NB-16-blog-ui-khanh`
 
 ### 3.2. Cú pháp Commit chuẩn 100% Tiếng Việt (Git 50/72 Rule)
-Mỗi commit bắt buộc phải gắn mã task `G7-xx` để tự động liên kết với Jira:
+Mỗi commit bắt buộc phải gắn mã task `NB-xx` để tự động liên kết với Jira:
 
 ```text
-<loại>(G7-<mã_task>-<TẦNG>): <Tiêu đề ngắn 50 - 72 ký tự tiếng Việt> [#done]
+<loại>(NB-<mã_task>-<TẦNG>): <Tiêu đề ngắn 50 - 72 ký tự tiếng Việt> [#done]
 
 - <Gạch đầu dòng 1: Chi tiết file/tính năng đã tạo hoặc chỉnh sửa>
 - <Gạch đầu dòng 2: Xử lý logic nghiệp vụ hoặc bảo mật>
@@ -71,7 +71,7 @@ Mỗi commit bắt buộc phải gắn mã task `G7-xx` để tự động liên
 
 *Ví dụ commit hoàn chỉnh:*
 ```bash
-git commit -m "feat(G7-02-BE): hoàn thành API đăng ký và mã hóa mật khẩu #done
+git commit -m "feat(NB-02-BE): hoàn thành API đăng ký và mã hóa mật khẩu #done
 
 - Tạo AuthController với endpoint POST /api/v1/auth/register
 - Mã hóa mật khẩu người dùng bằng BCryptPasswordEncoder

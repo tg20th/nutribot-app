@@ -5,6 +5,7 @@ NutriBot is a personalized nutrition consulting system.
 - Backend: Java 25, Spring Boot 3, JPA, Spring Security 6, JWT, MySQL 8
 - Frontend: React 19, Vite, Tailwind CSS / Vanilla CSS, Axios
 - AI Microservice: Python 3.12+, FastAPI, Uvicorn, Google Gemini API SDK
+- Jira Workspace: `https://danyngo06.atlassian.net` (Project Key: `NB`)
 
 ## Team Members
 - Trường: Backend (Auth, Security, Content, Comments, Admin APIs)
@@ -17,5 +18,5 @@ NutriBot is a personalized nutrition consulting system.
 2. Always refer to `backend/sql/Database.sql` for table names and column definitions.
 3. Check `PROJECT_TODO.md` for task specifications and update task checkbox `[x]` upon completion.
 4. Git commit messages must be 100% in Vietnamese, following the Git 50/72 rule:
-   `<type>(G7-<task_id>-<LAYER>): <Tiêu đề ngắn 50-72 ký tự tiếng Việt> [#done]`
-5. Branch naming convention: `feat/G7-<task_id>-<short_name>-<member_name>`.
+   `<type>(NB-<task_id>-<LAYER>): <Tiêu đề ngắn 50-72 ký tự tiếng Việt> [#done]`
+5. Branch naming convention: `feat/NB-<task_id>-<short_name>-<member_name>`.

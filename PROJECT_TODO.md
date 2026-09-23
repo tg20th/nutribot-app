@@ -1,8 +1,8 @@
 # NutriBot - Project Master To-Do Checklist (59 Tasks)
 
 > **Dành cho 4 thành viên nhóm 7 (SWP391):** Trường (BE), Thắng (BE), Lan (AI & FE), Khánh (BA & FE)  
-> **Jira Project Key:** `G7` (`https://danyngo06.atlassian.net`)  
-> **Quy tắc phối hợp:** Mỗi thành viên tick `[x]` vào task khi hoàn thành. Tạo branch theo cú pháp `feat/G7-<mã>-<tên_ngắn>-<tên_bạn>`. Commit code bắt buộc **100% Tiếng Việt** theo chuẩn Git 50/72 và gắn mã task kèm `#done` (ví dụ: `git commit -m "feat(G7-02-BE): hoàn thành API đăng ký và mã hóa mật khẩu #done"`). Chi tiết xem tại [`CONTRIBUTING.md`](CONTRIBUTING.md) và [`AGENTS.md`](AGENTS.md).
+> **Jira Project Key:** `NB` (`https://danyngo06.atlassian.net`)  
+> **Quy tắc phối hợp:** Mỗi thành viên tick `[x]` vào task khi hoàn thành. Tạo branch theo cú pháp `feat/NB-<mã>-<tên_ngắn>-<tên_bạn>`. Commit code bắt buộc **100% Tiếng Việt** theo chuẩn Git 50/72 và gắn mã task kèm `#done` (ví dụ: `git commit -m "feat(NB-02-BE): hoàn thành API đăng ký và mã hóa mật khẩu #done"`). Chi tiết xem tại [`CONTRIBUTING.md`](CONTRIBUTING.md) và [`AGENTS.md`](AGENTS.md).
 
 ---
 

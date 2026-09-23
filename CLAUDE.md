@@ -1,7 +1,7 @@
 # CLAUDE.md - NutriBot Project Guidelines (Claude Code)
 
 > NutriBot: AI-powered Personalized Nutrition & Diet Planner (SWP391 Group 7)
-> Repository: `tg20th/swp391-group7-nutribot` | Jira Project Key: `G7`
+> Repository: `tg20th/swp391-group7-nutribot` | Jira Project Key: `NB`
 
 ## 🔨 BUILD & TEST COMMANDS
 
@@ -33,20 +33,20 @@
 ### 1. Branch Naming
 All branches must follow:
 ```bash
-feat/G7-<task_id>-<short_description>-<member_name>
-fix/G7-<task_id>-<short_description>-<member_name>
+feat/NB-<task_id>-<short_description>-<member_name>
+fix/NB-<task_id>-<short_description>-<member_name>
 ```
 *Examples:*
-- `feat/G7-02-register-truong`
-- `feat/G7-10-bmi-thang`
-- `feat/G7-32-fastapi-lan`
-- `feat/G7-16-blog-ui-khanh`
+- `feat/NB-02-register-truong`
+- `feat/NB-10-bmi-thang`
+- `feat/NB-32-fastapi-lan`
+- `feat/NB-16-blog-ui-khanh`
 
 ### 2. Commit Message Guidelines (100% VIETNAMESE + 50/72 RULE)
 Claude Code MUST format all git commit messages in **100% Vietnamese**, adhering strictly to the **Git 50/72 rule**:
 
 ```text
-<type>(G7-<task_id>-<LAYER>): <Tiêu đề ngắn 50 - 72 ký tự tiếng Việt> [#done]
+<type>(NB-<task_id>-<LAYER>): <Tiêu đề ngắn 50 - 72 ký tự tiếng Việt> [#done]
 
 - <Gạch đầu dòng 1: Chi tiết file/tính năng đã tạo hoặc chỉnh sửa>
 - <Gạch đầu dòng 2: Xử lý logic nghiệp vụ hoặc bảo mật>
@@ -62,7 +62,7 @@ Claude Code MUST format all git commit messages in **100% Vietnamese**, adhering
 
 #### Example Commit:
 ```bash
-git commit -m "feat(G7-02-BE): hoàn thành API đăng ký và mã hóa mật khẩu #done
+git commit -m "feat(NB-02-BE): hoàn thành API đăng ký và mã hóa mật khẩu #done
 
 - Tạo AuthController với endpoint POST /api/v1/auth/register
 - Mã hóa mật khẩu người dùng bằng BCryptPasswordEncoder
