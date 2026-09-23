@@ -80,7 +80,8 @@ git commit -m "feat(G7-02-BE): hoàn thành API đăng ký và mã hóa mật kh
 
 ---
 
-## 📌 PROJECT REFERENCES
-- **Task Checklist & Assignment:** [`PROJECT_TODO.md`](PROJECT_TODO.md) (Check before starting any task)
-- **API Response Wrapper & Status Codes:** [`API_CONTRACTS.md`](API_CONTRACTS.md) (Mandatory JSON structure)
+## 📌 PROJECT REFERENCES & WORKFLOW
+- **Task Checklist & Assignment:** [`PROJECT_TODO.md`](PROJECT_TODO.md) (Check before starting, and tick `[x]` upon completion)
+- **Database Schema:** [`backend/sql/Database.sql`](backend/sql/Database.sql) & [`backend/sql/SampleData.sql`](backend/sql/SampleData.sql) (Map all JPA Entities to these tables)
+- **API Response Wrapper & Status Codes:** [`API_CONTRACTS.md`](API_CONTRACTS.md) (Mandatory `ApiResponse<T>` JSON structure: `success`, `message`, `data`, `timestamp`)
 - **Human Contribution & Git Guide:** [`CONTRIBUTING.md`](CONTRIBUTING.md)

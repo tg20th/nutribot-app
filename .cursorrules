@@ -1,0 +1,14 @@
+# NutriBot AI Rules (Cursor / Cross-Agent)
+Always follow the project conventions defined in:
+- `AGENTS.md` - Core guidelines and Jira integration
+- `CLAUDE.md` - Build & test commands, layer separation
+- `API_CONTRACTS.md` - Standard JSON API response structure (`success`, `message`, `data`, `timestamp`)
+- `PROJECT_TODO.md` - Master 59-task checklist with `G7-xx` task codes
+- `backend/sql/Database.sql` - Database schema
+
+Mandatory Git Commit Rules:
+- 100% Vietnamese commit messages
+- Format: `<type>(G7-<task_id>-<LAYER>): <Tiêu đề ngắn 50-72 ký tự tiếng Việt> [#done]`
+- Add `#done` at the end of the subject line to trigger Jira Smart Commits
+- Use 2-4 bullet points in the commit body
+- Branch name format: `feat/G7-<task_id>-<short_name>-<member_name>`

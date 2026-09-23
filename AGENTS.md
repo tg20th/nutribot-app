@@ -67,14 +67,16 @@ git commit -m "feat(G7-02-BE): hoàn thành API đăng ký và mã hóa mật kh
 
 1. **Tuân thủ API_CONTRACTS.md:**
    - Mọi API Backend/AI bắt buộc tuân theo định dạng phản hồi chuẩn trong file [`API_CONTRACTS.md`](file:///c:/Users/PC/Documents/26FA/SWP391/Project/swp391_group7_nutribot/API_CONTRACTS.md).
-   - Format JSON chuẩn:
+   - Format JSON chuẩn (`ApiResponse<T>`):
      ```json
      {
-       "code": 200,
-       "message": "Thành công",
-       "data": { ... }
+       "success": true,
+       "message": "Thao tác thành công",
+       "data": { ... },
+       "timestamp": "2026-09-24T08:30:00Z"
      }
      ```
+   - Schema cơ sở dữ liệu: Luôn tham chiếu bảng và cột từ file [`backend/sql/Database.sql`](backend/sql/Database.sql) và [`backend/sql/SampleData.sql`](backend/sql/SampleData.sql).
 2. **Tuân thủ PROJECT_TODO.md:**
    - Luôn kiểm tra file [`PROJECT_TODO.md`](file:///c:/Users/PC/Documents/26FA/SWP391/Project/swp391_group7_nutribot/PROJECT_TODO.md) trước khi code để nắm rõ: mã task `G7-xx`, mô tả nghiệp vụ, các file cần tạo, và danh sách task phụ thuộc (`Blocked by`).
    - Sau khi hoàn thành task, cập nhật dấu tick `[x]` vào file `PROJECT_TODO.md`.
