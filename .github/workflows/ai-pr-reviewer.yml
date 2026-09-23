@@ -1,0 +1,49 @@
+name: NutriBot PR Assistant & Quality Gate
+
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+permissions:
+  pull-requests: write
+  contents: read
+  issues: write
+
+jobs:
+  pr-assistant:
+    name: PR Automated Quality Check
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine changed modules & Post Review Comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+
+            const reviewMessage = `### 🤖 NutriBot PR Quality Gate (${author})
+            
+            Chào **@${author}**! Con bot \`github-actions[bot]\` đã tiếp nhận Pull Request này của bạn.
+            
+            #### 📋 Bảng Kiểm Tra Chất Lượng Tự Động (Quality Checklist):
+            - [ ] **Mã Task:** PR đã gắn đúng mã task tương ứng trong [PROJECT_TODO.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/master/PROJECT_TODO.md) chưa?
+            - [ ] **Kiểm thử CI:** Pipeline kiểm thử tự động (\`backend-ci\`, \`frontend-ci\`, \`ai-service-ci\`) đã chuyển sang màu xanh (PASS) chưa?
+            - [ ] **Quy chuẩn Code:** Đã tuân thủ quy tắc Clean Code và không sửa nhầm vào domain của thành viên khác?
+            - [ ] **Hợp đồng API:** Nếu có cập nhật API, đã kiểm tra khớp với [API_CONTRACTS.md](https://github.com/${context.repo.owner}/${context.repo.repo}/blob/master/API_CONTRACTS.md) chưa?
+            
+            ---
+            *🚀 Khi các kiểm thử CI đều vượt qua và PR không còn xung đột, bot sẽ tự động thực hiện **Squash and Merge** vào nhánh \`master\` và tự xóa nhánh phụ này.*`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: reviewMessage
+            });

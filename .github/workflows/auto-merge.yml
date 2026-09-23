@@ -1,0 +1,35 @@
+name: Automated PR Merge & Cleanup Bot
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - auto_merge_enabled
+  check_suite:
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-merge by github-actions[bot]
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Enable Auto-merge on Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          echo "Configuring auto-merge for PR: $PR_URL"
+          gh pr merge "$PR_URL" --auto --squash --delete-branch || echo "Auto-merge might already be active or requires manual trigger."
