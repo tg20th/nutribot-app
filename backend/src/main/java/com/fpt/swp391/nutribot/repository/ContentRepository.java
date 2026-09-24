@@ -37,6 +37,20 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
 
     Long countByContentTypeAndStatus(String contentType, String status);
 
+    // Search queries
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND " +
+           "(LOWER(c.title) LIKE :keyword OR LOWER(c.body) LIKE :keyword) " +
+           "ORDER BY c.createdAt DESC")
+    Page<Content> searchByKeyword(@Param("keyword") String keyword, @Param("status") String status, Pageable pageable);
+
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.contentType = :contentType AND " +
+           "(LOWER(c.title) LIKE :keyword OR LOWER(c.body) LIKE :keyword) " +
+           "ORDER BY c.createdAt DESC")
+    Page<Content> searchByKeywordAndType(@Param("keyword") String keyword, @Param("contentType") String contentType,
+                                          @Param("status") String status, Pageable pageable);
+
+    Page<Content> findByStatus(String status, Pageable pageable);
+
     @Modifying
     @Query("UPDATE Content c SET c.viewCount = c.viewCount + 1 WHERE c.contentId = :contentId")
     void incrementViewCount(@Param("contentId") Integer contentId);
