@@ -1,0 +1,31 @@
+/* Home-style brand above a community-style expanding icon rail. */
+.admin-shell{background:radial-gradient(circle at 80% 0,rgba(215,242,97,.12),transparent 24%),#fbfbf7}
+.admin-sidebar{inset:76px auto 0 0;width:76px;padding:16px 8px;background:rgba(255,255,252,.9);border-right-color:rgba(23,53,41,.1);overflow:hidden;transition:width .22s cubic-bezier(.2,.8,.2,1),box-shadow .22s ease}
+.admin-sidebar:hover{width:224px;box-shadow:6px 0 24px rgba(23,53,41,.12)}
+.admin-sidebar nav{gap:2px}
+.admin-sidebar nav a{width:60px;height:44px;padding:0 10px;gap:16px;border-radius:18px;color:#506058;white-space:nowrap;font-size:13px;font-weight:600;transition:width .22s cubic-bezier(.2,.8,.2,1),background .2s,color .2s}
+.admin-sidebar:hover nav a{width:208px}.admin-sidebar nav a svg{flex:none;margin-left:2px}
+.admin-sidebar nav a span{opacity:0;transform:translateX(-4px);transition:opacity .15s ease,transform .15s ease}
+.admin-sidebar:hover nav a span{opacity:1;transform:none}
+.admin-sidebar nav a.active{background:#173529;color:#fffefa;box-shadow:none}
+.admin-sidebar nav a.active svg{color:#d7f261}.admin-sidebar nav a:hover:not(.active){background:#edf2e9;color:#173529}
+.admin-sidenav-logout{height:0;margin:0;padding:0;display:flex;align-items:center;gap:16px;overflow:hidden;opacity:0;background:transparent;color:#506058;white-space:nowrap;font-size:13px;font-weight:600;transition:height .15s ease,opacity .15s ease}
+.admin-sidenav-logout svg{flex:none;margin-left:12px}.admin-sidebar:hover .admin-sidenav-logout{height:44px;opacity:1}
+.admin-sidenav-profile{margin-top:auto;padding:9px 10px;display:flex;align-items:center;gap:12px;border-top:1px solid rgba(23,53,41,.1);white-space:nowrap}
+.admin-sidenav-profile img{width:30px;height:30px;flex:none;object-fit:cover;border:2px solid #d7f261;border-radius:50%}
+.admin-sidenav-profile>span{display:flex;flex-direction:column;gap:2px;min-width:0;opacity:0;transform:translateX(-4px);transition:opacity .15s ease,transform .15s ease}
+.admin-sidenav-profile b,.admin-sidenav-profile small{display:block;overflow:hidden;text-overflow:ellipsis}.admin-sidenav-profile b{font-size:11px;color:#173529}.admin-sidenav-profile small{font-size:9px;color:#718077}
+.admin-sidebar:hover .admin-sidenav-profile>span{opacity:1;transform:none}
+.admin-main{margin-left:76px;width:calc(100% - 76px)}
+.admin-topbar{height:76px;padding:0 32px 0 0;background:rgba(251,251,247,.82);border-bottom-color:rgba(23,53,41,.1);backdrop-filter:blur(20px)}
+.admin-top-brand{width:190px;flex:none;font:600 30px/1 'Playfair Display',serif;letter-spacing:-1.8px;color:var(--text)}
+.admin-top-brand span{color:var(--primary)}.admin-top-brand small{display:block;margin-top:5px;font:500 8px/1.2 Outfit,sans-serif;letter-spacing:.08em;color:var(--text-muted)}
+.admin-content{transition:padding-left .22s cubic-bezier(.2,.8,.2,1)}
+@media(min-width:761px){.admin-sidebar:hover~.admin-main .admin-content{padding-left:calc(clamp(24px,4vw,66px) + 148px)}}
+
+@media(max-width:760px){
+  .admin-sidebar-scrim{position:fixed;z-index:49;inset:0;background:rgba(23,53,41,.22);border:0;cursor:default}
+  .admin-sidebar{inset:68px auto 0 0;width:224px;padding:16px 8px;transform:translateX(-100%);transition:transform .25s ease;box-shadow:15px 0 45px rgba(23,53,41,.13)}
+  .admin-sidebar.open{transform:translateX(0)}.admin-sidebar nav a,.admin-sidebar:hover nav a{width:208px}.admin-sidebar nav a span,.admin-sidebar .admin-sidenav-profile>span{opacity:1;transform:none}.admin-sidebar .admin-sidenav-logout{height:44px;opacity:1}
+  .admin-main{margin-left:0;width:100%}.admin-topbar{height:68px;padding:0 16px}.sidebar-trigger{display:grid}.admin-top-brand{width:auto;margin-left:11px;font-size:24px}
+}

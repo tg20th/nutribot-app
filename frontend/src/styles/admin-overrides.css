@@ -1,0 +1,9 @@
+.ops-tags .tag-row{gap:14px;padding:16px 0;font-size:14px}
+.ops-tags .tag-row>b{height:28px;width:28px;border-radius:7px;font-size:13px}
+.ops-tags .tag-row span{gap:5px}
+.ops-tags .tag-row strong{font-size:15px}
+.ops-tags .tag-row small{font-size:13px;max-width:300px}
+.ops-tags .tag-row em{font-size:13px;padding:7px 10px}
+.ops-tags .tag-row>i{font-size:13px}
+
+@media(max-width:600px){.ops-tags .tag-row small{max-width:105px}}

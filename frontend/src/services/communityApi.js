@@ -1,0 +1,10 @@
+import { apiRequest, unwrapData } from './apiClient';
+const normalizePost = (item = {}) => ({ ...item, author: item.author?.name ?? item.author?.fullName ?? item.author ?? item.user?.fullName ?? item.user?.name ?? '', username: item.author?.username ?? item.username ?? '', avatar: item.author?.avatarUrl ?? item.author?.avatar ?? item.avatar ?? item.user?.avatarUrl ?? null, image: item.image ?? item.imageUrl ?? null, images: item.images ?? item.imageUrls ?? [], likes: item.likes ?? item.likeCount ?? 0, comments: item.comments ?? item.commentCount ?? 0, commentList: item.commentList ?? item.commentsList ?? [] });
+export const getPosts = async (signal) => unwrapData(await apiRequest('/api/posts', { signal })).map(normalizePost);
+export const getPost = async (id, signal) => normalizePost(unwrapData(await apiRequest(`/api/posts/${id}`, { signal }), {}));
+export const createPost = async (payload) => normalizePost(unwrapData(await apiRequest('/api/posts', { method: 'POST', body: JSON.stringify(payload) }), {}));
+export const getPostComments = async (id, signal) => unwrapData(await apiRequest(`/api/posts/${id}/comments`, { signal }));
+export const createPostComment = async (id, payload) => unwrapData(await apiRequest(`/api/posts/${id}/comments`, { method: 'POST', body: JSON.stringify(payload) }), {});
+export const votePost = (id) => apiRequest(`/api/posts/${id}/votes`, { method: 'POST' });
+export const removeVote = (id) => apiRequest(`/api/posts/${id}/votes`, { method: 'DELETE' });
+export const getCommunityFilters = async (signal) => unwrapData(await apiRequest('/api/categories', { signal })).map((x) => x.name ?? x.label).filter(Boolean);

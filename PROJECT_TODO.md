@@ -78,7 +78,7 @@
 - [ ] **#32 [AI] Dựng Python FastAPI AI Service & NutriBot System Prompt**
   - *Mô tả:* Dựng ứng dụng FastAPI trong thư mục `ai-service/`, kết nối Gemini/OpenAI API, cấu hình System Prompt chuyên gia dinh dưỡng thực vật, mở endpoint `POST /api/ai/chat`.
   - *File cần tạo:* `ai-service/main.py`, `ai-service/requirements.txt`, `ai-service/Dockerfile`.
-- [ ] **#1 [FE] Màn hình Đăng ký (`/register`)**
+- [x] **#1 [FE] Màn hình Đăng ký (`/register`)**
   - *Mô tả:* Form đăng ký tài khoản, kiểm tra định dạng email, mật khẩu khớp, thông báo lỗi trực quan.
   - *File cần tạo:* `frontend/src/pages/RegisterPage.jsx`.
 - [ ] **#4 [FE] Màn hình Đăng nhập (`/login`)**
