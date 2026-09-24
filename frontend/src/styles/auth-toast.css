@@ -1,0 +1,5 @@
+.auth-toast { position: fixed; z-index: 120; top: 24px; left: 24px; display: flex; align-items: center; gap: 9px; width: min(360px, calc(100vw - 48px)); padding: 12px 14px; border: 1px solid; border-radius: 10px; box-shadow: 0 12px 30px rgba(36, 49, 33, .14); font-size: 13px; line-height: 1.4; opacity: 0; transform: translateX(-18px); pointer-events: none; transition: opacity .22s ease, transform .22s ease; }
+.auth-toast.is-visible { opacity: 1; transform: translateX(0); }
+.auth-toast-error { color: #8f3227; background: #fff0ee; border-color: #f2c4be; }
+.auth-toast-success { color: #285f35; background: #edf7e9; border-color: #c5e0bb; }
+@media (max-width: 480px) { .auth-toast { top: 16px; left: 16px; width: calc(100vw - 32px); } }

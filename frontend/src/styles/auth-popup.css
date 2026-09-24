@@ -10,10 +10,29 @@
   width: 100%;
 }
 
+.auth-modal label,
+.auth-modal label > input,
+.auth-modal .password-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.auth-modal label > input,
+.auth-modal .password-input input {
+  box-sizing: border-box;
+}
+
 .auth-modal .password-input {
   display: block;
 }
 
+.auth-modal .google-auth,
+.auth-modal .auth-submit {
+  height: 50px;
+  min-height: 50px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
 @media (max-width: 767px) {
   .auth-modal {
     max-height: calc(100dvh - 24px);

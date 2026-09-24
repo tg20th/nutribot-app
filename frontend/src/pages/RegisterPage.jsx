@@ -1,8 +1,9 @@
-import { CheckCircle2, Eye, EyeOff, LoaderCircle } from 'lucide-react';
+import { Eye, EyeOff, LoaderCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ApiError } from '../services/apiClient';
 import { registerAccount } from '../services/authApi';
+import AuthToast from '../components/AuthToast';
 
 const initialForm = { fullName: '', username: '', email: '', password: '', confirmPassword: '' };
 
@@ -57,7 +58,7 @@ export default function RegisterPage() {
     }
   };
 
-  return <main className="register-page">
+  return <><AuthToast error={serverError} success={success} /><main className="register-page">
     <section className="register-intro" aria-label="Giới thiệu NutriBot">
       <Link className="register-brand" to="/" aria-label="Về trang chủ NutriBot"><span>Nutri</span>Bot</Link>
       <div className="register-intro-copy"><p>DINH DƯỠNG CÁ NHÂN HÓA</p><h1>Ăn lành mạnh, theo cách của bạn.</h1><span>Lưu thực đơn, theo dõi mục tiêu sức khỏe và nhận gợi ý dinh dưỡng phù hợp mỗi ngày.</span></div>
@@ -65,8 +66,6 @@ export default function RegisterPage() {
     <section className="register-card-wrap">
       <form className="register-card" noValidate onSubmit={submit}>
         <div className="register-heading"><p>TẠO TÀI KHOẢN</p><h2>Bắt đầu cùng NutriBot</h2><span>Chỉ mất chưa đến một phút để thiết lập tài khoản của bạn.</span></div>
-        {serverError && <p className="form-alert form-alert-error" role="alert">{serverError}</p>}
-        {success && <p className="form-alert form-alert-success" role="status"><CheckCircle2 size={18}/>{success}</p>}
         <div className="register-fields">
           <label htmlFor="fullName">Họ và tên<input id="fullName" name="fullName" autoComplete="name" value={form.fullName} onChange={updateField} onBlur={() => touch('fullName')} aria-invalid={Boolean(fieldError('fullName'))}/>{fieldError('fullName') && <small>{fieldError('fullName')}</small>}</label>
           <label htmlFor="username">Tên đăng nhập<input id="username" name="username" autoComplete="username" value={form.username} onChange={updateField} onBlur={() => touch('username')} aria-invalid={Boolean(fieldError('username'))}/>{fieldError('username') && <small>{fieldError('username')}</small>}</label>
@@ -78,5 +77,5 @@ export default function RegisterPage() {
         <p className="register-login">Đã có tài khoản? <button type="button" onClick={() => navigate('/')}>Đăng nhập từ trang chủ</button></p>
       </form>
     </section>
-  </main>;
+  </main></>;
 }
