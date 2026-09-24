@@ -20,7 +20,7 @@
 ## 🏃 SPRINT 1: Nền tảng, Quản lý Nội dung & Chatbot MVP (Tasks #1 - #32)
 
 ### ☕ TRƯỜNG (Backend - 7 tasks)
-- [ ] **#3 [BE] User & Role Entities & Repositories**
+- [x] **#3 [BE] User & Role Entities & Repositories** ✅
   - *Mô tả:* Tạo JPA Entity `User`, `Role` map bảng `users`, `roles` trong `Database.sql`.
   - *File cần tạo:* `entity/Role.java`, `entity/User.java`, `repository/RoleRepository.java`, `repository/UserRepository.java`.
   - *Blocked by:* Không có.

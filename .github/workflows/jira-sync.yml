@@ -1,0 +1,61 @@
+name: Sync Git to Jira
+
+on:
+  push:
+    branches-ignore: [master, main]
+  pull_request:
+    types: [opened, closed]
+
+jobs:
+  sync-jira:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Extract Jira Issue Key
+        id: extract
+        run: |
+          ISSUE_KEY=$(echo "${{ github.event.pull_request.title || github.event.head_commit.message }}" | grep -oE 'NB-[0-9]+' | head -1)
+          echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            if [[ "${{ github.event.action }}" == "opened" ]]; then
+              echo "action=review" >> $GITHUB_OUTPUT
+            elif [[ "${{ github.event.action }}" == "closed" && "${{ github.event.pull_request.merged }}" == "true" ]]; then
+              echo "action=done" >> $GITHUB_OUTPUT
+            fi
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "action=progress" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Move to In Progress
+        if: steps.extract.outputs.action == 'progress'
+        run: |
+          echo "🔨 Moving ${{ steps.extract.outputs.issue_key }} to In Progress"
+          curl -s -X POST \
+            -u ":"${{ secrets.JIRA_AUTH }} \
+            -H "Content-Type: application/json" \
+            --data '{"transition": {"id": "21"}}' \
+            "https://danyngo06.atlassian.net/rest/api/3/issue/${{ steps.extract.outputs.issue_key }}/transitions"
+
+      - name: Move to In Review
+        if: steps.extract.outputs.action == 'review'
+        run: |
+          echo "👀 Moving ${{ steps.extract.outputs.issue_key }} to In Review"
+          curl -s -X POST \
+            -u ":"${{ secrets.JIRA_AUTH }} \
+            -H "Content-Type: application/json" \
+            --data '{"transition": {"id": "31"}}' \
+            "https://danyngo06.atlassian.net/rest/api/3/issue/${{ steps.extract.outputs.issue_key }}/transitions"
+
+      - name: Move to Done
+        if: steps.extract.outputs.action == 'done'
+        run: |
+          echo "✅ Moving ${{ steps.extract.outputs.issue_key }} to Done"
+          curl -s -X POST \
+            -u ":"${{ secrets.JIRA_AUTH }} \
+            -H "Content-Type: application/json" \
+            --data '{"transition": {"id": "41"}}' \
+            "https://danyngo06.atlassian.net/rest/api/3/issue/${{ steps.extract.outputs.issue_key }}/transitions"
