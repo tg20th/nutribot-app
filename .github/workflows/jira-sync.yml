@@ -1,5 +1,10 @@
 name: Sync Git to Jira
 
+# Quy trình tự động:
+# 1. Push branch mới → In Progress
+# 2. Tạo Pull Request → In Review
+# 3. Merged PR vào main → Done
+
 on:
   push:
     branches-ignore: [master, main]
@@ -52,16 +57,6 @@ jobs:
             -u ":"${{ secrets.JIRA_AUTH }} \
             -H "Content-Type: application/json" \
             --data '{"transition": {"id": "31"}}' \
-            "https://danyngo06.atlassian.net/rest/api/3/issue/${{ steps.extract.outputs.issue_key }}/transitions"
-
-      - name: Move to In Progress (before Done)
-        if: steps.extract.outputs.action == 'done' && steps.extract.outputs.issue_key != ''
-        run: |
-          echo "Moving ${{ steps.extract.outputs.issue_key }} to In Progress before Done"
-          curl -s -X POST \
-            -u ":"${{ secrets.JIRA_AUTH }} \
-            -H "Content-Type: application/json" \
-            --data '{"transition": {"id": "21"}}' \
             "https://danyngo06.atlassian.net/rest/api/3/issue/${{ steps.extract.outputs.issue_key }}/transitions"
 
       - name: Move to Done
