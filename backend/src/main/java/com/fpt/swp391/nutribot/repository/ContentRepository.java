@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -30,6 +31,11 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
     Page<Content> findByUserUserId(Integer userId, Pageable pageable);
 
     Page<Content> findByUserUserIdAndContentType(Integer userId, String contentType, Pageable pageable);
+
+    @Query("SELECT c FROM Content c WHERE c.contentType = :contentType AND c.status = :status ORDER BY c.viewCount DESC, c.createdAt DESC")
+    List<Content> findPublishedByTypeWithLimit(@Param("contentType") String contentType, @Param("status") String status, Pageable pageable);
+
+    Long countByContentTypeAndStatus(String contentType, String status);
 
     @Modifying
     @Query("UPDATE Content c SET c.viewCount = c.viewCount + 1 WHERE c.contentId = :contentId")
