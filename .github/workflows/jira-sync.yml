@@ -1,5 +1,10 @@
 name: Sync Git to Jira
 
+# Quy trình tự động:
+# 1. Push branch mới → In Progress
+# 2. Tạo Pull Request → In Review
+# 3. Merged PR vào main → Done
+
 on:
   push:
     branches-ignore: [master, main]
