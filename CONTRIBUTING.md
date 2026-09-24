@@ -108,3 +108,5 @@ Dự án tích hợp sẵn bot hệ thống **`github-actions[bot]`** trong thư
   }
   ```
 - Luôn kiểm tra và đánh dấu tick `[x]` vào [`PROJECT_TODO.md`](PROJECT_TODO.md) khi hoàn thành từng hạng mục công việc.
+
+<!-- Dummy line to allow commit -->
