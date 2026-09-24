@@ -1,16 +1,17 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useState } from 'react';
 import communityMember from '../assets/community-member.jpg';
+import colorfulPlate from '../assets/colorful-plate.jpg';
 import freshProduce from '../assets/fresh-produce.jpg';
 import heroBowl from '../assets/hero-bowl.jpg';
 import nutribotHero from '../assets/nutribot-hero.png';
 
 const defaultTopics = [
-  { name: 'Bữa ăn cân bằng', image: heroBowl },
-  { name: 'Rau củ mỗi ngày', image: freshProduce },
-  { name: 'Thực đơn thực vật', image: nutribotHero },
-  { name: 'Ăn sáng lành mạnh', image: heroBowl },
-  { name: 'Mẹo dinh dưỡng', image: freshProduce }
+  { name: 'Balanced meals', image: heroBowl },
+  { name: 'Everyday greens', image: freshProduce },
+  { name: 'Plant-forward cooking', image: nutribotHero },
+  { name: 'Bright breakfasts', image: communityMember },
+  { name: 'Nutrition basics', image: colorfulPlate }
 ];
 
 export function TopicAccordion({ topics = [] }) {

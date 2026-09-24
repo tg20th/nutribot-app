@@ -1,13 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header'; import Hero from '../components/Hero'; import FeaturedPost from '../components/FeaturedPost'; import ContentCard from '../components/ContentCard'; import VideoSection from '../components/VideoSection'; import Chatbot from '../components/Chatbot'; import Footer from '../components/Footer'; import EditorialGallery from '../components/EditorialGallery'; import { TopicAccordion, ReaderNotes } from '../components/EditorialExtras'; import AuthModal from '../components/AuthModal';
 import { getBlogs, getFeaturedContent, getTopics, getVideos, googleAuthUrl } from '../services/contentApi'; import { Play, X } from 'lucide-react';
 
 export default function HomePage({ onAuthenticate }) {
-  const navigate = useNavigate();
   const blogData = null; const videoData = null;
   const [query, setQuery] = useState(''); const [video, setVideo] = useState(null); const [authMode, setAuthMode] = useState(null); const [remoteContent, setRemoteContent] = useState({ blogs: [], videos: [], featured: null, topics: [], loading: true, error: '' });
-  useEffect(() => { if (authMode === 'signup') navigate('/register'); }, [authMode, navigate]);
   useEffect(() => { if (blogData || videoData) return; const controller = new AbortController(); Promise.all([getBlogs(controller.signal), getVideos(controller.signal)]).then(([blogs, remoteVideos]) => setRemoteContent({ blogs, videos: remoteVideos, loading: false, error: '' })).catch((error) => { if (error.name !== 'AbortError') setRemoteContent((current) => ({ ...current, loading: false, error: 'Không thể tải dữ liệu mới. Đang hiển thị nội dung tạm thời.' })); }); return () => controller.abort(); }, [blogData, videoData]);
   const blogItems = remoteContent.blogs; const videoItems = remoteContent.videos;
   const filtered = useMemo(() => blogItems.filter((p) => `${p.title} ${p.type} ${p.description}`.toLowerCase().includes(query.toLowerCase())), [blogItems, query]); const authenticate = (form, mode) => form ? onAuthenticate?.(form, mode) : setAuthMode(mode);

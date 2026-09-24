@@ -8,3 +8,12 @@ export async function registerAccount(payload) {
 
   return unwrapData(response, {});
 }
+
+export async function loginAccount(payload) {
+  const response = await apiRequest('/api/v1/auth/login', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+
+  return unwrapData(response, {});
+}

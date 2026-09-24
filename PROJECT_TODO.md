@@ -81,7 +81,7 @@
 - [x] **#1 [FE] Màn hình Đăng ký (`/register`)**
   - *Mô tả:* Form đăng ký tài khoản, kiểm tra định dạng email, mật khẩu khớp, thông báo lỗi trực quan.
   - *File cần tạo:* `frontend/src/pages/RegisterPage.jsx`.
-- [ ] **#4 [FE] Màn hình Đăng nhập (`/login`)**
+- [x] **#4 [FE] Màn hình Đăng nhập (`/login`)**
   - *Mô tả:* Form đăng nhập, gọi API nhận JWT Token, lưu vào `localStorage`, chuyển hướng người dùng.
   - *File cần tạo:* `frontend/src/pages/LoginPage.jsx`.
 - [ ] **#7 [FE] Màn hình Thông tin cá nhân (`/profile`)**

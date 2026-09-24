@@ -13,11 +13,13 @@ import CategoryManagementPage from './pages/admin/CategoryManagementPage';
 import CommentManagementPage from './pages/admin/CommentManagementPage';
 import { ContentDetailPage, ContentManagementPage } from './pages/admin/ContentPages';
 import RegisterPage from './pages/RegisterPage';
+import LoginPage from './pages/LoginPage';
 
 export default function App() {
   return <Routes>
     <Route path="/" element={<HomePage />} />
     <Route path="/register" element={<RegisterPage />} />
+    <Route path="/login" element={<LoginPage />} />
     <Route path="/community" element={<CommunityFeedPage />} />
     <Route path="/community/planner" element={<WeeklyMealPlannerPage />} />
     <Route path="/community/profile" element={<CommunityProfilePage />} />

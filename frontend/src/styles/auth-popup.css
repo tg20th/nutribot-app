@@ -1,0 +1,22 @@
+.auth-modal {
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #b9c9b3 transparent;
+}
+
+.auth-modal .password-input,
+.auth-modal .password-input input {
+  width: 100%;
+}
+
+.auth-modal .password-input {
+  display: block;
+}
+
+@media (max-width: 767px) {
+  .auth-modal {
+    max-height: calc(100dvh - 24px);
+    padding: 34px 25px;
+  }
+}
