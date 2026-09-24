@@ -2,21 +2,19 @@ import { MessageCircle, Sparkles } from 'lucide-react';
 
 const sum = (list, key) => list.reduce((total, item) => total + item[key], 0);
 
-const lowestProteinDay = plannerDays.reduce((worst, day) => {
-  const ratio = day.proteinActual / day.proteinGoal;
-  return ratio < worst.proteinActual / worst.proteinGoal ? day : worst;
-}, plannerDays[0]);
-
-const swappedEntry = (() => {
-  for (const day of plannerDays) {
-    const meal = day.meals.find((item) => item.swapped);
-    if (meal) return { day, meal };
-  }
-  return null;
-})();
-
 export default function MealPlanAssistant({ days: plannerDays = [], profile: communityUser = {} }) {
   if (!plannerDays.length) return null;
+  const lowestProteinDay = plannerDays.reduce((worst, day) => {
+    const ratio = day.proteinActual / day.proteinGoal;
+    return ratio < worst.proteinActual / worst.proteinGoal ? day : worst;
+  }, plannerDays[0]);
+  const swappedEntry = (() => {
+    for (const day of plannerDays) {
+      const meal = day.meals.find((item) => item.swapped);
+      if (meal) return { day, meal };
+    }
+    return null;
+  })();
   const caloriePct = Math.round((sum(plannerDays, 'calorieActual') / sum(plannerDays, 'calorieGoal')) * 100);
   const proteinPct = Math.round((sum(plannerDays, 'proteinActual') / sum(plannerDays, 'proteinGoal')) * 100);
   const alignment = caloriePct >= 95 && caloriePct <= 105 ? 'On track' : caloriePct > 105 ? 'Slightly over target' : 'Slightly under target';

@@ -1,7 +1,6 @@
 import { ArrowRight, Search } from 'lucide-react';
 import { useState } from 'react';
-
-const heroImage = 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=1600&q=90';
+import heroImage from '../assets/hero-bowl.jpg';
 
 export default function Hero({ onSearch }) {
   const [query, setQuery] = useState('');
