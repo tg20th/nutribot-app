@@ -14,6 +14,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -82,5 +84,10 @@ public class AuthService {
                 .username(user.getUsername())
                 .role(user.getRole().getRoleName())
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<User> getUserByUsername(String username) {
+        return userRepository.findByUsername(username);
     }
 }

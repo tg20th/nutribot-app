@@ -12,7 +12,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-
+Sao
     steps:
       - name: Extract Jira Issue Key
         id: extract
