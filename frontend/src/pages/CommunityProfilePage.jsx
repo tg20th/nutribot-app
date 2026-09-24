@@ -2,7 +2,7 @@ import { Bookmark, CalendarDays, Edit3, MapPin, Settings } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
-import Chatbot from '../components/Chatbot';
+import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import { getPosts } from '../services/communityApi';
 import { getMyProfile } from '../services/profileApi';
 
@@ -47,6 +47,6 @@ export default function CommunityProfilePage() {
         </section>
       </main>
     </div>
-    <Chatbot/>
+    <ChatbotWidget/>
   </div>;
 }

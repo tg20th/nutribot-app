@@ -9,7 +9,7 @@ import CommunityComposer from '../components/community/CommunityComposer';
 import CommunityFilters from '../components/community/CommunityFilters';
 import CommunityPostCard from '../components/community/CommunityPostCard';
 import CommunityRightRail from '../components/community/CommunityRightRail';
-import Chatbot from '../components/Chatbot';
+import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import { createPost, getCommunityFilters, getPosts } from '../services/communityApi';
 import { getMyProfile } from '../services/profileApi';
 import colorfulPlate from '../assets/colorful-plate.jpg';
@@ -93,6 +93,6 @@ export default function CommunityFeedPage() {
         <CommunityRightRail/>
       </div>
     </div>
-    <Chatbot/>
+    <ChatbotWidget/>
   </div>;
 }

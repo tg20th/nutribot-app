@@ -7,7 +7,7 @@ import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import MealPlanAssistant from '../components/community/MealPlanAssistant';
 import MealPlanMatrix from '../components/community/MealPlanMatrix';
-import Chatbot from '../components/Chatbot';
+import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import { getMyProfile } from '../services/profileApi';
 import { getCurrentWeeklyMenu } from '../services/weeklyMealApi';
 
@@ -140,6 +140,6 @@ export default function WeeklyMealPlannerPage() {
         <MealPlanAssistant days={plannerDays} profile={communityUser}/>
       </div>
     </div>
-    <Chatbot/>
+    <ChatbotWidget/>
   </div>;
 }

@@ -4,7 +4,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ArrowLeft, Bookmark, Clock3, Heart, MessageCircle, Play, Send, Share2, UsersRound } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
-import Chatbot from '../components/Chatbot';
+import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import { createPostComment, getPost, getPostComments } from '../services/communityApi';
 import { getMyProfile } from '../services/profileApi';
 
@@ -49,6 +49,6 @@ export default function CommunityContentDetailPage() {
       <section className="detail-actions detail-reveal"><button type="button" onClick={() => setLiked(!liked)} className={liked ? 'is-liked' : ''}><Heart fill={liked ? 'currentColor' : 'none'} size={17}/>{liked ? 'Loved' : 'Love this'} · {post.likes}</button><button type="button" onClick={() => setSaved(!saved)} className={saved ? 'is-saved' : ''}><Bookmark fill={saved ? 'currentColor' : 'none'} size={17}/>{saved ? 'Saved to your table' : 'Save recipe'}</button><button type="button"><Share2 size={17}/> Share</button></section>
       <section className="detail-comments detail-reveal"><div className="detail-section-head"><span>Join the table</span><h2>Community discussion <small>({comments.length + post.comments})</small></h2></div><form className="detail-comment-form" onSubmit={submitComment}><img src={communityUser.avatar} alt=""/><input value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Add a thoughtful comment or kitchen modification..."/><button type="submit"><Send size={16}/> Post comment</button></form><div className="detail-comment-list">{comments.map((item) => <article key={item.id}><img src={item.avatar} alt=""/><div><b>{item.author}</b><small>{item.time}</small><p>{item.text}</p><button type="button"><Heart size={14}/> {item.likes}</button><button type="button"><MessageCircle size={14}/> Reply</button></div></article>)}</div><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><Link to="/home">Open the feed</Link></div></section>
     </main>
-    <Chatbot/>
+    <ChatbotWidget/>
   </div>;
 }

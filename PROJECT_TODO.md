@@ -96,7 +96,7 @@
 - [ ] **#14 [FE] Màn hình Tìm kiếm & Bộ lọc nội dung**
   - *Mô tả:* Giao diện kết quả tìm kiếm với bộ lọc theo danh mục, từ khóa và sắp xếp ngày đăng.
   - *File cần tạo:* `frontend/src/pages/SearchPage.jsx`.
-- [ ] **#29 [FE] Floating Chatbot Widget**
+- [x] **#29 [FE] Floating Chatbot Widget**
   - *Mô tả:* Nút tròn góc phải dưới màn hình, bấm mở/thu nhỏ khung chat, giao diện bong bóng tin nhắn.
   - *File cần tạo:* `frontend/src/components/chatbot/ChatbotWidget.jsx`.
 - [ ] **#30 [FE] Tích hợp Gửi/Nhận Chatbot**
