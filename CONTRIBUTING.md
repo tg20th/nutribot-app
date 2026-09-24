@@ -76,7 +76,9 @@ git commit -m "feat(NB-02-BE): hoàn thành API đăng ký và mã hóa mật kh
 - Tạo AuthController với endpoint POST /api/v1/auth/register
 - Mã hóa mật khẩu người dùng bằng BCryptPasswordEncoder
 - Bổ sung kiểm tra trùng lặp email và username trong DB
-- Chạy unit test AuthControllerTest đạt 100%"
+- Chạy unit test AuthControllerTest đạt 100%
+
+Closes NB-2"
 ```
 
 ---
