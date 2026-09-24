@@ -1,5 +1,6 @@
 package com.fpt.swp391.nutribot.controller;
 
+import com.fpt.swp391.nutribot.dto.request.LoginRequest;
 import com.fpt.swp391.nutribot.dto.request.RegisterRequest;
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
 import com.fpt.swp391.nutribot.dto.response.AuthResponse;
@@ -20,5 +21,11 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
         AuthResponse response = authService.register(request);
         return ResponseEntity.ok(ApiResponse.success("Đăng ký tài khoản thành công", response));
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
+        AuthResponse response = authService.login(request);
+        return ResponseEntity.ok(ApiResponse.success("Đăng nhập thành công", response));
     }
 }

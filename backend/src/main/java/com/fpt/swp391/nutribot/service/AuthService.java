@@ -1,5 +1,7 @@
 package com.fpt.swp391.nutribot.service;
 
+import com.fpt.swp391.nutribot.config.JwtTokenProvider;
+import com.fpt.swp391.nutribot.dto.request.LoginRequest;
 import com.fpt.swp391.nutribot.dto.request.RegisterRequest;
 import com.fpt.swp391.nutribot.dto.response.AuthResponse;
 import com.fpt.swp391.nutribot.entity.Role;
@@ -19,24 +21,21 @@ public class AuthService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtTokenProvider jwtTokenProvider;
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        // Kiểm tra username đã tồn tại
         if (userRepository.existsByUsername(request.getUsername())) {
             throw new BadRequestException("Username đã được sử dụng");
         }
 
-        // Kiểm tra email đã tồn tại
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new BadRequestException("Email đã được sử dụng");
         }
 
-        // Lấy role mặc định ROLE_USER
         Role userRole = roleRepository.findByRoleName("ROLE_USER")
                 .orElseThrow(() -> new BadRequestException("Không tìm thấy role mặc định"));
 
-        // Tạo user mới
         User user = User.builder()
                 .username(request.getUsername())
                 .email(request.getEmail())
@@ -47,9 +46,41 @@ public class AuthService {
 
         User savedUser = userRepository.save(user);
 
+        String token = jwtTokenProvider.generateToken(
+                savedUser.getUsername(),
+                savedUser.getRole().getRoleName()
+        );
+
         return AuthResponse.builder()
+                .token(token)
                 .username(savedUser.getUsername())
                 .role(savedUser.getRole().getRoleName())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public AuthResponse login(LoginRequest request) {
+        User user = userRepository.findByUsername(request.getUsernameOrEmail())
+                .or(() -> userRepository.findByEmail(request.getUsernameOrEmail()))
+                .orElseThrow(() -> new BadRequestException("Tài khoản không tồn tại"));
+
+        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            throw new BadRequestException("Mật khẩu không chính xác");
+        }
+
+        if (!"ACTIVE".equals(user.getStatus())) {
+            throw new BadRequestException("Tài khoản đã bị khóa hoặc suspend");
+        }
+
+        String token = jwtTokenProvider.generateToken(
+                user.getUsername(),
+                user.getRole().getRoleName()
+        );
+
+        return AuthResponse.builder()
+                .token(token)
+                .username(user.getUsername())
+                .role(user.getRole().getRoleName())
                 .build();
     }
 }
