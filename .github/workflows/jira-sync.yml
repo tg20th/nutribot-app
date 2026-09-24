@@ -12,14 +12,15 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-Sao
+
     steps:
       - name: Extract Jira Issue Key
         id: extract
         run: |
           if [[ "${{ github.event_name }}" == "pull_request_target" ]]; then
             PR_NUMBER="${{ github.event.pull_request.number }}"
-            ISSUE_KEY=$(echo "${{ github.event.pull_request.title }}" | grep -oE 'NB-[0-9]+' | head -1)
+            # Extract NB-02 and convert to NB-2
+            ISSUE_KEY=$(echo "${{ github.event.pull_request.title }}" | grep -oE 'NB-0?[0-9]+' | sed 's/NB-0\([0-9]\)/NB-\1/' | head -1)
             echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
             echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
 
@@ -29,7 +30,7 @@ Sao
               echo "action=done" >> $GITHUB_OUTPUT
             fi
           elif [[ "${{ github.event_name }}" == "push" ]]; then
-            ISSUE_KEY=$(echo "${{ github.event.head_commit.message }}" | grep -oE 'NB-[0-9]+' | head -1)
+            ISSUE_KEY=$(echo "${{ github.event.head_commit.message }}" | grep -oE 'NB-0?[0-9]+' | sed 's/NB-0\([0-9]\)/NB-\1/' | head -1)
             echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
             echo "action=progress" >> $GITHUB_OUTPUT
           fi
@@ -37,7 +38,7 @@ Sao
       - name: Move to In Progress
         if: steps.extract.outputs.action == 'progress' && steps.extract.outputs.issue_key != ''
         run: |
-          echo "🔨 Moving ${{ steps.extract.outputs.issue_key }} to In Progress"
+          echo "Moving ${{ steps.extract.outputs.issue_key }} to In Progress"
           curl -s -X POST \
             -u ":"${{ secrets.JIRA_AUTH }} \
             -H "Content-Type: application/json" \
@@ -47,7 +48,7 @@ Sao
       - name: Move to In Review
         if: steps.extract.outputs.action == 'review' && steps.extract.outputs.issue_key != ''
         run: |
-          echo "👀 Moving ${{ steps.extract.outputs.issue_key }} to In Review"
+          echo "Moving ${{ steps.extract.outputs.issue_key }} to In Review"
           curl -s -X POST \
             -u ":"${{ secrets.JIRA_AUTH }} \
             -H "Content-Type: application/json" \
@@ -57,7 +58,7 @@ Sao
       - name: Move to Done
         if: steps.extract.outputs.action == 'done' && steps.extract.outputs.issue_key != ''
         run: |
-          echo "✅ Moving ${{ steps.extract.outputs.issue_key }} to Done"
+          echo "Moving ${{ steps.extract.outputs.issue_key }} to Done"
           curl -s -X POST \
             -u ":"${{ secrets.JIRA_AUTH }} \
             -H "Content-Type: application/json" \
