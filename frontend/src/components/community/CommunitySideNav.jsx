@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { getMyProfile } from '../../services/profileApi';
 
 const icons = { Rss, CalendarDays, MapPin, BarChart3 };
-const communityNav = [{ label: 'Feed', icon: 'Rss', to: '/community' }, { label: 'Weekly Meal Planner', icon: 'CalendarDays', to: '/community/planner' }, { label: 'Nearby Vegan Map', icon: 'MapPin' }, { label: 'Analytics', icon: 'BarChart3' }];
+const communityNav = [{ label: 'Home', icon: 'Rss', to: '/home' }, { label: 'Weekly Meal Planner', icon: 'CalendarDays', to: '/community/planner' }, { label: 'Nearby Vegan Map', icon: 'MapPin' }, { label: 'Analytics', icon: 'BarChart3' }];
 
 export default function CommunitySideNav() {
   const [communityUser, setCommunityUser] = useState({}); useEffect(() => { getMyProfile().then(setCommunityUser).catch(() => {}); }, []);

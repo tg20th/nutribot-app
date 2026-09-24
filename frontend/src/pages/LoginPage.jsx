@@ -28,7 +28,7 @@ export default function LoginPage() {
       if (!data.token) throw new Error('Máy chủ chưa trả về token đăng nhập.');
       localStorage.setItem('nutribot-auth-token', data.token);
       setSuccess('Đăng nhập thành công. Đang chuyển đến NutriBot...');
-      window.setTimeout(() => navigate('/'), 700);
+      window.setTimeout(() => navigate('/home'), 700);
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : error.message || 'Không thể kết nối đến máy chủ. Vui lòng thử lại.');
     } finally { setSubmitting(false); }

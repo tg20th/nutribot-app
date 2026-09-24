@@ -5,7 +5,7 @@ import { createPostComment, removeVote, votePost } from '../../services/communit
 
 export default function CommunityPostCard({ post, profile = {} }) {
   const navigate = useNavigate();
-  const [liked, setLiked] = useState(false);
+  const [liked, setLiked] = useState(post.userVoted);
   const [saved, setSaved] = useState(false);
   const [slide, setSlide] = useState(0);
   const [comment, setComment] = useState('');

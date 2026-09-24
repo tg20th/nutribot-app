@@ -12,21 +12,50 @@ import CommunityRightRail from '../components/community/CommunityRightRail';
 import Chatbot from '../components/Chatbot';
 import { createPost, getCommunityFilters, getPosts } from '../services/communityApi';
 import { getMyProfile } from '../services/profileApi';
+import colorfulPlate from '../assets/colorful-plate.jpg';
+import heroBowl from '../assets/hero-bowl.jpg';
 
 gsap.registerPlugin(ScrollTrigger);
+
+const fallbackDiscoverPosts = [
+  {
+    id: 'featured-reset',
+    title: 'Make dinner feel like a reset.',
+    description: "Chef Julien's crisp tofu, in under 20 minutes.",
+    image: colorfulPlate
+  },
+  {
+    id: 'featured-color',
+    title: 'A bowl with every color.',
+    description: 'A bright mix of vegetables for an uncomplicated meal.',
+    image: heroBowl
+  }
+];
 
 export default function CommunityFeedPage() {
   const page = useRef(null);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
   const [posts, setPosts] = useState([]); const [profile, setProfile] = useState({}); const [filters, setFilters] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
-  useEffect(() => { const controller = new AbortController(); Promise.all([getPosts(controller.signal), getMyProfile(controller.signal), getCommunityFilters(controller.signal)]).then(([items, user, categories]) => { setPosts(items); setProfile(user); setFilters(categories); }).catch((e) => { if (e.name !== 'AbortError') setError('Unable to load the community feed.'); }).finally(() => setLoading(false)); return () => controller.abort(); }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.allSettled([getPosts(controller.signal), getMyProfile(controller.signal), getCommunityFilters(controller.signal)]).then(([postsResult, profileResult, filtersResult]) => {
+      if (controller.signal.aborted) return;
+      if (postsResult.status === 'fulfilled') setPosts(postsResult.value);
+      else setError('Unable to load the community feed.');
+      if (profileResult.status === 'fulfilled') setProfile(profileResult.value);
+      if (filtersResult.status === 'fulfilled') setFilters(filtersResult.value);
+      setLoading(false);
+    });
+    return () => controller.abort();
+  }, []);
 
   const visible = useMemo(() => posts.filter((post) => {
     const matchesFilter = filter === 'All' || post.title.toLowerCase().includes(filter.replace('#', '').toLowerCase());
     const matchesQuery = `${post.title} ${post.author} ${post.description ?? ''}`.toLowerCase().includes(query.toLowerCase());
     return matchesFilter && matchesQuery;
   }), [posts, filter, query]);
+  const discoverPosts = fallbackDiscoverPosts.map((fallback, index) => posts[index]?.image ? posts[index] : fallback);
 
   const addPost = async (text) => { try { const post = await createPost({ title: text }); setPosts((items) => [post, ...items]); } catch { setError('Unable to publish your post.'); } };
 
@@ -51,11 +80,11 @@ export default function CommunityFeedPage() {
             <div className="feed-intro-copy"><p>YOUR DAILY TABLE</p><h1 id="feed-title">Good food, <span className="feed-inline-image"/> shared well.</h1><span>Recipes, practical videos, and small ideas worth bringing to your next meal.</span></div>
             <div className="feed-intro-actions"><button type="button" onClick={() => document.querySelector('.community-composer input')?.focus()}>Share a bite <ArrowUpRight size={17}/></button><a href="#discover">Explore picks <Sparkles size={16}/></a></div>
           </section>
-          {posts.length >= 2 && <section className="feed-discover" id="discover" aria-label="Featured food stories">
-            <article className="discover-feature group"><img src={posts[0].image} alt={posts[0].title}/><div><span><Play size={13} fill="currentColor"/> Watch now</span><h2>Make dinner feel like a reset.</h2><p>{posts[0].description}</p></div></article>
+          <section className="feed-discover" id="discover" aria-label="Featured food stories">
+            <article className="discover-feature group"><img src={discoverPosts[0].image} alt={discoverPosts[0].title}/><div><span><Play size={13} fill="currentColor"/> Watch now</span><h2>Make dinner feel like a reset.</h2><p>{discoverPosts[0].description}</p></div></article>
             <article className="discover-note"><span>Today&apos;s mood</span><b>Bright,<br/>fresh,<br/>uncomplicated.</b><small>Curated for your table</small></article>
-            <article className="discover-feature discover-feature--small group"><img src={posts[1].image ?? posts[1].images?.[0]} alt={posts[1].title}/><div><span>READ &amp; SAVE</span><h2>{posts[1].title}</h2></div></article>
-          </section>}
+            <article className="discover-feature discover-feature--small group"><img src={discoverPosts[1].image} alt={discoverPosts[1].title}/><div><span>READ &amp; SAVE</span><h2>{discoverPosts[1].title}</h2></div></article>
+          </section>
           <div className="feed-stream-heading"><div><span>The community stream</span><h2>What&apos;s nourishing people now</h2></div><p>Stories and videos, all in one thoughtful place.</p></div>
           <CommunityComposer onPost={addPost} profile={profile}/>
           <CommunityFilters filters={filters} active={filter} onChange={setFilter}/>

@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Navigate, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import CommunityFeedPage from './pages/CommunityFeedPage';
 import CommunityContentDetailPage from './pages/CommunityContentDetailPage';
@@ -14,16 +14,18 @@ import CommentManagementPage from './pages/admin/CommentManagementPage';
 import { ContentDetailPage, ContentManagementPage } from './pages/admin/ContentPages';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
+import MemberRoute from './components/MemberRoute';
 
 export default function App() {
   return <Routes>
     <Route path="/" element={<HomePage />} />
+    <Route path="/home" element={<MemberRoute><CommunityFeedPage /></MemberRoute>} />
     <Route path="/register" element={<RegisterPage />} />
     <Route path="/login" element={<LoginPage />} />
-    <Route path="/community" element={<CommunityFeedPage />} />
-    <Route path="/community/planner" element={<WeeklyMealPlannerPage />} />
-    <Route path="/community/profile" element={<CommunityProfilePage />} />
-    <Route path="/community/posts/:postId" element={<CommunityContentDetailPage />} />
+    <Route path="/community" element={<Navigate to="/home" replace />} />
+    <Route path="/community/planner" element={<MemberRoute><WeeklyMealPlannerPage /></MemberRoute>} />
+    <Route path="/community/profile" element={<MemberRoute><CommunityProfilePage /></MemberRoute>} />
+    <Route path="/community/posts/:postId" element={<MemberRoute><CommunityContentDetailPage /></MemberRoute>} />
     <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
       <Route index element={<AdminDashboard />} />
       <Route path="users" element={<UserManagementPage />} />

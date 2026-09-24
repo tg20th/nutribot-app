@@ -6,7 +6,7 @@ function TrendingEateries({ eateries }) {
   return <div className="community-widget">
     <div className="community-widget-head"><b>Trending Eateries</b><a href="#map"><Map size={14}/>View Map</a></div>
     <ul className="community-eateries">
-      {trendingEateries.map((e) => <li key={e.id}>
+      {eateries.map((e) => <li key={e.id}>
         <img src={e.image} alt=""/>
         <div><b>{e.name}</b><span><Star size={12} fill="currentColor"/>{e.rating}</span><small>{e.meta}</small></div>
       </li>)}
@@ -17,7 +17,7 @@ function TrendingEateries({ eateries }) {
 function TrendingHashtags({ hashtags }) {
   return <div className="community-widget">
     <div className="community-widget-head"><b>Trending in the Community</b></div>
-    <ul className="community-hashtags">{trendingHashtags.map((tag) => <li key={tag}><a href="#tag">{tag}</a></li>)}</ul>
+    <ul className="community-hashtags">{hashtags.map((tag) => <li key={tag}><a href="#tag">{tag}</a></li>)}</ul>
   </div>;
 }
 

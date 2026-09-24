@@ -50,7 +50,7 @@ export default function RegisterPage() {
       const data = await registerAccount({ fullName: form.fullName.trim(), username: form.username.trim(), email: form.email.trim(), password: form.password });
       if (data.token) localStorage.setItem('nutribot-auth-token', data.token);
       setSuccess('Đăng ký thành công. Chào mừng bạn đến với NutriBot!');
-      window.setTimeout(() => navigate('/'), 1400);
+      window.setTimeout(() => navigate('/home'), 1400);
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : 'Không thể kết nối đến máy chủ. Vui lòng thử lại.');
     } finally {

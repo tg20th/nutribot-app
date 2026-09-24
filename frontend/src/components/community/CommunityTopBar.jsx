@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 
 export default function CommunityTopBar({ query, onQueryChange }) {
   return <header className="community-topbar">
-    <Link to="/" className="community-brand" aria-label="NutriBot home"><span>Nutri</span>Bot<small>Good Food. Brighter You.</small></Link>
+    <Link to="/home" className="community-brand" aria-label="NutriBot member home"><span>Nutri</span>Bot<small>Good Food. Brighter You.</small></Link>
     <div className="community-search">
       <Search size={16}/>
       <input value={query} onChange={(e) => onQueryChange(e.target.value)} placeholder="Search your feed, creators, plant-based tag..." aria-label="Search community feed"/>

@@ -90,7 +90,7 @@
 - [ ] **#9 [FE] Màn hình Hồ sơ Sức khỏe & Dị ứng**
   - *Mô tả:* Form nhập chiều cao, cân nặng, thanh đo BMI hiển thị thể trạng, danh sách thẻ chọn nguyên liệu dị ứng.
   - *File cần tạo:* `frontend/src/components/profile/HealthProfileSection.jsx`.
-- [ ] **#12 [FE] Layout Trang chủ (`/home`)**
+- [x] **#12 [FE] Layout Trang chủ (`/home`)**
   - *Mô tả:* Hero banner chào mừng, thanh tìm kiếm nhanh, khối hiển thị các bài viết và video mới nhất.
   - *File cần tạo:* `frontend/src/pages/HomePage.jsx`.
 - [ ] **#14 [FE] Màn hình Tìm kiếm & Bộ lọc nội dung**
