@@ -24,10 +24,10 @@
   - *Mô tả:* Tạo JPA Entity `User`, `Role` map bảng `users`, `roles` trong `Database.sql`.
   - *File cần tạo:* `entity/Role.java`, `entity/User.java`, `repository/RoleRepository.java`, `repository/UserRepository.java`.
   - *Blocked by:* Không có.
-- [ ] **#2 [BE] Registration API & Password Handling**
+- [x] **#2 [BE] Registration API & Password Handling** ✅
   - *Mô tả:* API `POST /api/v1/auth/register`, validate email/username duy nhất, mã hóa mật khẩu bằng BCrypt.
-  - *File cần tạo:* `dto/request/RegisterRequest.java`, `service/AuthService.java`, `controller/AuthController.java`.
-  - *Blocked by:* `#3`.
+  - *File đã tạo:* `dto/request/RegisterRequest.java`, `service/AuthService.java`, `controller/AuthController.java`.
+  - *Blocked by:* `#3` ✅ (đã xong).
 - [ ] **#5 [BE] Login Flow & JWT Token Generation**
   - *Mô tả:* API `POST /api/v1/auth/login`, xác thực username/password, cấp phát JWT token có hạn sử dụng.
   - *File cần tạo:* `dto/request/LoginRequest.java`, `dto/response/AuthResponse.java`, `config/JwtTokenProvider.java`.
