@@ -19,7 +19,6 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "pull_request_target" ]]; then
             PR_NUMBER="${{ github.event.pull_request.number }}"
-            # Extract NB-02 and convert to NB-2
             ISSUE_KEY=$(echo "${{ github.event.pull_request.title }}" | grep -oE 'NB-0?[0-9]+' | sed 's/NB-0\([0-9]\)/NB-\1/' | head -1)
             echo "issue_key=$ISSUE_KEY" >> $GITHUB_OUTPUT
             echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
@@ -53,6 +52,16 @@ jobs:
             -u ":"${{ secrets.JIRA_AUTH }} \
             -H "Content-Type: application/json" \
             --data '{"transition": {"id": "31"}}' \
+            "https://danyngo06.atlassian.net/rest/api/3/issue/${{ steps.extract.outputs.issue_key }}/transitions"
+
+      - name: Move to In Progress (before Done)
+        if: steps.extract.outputs.action == 'done' && steps.extract.outputs.issue_key != ''
+        run: |
+          echo "Moving ${{ steps.extract.outputs.issue_key }} to In Progress before Done"
+          curl -s -X POST \
+            -u ":"${{ secrets.JIRA_AUTH }} \
+            -H "Content-Type: application/json" \
+            --data '{"transition": {"id": "21"}}' \
             "https://danyngo06.atlassian.net/rest/api/3/issue/${{ steps.extract.outputs.issue_key }}/transitions"
 
       - name: Move to Done
