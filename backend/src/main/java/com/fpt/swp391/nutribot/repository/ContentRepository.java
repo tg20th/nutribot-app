@@ -25,6 +25,12 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
     @Query("SELECT c FROM Content c WHERE c.contentId = :contentId AND c.contentType = :contentType")
     Optional<Content> findByContentIdAndType(@Param("contentId") Integer contentId, @Param("contentType") String contentType);
 
+    Optional<Content> findByContentIdAndUserUserId(Integer contentId, Integer userId);
+
+    Page<Content> findByUserUserId(Integer userId, Pageable pageable);
+
+    Page<Content> findByUserUserIdAndContentType(Integer userId, String contentType, Pageable pageable);
+
     @Modifying
     @Query("UPDATE Content c SET c.viewCount = c.viewCount + 1 WHERE c.contentId = :contentId")
     void incrementViewCount(@Param("contentId") Integer contentId);
