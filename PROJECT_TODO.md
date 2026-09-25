@@ -65,7 +65,7 @@
 ---
 
 ### ☕ THẮNG (Backend - 5 tasks)
-- [ ] **#11 [BE] UserProfile, Ingredient, UserAllergy Entities & Repositories**
+- [x] **#11 [BE] UserProfile, Ingredient, UserAllergy Entities & Repositories**
   - *Mô tả:* Tạo Entity `UserProfile`, `Ingredient` map bảng `user_profiles`, `ingredients`, bảng trung gian `user_allergies`.
   - *File cần tạo:* `entity/UserProfile.java`, `entity/Ingredient.java`, `repository/UserProfileRepository.java`, `repository/IngredientRepository.java`.
   - *Blocked by:* Không có.
