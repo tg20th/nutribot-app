@@ -6,5 +6,5 @@ export default function MemberRoute({ children }) {
 
   return token
     ? children
-    : <Navigate to="/login" replace state={{ from: location.pathname }} />;
+    : <Navigate to="/" replace state={{ authRequired: true, returnTo: location.pathname }} />;
 }
