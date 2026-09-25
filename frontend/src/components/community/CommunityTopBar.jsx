@@ -1,6 +1,7 @@
 import { Bell, Bookmark, Search, Menu, X, BarChart3, BookOpen, CalendarDays, MapPin, Rss } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { getCurrentUserFromToken } from '../../utils/auth';
 
 const drawerNav = [
   { label: 'Home', icon: Rss, to: '/home' },
@@ -10,9 +11,27 @@ const drawerNav = [
   { label: 'Analytics', icon: BarChart3 },
 ];
 
-export default function CommunityTopBar({ query, onQueryChange, hideSearch = false, profile }) {
+const buildAvatarFromUsername = (username) => {
+  const safeName = (username || 'User').trim();
+  const initials = safeName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('') || 'U';
+  const colors = ['#173529', '#285642', '#397055', '#7a4f2a', '#315c2b'];
+  const index = safeName.length % colors.length;
+  const bg = colors[index];
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='32' fill='${bg}'/><text x='50%' y='54%' font-family='Outfit, Arial, sans-serif' font-size='26' font-weight='700' fill='#d7f261' text-anchor='middle' dominant-baseline='middle'>${initials}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
+export default function CommunityTopBar({ query, onQueryChange, hideSearch = false }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { pathname } = useLocation();
+  const currentUser = getCurrentUserFromToken();
+  const username = currentUser?.username || 'NutriBot Member';
+  const avatarSrc = buildAvatarFromUsername(username);
 
   // Close drawer on navigation
   useEffect(() => { setDrawerOpen(false); }, [pathname]);
@@ -98,9 +117,9 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
       </div>
       <div className="community-drawer-profile">
         <Link to="/community/profile">
-          <img src={profile?.avatarUrl || ''} alt=""/>
+          <img src={avatarSrc} alt={username}/>
           <span>
-            <b>{profile?.fullName || profile?.name || 'View your profile'}</b>
+            <b>{username}</b>
             <small>Manage your account</small>
           </span>
         </Link>
