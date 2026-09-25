@@ -14,10 +14,10 @@
 .community-avatar-btn{width:38px;height:38px;border-radius:50%;overflow:hidden;padding:0;border:2px solid var(--sage);flex:none}
 .community-avatar-btn img{width:100%;height:100%;object-fit:cover}
 
-.community-shell{display:flex;align-items:flex-start}
+.community-shell{display:flex;align-items:flex-start;min-height:calc(100vh - 76px)}
 .community-sidenav-spacer{flex:none;width:76px}
 
-.community-sidenav{position:fixed;left:0;top:68px;bottom:0;z-index:15;width:76px;overflow:hidden;transition:width .22s cubic-bezier(.2,.8,.2,1);background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:18px 8px;gap:2px}
+.community-sidenav{position:sticky;top:76px;flex:none;width:76px;height:calc(100vh - 76px);overflow:hidden;transition:width .22s cubic-bezier(.2,.8,.2,1);background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:18px 8px;gap:2px}
 .community-sidenav:hover{width:224px;box-shadow:6px 0 24px rgba(30,40,25,.12)}
 .community-sidenav button,.community-sidenav a{display:flex;align-items:center;gap:16px;width:100%;padding:12px 10px;border-radius:12px;background:transparent;color:var(--text-muted);font-size:13px;font-weight:600;white-space:nowrap}
 .community-sidenav button svg,.community-sidenav a svg{flex:none;margin-left:2px}
@@ -25,6 +25,37 @@
 .community-sidenav:hover button span,.community-sidenav:hover a span{opacity:1}
 .community-sidenav button:hover,.community-sidenav a:hover{background:var(--sage);color:var(--text)}
 .community-sidenav button.is-active,.community-sidenav a.is-active{background:var(--primary);color:#fffefa}
+
+/* Mobile hamburger button */
+.community-hamburger{display:none;width:42px;height:42px;border-radius:12px;background:var(--sage);border:none;cursor:pointer;align-items:center;justify-content:center;color:var(--community-ink);transition:background .2s}
+.community-hamburger:hover{background:#e4ece2}
+.community-hamburger:focus-visible{outline:3px solid var(--community-acid);outline-offset:2px}
+
+/* Mobile drawer overlay */
+.community-drawer-overlay{display:none;position:fixed;inset:0;background:rgba(23,53,41,.4);z-index:25;opacity:0;transition:opacity .25s ease}
+.community-drawer-overlay.is-open{display:block;opacity:1}
+
+/* Mobile drawer */
+.community-drawer{position:fixed;left:0;top:0;bottom:0;width:280px;background:var(--community-paper,#fffef9);z-index:30;transform:translateX(-100%);transition:transform .3s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;padding:20px 16px;gap:8px;box-shadow:4px 0 24px rgba(23,53,41,.15)}
+.community-drawer.is-open{transform:translateX(0)}
+.community-drawer-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:16px;border-bottom:1px solid rgba(23,53,41,.1);margin-bottom:8px}
+.community-drawer-brand{font:600 22px/1 'Playfair Display',serif;letter-spacing:-1px;color:var(--text)}
+.community-drawer-brand span{color:var(--primary)}
+.community-drawer-close{width:36px;height:36px;border-radius:10px;background:transparent;border:none;cursor:pointer;display:grid;place-items:center;color:var(--community-ink);transition:background .2s}
+.community-drawer-close:hover{background:var(--sage)}
+.community-drawer-nav{display:flex;flex-direction:column;gap:4px}
+.community-drawer-nav a,.community-drawer-nav button{display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:12px;background:transparent;color:#506058;font-size:14px;font-weight:600;text-decoration:none;transition:background .2s,color .2s}
+.community-drawer-nav a svg,.community-drawer-nav button svg{flex:none}
+.community-drawer-nav a:hover,.community-drawer-nav button:hover{background:var(--sage);color:var(--text)}
+.community-drawer-nav a.is-active,.community-drawer-nav button.is-active{background:var(--community-ink);color:#fff}
+.community-drawer-nav a.is-active svg,.community-drawer-nav button.is-active svg{color:var(--community-acid)}
+.community-drawer-profile{margin-top:auto;padding-top:16px;border-top:1px solid rgba(23,53,41,.1)}
+.community-drawer-profile a{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:transparent;text-decoration:none;transition:background .2s}
+.community-drawer-profile a:hover{background:var(--sage)}
+.community-drawer-profile img{width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid var(--community-acid)}
+.community-drawer-profile span{display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.community-drawer-profile b{font-size:13px;color:var(--community-ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.community-drawer-profile small{font-size:10px;color:#718077}
 
 .community-layout{flex:1;min-width:0;max-width:1180px;margin:0 auto;padding:28px 4vw 90px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:26px;align-items:start}
 
@@ -119,19 +150,25 @@
   .community-layout{grid-template-columns:minmax(0,1fr) 270px;gap:16px}
 }
 @media(max-width:1000px){
-  .community-sidenav-spacer{width:0}
-  .community-sidenav{left:0;right:0;top:auto;bottom:0;width:100%;height:64px;flex-direction:row;justify-content:space-around;padding:6px 10px;border-right:0;border-top:1px solid var(--border)}
-  .community-sidenav:hover{width:100%;box-shadow:none}
-  .community-sidenav button,.community-sidenav a{width:auto;flex:1;justify-content:center;padding:8px}
-  .community-sidenav button span,.community-sidenav a span{display:none}
-  .community-layout{max-width:none;grid-template-columns:1fr;padding:18px 20px 90px}
+  /* Tablet: compact sidebar, no overlap */
+  .community-sidenav{position:sticky;top:76px;width:60px;height:calc(100vh - 76px);flex-shrink:0}
+  .community-sidenav:hover{width:60px;box-shadow:none}
+  .community-sidenav button span,.community-sidenav a span{display:none!important;opacity:0!important}
+  .community-sidenav button,.community-sidenav a{justify-content:center;padding:12px 8px}
+  .community-sidenav-spacer{width:60px}
+  .community-layout{padding:28px 4vw 90px}
   .community-right-rail{position:static}
   .community-search{max-width:none}
 }
 @media(max-width:640px){
+  /* Mobile: hamburger menu, hide desktop sidebar */
   .community-topbar{padding:0 16px;gap:12px}
   .community-brand small{display:none}
   .community-search{display:none}
+  .community-hamburger{display:flex}
+  .community-sidenav{display:none}
+  .community-sidenav-spacer{display:none}
+  .community-layout{padding:18px 16px 100px}
   .community-post h3{font-size:20px}
   .community-pantry ul{grid-template-columns:1fr}
 }

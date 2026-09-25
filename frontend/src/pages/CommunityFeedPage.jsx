@@ -70,7 +70,7 @@ export default function CommunityFeedPage() {
   }, { scope: page });
 
   return <div className="community-page" ref={page}>
-    <CommunityTopBar query={query} onQueryChange={setQuery}/>
+    <CommunityTopBar query={query} onQueryChange={setQuery} profile={profile}/>
     <div className="community-shell">
       <CommunitySideNav/>
       <span className="community-sidenav-spacer" aria-hidden="true"/>
