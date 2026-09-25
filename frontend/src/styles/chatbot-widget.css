@@ -95,8 +95,8 @@
   position: absolute;
   right: 0;
   bottom: 76px;
-  width: min(410px, calc(100vw - 48px));
-  height: min(620px, calc(100dvh - 124px));
+  width: min(360px, calc(100vw - 48px));
+  height: min(520px, calc(100dvh - 124px));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   overflow: hidden;
