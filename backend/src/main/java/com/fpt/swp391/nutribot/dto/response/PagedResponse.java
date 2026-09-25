@@ -13,22 +13,46 @@ import java.util.List;
 public class PagedResponse<T> {
 
     @JsonProperty("content")
-    private List<T> content;
+    @Builder.Default
+    private List<T> content = List.of();
+
+    @JsonProperty("page")
+    @Builder.Default
+    private int page = 0;
+
+    @JsonProperty("size")
+    @Builder.Default
+    private int size = 0;
 
     @JsonProperty("totalElements")
-    private long totalElements;
+    @Builder.Default
+    private long totalElements = 0;
 
     @JsonProperty("totalPages")
-    private int totalPages;
+    @Builder.Default
+    private int totalPages = 0;
+
+    @JsonProperty("first")
+    @Builder.Default
+    private boolean first = true;
+
+    @JsonProperty("last")
+    @Builder.Default
+    private boolean last = true;
 
     @JsonProperty("currentPage")
-    private int currentPage;
+    @Builder.Default
+    private int currentPage = 0;
 
     public static <T> PagedResponse<T> of(Page<T> page) {
         return PagedResponse.<T>builder()
                 .content(page.getContent())
+                .page(page.getNumber())
+                .size(page.getSize())
                 .totalElements(page.getTotalElements())
                 .totalPages(page.getTotalPages())
+                .first(page.isFirst())
+                .last(page.isLast())
                 .currentPage(page.getNumber())
                 .build();
     }
