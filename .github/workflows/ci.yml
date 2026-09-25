@@ -75,7 +75,7 @@ jobs:
             cd ai-service
             pip install -r requirements-dev.txt
             python -m compileall -q main.py app
-            pytest -q tests
+            python -m pytest -q tests
           else
             echo "AI service not initialized yet, skipping."
           fi
