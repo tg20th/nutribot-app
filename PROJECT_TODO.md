@@ -69,7 +69,7 @@
   - *Mô tả:* Tạo Entity `UserProfile`, `Ingredient` map bảng `user_profiles`, `ingredients`, bảng trung gian `user_allergies`.
   - *File cần tạo:* `entity/UserProfile.java`, `entity/Ingredient.java`, `repository/UserProfileRepository.java`, `repository/IngredientRepository.java`.
   - *Blocked by:* Không có.
-- [ ] **#8 [BE] User Profile GET/UPDATE APIs**
+- [x] **#8 [BE] User Profile GET/UPDATE APIs**
   - *Mô tả:* API `GET /api/v1/users/profile` và `PUT /api/v1/users/profile` xem/sửa thông tin cá nhân cơ bản.
   - *File cần tạo:* `service/UserProfileService.java`, `controller/UserProfileController.java`.
   - *Blocked by:* `#11`.
@@ -98,7 +98,7 @@
 - [x] **#4 [FE] Màn hình Đăng nhập (`/login`)** ✅
   - *Mô tả:* Form đăng nhập, gọi API nhận JWT Token, lưu vào `localStorage`, chuyển hướng người dùng.
   - *File cần tạo:* `frontend/src/pages/LoginPage.jsx`.
-- [ ] **#7 [FE] Màn hình Thông tin cá nhân (`/profile`)**
+- [x] **#7 [FE] Màn hình Thông tin cá nhân (`/profile`)**
   - *Mô tả:* Hiển thị họ tên, email, ngày sinh, giới tính và cho phép cập nhật.
   - *File cần tạo:* `frontend/src/pages/ProfilePage.jsx`.
 - [ ] **#9 [FE] Màn hình Hồ sơ Sức khỏe & Dị ứng**

@@ -1,5 +1,6 @@
 package com.fpt.swp391.nutribot.config;
 
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -17,6 +18,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.Arrays;
 import java.util.List;
+import java.time.Instant;
 
 @Configuration
 @EnableWebSecurity
@@ -43,6 +45,13 @@ public class SecurityConfig {
                         // Authenticated endpoints
                         .anyRequest().authenticated()
                 )
+                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, exception) -> {
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json");
+                    response.setCharacterEncoding("UTF-8");
+                    response.getWriter().write("{\"success\":false,\"message\":\"Authentication required.\",\"data\":null,\"timestamp\":\""
+                            + Instant.now() + "\"}");
+                }))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")

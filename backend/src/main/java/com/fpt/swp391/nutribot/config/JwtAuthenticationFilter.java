@@ -1,6 +1,6 @@
 package com.fpt.swp391.nutribot.config;
 
-import com.fpt.swp391.nutribot.service.AuthService;
+import com.fpt.swp391.nutribot.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -21,7 +21,7 @@ import java.util.Collections;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
-    private final AuthService authService;
+    private final UserRepository userRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -33,7 +33,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
             String username = jwtTokenProvider.getUsernameFromToken(token);
 
-            var userOpt = authService.getUserByUsername(username);
+            var userOpt = userRepository.findByUsername(username);
             if (userOpt.isPresent()) {
                 var user = userOpt.get();
                 var authorities = Collections.singletonList(
