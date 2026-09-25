@@ -147,13 +147,13 @@
 ## 🏃 SPRINT 2: Quản trị Admin, Thực đơn Tuần & Nhà hàng GPS (Tasks #33 - #51)
 
 ### ☕ TRƯỜNG (Backend - 5 tasks)
-- [ ] **#36 [BE] Admin API: Quản lý Người dùng**
+- [x] **#36 [BE] Admin API: Quản lý Người dùng** ✅
   - *Mô tả:* API `GET /api/v1/admin/users` (phân trang, tìm kiếm), `PUT /api/v1/admin/users/{id}/status` (khóa/mở khóa tài khoản).
   - *File cần tạo:* `controller/AdminUserController.java`.
-- [ ] **#38 [BE] Admin API: Kiểm duyệt Nội dung Blog/Video**
+- [x] **#38 [BE] Admin API: Kiểm duyệt Nội dung Blog/Video** ✅
   - *Mô tả:* API `GET /api/v1/admin/contents`, `PUT /api/v1/admin/contents/{id}/status` (duyệt, ẩn, xóa bài vi phạm).
   - *File cần tạo:* `controller/AdminContentController.java`.
-- [ ] **#40 [BE] Admin API: Quản lý & Xóa Bình luận Vi phạm**
+- [x] **#40 [BE] Admin API: Quản lý & Xóa Bình luận Vi phạm** ✅
   - *Mô tả:* API `GET /api/v1/admin/comments`, `DELETE /api/v1/admin/comments/{id}`.
 - [ ] **#57 [BE] API Gợi ý Nhà hàng theo Món ăn**
   - *Mô tả:* API `GET /api/v1/restaurants/recommend?dishId=...` kết nối logic gợi ý của Lan để trả về danh sách nhà hàng tương ứng.
