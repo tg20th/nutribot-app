@@ -30,6 +30,12 @@
 
 ## 🌿 GIT & COMMIT CONVENTIONS (MANDATORY)
 
+### 0. QUY TẮC BẮT BUỘC: 1 TASK = 1 BRANCH = 1 COMMIT = 1 PR
+- Mỗi task Jira phải có **đúng 1 branch riêng**, **đúng 1 commit**, và **đúng 1 PR**.
+- Không gộp nhiều task vào chung 1 commit hay 1 PR.
+- Commit xong task nào → push và tạo PR cho task đó ngay, không chờ.
+- Cập nhật `[x]` trong `PROJECT_TODO.md` ngay sau khi commit.
+
 ### 1. Branch Naming
 All branches must follow:
 ```bash

@@ -52,6 +52,12 @@ git checkout -b feat/NB-<mã_task>-<tên_ngắn>-<tên_bạn>
 - `feat/NB-32-fastapi-lan`
 - `feat/NB-16-blog-ui-khanh`
 
+> **QUY TẮC BẮT BUỘC: 1 TASK = 1 BRANCH = 1 COMMIT = 1 PR**
+> - Mỗi task Jira phải có **đúng 1 branch riêng**, **đúng 1 commit**, và **đúng 1 PR**.
+> - Không gộp nhiều task vào chung 1 commit hay 1 PR.
+> - Commit xong task nào → push và tạo PR cho task đó ngay, không chờ.
+> - Cập nhật `[x]` trong `PROJECT_TODO.md` ngay sau khi commit.
+
 ### 3.2. Cú pháp Commit chuẩn 100% Tiếng Việt (Git 50/72 Rule)
 Mỗi commit bắt buộc phải gắn mã task `NB-xx` để tự động liên kết với Jira:
 
