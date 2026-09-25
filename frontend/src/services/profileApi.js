@@ -7,3 +7,6 @@ export const updateMyAvatar = async (file) => {
   return unwrapData(await apiRequest('/api/v1/users/profile/avatar', { method: 'PUT', body }), {});
 };
 export const deleteMyAvatar = async () => unwrapData(await apiRequest('/api/v1/users/profile/avatar', { method: 'DELETE' }), {});
+export const getHealthProfile = async (signal) => unwrapData(await apiRequest('/api/v1/users/profile/health', { signal }), {});
+export const updateHealthProfile = async (payload) => unwrapData(await apiRequest('/api/v1/users/profile/health', { method: 'PUT', body: JSON.stringify(payload) }), {});
+export const getAllergyIngredients = async (signal) => unwrapData(await apiRequest('/api/v1/ingredients', { signal }), []);

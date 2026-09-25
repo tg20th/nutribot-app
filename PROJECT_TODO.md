@@ -101,7 +101,7 @@
 - [x] **#7 [FE] Màn hình Thông tin cá nhân (`/profile`)** ✅
   - *Mô tả:* Hiển thị họ tên, email, ngày sinh, giới tính và cho phép cập nhật.
   - *File cần tạo:* `frontend/src/pages/ProfilePage.jsx`.
-- [ ] **#9 [FE] Màn hình Hồ sơ Sức khỏe & Dị ứng**
+- [x] **#9 [FE] Màn hình Hồ sơ Sức khỏe & Dị ứng**
   - *Mô tả:* Form nhập chiều cao, cân nặng, thanh đo BMI hiển thị thể trạng, danh sách thẻ chọn nguyên liệu dị ứng.
   - *File cần tạo:* `frontend/src/components/profile/HealthProfileSection.jsx`.
 - [x] **#12 [FE] Layout Trang chủ (`/home`)** ✅

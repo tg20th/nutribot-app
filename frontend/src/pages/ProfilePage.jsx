@@ -300,9 +300,9 @@ export default function ProfilePage() {
 
   return (
     <div className="community-page nb-profile-page" ref={pageRef}>
-      <CommunityTopBar query={headerQuery} onQueryChange={setHeaderQuery} activePath="/home" />
+      <CommunityTopBar query={headerQuery} onQueryChange={setHeaderQuery} activePath="/profile" />
       <div className="community-shell">
-        <CommunitySideNav activePath="/home" />
+        <CommunitySideNav activePath="/profile" />
         <span className="community-sidenav-spacer" aria-hidden="true" />
 
         <main className="nb-profile-main">

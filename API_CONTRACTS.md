@@ -127,19 +127,40 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
 ```
 
 ### 2.6. Cập nhật chỉ số cơ thể & Dị ứng (Tự động tính BMI)
-- **Endpoint:** `PUT /api/v1/users/profile/health`
+- **Lấy hồ sơ sức khỏe:** `GET /api/v1/users/profile/health`
+- **Cập nhật hồ sơ sức khỏe:** `PUT /api/v1/users/profile/health`
 - **Header:** `Authorization: Bearer <token>`
 - **Request Body:**
 ```json
 {
   "heightCm": 168.0,
   "weightKg": 58.0,
-  "gender": "Nữ",
-  "dateOfBirth": "2003-05-15",
   "healthGoal": "gain_muscle",
   "allergyIngredientIds": [2, 5]
 }
 ```
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Cập nhật hồ sơ sức khỏe thành công",
+  "data": {
+    "heightCm": 168.0,
+    "weightKg": 58.0,
+    "bmi": 20.5,
+    "bmiCategory": "Bình thường",
+    "healthGoal": "gain_muscle",
+    "allergyIngredientIds": [2, 5],
+    "allergies": ["Hành tây", "Bắp cải"]
+  },
+  "timestamp": "2026-09-25T08:30:00Z"
+}
+```
+
+### 2.7. Lấy danh sách nguyên liệu chọn dị ứng
+- **Endpoint:** `GET /api/v1/ingredients`
+- **Header:** `Authorization: Bearer <token>`
+- **Mô tả:** Trả về các nguyên liệu đang hoạt động từ bảng `ingredients`, sắp xếp theo tên.
 
 ---
 

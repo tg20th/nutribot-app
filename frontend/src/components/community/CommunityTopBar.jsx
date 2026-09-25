@@ -1,15 +1,8 @@
-import { Bell, Bookmark, Search, Menu, X, BarChart3, BookOpen, CalendarDays, MapPin, Rss } from 'lucide-react';
+import { Bell, Bookmark, Search, Menu, X } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { getCurrentUserFromToken } from '../../utils/auth';
-
-const drawerNav = [
-  { label: 'Home', icon: Rss, to: '/home' },
-  { label: 'My blogs', icon: BookOpen, to: '/community/my-blogs' },
-  { label: 'Weekly Meal Planner', icon: CalendarDays, to: '/community/planner' },
-  { label: 'Nearby Vegan Map', icon: MapPin },
-  { label: 'Analytics', icon: BarChart3 },
-];
+import { userDashboardNav } from './userDashboardNav';
 
 const buildAvatarFromUsername = (username) => {
   const safeName = (username || 'User').trim();
@@ -104,7 +97,7 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
         </button>
       </div>
       <div className="community-drawer-nav">
-        {drawerNav.map(({ label, icon, to }) => {
+        {userDashboardNav.map(({ label, icon, to }) => {
           const Icon = icon;
           const isActive = to === activeLocation;
           return to

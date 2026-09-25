@@ -1,16 +1,8 @@
-import { BarChart3, BookOpen, CalendarDays, MapPin, Rss } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { getCurrentUserFromToken } from '../../utils/auth';
+import { userDashboardNav } from './userDashboardNav';
 
-const icons = { Rss, BookOpen, CalendarDays, MapPin, BarChart3 };
-const communityNav = [
-  { label: 'Home', icon: 'Rss', to: '/home' },
-  { label: 'My blogs', icon: 'BookOpen', to: '/community/my-blogs' },
-  { label: 'Weekly Meal Planner', icon: 'CalendarDays', to: '/community/planner' },
-  { label: 'Nearby Vegan Map', icon: 'MapPin' },
-  { label: 'Analytics', icon: 'BarChart3' },
-];
 
 const buildAvatarFromUsername = (username) => {
   const safeName = (username || 'User').trim();
@@ -43,8 +35,7 @@ export default function CommunitySideNav({ activePath }) {
 
   return (
     <nav className="community-sidenav" aria-label="Community sections">
-      {communityNav.map(({ label, icon, to }) => {
-        const Icon = icons[icon];
+      {userDashboardNav.map(({ label, icon: Icon, to }) => {
         const isActive = to === activeLocation;
         return to
           ? <Link key={label} to={to} className={isActive ? 'is-active' : ''} title={label} aria-label={label} aria-current={to === pathname ? 'page' : undefined}><Icon size={20}/><span>{label}</span></Link>
