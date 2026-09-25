@@ -17,6 +17,7 @@ NutriBot is a personalized nutrition consulting system.
 1. Always adhere to `API_CONTRACTS.md` for JSON request/response formats (`success`, `message`, `data`, `timestamp`).
 2. Always refer to `backend/sql/Database.sql` for table names and column definitions.
 3. Check `PROJECT_TODO.md` for task specifications and update task checkbox `[x]` upon completion.
+   - **AFTER PR MERGED TO `master`:** Create a separate commit `chore: cập nhật PROJECT_TODO.md - <description>` to update the task checkbox and push to `master`.
 4. Git commit messages must be 100% in Vietnamese, following the Git 50/72 rule:
    `<type>(NB-<task_id>-<LAYER>): <Tiêu đề ngắn 50-72 ký tự tiếng Việt> [#done]`
 5. Branch naming convention: `feat/NB-<task_id>-<short_name>-<member_name>`.

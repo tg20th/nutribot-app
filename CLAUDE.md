@@ -34,7 +34,8 @@
 - Mỗi task Jira phải có **đúng 1 branch riêng**, **đúng 1 commit**, và **đúng 1 PR**.
 - Không gộp nhiều task vào chung 1 commit hay 1 PR.
 - Commit xong task nào → push và tạo PR cho task đó ngay, không chờ.
-- Cập nhật `[x]` trong `PROJECT_TODO.md` ngay sau khi commit.
+- Cập nhật `[x]` trong `PROJECT_TODO.md` ngay sau khi PR được merged vào `master`.
+- **Sau khi PR merged:** Tạo commit riêng `chore: cập nhật PROJECT_TODO.md - <mô_tả>` cập nhật trạng thái task và push lên `master`.
 
 ### 1. Branch Naming
 All branches must follow:

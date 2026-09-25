@@ -49,6 +49,7 @@ Agent **BẮT BUỘC** viết commit message bằng **100% Tiếng Việt**, tu�
 - **Tiêu đề (Dòng 1):** Độ dài từ 50 đến tối đa 72 ký tự. Bắt đầu bằng động từ tiếng Việt (*hoàn thành, xây dựng, tối ưu, sửa lỗi, bổ sung*).
 - **Thêm `#done`:** Thêm `#done` ở cuối dòng 1 khi hoàn thành task để kích hoạt **Jira Smart Commits** tự động kéo task sang cột *Done*.
 - **Thêm `#time <thời_gian>` (Tùy chọn):** Ví dụ `#time 2h` hoặc `#time 45m` để tự động ghi log thời gian vào Jira.
+- **Sau khi PR merged vào `master`:** Agent PHẢI cập nhật `[x]` trong `PROJECT_TODO.md` (tick done), tạo commit riêng `chore: cập nhật PROJECT_TODO.md - <mô_tả>` và push lên `master`.
 - **Thân commit (Body):** Cách dòng tiêu đề đúng 1 dòng trống. Dùng 2 đến 4 dấu gạch đầu dòng `-` mô tả chi tiết công việc.
 
 #### Ví dụ Commit chuẩn mẫu:
