@@ -26,15 +26,23 @@ const buildAvatarFromUsername = (username) => {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 };
 
-export default function CommunityTopBar({ query, onQueryChange, hideSearch = false }) {
+export default function CommunityTopBar({ query, onQueryChange, hideSearch = false, activePath }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { pathname } = useLocation();
+  const activeLocation = activePath ?? pathname;
   const currentUser = getCurrentUserFromToken();
   const username = currentUser?.username || 'NutriBot Member';
-  const avatarSrc = buildAvatarFromUsername(username);
+  const [profileAvatar, setProfileAvatar] = useState(() => sessionStorage.getItem('nutribot-profile-avatar') || '');
+  const avatarSrc = profileAvatar || buildAvatarFromUsername(username);
 
   // Close drawer on navigation
   useEffect(() => { setDrawerOpen(false); }, [pathname]);
+
+  useEffect(() => {
+    const handleProfileUpdate = (event) => setProfileAvatar(event.detail?.avatarUrl || '');
+    window.addEventListener('nutribot-profile-updated', handleProfileUpdate);
+    return () => window.removeEventListener('nutribot-profile-updated', handleProfileUpdate);
+  }, []);
 
   // Close drawer on Escape key
   useEffect(() => {
@@ -98,13 +106,13 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
       <div className="community-drawer-nav">
         {drawerNav.map(({ label, icon, to }) => {
           const Icon = icon;
-          const isActive = to === pathname;
+          const isActive = to === activeLocation;
           return to
             ? <Link
                 key={label}
                 to={to}
                 className={isActive ? 'is-active' : ''}
-                aria-current={isActive ? 'page' : undefined}
+                aria-current={to === pathname ? 'page' : undefined}
               >
                 <Icon size={20}/>
                 <span>{label}</span>
@@ -116,7 +124,7 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
         })}
       </div>
       <div className="community-drawer-profile">
-        <Link to="/community/profile">
+        <Link to="/profile">
           <img src={avatarSrc} alt={username}/>
           <span>
             <b>{username}</b>

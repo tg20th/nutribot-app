@@ -98,7 +98,7 @@
 - [x] **#4 [FE] Màn hình Đăng nhập (`/login`)** ✅
   - *Mô tả:* Form đăng nhập, gọi API nhận JWT Token, lưu vào `localStorage`, chuyển hướng người dùng.
   - *File cần tạo:* `frontend/src/pages/LoginPage.jsx`.
-- [ ] **#7 [FE] Màn hình Thông tin cá nhân (`/profile`)**
+- [x] **#7 [FE] Màn hình Thông tin cá nhân (`/profile`)** ✅
   - *Mô tả:* Hiển thị họ tên, email, ngày sinh, giới tính và cho phép cập nhật.
   - *File cần tạo:* `frontend/src/pages/ProfilePage.jsx`.
 - [ ] **#9 [FE] Màn hình Hồ sơ Sức khỏe & Dị ứng**

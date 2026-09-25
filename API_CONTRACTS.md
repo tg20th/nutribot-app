@@ -79,6 +79,8 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
     "username": "hoanglan_ai",
     "email": "lan@nutribot.com",
     "fullName": "Hoàng Thị Lan",
+    "avatarUrl": "https://cdn.nutribot.vn/avatars/user-1.webp",
+    "bio": "Yêu thích các món ăn lành mạnh và giàu đạm thực vật.",
     "heightCm": 165.0,
     "weightKg": 55.0,
     "bmi": 20.2,
@@ -92,7 +94,39 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
 }
 ```
 
-### 2.4. Cập nhật chỉ số cơ thể & Dị ứng (Tự động tính BMI)
+### 2.4. Cập nhật thông tin cá nhân cơ bản
+- **Endpoint:** `PUT /api/v1/users/profile`
+- **Header:** `Authorization: Bearer <token>`
+- **Request Body:**
+```json
+{
+  "fullName": "Hoàng Thị Lan",
+  "email": "lan@nutribot.com",
+  "bio": "Yêu thích các món ăn lành mạnh và giàu đạm thực vật.",
+  "gender": "Female",
+  "dateOfBirth": "2003-05-15"
+}
+```
+- **Response (200 OK):** Trả về `ApiResponse` chứa hồ sơ đã cập nhật.
+
+### 2.5. Cập nhật hoặc xóa ảnh đại diện
+- **Cập nhật:** `PUT /api/v1/users/profile/avatar`
+- **Content-Type:** `multipart/form-data`
+- **Form field:** `avatar` (JPG, PNG hoặc WebP; tối đa 5 MB)
+- **Xóa:** `DELETE /api/v1/users/profile/avatar`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Cập nhật ảnh đại diện thành công",
+  "data": {
+    "avatarUrl": "https://cdn.nutribot.vn/avatars/user-1.webp"
+  },
+  "timestamp": "2026-09-25T10:00:00Z"
+}
+```
+
+### 2.6. Cập nhật chỉ số cơ thể & Dị ứng (Tự động tính BMI)
 - **Endpoint:** `PUT /api/v1/users/profile/health`
 - **Header:** `Authorization: Bearer <token>`
 - **Request Body:**

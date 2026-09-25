@@ -7,7 +7,8 @@ export class ApiError extends Error {
 export async function apiRequest(path, options = {}) {
   const { body, headers, signal, token, ...requestOptions } = options;
   const authToken = token ?? (typeof window !== 'undefined' ? localStorage.getItem('nutribot-auth-token') : null);
-  const response = await fetch(`${baseUrl}${path}`, { ...requestOptions, signal, headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}), ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}), ...headers }, body });
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
+  const response = await fetch(`${baseUrl}${path}`, { ...requestOptions, signal, headers: { Accept: 'application/json', ...(body && !isFormData ? { 'Content-Type': 'application/json' } : {}), ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}), ...headers }, body });
   if (response.status === 204) return null;
   const contentType = response.headers.get('content-type') ?? '';
   const payload = contentType.includes('application/json') ? await response.json() : await response.text();

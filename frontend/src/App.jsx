@@ -3,7 +3,7 @@ import HomePage from './pages/HomePage';
 import CommunityFeedPage from './pages/CommunityFeedPage';
 import CommunityContentDetailPage from './pages/CommunityContentDetailPage';
 import WeeklyMealPlannerPage from './pages/WeeklyMealPlannerPage';
-import CommunityProfilePage from './pages/CommunityProfilePage';
+import ProfilePage from './pages/ProfilePage';
 import AdminLayout from './layouts/AdminLayout';
 import AdminRoute from './components/admin/AdminRoute';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -25,7 +25,8 @@ export default function App() {
     <Route path="/login" element={<LoginPage />} />
     <Route path="/community" element={<Navigate to="/home" replace />} />
     <Route path="/community/planner" element={<MemberRoute><WeeklyMealPlannerPage /></MemberRoute>} />
-    <Route path="/community/profile" element={<MemberRoute><CommunityProfilePage /></MemberRoute>} />
+    <Route path="/profile" element={<MemberRoute><ProfilePage /></MemberRoute>} />
+    <Route path="/community/profile" element={<Navigate to="/profile" replace />} />
     <Route path="/community/my-blogs" element={<MemberRoute><MyBlogsPage /></MemberRoute>} />
     <Route path="/community/posts/:postId" element={<MemberRoute><CommunityContentDetailPage /></MemberRoute>} />
     <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>

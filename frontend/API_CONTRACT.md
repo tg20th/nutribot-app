@@ -12,7 +12,8 @@ All successful resource responses use `{ "data": ... }`. Configure `VITE_API_BAS
 | GET | `/api/posts/{id}` | Community detail |
 | GET, POST | `/api/posts/{id}/comments` | Community detail/post cards |
 | POST, DELETE | `/api/posts/{id}/votes` | Post cards/detail |
-| GET, PUT | `/api/users/me/profile` | Community profile/navigation |
+| GET, PUT | `/api/v1/users/profile` | Personal profile/navigation |
+| PUT, DELETE | `/api/v1/users/profile/avatar` | Profile avatar upload/removal |
 | GET | `/api/weekly-menus/current` | Weekly planner |
 | PUT | `/api/weekly-menus/{id}` | Planner persistence |
 | GET | `/api/restaurants` | Community right rail |

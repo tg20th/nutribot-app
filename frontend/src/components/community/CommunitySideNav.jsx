@@ -1,5 +1,6 @@
 import { BarChart3, BookOpen, CalendarDays, MapPin, Rss } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { getCurrentUserFromToken } from '../../utils/auth';
 
 const icons = { Rss, BookOpen, CalendarDays, MapPin, BarChart3 };
@@ -26,22 +27,30 @@ const buildAvatarFromUsername = (username) => {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 };
 
-export default function CommunitySideNav() {
+export default function CommunitySideNav({ activePath }) {
   const { pathname } = useLocation();
+  const activeLocation = activePath ?? pathname;
   const currentUser = getCurrentUserFromToken();
   const username = currentUser?.username || 'NutriBot Member';
-  const avatarSrc = buildAvatarFromUsername(username);
+  const [profileAvatar, setProfileAvatar] = useState(() => sessionStorage.getItem('nutribot-profile-avatar') || '');
+  const avatarSrc = profileAvatar || buildAvatarFromUsername(username);
+
+  useEffect(() => {
+    const handleProfileUpdate = (event) => setProfileAvatar(event.detail?.avatarUrl || '');
+    window.addEventListener('nutribot-profile-updated', handleProfileUpdate);
+    return () => window.removeEventListener('nutribot-profile-updated', handleProfileUpdate);
+  }, []);
 
   return (
     <nav className="community-sidenav" aria-label="Community sections">
       {communityNav.map(({ label, icon, to }) => {
         const Icon = icons[icon];
-        const isActive = to === pathname;
+        const isActive = to === activeLocation;
         return to
-          ? <Link key={label} to={to} className={isActive ? 'is-active' : ''} title={label} aria-label={label} aria-current={isActive ? 'page' : undefined}><Icon size={20}/><span>{label}</span></Link>
+          ? <Link key={label} to={to} className={isActive ? 'is-active' : ''} title={label} aria-label={label} aria-current={to === pathname ? 'page' : undefined}><Icon size={20}/><span>{label}</span></Link>
           : <button key={label} type="button" title={label}><Icon size={20}/><span>{label}</span></button>;
       })}
-      <Link to="/community/profile" className={`community-sidenav-profile${pathname === '/community/profile' ? ' is-active' : ''}`} title={username} aria-label={`Open ${username} profile`}>
+      <Link to="/profile" className={`community-sidenav-profile${activeLocation === '/profile' ? ' is-active' : ''}`} title={username} aria-label={`Open ${username} profile`}>
         <img src={avatarSrc} alt={username}/>
         <span><b>{username}</b><small>View your profile</small></span>
       </Link>

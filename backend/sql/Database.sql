@@ -76,6 +76,8 @@ GO
 
 CREATE TABLE user_profiles (
     user_id         INT NOT NULL PRIMARY KEY,
+    avatar_url      NVARCHAR(500) NULL,
+    bio             NVARCHAR(500) NULL,
     height_cm       DECIMAL(5,2) NULL,
     weight_kg       DECIMAL(5,2) NULL,
     gender          NVARCHAR(20) NULL,
