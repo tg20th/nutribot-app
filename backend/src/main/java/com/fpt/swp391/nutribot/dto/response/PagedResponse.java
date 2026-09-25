@@ -3,7 +3,6 @@ package com.fpt.swp391.nutribot.dto.response;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 import org.springframework.data.domain.Page;
-
 import java.util.List;
 
 @Data
