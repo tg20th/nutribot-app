@@ -15,6 +15,7 @@ import { ContentDetailPage, ContentManagementPage } from './pages/admin/ContentP
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
 import MemberRoute from './components/MemberRoute';
+import MyBlogsPage from './pages/MyBlogsPage';
 
 export default function App() {
   return <Routes>
@@ -25,6 +26,7 @@ export default function App() {
     <Route path="/community" element={<Navigate to="/home" replace />} />
     <Route path="/community/planner" element={<MemberRoute><WeeklyMealPlannerPage /></MemberRoute>} />
     <Route path="/community/profile" element={<MemberRoute><CommunityProfilePage /></MemberRoute>} />
+    <Route path="/community/my-blogs" element={<MemberRoute><MyBlogsPage /></MemberRoute>} />
     <Route path="/community/posts/:postId" element={<MemberRoute><CommunityContentDetailPage /></MemberRoute>} />
     <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
       <Route index element={<AdminDashboard />} />

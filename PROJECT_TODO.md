@@ -126,7 +126,7 @@
 - [ ] **#18 [FE] Form Soạn thảo & Đăng Blog**
   - *Mô tả:* Trình soạn thảo văn bản, upload ảnh thumbnail, chọn danh mục bài viết.
   - *File cần tạo:* `frontend/src/pages/CreateBlogPage.jsx`.
-- [ ] **#20 [FE] Màn hình "Blog của tôi"**
+- [x] **#20 [FE] Màn hình "Blog của tôi"** ✅
   - *Mô tả:* Danh sách bài viết cá nhân đã đăng, nút sửa bài và nút xóa bài kèm dialog xác nhận.
   - *File cần tạo:* `frontend/src/pages/MyBlogsPage.jsx`.
 - [ ] **#21 [FE] Màn hình Danh sách & Chi tiết Video nấu ăn**
