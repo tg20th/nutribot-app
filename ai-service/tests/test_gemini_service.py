@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from google.genai import errors
 
 from app.config import Settings
-from app.prompts import build_user_prompt
+from app.prompts import SYSTEM_INSTRUCTION, build_user_prompt
 from app.schemas.chat import ChatRequest, GeminiChatResult
 from app.services.gemini_service import GeminiService
 
@@ -76,6 +76,21 @@ def test_prompt_limits_history_and_preserves_user_context():
     assert "Tin nhắn 4" in prompt
     assert "Tin nhắn 3" in prompt
     assert "Tin nhắn 2" not in prompt
+
+
+def test_system_prompt_restricts_advice_to_vegan_food():
+    normalized_instruction = SYSTEM_INSTRUCTION.casefold()
+
+    assert "chỉ tư vấn" in normalized_instruction
+    assert "thuần chay" in normalized_instruction
+    assert "không tư vấn" in normalized_instruction
+    assert "thịt" in normalized_instruction
+    assert "cá" in normalized_instruction
+    assert "trứng" in normalized_instruction
+    assert "sữa động vật" in normalized_instruction
+    assert "mật ong" in normalized_instruction
+    assert "gelatin" in normalized_instruction
+    assert "từ chối" in normalized_instruction
 
 
 def test_gemini_service_falls_back_when_latest_model_is_overloaded():
