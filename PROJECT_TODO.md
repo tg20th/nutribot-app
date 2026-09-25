@@ -89,7 +89,7 @@
 ---
 
 ### 🤖 LAN (AI Specialist & React FE - 13 tasks)
-- [ ] **#32 [AI] Dựng Python FastAPI AI Service & NutriBot System Prompt**
+- [x] **#32 [AI] Dựng Python FastAPI AI Service & NutriBot System Prompt**
   - *Mô tả:* Dựng ứng dụng FastAPI trong thư mục `ai-service/`, kết nối Gemini/OpenAI API, cấu hình System Prompt chuyên gia dinh dưỡng thực vật, mở endpoint `POST /api/ai/chat`.
   - *File cần tạo:* `ai-service/main.py`, `ai-service/requirements.txt`, `ai-service/Dockerfile`.
 - [x] **#1 [FE] Màn hình Đăng ký (`/register`)** ✅

@@ -64,17 +64,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
-      - name: Check requirements.txt exists & Lint
+      - name: Install dependencies and run tests
         run: |
           if [ -d "ai-service" ] && [ -f "ai-service/requirements.txt" ]; then
             cd ai-service
-            pip install -r requirements.txt
-            python -m py_compile main.py || true
+            pip install -r requirements-dev.txt
+            python -m compileall -q main.py app
+            pytest -q tests
           else
             echo "AI service not initialized yet, skipping."
           fi

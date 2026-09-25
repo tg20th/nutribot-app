@@ -7,6 +7,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { requestNutritionAdvice } from '../../services/chatbotApi';
 import '../../styles/chatbot-widget.css';
 
 const QUICK_PROMPTS = [
@@ -29,9 +30,14 @@ export default function ChatbotWidget({ onSend }) {
   const [isOpen, setIsOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState(INITIAL_MESSAGES);
+  const [isLoading, setIsLoading] = useState(false);
   const panelRef = useRef(null);
   const threadRef = useRef(null);
   const inputRef = useRef(null);
+  const requestControllerRef = useRef(null);
+  const sessionIdRef = useRef(
+    globalThis.crypto?.randomUUID?.() || `guest-${Date.now()}`,
+  );
 
   const openWidget = useCallback(() => {
     setIsMounted(true);
@@ -75,6 +81,8 @@ export default function ChatbotWidget({ onSend }) {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [closeWidget, isOpen, openWidget]);
+
+  useEffect(() => () => requestControllerRef.current?.abort(), []);
 
   useEffect(() => {
     threadRef.current?.scrollTo({
@@ -131,20 +139,73 @@ export default function ChatbotWidget({ onSend }) {
     );
   }, { dependencies: [messages.length, isOpen], scope: panelRef });
 
-  const submitMessage = (value = draft) => {
+  const submitMessage = async (value = draft) => {
     const message = value.trim();
-    if (!message) return;
+    if (!message || isLoading) return;
+
+    const conversationHistory = messages
+      .filter((item) => item.id !== 'welcome' && !item.pending && !item.error)
+      .slice(-40)
+      .map((item) => ({
+        sender: item.sender === 'user' ? 'USER' : 'ASSISTANT',
+        content: item.text,
+      }));
+    const userMessage = {
+      id: `user-${Date.now()}`,
+      sender: 'user',
+      text: message,
+    };
+    const pendingId = `pending-${Date.now()}`;
 
     setMessages((current) => [
       ...current,
-      {
-        id: `user-${Date.now()}`,
-        sender: 'user',
-        text: message,
-      },
+      userMessage,
+      { id: pendingId, sender: 'assistant', text: '', pending: true },
     ]);
     setDraft('');
+    setIsLoading(true);
     onSend?.(message);
+
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+
+    try {
+      const response = await requestNutritionAdvice({
+        message,
+        sessionId: sessionIdRef.current,
+        conversationHistory,
+        signal: controller.signal,
+      });
+      const recommendations = response.recommendations ?? [];
+      const recommendationText = recommendations.length
+        ? `\n\nGợi ý nhanh:\n${recommendations.map((item) => `• ${item}`).join('\n')}`
+        : '';
+      setMessages((current) => [
+        ...current.filter((item) => item.id !== pendingId),
+        {
+          id: `assistant-${Date.now()}`,
+          sender: 'assistant',
+          text: `${response.reply}${recommendationText}`,
+        },
+      ]);
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+      const messageText = error.status === 503
+        ? 'NutriBot đang quá tải tạm thời. Bạn hãy thử lại sau ít phút.'
+        : 'NutriBot chưa thể trả lời lúc này. Vui lòng kiểm tra AI service và thử lại.';
+      setMessages((current) => [
+        ...current.filter((item) => item.id !== pendingId),
+        {
+          id: `error-${Date.now()}`,
+          sender: 'assistant',
+          text: messageText,
+          error: true,
+        },
+      ]);
+    } finally {
+      requestControllerRef.current = null;
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -165,7 +226,7 @@ export default function ChatbotWidget({ onSend }) {
               </span>
               <span>
                 <strong>NutriBot AI</strong>
-                <small><i aria-hidden="true" /> Ready to help</small>
+                <small><i aria-hidden="true" /> {isLoading ? 'Thinking...' : 'Ready to help'}</small>
               </span>
             </div>
             <button
@@ -196,7 +257,11 @@ export default function ChatbotWidget({ onSend }) {
                   className={`chatbot-widget__message chatbot-widget__message--${message.sender}`}
                   data-latest-message={index === messages.length - 1 ? 'true' : undefined}
                 >
-                  {message.text}
+                  {message.pending ? (
+                    <span className="chatbot-widget__typing" aria-label="NutriBot is thinking">
+                      <i /><i /><i />
+                    </span>
+                  ) : message.text}
                 </div>
               ))}
             </div>
@@ -209,6 +274,7 @@ export default function ChatbotWidget({ onSend }) {
                     type="button"
                     className="chatbot-widget__prompt"
                     onClick={() => submitMessage(prompt)}
+                    disabled={isLoading}
                   >
                     <span>{prompt}</span>
                     <span aria-hidden="true">+</span>
@@ -235,8 +301,9 @@ export default function ChatbotWidget({ onSend }) {
               onChange={(event) => setDraft(event.target.value)}
               placeholder="Ask about food or nutrition..."
               autoComplete="off"
+              disabled={isLoading}
             />
-            <button type="submit" disabled={!draft.trim()} aria-label="Send message">
+            <button type="submit" disabled={!draft.trim() || isLoading} aria-label="Send message">
               <Send size={18} />
             </button>
           </form>
