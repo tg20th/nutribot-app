@@ -10,7 +10,7 @@
 
 | Thành viên | Vai trò | Số lượng Task | Phạm vi sở hữu code chính |
 | :--- | :---: | :---: | :--- |
-| **Trường** | Backend | **14 tasks** | Auth, Security (JWT), User & Role, Content (Blog & Video), Comments, Votes, Admin APIs. |
+| **Trường** | Backend | **13 tasks** (12 done, 1 remaining) | Auth, Security (JWT), User & Role, Content (Blog & Video), Comments, Votes, Admin APIs. |
 | **Thắng** | Backend | **13 tasks** | Profile cá nhân, Health & Dị ứng, BMI, Category, Weekly Menu, Restaurant GPS, Java AI Gateway. |
 | **Lan** | AI & FE | **17 tasks** | Python AI Microservice (FastAPI, LLM prompt, Meal Planner) + React UI cho Auth, Profile, Chatbot, Planner. |
 | **Khánh** | BA & FE | **15 tasks** | React UI cho Admin Dashboard (4 màn hình), Blog/Video, Bình luận/Vote, Nhà hàng & Bản đồ GPS. |
@@ -47,18 +47,18 @@
 - [x] **#19 & #24 [BE] Author Blog/Video CRUD & Upload** ✅
   - *Mô tả:* API cho tác giả thêm, sửa, xóa Blog (`POST/PUT/DELETE /api/v1/blogs`) và Video (`POST/PUT/DELETE /api/v1/videos`), kiểm tra quyền sở hữu bài viết.
   - *Blocked by:* `#17`, `#22`.
-- [ ] **#13 [BE] API Lấy dữ liệu Trang chủ tổng hợp**
+- [x] **#13 [BE] API Lấy dữ liệu Trang chủ tổng hợp** ✅
   - *Mô tả:* API `GET /api/v1/home` tổng hợp blog nổi bật, video mới nhất và danh mục.
   - *File cần tạo:* `dto/response/HomeSummaryResponse.java`, `controller/HomeController.java`.
   - *Blocked by:* `#17`, `#22`.
-- [ ] **#15 [BE] API Tìm kiếm Đa tiêu chí cho Blog & Video**
+- [x] **#15 [BE] API Tìm kiếm Đa tiêu chí cho Blog & Video** ✅
   - *Mô tả:* API `GET /api/v1/search` tìm kiếm nội dung theo keyword, categoryId, contentType.
   - *File cần tạo:* `controller/SearchController.java`, `service/SearchService.java`.
   - *Blocked by:* `#17`, `#22`.
-- [ ] **#27 [BE] API CRUD Bình luận (Comment Engine)**
+- [x] **#27 [BE] API CRUD Bình luận (Comment Engine)** ✅
   - *Mô tả:* Entity Comment, API `GET/POST/DELETE /api/v1/comments`, hỗ trợ bình luận lồng nhau.
   - *File cần tạo:* `entity/Comment.java`, `repository/CommentRepository.java`, `controller/CommentController.java`.
-- [ ] **#28 [BE] API Like/Vote & Chống Trùng lặp**
+- [x] **#28 [BE] API Like/Vote & Chống Trùng lặp** ✅
   - *Mô tả:* Entity Vote, API `POST /api/v1/votes/toggle`, 1 user chỉ vote 1 lần.
   - *File cần tạo:* `entity/Vote.java`, `repository/VoteRepository.java`, `controller/VoteController.java`.
 
@@ -234,7 +234,7 @@
 ---
 
 ### ☕ TRƯỜNG (Backend - 2 tasks)
-- [ ] **#13 & #15 [BE] Hoàn thiện API Trang chủ & Tìm kiếm Đa tiêu chí**
+- [x] **#13 & #15 [BE] Hoàn thiện API Trang chủ & Tìm kiếm Đa tiêu chí** ✅
   - *Mô tả:* API `GET /api/v1/home/latest` tổng hợp bài viết mới nhất và `GET /api/v1/contents/search` tìm kiếm full-text theo từ khóa và danh mục.
 - [ ] **#59 [BE] API Gợi ý Bài viết / Video Liên quan**
   - *Mô tả:* API `GET /api/v1/contents/{id}/related` trả về 4-6 bài viết/video cùng chủ đề.
