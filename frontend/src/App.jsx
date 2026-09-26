@@ -19,6 +19,7 @@ import LoginPage from './pages/LoginPage';
 import MemberRoute from './components/MemberRoute';
 import MyBlogsPage from './pages/MyBlogsPage';
 import CreateBlogPage from './pages/CreateBlogPage';
+import ChatHistoryPage from './pages/ChatHistoryPage';
 
 export default function App() {
   return <Routes>
@@ -35,6 +36,7 @@ export default function App() {
     <Route path="/community/search" element={<MemberRoute><SearchPage member /></MemberRoute>} />
     <Route path="/community/blogs/new" element={<MemberRoute><CreateBlogPage /></MemberRoute>} />
     <Route path="/community/posts/:postId" element={<MemberRoute><CommunityContentDetailPage /></MemberRoute>} />
+    <Route path="/chat-history" element={<MemberRoute><ChatHistoryPage /></MemberRoute>} />
     <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
       <Route index element={<AdminDashboard />} />
       <Route path="users" element={<UserManagementPage />} />
