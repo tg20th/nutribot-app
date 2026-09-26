@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Trash2,
   UserRound,
+  X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
@@ -135,6 +136,7 @@ export default function ProfilePage() {
   const [headerQuery, setHeaderQuery] = useState('');
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState('');
+  const [isAvatarViewerOpen, setIsAvatarViewerOpen] = useState(false);
   const [avatarRemoved, setAvatarRemoved] = useState(false);
 
   useEffect(() => {
@@ -272,6 +274,7 @@ export default function ProfilePage() {
     setNotice(null);
     try {
       const payload = {
+        username: profile.username.trim(),
         fullName: profile.fullName.trim(),
         email: profile.email.trim(),
         bio: profile.bio.trim() || null,
@@ -316,8 +319,15 @@ export default function ProfilePage() {
               </h1>
               <span>Keep the essentials current and let NutriBot build from a better understanding of you.</span>
             </div>
-            <button type="button" className="nb-profile-avatar" onClick={() => avatarInputRef.current?.click()} aria-label="Change profile photo">
-              {visibleAvatar ? <img src={visibleAvatar} alt="Your profile preview" /> : <span>{getInitials(profile)}</span>}
+            <button
+              type="button"
+              className="nb-profile-avatar"
+              onClick={() => visibleAvatar && setIsAvatarViewerOpen(true)}
+              aria-label={visibleAvatar ? 'View profile photo' : 'No profile photo'}
+              aria-haspopup={visibleAvatar ? 'dialog' : undefined}
+              disabled={!visibleAvatar}
+            >
+              {visibleAvatar ? <span className="nb-profile-avatar__crop"><img src={visibleAvatar} alt="Your profile preview" /></span> : <span>{getInitials(profile)}</span>}
               <i><Camera size={14} strokeWidth={2.5} /></i>
             </button>
             <input ref={avatarInputRef} className="nb-profile-avatar-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarChange} tabIndex={-1} />
@@ -450,6 +460,14 @@ export default function ProfilePage() {
           </section>
         </main>
       </div>
+      {isAvatarViewerOpen && visibleAvatar && (
+        <div className="nb-avatar-preview-backdrop" role="presentation" onClick={() => setIsAvatarViewerOpen(false)}>
+          <section className="nb-avatar-preview-dialog" role="dialog" aria-modal="true" aria-label="Profile photo" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="nb-avatar-preview-close" onClick={() => setIsAvatarViewerOpen(false)} aria-label="Close photo preview"><X size={20} /></button>
+            <img src={visibleAvatar} alt="Profile photo enlarged" />
+          </section>
+        </div>
+      )}
       <ChatbotWidget />
     </div>
   );

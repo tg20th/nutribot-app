@@ -13,5 +13,5 @@ const collection = async (path, type, signal) => normalizeCollection(itemsFrom(a
 export const getBlogs = (signal) => collection('/api/v1/blogs?page=0&size=4', 'Article', signal);
 export const getVideos = (signal) => collection('/api/v1/videos?page=0&size=4', 'Video', signal);
 export const getTopics = async (signal) => itemsFrom(await apiRequest('/api/v1/categories?type=RECIPE', { signal }))
-  .map((item) => ({ name: item.name ?? item.title, image: item.image ?? item.imageUrl ?? null }));
+  .map((item) => ({ name: item.name ?? item.categoryName ?? item.title, image: item.image ?? item.imageUrl ?? item.iconUrl ?? item.icon_url ?? null }));
 export const googleAuthUrl = () => `${(import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')}/api/v1/auth/google`;

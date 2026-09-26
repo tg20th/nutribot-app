@@ -7,6 +7,7 @@ import { ArrowRight, BookOpen, Eye, LoaderCircle, Play, Search, SlidersHorizonta
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import Header from '../components/Header';
+import ImageWithFallback from '../components/ImageWithFallback';
 import AuthModal from '../components/AuthModal';
 import { getCategories, searchContent } from '../services/searchApi';
 import { googleAuthUrl } from '../services/contentApi';
@@ -28,7 +29,7 @@ const normalizeItem = (item, selectedType) => ({
   id: item.contentId ?? item.id,
   type: item.contentType ?? item.type ?? selectedType,
   title: item.title || 'Content from NutriBot',
-  thumbnailUrl: item.thumbnailUrl ?? item.imageUrl ?? item.image,
+  thumbnailUrl: item.thumbnailUrl ?? item.thumbnail_url ?? item.imageUrl ?? item.image_url ?? item.image,
   authorName: item.authorName ?? item.author?.fullName ?? 'NutriBot',
   viewCount: item.viewCount ?? item.views ?? 0,
   createdAt: item.createdAt ?? item.created_at
@@ -39,7 +40,7 @@ function ResultCard({ item, index, isMember, onPreview }) {
   const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently updated';
   const content = <>
     <div className="search-result-media">
-      <img src={item.thumbnailUrl || heroBowl} alt="" loading="lazy" />
+      <ImageWithFallback src={item.thumbnailUrl} alt="" loading="lazy" />
       <span className="search-result-kind">{isVideo ? <Play size={12} fill="currentColor" /> : <BookOpen size={12} />}{isVideo ? 'Video' : item.type === 'BLOG' ? 'Article' : 'Content'}</span>
       <span className="search-result-arrow"><ArrowRight size={17} /></span>
     </div>
@@ -59,7 +60,7 @@ function PublicResultCard({ item, onPreview }) {
   const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US') : 'Recently updated';
   return <article className="public-result-card">
     <button type="button" onClick={() => onPreview(item)} aria-label={`Preview ${item.title}`}>
-      <div className="public-result-image"><img src={item.thumbnailUrl || heroBowl} alt="" loading="lazy" />{isVideo && <span><Play size={15} fill="currentColor" /></span>}</div>
+      <div className="public-result-image"><ImageWithFallback src={item.thumbnailUrl} alt="" loading="lazy" />{isVideo && <span><Play size={15} fill="currentColor" /></span>}</div>
       <div className="public-result-body"><span>{isVideo ? 'Video' : item.type === 'BLOG' ? 'Article' : 'Content'} · {date}</span><h2>{item.title}</h2><p>{item.authorName} · {Number(item.viewCount).toLocaleString('en-US')} views</p></div>
     </button>
   </article>;
@@ -70,7 +71,7 @@ function PreviewDialog({ item, onClose }) {
   return <div className="search-preview-backdrop" role="presentation" onMouseDown={onClose}>
     <section className="search-preview" role="dialog" aria-modal="true" aria-labelledby="preview-title" onMouseDown={(event) => event.stopPropagation()}>
       <button type="button" className="search-preview-close" onClick={onClose} aria-label="Close preview"><X /></button>
-      <img src={item.thumbnailUrl || heroBowl} alt="" />
+      <ImageWithFallback src={item.thumbnailUrl} alt="" />
       <div><span>Public content from NutriBot</span><h2 id="preview-title">{item.title}</h2><p>Create a free account to read the full story, save favorites, and receive recommendations tailored to your goals.</p><div><Link to="/register">Create an account <ArrowRight size={16} /></Link><Link to="/login">I already have an account</Link></div></div>
     </section>
   </div>;
@@ -125,9 +126,8 @@ function SearchExperience({ isMember }) {
   }, [fetchPage, loading, loadingMore, meta.page, meta.totalPages]);
 
   useGSAP(() => {
-    gsap.from('.search-hero-copy > *', { y: 24, opacity: 0, duration: .75, stagger: .08, ease: 'power3.out' });
     gsap.utils.toArray('.search-result-card').forEach((card) => gsap.fromTo(card, { scale: .88, opacity: .25 }, { scale: 1, opacity: 1, ease: 'none', scrollTrigger: { trigger: card, start: 'top 96%', end: 'top 62%', scrub: .5 } }));
-  }, { scope: pageRef, dependencies: [results.length] });
+  }, { scope: pageRef, dependencies: [results.length], revertOnUpdate: true });
 
   useEffect(() => { if (!preview) return undefined; const close = (event) => { if (event.key === 'Escape') setPreview(null); }; window.addEventListener('keydown', close); return () => window.removeEventListener('keydown', close); }, [preview]);
 

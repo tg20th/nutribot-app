@@ -38,6 +38,8 @@ CREATE TABLE users (
     email           NVARCHAR(255) NOT NULL,
     password_hash   NVARCHAR(255) NOT NULL,
     full_name       NVARCHAR(150) NULL,
+    avatar_url      NVARCHAR(500) NULL,
+    bio             NVARCHAR(500) NULL,
     role_id         INT NOT NULL,
     strike_count    TINYINT NOT NULL CONSTRAINT DF_users_strike_count DEFAULT (0),
     status          NVARCHAR(20) NOT NULL CONSTRAINT DF_users_status DEFAULT (N'ACTIVE'),

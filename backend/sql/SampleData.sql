@@ -56,12 +56,14 @@ DECLARE @i INT = 1;
 
 WHILE @i <= 50
 BEGIN
-    INSERT INTO users (username, email, password_hash, full_name, role_id, strike_count, status)
+    INSERT INTO users (username, email, password_hash, full_name, avatar_url, bio, role_id, strike_count, status)
     VALUES (
         N'user' + CAST(@i AS NVARCHAR(10)),
         N'user' + CAST(@i AS NVARCHAR(10)) + N'@nutribot.vn',
         N'$2a$10$abcdefghijklmnopqrstuvwxyz0123456789ABCDEF',
         N'Nguyễn Văn ' + CAST(@i AS NVARCHAR(10)),
+        N'https://i.pravatar.cc/150?img=' + CAST((@i % 70 + 1) AS NVARCHAR(10)),
+        N'Thành viên NutriBot chia sẻ hành trình ăn uống lành mạnh số ' + CAST(@i AS NVARCHAR(10)),
         CASE WHEN @i <= 3 THEN @AdminRoleId ELSE @UserRoleId END,
         CASE WHEN @i % 17 = 0 THEN 1 WHEN @i % 23 = 0 THEN 2 ELSE 0 END,
         N'ACTIVE'

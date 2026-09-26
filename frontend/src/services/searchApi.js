@@ -34,5 +34,10 @@ export async function searchContent({ keyword, categoryId, contentType, page = 0
 
 export async function getCategories(signal) {
   const payload = await apiRequest('/api/v1/categories', { signal });
-  return itemsFrom(payload);
+  return itemsFrom(payload).map((item) => ({
+    ...item,
+    categoryId: item.categoryId ?? item.id,
+    name: item.categoryName ?? item.name ?? item.title,
+    iconUrl: item.iconUrl ?? item.icon_url ?? item.imageUrl ?? item.image_url
+  }));
 }

@@ -20,10 +20,19 @@ export default function HealthProfilePage() {
   useGSAP(() => {
     const media = gsap.matchMedia();
     media.add('(prefers-reduced-motion: no-preference)', () => {
-      gsap.from('.health-hero-copy > *', { y: 22, opacity: 0, duration: 0.72, stagger: 0.08, ease: 'power3.out' });
-      gsap.fromTo('.health-hero-visual img', { scale: 0.88, opacity: 0.72 }, { scale: 1.04, opacity: 0.56, ease: 'none', scrollTrigger: { trigger: '.health-hero', start: 'top top+=76', end: 'bottom top+=76', scrub: true } });
-      gsap.from('.health-intention-card', { y: 28, opacity: 0, duration: 0.65, stagger: 0.09, ease: 'power3.out', delay: 0.2 });
-      gsap.from('.health-bento > *', { y: 46, opacity: 0, scale: 0.97, duration: 0.7, stagger: 0.11, ease: 'power3.out', delay: 0.22 });
+      const scopedTargets = (selector) => pageRef.current?.querySelectorAll(selector) ?? [];
+      const heroCopy = scopedTargets('.health-hero-copy > *');
+      const heroImage = scopedTargets('.health-hero-visual img');
+      const hero = scopedTargets('.health-hero');
+      const intentionCards = scopedTargets('.health-intention-card');
+      const healthCards = scopedTargets('.health-bento > *');
+
+      if (heroCopy.length) gsap.from(heroCopy, { y: 22, opacity: 0, duration: 0.72, stagger: 0.08, ease: 'power3.out' });
+      if (heroImage.length && hero.length) {
+        gsap.fromTo(heroImage, { scale: 0.88, opacity: 0.72 }, { scale: 1.04, opacity: 0.56, ease: 'none', scrollTrigger: { trigger: hero[0], start: 'top top+=76', end: 'bottom top+=76', scrub: true } });
+      }
+      if (intentionCards.length) gsap.from(intentionCards, { y: 28, opacity: 0, duration: 0.65, stagger: 0.09, ease: 'power3.out', delay: 0.2 });
+      if (healthCards.length) gsap.from(healthCards, { y: 46, opacity: 0, scale: 0.97, duration: 0.7, stagger: 0.11, ease: 'power3.out', delay: 0.22 });
     });
     return () => media.revert();
   }, { scope: pageRef });

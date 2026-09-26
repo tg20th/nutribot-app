@@ -36,6 +36,7 @@ public class AuthService {
         }
 
         Role userRole = roleRepository.findByRoleName("ROLE_USER")
+                .or(() -> roleRepository.findByRoleName("User"))
                 .orElseThrow(() -> new BadRequestException("Không tìm thấy role mặc định"));
 
         User user = User.builder()
