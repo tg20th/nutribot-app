@@ -9,10 +9,15 @@ import {
   Search,
   Send,
   Sparkles,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createChatSession, getChatMessages, getChatSessions, requestNutritionAdvice, saveChatMessage } from '../../services/chatbotApi';
 import '../../styles/chatbot-widget.css';
+
+const GUEST_TRIAL_LIMIT = 3;
+const GUEST_TRIAL_KEY = 'nutribot_guest_trial_count';
 
 const QUICK_PROMPTS = [
   'Build a balanced plate',
@@ -40,12 +45,36 @@ export default function ChatbotWidget({ onSend }) {
   const [historyError, setHistoryError] = useState('');
   const [historyQuery, setHistoryQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [guestTrialsLeft, setGuestTrialsLeft] = useState(() => {
+    const stored = localStorage.getItem(GUEST_TRIAL_KEY);
+    return stored ? parseInt(stored, 10) : GUEST_TRIAL_LIMIT;
+  });
   const panelRef = useRef(null);
   const threadRef = useRef(null);
   const inputRef = useRef(null);
   const requestControllerRef = useRef(null);
   const sessionIdRef = useRef(null);
   const aiSessionIdRef = useRef(globalThis.crypto?.randomUUID?.() || `guest-${Date.now()}`);
+
+  const isGuest = !localStorage.getItem('nutribot-auth-token');
+
+  const checkGuestLimit = useCallback(() => {
+    if (!isGuest) return true;
+    return guestTrialsLeft > 0;
+  }, [isGuest, guestTrialsLeft]);
+
+  const decrementGuestTrial = useCallback(() => {
+    if (!isGuest) return;
+    const newCount = Math.max(0, guestTrialsLeft - 1);
+    setGuestTrialsLeft(newCount);
+    localStorage.setItem(GUEST_TRIAL_KEY, String(newCount));
+    if (newCount === 0) {
+      setShowLimitModal(true);
+    }
+  }, [isGuest, guestTrialsLeft]);
+
+  const showTrialBadge = isGuest && guestTrialsLeft > 0 && guestTrialsLeft < GUEST_TRIAL_LIMIT;
 
   const loadSessions = useCallback(async () => {
     setHistoryLoading(true);
@@ -173,6 +202,14 @@ export default function ChatbotWidget({ onSend }) {
     const message = value.trim();
     if (!message || isLoading) return;
 
+    // Check guest trial limit
+    if (!checkGuestLimit()) {
+      setShowLimitModal(true);
+      return;
+    }
+
+    decrementGuestTrial();
+
     const conversationHistory = messages
       .filter((item) => item.id !== 'welcome' && !item.pending && !item.error)
       .slice(-40)
@@ -278,6 +315,12 @@ export default function ChatbotWidget({ onSend }) {
               <ChevronDown size={21} />
             </button>
             </div>
+            {showTrialBadge && (
+              <div className="chatbot-widget__trial-badge" aria-live="polite">
+                <AlertCircle size={14} />
+                <span>{guestTrialsLeft}/{GUEST_TRIAL_LIMIT} questions left</span>
+              </div>
+            )}
           </header>
 
           {historyOpen && (
@@ -368,6 +411,26 @@ export default function ChatbotWidget({ onSend }) {
             NutriBot offers general guidance, not medical advice.
           </p>
         </section>
+      )}
+
+      {showLimitModal && (
+        <div className="chatbot-widget__modal-overlay" onClick={() => setShowLimitModal(false)}>
+          <div className="chatbot-widget__modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="limit-modal-title">
+            <button type="button" className="chatbot-widget__modal-close" onClick={() => setShowLimitModal(false)} aria-label="Close">
+              <X size={18} />
+            </button>
+            <div className="chatbot-widget__modal-icon">
+              <AlertCircle size={48} />
+            </div>
+            <h2 id="limit-modal-title">Trial Ended</h2>
+            <p>You have used all 3 free questions with NutriBot.</p>
+            <p className="chatbot-widget__modal-cta">Sign up for an account to continue chatting with NutriBot.</p>
+            <div className="chatbot-widget__modal-actions">
+              <a href="/register" className="chatbot-widget__modal-btn chatbot-widget__modal-btn--primary">Sign Up</a>
+              <a href="/login" className="chatbot-widget__modal-btn chatbot-widget__modal-btn--secondary">Log In</a>
+            </div>
+          </div>
+        </div>
       )}
 
       <button
