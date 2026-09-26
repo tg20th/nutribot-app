@@ -53,6 +53,7 @@ export default function WeeklyMealPlannerPage() {
   const [aiGoal, setAiGoal] = useState('maintain_weight');
   const [aiCalories, setAiCalories] = useState(1800);
   const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [aiPreview, setAiPreview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -105,6 +106,11 @@ export default function WeeklyMealPlannerPage() {
     gsap.to('.planner-scrub-word', { opacity: 1, stagger: .08, ease: 'none', scrollTrigger: { trigger: '.planner-content-heading', start: 'top 85%', end: 'bottom 52%', scrub: true } });
     gsap.utils.toArray('.planner-day').forEach((card) => gsap.fromTo(card, { scale: .97, opacity: .4 }, { scale: 1, opacity: 1, ease: 'power2.out', scrollTrigger: { trigger: card, start: 'top 92%', end: 'top 60%', scrub: true } }));
   }, { scope: page, dependencies: [weekStart, view] });
+
+  useGSAP(() => {
+    if (!aiPreview || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    return gsap.fromTo('.ai-preview-dialog', { autoAlpha: 0, y: 18, scale: .97 }, { autoAlpha: 1, y: 0, scale: 1, duration: .38, ease: 'power3.out' });
+  }, { scope: page, dependencies: [aiPreview] });
 
   const plannerDays = menu.days ?? [];
   const heroMeal = plannerDays.flatMap((day) => day.meals).find(Boolean);
@@ -201,33 +207,39 @@ export default function WeeklyMealPlannerPage() {
     try {
       const result = await generateMealPlan({ targetCalories: Number(aiCalories), healthGoal: aiGoal, availableIngredients, excludedAllergies });
       if (!Array.isArray(result.weeklyPlan) || !result.weeklyPlan.length) throw new Error('The AI response did not include a weekly plan.');
-      const aiSlots = [['Breakfast', 'breakfast'], ['Lunch', 'lunch'], ['Dinner', 'dinner']];
-      setMenu((current) => recalculateMenu({
-        ...current,
-        targetCalories: Number(result.estimatedDailyCalories ?? aiCalories),
-        days: current.days.map((day, dayIndex) => {
-          const generatedDay = result.weeklyPlan[dayIndex] ?? {};
-          return {
-            ...day,
-            calorieGoal: Number(result.estimatedDailyCalories ?? aiCalories),
-            meals: aiSlots.map(([slot, field], slotIndex) => ({
-              key: `ai-${Date.now()}-${dayIndex}-${slotIndex}`,
-              itemId: null, mealId: null, dishId: null, slot,
-              name: generatedDay[field] || `${slot} suggestion`,
-              kcal: Math.round(Number(result.estimatedDailyCalories ?? aiCalories) / 3), protein: 0,
-              baseCalories: Math.round(Number(result.estimatedDailyCalories ?? aiCalories) / 3), baseProtein: 0,
-              image: freshProduce, servings: 1, notes: 'Suggested by NutriBot AI', swapped: false,
-            }))
-          };
-        })
-      }));
       setShowAiGenerator(false);
-      setNotice({ type: 'success', text: result.suggestedMenuTitle ? `AI created: ${result.suggestedMenuTitle}` : 'Your AI weekly plan is ready to review.' });
+      setAiPreview(result);
     } catch (error) {
       setNotice({ type: 'offline', text: error?.message || 'NutriBot could not generate a plan right now. Please try again.' });
     } finally {
       setGeneratingPlan(false);
     }
+  };
+
+  const applyAiPreview = () => {
+    if (!aiPreview) return;
+    const aiSlots = [['Breakfast', 'breakfast'], ['Lunch', 'lunch'], ['Dinner', 'dinner']];
+    setMenu((current) => recalculateMenu({
+        ...current,
+        targetCalories: Number(aiPreview.estimatedDailyCalories ?? aiCalories),
+        days: current.days.map((day, dayIndex) => {
+          const generatedDay = aiPreview.weeklyPlan[dayIndex] ?? {};
+          return {
+            ...day,
+            calorieGoal: Number(aiPreview.estimatedDailyCalories ?? aiCalories),
+            meals: aiSlots.map(([slot, field], slotIndex) => ({
+              key: `ai-${Date.now()}-${dayIndex}-${slotIndex}`,
+              itemId: null, mealId: null, dishId: null, slot,
+              name: generatedDay[field] || `${slot} suggestion`,
+              kcal: Math.round(Number(aiPreview.estimatedDailyCalories ?? aiCalories) / 3), protein: 0,
+              baseCalories: Math.round(Number(aiPreview.estimatedDailyCalories ?? aiCalories) / 3), baseProtein: 0,
+              image: freshProduce, servings: 1, notes: 'Suggested by NutriBot AI', swapped: false,
+            }))
+          };
+        })
+      }));
+    setAiPreview(null);
+    setNotice({ type: 'success', text: aiPreview.suggestedMenuTitle ? `AI plan applied: ${aiPreview.suggestedMenuTitle}` : 'Your AI weekly plan is ready to review.' });
   };
 
   return <div className="community-page planner-page" ref={page}>
@@ -342,6 +354,13 @@ export default function WeeklyMealPlannerPage() {
           <p>NutriBot will replace the visible week with a seven-day preview. You can still swap or edit every meal after it is generated.</p>
           <footer><button type="button" className="planner-btn-ghost" onClick={() => setShowAiGenerator(false)} disabled={generatingPlan}>Cancel</button><button type="submit" className="planner-btn-primary" disabled={generatingPlan}>{generatingPlan ? <><Loader2 size={15} className="is-spinning"/> Generating...</> : <><Sparkles size={15}/> Generate plan</>}</button></footer>
         </form>
+      </section>
+    </div>}
+    {aiPreview && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setAiPreview(null)}>
+      <section className="meal-dialog ai-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-preview-title">
+        <header><div><span>NutriBot AI weekly preview</span><h2 id="ai-preview-title">{aiPreview.suggestedMenuTitle || 'Your seven-day menu'}</h2><p>{aiPreview.estimatedDailyCalories ?? aiCalories} kcal average each day</p></div><button type="button" className="meal-dialog-close" onClick={() => setAiPreview(null)} aria-label="Close weekly preview"><X size={18}/></button></header>
+        <div className="ai-preview-days">{aiPreview.weeklyPlan.slice(0, 7).map((day, index) => <article key={`${day.day}-${index}`}><header><span>{String(index + 1).padStart(2, '0')}</span><b>{day.day || `Day ${index + 1}`}</b></header><dl><div><dt>Breakfast</dt><dd>{day.breakfast || 'No suggestion'}</dd></div><div><dt>Lunch</dt><dd>{day.lunch || 'No suggestion'}</dd></div><div><dt>Dinner</dt><dd>{day.dinner || 'No suggestion'}</dd></div></dl></article>)}</div>
+        <footer><button type="button" className="planner-btn-ghost" onClick={() => setAiPreview(null)}>Edit request</button><button type="button" className="planner-btn-primary" onClick={applyAiPreview}><CheckCircle2 size={15}/> Use this plan</button></footer>
       </section>
     </div>}
     <ChatbotWidget/>
