@@ -2,7 +2,7 @@ import { Navigate, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import CommunityFeedPage from './pages/CommunityFeedPage';
 import CommunityContentDetailPage from './pages/CommunityContentDetailPage';
-import WeeklyMealPlannerPage from './pages/WeeklyMealPlannerPage';
+import WeeklyMenuPage from './pages/WeeklyMenuPage';
 import ProfilePage from './pages/ProfilePage';
 import HealthProfilePage from './pages/HealthProfilePage';
 import SearchPage from './pages/SearchPage';
@@ -26,7 +26,7 @@ export default function App() {
     <Route path="/register" element={<RegisterPage />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/community" element={<Navigate to="/home" replace />} />
-    <Route path="/community/planner" element={<MemberRoute><WeeklyMealPlannerPage /></MemberRoute>} />
+    <Route path="/community/planner" element={<MemberRoute><WeeklyMenuPage /></MemberRoute>} />
     <Route path="/profile" element={<MemberRoute><ProfilePage /></MemberRoute>} />
     <Route path="/profile/health" element={<MemberRoute><HealthProfilePage /></MemberRoute>} />
     <Route path="/community/profile" element={<Navigate to="/profile" replace />} />
