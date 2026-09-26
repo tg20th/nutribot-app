@@ -73,7 +73,7 @@
   - *Mô tả:* API `GET /api/v1/users/profile` và `PUT /api/v1/users/profile` xem/sửa thông tin cá nhân cơ bản.
   - *File cần tạo:* `service/UserProfileService.java`, `controller/UserProfileController.java`.
   - *Blocked by:* `#11`.
-- [ ] **#10 [BE] Health Profile & Automatic BMI Calculation**
+- [x] **#10 [BE] Health Profile & Automatic BMI Calculation**
   - *Mô tả:* API `PUT /api/v1/users/profile/health` cập nhật chiều cao, cân nặng, danh sách dị ứng; tự động tính $BMI = weight / (height^2)$ và phân loại thể trạng.
   - *File cần tạo:* `dto/request/HealthProfileUpdateRequest.java`, bổ sung logic tính toán trong `UserProfileServiceImpl.java`.
   - *Blocked by:* `#11`.
