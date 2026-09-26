@@ -1,3 +1,5 @@
+import { apiRequest, unwrapData } from './apiClient';
+
 const aiBaseUrl = (import.meta.env.VITE_AI_API_BASE_URL ?? '').replace(/\/$/, '');
 
 export class ChatbotApiError extends Error {
@@ -8,6 +10,13 @@ export class ChatbotApiError extends Error {
     this.payload = payload;
   }
 }
+
+export const getChatSessions = async (signal) => unwrapData(await apiRequest('/api/v1/chatbot/sessions', { signal }), []);
+export const createChatSession = async () => unwrapData(await apiRequest('/api/v1/chatbot/sessions', { method: 'POST' }), null);
+export const getChatMessages = async (sessionId, signal) => unwrapData(await apiRequest(`/api/v1/chatbot/sessions/${sessionId}/messages`, { signal }), []);
+export const saveChatMessage = async (sessionId, senderType, content) => unwrapData(await apiRequest(`/api/v1/chatbot/sessions/${sessionId}/messages`, {
+  method: 'POST', body: JSON.stringify({ senderType, content }),
+}), null);
 
 export async function requestNutritionAdvice({
   message,

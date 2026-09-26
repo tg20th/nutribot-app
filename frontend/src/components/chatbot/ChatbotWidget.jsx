@@ -3,11 +3,15 @@ import gsap from 'gsap';
 import {
   BotMessageSquare,
   ChevronDown,
+  Clock3,
+  History,
+  Plus,
+  Search,
   Send,
   Sparkles,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { requestNutritionAdvice } from '../../services/chatbotApi';
+import { createChatSession, getChatMessages, getChatSessions, requestNutritionAdvice, saveChatMessage } from '../../services/chatbotApi';
 import '../../styles/chatbot-widget.css';
 
 const QUICK_PROMPTS = [
@@ -30,19 +34,45 @@ export default function ChatbotWidget({ onSend }) {
   const [isOpen, setIsOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState(INITIAL_MESSAGES);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [sessions, setSessions] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [historyQuery, setHistoryQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const panelRef = useRef(null);
   const threadRef = useRef(null);
   const inputRef = useRef(null);
   const requestControllerRef = useRef(null);
-  const sessionIdRef = useRef(
-    globalThis.crypto?.randomUUID?.() || `guest-${Date.now()}`,
-  );
+  const sessionIdRef = useRef(null);
+  const aiSessionIdRef = useRef(globalThis.crypto?.randomUUID?.() || `guest-${Date.now()}`);
+
+  const loadSessions = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError('');
+    try { setSessions(await getChatSessions()); }
+    catch (error) { setHistoryError(error.message || 'Không thể tải lịch sử trò chuyện.'); }
+    finally { setHistoryLoading(false); }
+  }, []);
 
   const openWidget = useCallback(() => {
     setIsMounted(true);
     setIsOpen(true);
   }, []);
+
+  const openHistory = async () => { setHistoryOpen(true); await loadSessions(); };
+  const startNewConversation = () => { sessionIdRef.current = null; setMessages(INITIAL_MESSAGES); setHistoryOpen(false); };
+  const selectSession = async (sessionId) => {
+    setHistoryLoading(true);
+    setHistoryError('');
+    try {
+      const persistedMessages = await getChatMessages(sessionId);
+      sessionIdRef.current = sessionId;
+      setMessages(persistedMessages.length ? persistedMessages.map((item) => ({ id: item.messageId, sender: item.senderType === 'USER' ? 'user' : 'assistant', text: item.content, createdAt: item.createdAt })) : INITIAL_MESSAGES);
+      setHistoryOpen(false);
+    } catch (error) { setHistoryError(error.message || 'Không thể tải nội dung cuộc trò chuyện.'); }
+    finally { setHistoryLoading(false); }
+  };
 
   const closeWidget = useCallback(() => {
     const panel = panelRef.current;
@@ -170,9 +200,15 @@ export default function ChatbotWidget({ onSend }) {
     requestControllerRef.current = controller;
 
     try {
+      const isMember = Boolean(localStorage.getItem('nutribot-auth-token'));
+      if (isMember && !sessionIdRef.current) {
+        const session = await createChatSession();
+        sessionIdRef.current = session.sessionId;
+      }
+      if (isMember) await saveChatMessage(sessionIdRef.current, 'USER', message);
       const response = await requestNutritionAdvice({
         message,
-        sessionId: sessionIdRef.current,
+        sessionId: sessionIdRef.current ?? aiSessionIdRef.current,
         conversationHistory,
         signal: controller.signal,
       });
@@ -180,12 +216,14 @@ export default function ChatbotWidget({ onSend }) {
       const recommendationText = recommendations.length
         ? `\n\nGợi ý nhanh:\n${recommendations.map((item) => `• ${item}`).join('\n')}`
         : '';
+      const assistantText = `${response.reply}${recommendationText}`;
+      if (isMember) await saveChatMessage(sessionIdRef.current, 'ASSISTANT', assistantText);
       setMessages((current) => [
         ...current.filter((item) => item.id !== pendingId),
         {
           id: `assistant-${Date.now()}`,
           sender: 'assistant',
-          text: `${response.reply}${recommendationText}`,
+          text: assistantText,
         },
       ]);
     } catch (error) {
@@ -229,6 +267,8 @@ export default function ChatbotWidget({ onSend }) {
                 <small><i aria-hidden="true" /> {isLoading ? 'Thinking...' : 'Ready to help'}</small>
               </span>
             </div>
+            <div className="chatbot-widget__header-actions">
+              <button type="button" className="chatbot-widget__history-toggle" onClick={openHistory} aria-label="Mở lịch sử trò chuyện"><History size={18} /></button>
             <button
               type="button"
               className="chatbot-widget__minimize"
@@ -237,7 +277,24 @@ export default function ChatbotWidget({ onSend }) {
             >
               <ChevronDown size={21} />
             </button>
+            </div>
           </header>
+
+          {historyOpen && (
+            <aside className="chatbot-widget__history" aria-label="Lịch sử trò chuyện">
+              <div className="chatbot-widget__history-head">
+                <div><span>Hội thoại của bạn</span><h2>Quay lại điều đang dang dở.</h2></div>
+                <button type="button" onClick={startNewConversation}><Plus size={16} /> Cuộc trò chuyện mới</button>
+              </div>
+              <label className="chatbot-widget__history-search"><Search size={15} /><input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Tìm trong lịch sử" /></label>
+              <div className="chatbot-widget__history-list">
+                {historyLoading && <p className="chatbot-widget__history-status">Đang tải lịch sử...</p>}
+                {!historyLoading && historyError && <p className="chatbot-widget__history-status is-error">{historyError}</p>}
+                {!historyLoading && !historyError && !sessions.filter((item) => `${item.title} ${item.preview}`.toLowerCase().includes(historyQuery.toLowerCase())).length && <p className="chatbot-widget__history-status">Chưa có cuộc trò chuyện nào được lưu.</p>}
+                {!historyLoading && sessions.filter((item) => `${item.title} ${item.preview}`.toLowerCase().includes(historyQuery.toLowerCase())).map((session) => <button type="button" key={session.sessionId} className="chatbot-widget__history-item" onClick={() => selectSession(session.sessionId)}><span>{session.title}</span><small>{session.preview || 'Chưa có tin nhắn'}<i><Clock3 size={12} /> {new Date(session.updatedAt).toLocaleDateString('vi-VN')}</i></small></button>)}
+              </div>
+            </aside>
+          )}
 
           <div ref={threadRef} className="chatbot-widget__thread" aria-live="polite">
             <div className="chatbot-widget__welcome">
