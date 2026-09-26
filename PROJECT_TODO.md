@@ -135,7 +135,7 @@
 - [x] **#23 [FE] Form Đăng tải Video**
   - *Mô tả:* Nhập tiêu đề, mô tả, gắn URL video (YouTube/MP4), chọn thời lượng và danh mục.
   - *File cần tạo:* `frontend/src/pages/CreateVideoPage.jsx`.
-- [ ] **#25 [FE] Màn hình "Video của tôi"**
+- [x] **#25 [FE] Màn hình "Video của tôi"** ✅
   - *Mô tả:* Quản lý các video đã đăng tải của tài khoản cá nhân.
   - *File cần tạo:* `frontend/src/pages/MyVideosPage.jsx`.
 - [x] **#26 [FE] Khối Bình luận & Like/Vote** ✅
