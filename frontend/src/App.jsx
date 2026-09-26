@@ -19,6 +19,8 @@ import LoginPage from './pages/LoginPage';
 import MemberRoute from './components/MemberRoute';
 import MyBlogsPage from './pages/MyBlogsPage';
 import CreateBlogPage from './pages/CreateBlogPage';
+import BlogListPage from './pages/BlogListPage';
+import BlogDetailPage from './pages/BlogDetailPage';
 
 export default function App() {
   return <Routes>
@@ -27,6 +29,9 @@ export default function App() {
     <Route path="/register" element={<RegisterPage />} />
     <Route path="/login" element={<LoginPage />} />
     <Route path="/community" element={<Navigate to="/home" replace />} />
+    <Route path="/blogs" element={<BlogListPage />} />
+    <Route path="/blogs/id/:id" element={<BlogDetailPage byId />} />
+    <Route path="/blogs/:slug" element={<BlogDetailPage />} />
     <Route path="/community/planner" element={<MemberRoute><WeeklyMenuPage /></MemberRoute>} />
     <Route path="/profile" element={<MemberRoute><ProfilePage /></MemberRoute>} />
     <Route path="/profile/health" element={<MemberRoute><HealthProfilePage /></MemberRoute>} />

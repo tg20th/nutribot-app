@@ -1,2 +1,15 @@
 import { ArrowRight, Clock3, Heart, MessageCircle } from 'lucide-react';
-export default function FeaturedPost({ post }) { if (!post?.id) return null; const p = post; return <section className="section featured" id="recipes"><div className="section-heading"><p>FEATURED FROM THE COMMUNITY</p><a href="#community">View all <ArrowRight size={17}/></a></div><article className="featured-story"><div className="featured-image">{p.image && <img src={p.image} alt={p.title}/>}</div><div className="featured-copy"><span className="content-type">{p.type}</span><div className="author">{p.avatar && <img src={p.avatar} alt={p.author}/>}<span><b>{p.author}</b><small>{p.username}, {p.createdAt}</small></span></div><h2>{p.title}</h2><p>{p.description}</p><div className="tags">{(p.tags ?? []).map((tag) => <span key={tag}>{tag}</span>)}</div><div className="feature-meta"><span><Heart size={17}/> {p.likes}</span><span><MessageCircle size={17}/> {p.comments}</span><span><Clock3 size={17}/> {p.duration}</span></div><a className="text-link" href="#community">Read more <ArrowRight size={17}/></a></div></article></section>; }
+import { Link } from 'react-router-dom';
+import { blogHref } from '../services/publicBlogApi';
+
+export default function FeaturedPost({ post }) {
+  if (!post?.id) return null;
+  const isBlog = post.type.toLowerCase() !== 'video';
+  return <section className="section featured" id="recipes">
+    <div className="section-heading"><p>FEATURED FROM THE COMMUNITY</p><Link to="/blogs">View all <ArrowRight size={17}/></Link></div>
+    <article className="featured-story">
+      <div className="featured-image">{post.image && <img src={post.image} alt=""/>}</div>
+      <div className="featured-copy"><span className="content-type">{post.type}</span><div className="author">{post.avatar && <img src={post.avatar} alt=""/>}<span><b>{post.author}</b><small>{post.username}, {post.createdAt}</small></span></div><h2>{post.title}</h2><p>{post.description}</p><div className="tags">{(post.tags ?? []).map((tag) => <span key={tag}>{tag}</span>)}</div><div className="feature-meta"><span><Heart size={17}/> {post.likes}</span><span><MessageCircle size={17}/> {post.comments}</span><span><Clock3 size={17}/> {post.duration}</span></div>{isBlog && <Link className="text-link" to={blogHref(post)}>Read more <ArrowRight size={17}/></Link>}</div>
+    </article>
+  </section>;
+}
