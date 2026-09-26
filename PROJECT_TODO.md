@@ -138,7 +138,7 @@
 - [ ] **#25 [FE] Màn hình "Video của tôi"**
   - *Mô tả:* Quản lý các video đã đăng tải của tài khoản cá nhân.
   - *File cần tạo:* `frontend/src/pages/MyVideosPage.jsx`.
-- [ ] **#26 [FE] Khối Bình luận & Like/Vote**
+- [x] **#26 [FE] Khối Bình luận & Like/Vote** ✅
   - *Mô tả:* Component hiển thị dưới bài viết Blog và Video: ô nhập bình luận, danh sách phản hồi, nút Like hiển thị số lượt thích.
   - *File cần tạo:* `frontend/src/components/content/CommentSection.jsx`, `VoteButton.jsx`.
 

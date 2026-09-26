@@ -1,0 +1,10 @@
+.nb26-review{min-height:100vh;background:#f7f8f2;color:#243d2d;font-family:'Outfit',Arial,sans-serif}
+.nb26-review-bar{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:20px clamp(20px,6vw,90px);background:#173529;color:#fff}
+.nb26-review-bar strong{font-size:22px;letter-spacing:-.04em}.nb26-review-bar span{font-size:12px;color:#d7f261}
+.nb26-review-main{max-width:920px;margin:0 auto;padding:52px 20px 90px}
+.nb26-review-intro{text-align:center;margin:0 auto 34px;max-width:660px}.nb26-review-intro>span{color:#558047;font-size:11px;font-weight:800;letter-spacing:.13em}.nb26-review-intro h1{margin:11px 0 14px;color:#193e2d;font:500 clamp(34px,5vw,54px)/1.1 'Playfair Display',Georgia,serif}.nb26-review-intro p{color:#617061;line-height:1.6;font-size:14px}
+.nb26-review-card{padding:clamp(20px,4vw,42px);border:1px solid #dce6d9;background:#fffefa;box-shadow:0 18px 50px #193e2d0c}.nb26-review-card>p{line-height:1.7;color:#485b4a}
+.nb26-review-author{display:flex;align-items:center;gap:11px}.nb26-review-avatar{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:#dcead4;color:#315c2b;font-size:12px;font-weight:800}.nb26-review-author div{display:grid;gap:2px}.nb26-review-author small{font-size:11px;color:#788678}
+.nb26-review-actions{display:flex;align-items:center;gap:25px;padding:18px 0;margin:25px 0;border-top:1px solid #dce6d9;border-bottom:1px solid #dce6d9}.nb26-review-actions>span{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:#456148}.nb26-review-actions .content-vote>button{border:0;background:none;padding:0;color:#456148;cursor:pointer;font:inherit;font-size:13px}.nb26-review-actions .content-vote>button.is-liked{color:#b85038}
+.nb26-review-note{display:flex;align-items:center;justify-content:center;gap:7px;margin-top:24px;color:#637663;font-size:12px;text-align:center}
+.nb26-review-hint{padding:20px 24px;margin-bottom:24px;border:1px solid #dce6d9;border-radius:14px;background:#f0f4e9;color:#315c2b}.nb26-review-hint p{margin:7px 0 0;font-size:13px;line-height:1.5}.nb26-review-feed .community-feed{padding-top:25px}
