@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ArrowRight, BookOpen, Eye, LoaderCircle, Play, Search, SlidersHorizontal, Sparkles, Video, X } from 'lucide-react';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import CommunityTopBar from '../components/community/CommunityTopBar';
+import Header from '../components/Header';
+import AuthModal from '../components/AuthModal';
 import { getCategories, searchContent } from '../services/searchApi';
-import { getCurrentUserFromToken } from '../utils/auth';
+import { googleAuthUrl } from '../services/contentApi';
 import freshProduce from '../assets/fresh-produce.jpg';
 import heroBowl from '../assets/hero-bowl.jpg';
 import '../styles/search.css';
@@ -15,48 +17,51 @@ import '../styles/search.css';
 gsap.registerPlugin(ScrollTrigger);
 
 const TYPES = [
-  { value: '', label: 'Tất cả', description: 'Blog và video', icon: Sparkles },
-  { value: 'BLOG', label: 'Bài viết', description: 'Kiến thức dễ áp dụng', icon: BookOpen },
-  { value: 'VIDEO', label: 'Video', description: 'Xem và nấu cùng', icon: Video }
+  { value: '', label: 'All', description: 'Blogs and videos', icon: Sparkles },
+  { value: 'BLOG', label: 'Articles', description: 'Practical nutrition', icon: BookOpen },
+  { value: 'VIDEO', label: 'Videos', description: 'Watch and cook', icon: Video }
 ];
-const SUGGESTIONS = ['Bữa sáng giàu đạm', 'Món chay', 'Ăn lành mạnh', 'Bữa tối 20 phút'];
+const SUGGESTIONS = ['High-protein breakfast', 'Plant-based meals', 'Healthy eating', '20-minute dinner'];
 
 const normalizeItem = (item, selectedType) => ({
   ...item,
   id: item.contentId ?? item.id,
   type: item.contentType ?? item.type ?? selectedType,
-  title: item.title || 'Nội dung từ NutriBot',
+  title: item.title || 'Content from NutriBot',
   thumbnailUrl: item.thumbnailUrl ?? item.imageUrl ?? item.image,
   authorName: item.authorName ?? item.author?.fullName ?? 'NutriBot',
   viewCount: item.viewCount ?? item.views ?? 0,
   createdAt: item.createdAt ?? item.created_at
 });
 
-function PublicSearchNav() {
-  return <header className="public-search-nav">
-    <Link to="/" className="public-search-brand" aria-label="Về trang chủ NutriBot"><span>Nutri</span>Bot<small>Good Food. Brighter You.</small></Link>
-    <nav aria-label="Điều hướng công khai"><Link to="/">Khám phá</Link><a href="#search-results">Bài viết &amp; video</a></nav>
-    <div><Link to="/login" className="public-search-login">Đăng nhập</Link><Link to="/register" className="public-search-signup">Tạo tài khoản</Link></div>
-  </header>;
-}
-
 function ResultCard({ item, index, isMember, onPreview }) {
   const isVideo = item.type === 'VIDEO';
-  const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString('vi-VN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Mới cập nhật';
+  const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently updated';
   const content = <>
     <div className="search-result-media">
       <img src={item.thumbnailUrl || heroBowl} alt="" loading="lazy" />
-      <span className="search-result-kind">{isVideo ? <Play size={12} fill="currentColor" /> : <BookOpen size={12} />}{isVideo ? 'Video' : item.type === 'BLOG' ? 'Bài viết' : 'Nội dung'}</span>
+      <span className="search-result-kind">{isVideo ? <Play size={12} fill="currentColor" /> : <BookOpen size={12} />}{isVideo ? 'Video' : item.type === 'BLOG' ? 'Article' : 'Content'}</span>
       <span className="search-result-arrow"><ArrowRight size={17} /></span>
     </div>
     <div className="search-result-copy">
       <div><span>{item.authorName}</span><span>{date}</span></div>
       <h3>{item.title}</h3>
-      <p><Eye size={13} /> {Number(item.viewCount).toLocaleString('vi-VN')} lượt xem</p>
+      <p><Eye size={13} /> {Number(item.viewCount).toLocaleString('en-US')} views</p>
     </div>
   </>;
   return <article className={`search-result-card search-result-card--${index % 6}`}>
-    {isMember ? <Link to={`/community/posts/${item.id}`} aria-label={`Mở ${item.title}`}>{content}</Link> : <button type="button" onClick={() => onPreview(item)} aria-label={`Xem trước ${item.title}`}>{content}</button>}
+    {isMember ? <Link to={`/community/posts/${item.id}`} aria-label={`Open ${item.title}`}>{content}</Link> : <button type="button" onClick={() => onPreview(item)} aria-label={`Preview ${item.title}`}>{content}</button>}
+  </article>;
+}
+
+function PublicResultCard({ item, onPreview }) {
+  const isVideo = item.type === 'VIDEO';
+  const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US') : 'Recently updated';
+  return <article className="public-result-card">
+    <button type="button" onClick={() => onPreview(item)} aria-label={`Preview ${item.title}`}>
+      <div className="public-result-image"><img src={item.thumbnailUrl || heroBowl} alt="" loading="lazy" />{isVideo && <span><Play size={15} fill="currentColor" /></span>}</div>
+      <div className="public-result-body"><span>{isVideo ? 'Video' : item.type === 'BLOG' ? 'Article' : 'Content'} · {date}</span><h2>{item.title}</h2><p>{item.authorName} · {Number(item.viewCount).toLocaleString('en-US')} views</p></div>
+    </button>
   </article>;
 }
 
@@ -64,9 +69,9 @@ function PreviewDialog({ item, onClose }) {
   if (!item) return null;
   return <div className="search-preview-backdrop" role="presentation" onMouseDown={onClose}>
     <section className="search-preview" role="dialog" aria-modal="true" aria-labelledby="preview-title" onMouseDown={(event) => event.stopPropagation()}>
-      <button type="button" className="search-preview-close" onClick={onClose} aria-label="Đóng xem trước"><X /></button>
+      <button type="button" className="search-preview-close" onClick={onClose} aria-label="Close preview"><X /></button>
       <img src={item.thumbnailUrl || heroBowl} alt="" />
-      <div><span>Nội dung công khai từ NutriBot</span><h2 id="preview-title">{item.title}</h2><p>Tạo tài khoản miễn phí để đọc toàn bộ nội dung, lưu bài yêu thích và nhận gợi ý phù hợp với mục tiêu của bạn.</p><div><Link to="/register">Tạo tài khoản <ArrowRight size={16} /></Link><Link to="/login">Đã có tài khoản</Link></div></div>
+      <div><span>Public content from NutriBot</span><h2 id="preview-title">{item.title}</h2><p>Create a free account to read the full story, save favorites, and receive recommendations tailored to your goals.</p><div><Link to="/register">Create an account <ArrowRight size={16} /></Link><Link to="/login">I already have an account</Link></div></div>
     </section>
   </div>;
 }
@@ -105,7 +110,7 @@ function SearchExperience({ isMember }) {
       setResults((current) => append ? [...current, ...incoming] : incoming);
       setMeta(response.meta);
     } catch (fetchError) {
-      if (fetchError.name !== 'AbortError') { setError('Chưa thể tải kết quả. Vui lòng kiểm tra kết nối và thử lại.'); if (!append) setResults([]); }
+      if (fetchError.name !== 'AbortError') { setError('We could not load the results. Check your connection and try again.'); if (!append) setResults([]); }
     } finally {
       if (!controller.signal.aborted) { setLoading(false); setLoadingMore(false); }
     }
@@ -136,40 +141,65 @@ function SearchExperience({ isMember }) {
   const submitSearch = (event) => { event.preventDefault(); updateParams({ q: draft.trim() }); };
   const activeCategory = categories.find((category) => String(category.categoryId ?? category.id) === categoryId);
 
+  if (!isMember) return <main className="public-search-main" ref={pageRef}>
+    <section className="public-search-intro" aria-labelledby="public-search-title">
+      <h1 id="public-search-title">Search content</h1>
+      <p>Find nutrition articles and videos available on NutriBot.</p>
+      <form className="public-search-form" onSubmit={submitSearch}>
+        <Search size={19} aria-hidden="true" />
+        <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Enter a keyword..." aria-label="Search keyword" autoFocus />
+        {draft && <button type="button" className="public-search-clear" onClick={() => setDraft('')} aria-label="Clear keyword"><X size={17} /></button>}
+        <button type="submit" className="public-search-submit">Search</button>
+      </form>
+    </section>
+
+    <section className="public-search-filters" aria-label="Search filters">
+      <div className="public-type-tabs">{TYPES.map(({ value, label }) => <button type="button" key={label} className={contentType === value ? 'is-active' : ''} onClick={() => updateParams({ type: value })}>{label}</button>)}</div>
+      <label>Category<select value={categoryId} onChange={(event) => updateParams({ category: event.target.value })}><option value="">All</option>{categories.map((category) => { const id = String(category.categoryId ?? category.id); return <option value={id} key={id}>{category.name}</option>; })}</select></label>
+      <label>Sort by<select value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Newest</option><option value="popular">Most viewed</option><option value="oldest">Oldest</option></select></label>
+    </section>
+
+    <section className="public-search-results" id="search-results" aria-live="polite">
+      <header><h2>{query ? `Results for “${query}”` : 'All content'}</h2>{!loading && <span>{meta.totalElements.toLocaleString('en-US')} results</span>}</header>
+      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Searching...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage(0)}>Try again</button></div> : sortedResults.length ? <div className="public-results-grid">{sortedResults.map((item, index) => <PublicResultCard key={`${item.id}-${index}`} item={item} onPreview={setPreview} />)}</div> : <div className="search-empty"><Search size={30} /><h3>No content found</h3><p>Try another keyword or clear the current filters.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all</button></div>}
+      {meta.page < meta.totalPages - 1 && <div className="search-load-more" ref={loadMoreRef}>{loadingMore && <LoaderCircle className="search-spinner" />}</div>}
+    </section>
+    <PreviewDialog item={preview} onClose={() => setPreview(null)} />
+  </main>;
+
   return <main className="search-experience" ref={pageRef}>
     <section className="search-hero" aria-labelledby="search-title">
       <div className="search-hero-copy">
-        <span className="search-eyebrow">Thư viện dinh dưỡng mở</span>
-        <h1 id="search-title">Tìm điều tốt lành <i style={{ backgroundImage: `url(${freshProduce})` }} /> cho bữa ăn hôm nay.</h1>
-        <p>Khám phá bài viết và video đã được cộng đồng NutriBot chia sẻ. Không cần tài khoản để bắt đầu tìm kiếm.</p>
-        <form className="search-main-form" onSubmit={submitSearch}><label><span className="sr-only">Từ khóa tìm kiếm</span><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ví dụ: bữa sáng giàu đạm" />{draft && <button type="button" onClick={() => setDraft('')} aria-label="Xóa từ khóa"><X size={17} /></button>}</label><button type="submit"><Search size={18} /> Tìm kiếm</button></form>
+        <span className="search-eyebrow">Your nutrition library</span>
+        <h1 id="search-title">Find something nourishing <i style={{ backgroundImage: `url(${freshProduce})` }} /> for today&apos;s table.</h1>
+        <p>Explore practical articles and videos shared across the NutriBot community.</p>
+        <form className="search-main-form" onSubmit={submitSearch}><label><span className="sr-only">Search keyword</span><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Try: high-protein breakfast" />{draft && <button type="button" onClick={() => setDraft('')} aria-label="Clear keyword"><X size={17} /></button>}</label><button type="submit"><Search size={18} /> Search</button></form>
       </div>
-      <div className="search-hero-art" aria-hidden="true"><img src={heroBowl} alt="" /><span><b>{meta.totalElements.toLocaleString('vi-VN')}</b> nội dung đang chờ bạn khám phá</span></div>
+      <div className="search-hero-art" aria-hidden="true"><img src={heroBowl} alt="" /><span><b>{meta.totalElements.toLocaleString('en-US')}</b> ideas ready to explore</span></div>
     </section>
 
-    <div className="search-suggestion-marquee" aria-label="Gợi ý tìm kiếm"><div>{[...SUGGESTIONS, ...SUGGESTIONS].map((suggestion, index) => <button type="button" key={`${suggestion}-${index}`} onClick={() => { setDraft(suggestion); updateParams({ q: suggestion }); }}>{suggestion}<ArrowRight size={14} /></button>)}</div></div>
+    <div className="search-suggestion-marquee" aria-label="Search suggestions"><div>{[...SUGGESTIONS, ...SUGGESTIONS].map((suggestion, index) => <button type="button" key={`${suggestion}-${index}`} onClick={() => { setDraft(suggestion); updateParams({ q: suggestion }); }}>{suggestion}<ArrowRight size={14} /></button>)}</div></div>
 
-    <section className="search-controls" aria-label="Bộ lọc tìm kiếm">
+    <section className="search-controls" aria-label="Search filters">
       <div className="search-type-accordion">{TYPES.map(({ value, label, description, icon: Icon }) => <button type="button" key={label} className={contentType === value ? 'is-active' : ''} onClick={() => updateParams({ type: value })}><Icon size={19} /><span><b>{label}</b><small>{description}</small></span></button>)}</div>
-      <button type="button" className={`search-filter-trigger${filtersOpen ? ' is-active' : ''}`} onClick={() => setFiltersOpen((open) => !open)}><SlidersHorizontal size={17} /> Danh mục {activeCategory && <span>1</span>}</button>
-      <label className="search-sort-control">Sắp xếp<select value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Mới nhất</option><option value="popular">Xem nhiều nhất</option><option value="oldest">Cũ nhất</option></select></label>
-      {filtersOpen && <div className="search-category-panel"><button type="button" className={!categoryId ? 'is-active' : ''} onClick={() => updateParams({ category: '' })}>Tất cả danh mục</button>{categories.map((category) => { const id = String(category.categoryId ?? category.id); return <button type="button" key={id} className={categoryId === id ? 'is-active' : ''} onClick={() => updateParams({ category: id })}>{category.name}</button>; })}</div>}
+      <button type="button" className={`search-filter-trigger${filtersOpen ? ' is-active' : ''}`} onClick={() => setFiltersOpen((open) => !open)}><SlidersHorizontal size={17} /> Categories {activeCategory && <span>1</span>}</button>
+      <label className="search-sort-control">Sort by<select value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Newest</option><option value="popular">Most viewed</option><option value="oldest">Oldest</option></select></label>
+      {filtersOpen && <div className="search-category-panel"><button type="button" className={!categoryId ? 'is-active' : ''} onClick={() => updateParams({ category: '' })}>All categories</button>{categories.map((category) => { const id = String(category.categoryId ?? category.id); return <button type="button" key={id} className={categoryId === id ? 'is-active' : ''} onClick={() => updateParams({ category: id })}>{category.name}</button>; })}</div>}
     </section>
 
     <section className="search-results" id="search-results" aria-live="polite">
-      <header><div><span>{query ? `Kết quả cho “${query}”` : 'Khám phá nội dung mới'}</span><h2>{loading ? 'Đang tìm trong thư viện...' : `${meta.totalElements.toLocaleString('vi-VN')} kết quả phù hợp`}</h2></div>{(query || contentType || categoryId) && <button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>Xóa toàn bộ bộ lọc <X size={15} /></button>}</header>
-      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Đang chuẩn bị những nội dung phù hợp...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage(0)}>Thử lại</button></div> : sortedResults.length ? <div className="search-results-grid">{sortedResults.map((item, index) => <ResultCard key={`${item.id}-${index}`} item={item} index={index} isMember={isMember} onPreview={setPreview} />)}</div> : <div className="search-empty"><Search size={34} /><h3>Chưa tìm thấy nội dung phù hợp</h3><p>Thử một từ khóa ngắn hơn hoặc chọn lại loại nội dung.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>Xem tất cả nội dung</button></div>}
+      <header><div><span>{query ? `Results for “${query}”` : 'Discover new content'}</span><h2>{loading ? 'Searching the library...' : `${meta.totalElements.toLocaleString('en-US')} matching results`}</h2></div>{(query || contentType || categoryId) && <button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>Clear all filters <X size={15} /></button>}</header>
+      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Finding the right content...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage(0)}>Try again</button></div> : sortedResults.length ? <div className="search-results-grid">{sortedResults.map((item, index) => <ResultCard key={`${item.id}-${index}`} item={item} index={index} isMember={isMember} onPreview={setPreview} />)}</div> : <div className="search-empty"><Search size={34} /><h3>No matching content found</h3><p>Try a shorter keyword or choose another content type.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all content</button></div>}
       {meta.page < meta.totalPages - 1 && <div className="search-load-more" ref={loadMoreRef}>{loadingMore && <LoaderCircle className="search-spinner" />}</div>}
     </section>
 
-    {!isMember && <section className="search-guest-cta"><div><span>Biến cảm hứng thành thói quen</span><h2>Lưu món ngon. Xây thực đơn. Hiểu cơ thể mình hơn.</h2></div><Link to="/register">Bắt đầu miễn phí <ArrowRight size={18} /></Link></section>}
-    {!isMember && <footer className="search-footer"><Link to="/">NutriBot</Link><span>Nội dung dinh dưỡng dễ hiểu cho mỗi ngày.</span><span>© 2026 NutriBot</span></footer>}
     <PreviewDialog item={preview} onClose={() => setPreview(null)} />
   </main>;
 }
 
-export default function SearchPage() {
-  const isMember = Boolean(getCurrentUserFromToken());
-  if (!isMember) return <div className="search-page search-page--public"><PublicSearchNav /><SearchExperience isMember={false} /></div>;
-  return <div className="community-page search-page search-page--member"><CommunityTopBar hideSearch activePath="/search" /><div className="community-shell"><CommunitySideNav activePath="/search" /><span className="community-sidenav-spacer" aria-hidden="true" /><SearchExperience isMember /></div></div>;
+export default function SearchPage({ member = false }) {
+  const navigate = useNavigate();
+  const [authMode, setAuthMode] = useState(null);
+  if (!member) return <div className="search-page search-page--public"><Header onAuth={setAuthMode} /><SearchExperience isMember={false} />{authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} onSubmit={(_, mode) => setAuthMode(mode)} onAuthenticated={() => navigate('/home')} onGoogle={() => window.location.assign(googleAuthUrl())} />}</div>;
+  return <div className="community-page search-page search-page--member"><CommunityTopBar hideSearch activePath="/community/search" /><div className="community-shell"><CommunitySideNav activePath="/community/search" /><span className="community-sidenav-spacer" aria-hidden="true" /><SearchExperience isMember /></div></div>;
 }

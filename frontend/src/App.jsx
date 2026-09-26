@@ -31,6 +31,7 @@ export default function App() {
     <Route path="/profile/health" element={<MemberRoute><HealthProfilePage /></MemberRoute>} />
     <Route path="/community/profile" element={<Navigate to="/profile" replace />} />
     <Route path="/community/my-blogs" element={<MemberRoute><MyBlogsPage /></MemberRoute>} />
+    <Route path="/community/search" element={<MemberRoute><SearchPage member /></MemberRoute>} />
     <Route path="/community/posts/:postId" element={<MemberRoute><CommunityContentDetailPage /></MemberRoute>} />
     <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
       <Route index element={<AdminDashboard />} />

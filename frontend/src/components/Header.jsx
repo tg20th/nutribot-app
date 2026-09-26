@@ -1,5 +1,5 @@
 import { Menu, Search, X } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
@@ -8,8 +8,10 @@ gsap.registerPlugin(ScrollTrigger);
 
 const links = [{ label: 'Home', target: 'home' }, { label: 'Explore', target: 'explore' }, { label: 'Recipes', target: 'recipes' }, { label: 'Videos', target: 'videos' }, { label: 'Community', target: 'community' }];
 
-export default function Header({ onSearch, onAuth }) {
+export default function Header({ onAuth }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const isLandingPage = pathname === '/';
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState('');
   const [active, setActive] = useState('Home');
@@ -75,7 +77,6 @@ export default function Header({ onSearch, onAuth }) {
       navigate('/search');
     }
     setOpen(false);
-    if (onSearch) onSearch(value);
   };
 
   const navigateSection = (label) => {
@@ -88,27 +89,31 @@ export default function Header({ onSearch, onAuth }) {
   return (
     <header ref={header} className="site-header">
       <div className="nav-wrap">
-        <a className="brand" href="#home" onClick={() => navigateSection('Home')} aria-label="NutriBot home">
-          <span>Nutri</span>Bot<small>Good Food. Brighter You.</small>
-        </a>
+        {isLandingPage
+          ? <a className="brand" href="#home" onClick={() => navigateSection('Home')} aria-label="NutriBot home"><span>Nutri</span>Bot<small>Good Food. Brighter You.</small></a>
+          : <Link className="brand" to="/" aria-label="NutriBot home"><span>Nutri</span>Bot<small>Good Food. Brighter You.</small></Link>}
 
         <nav ref={nav} className={open ? 'nav-links open' : 'nav-links'}>
           {links.map(({ label, target }) =>
             label === 'Community'
               ? <Link ref={(node) => { linkRefs.current[label] = node; }} key={label} to="/community" className={active === label ? 'active' : ''}>{label}</Link>
-              : <a ref={(node) => { linkRefs.current[label] = node; }} key={label} onClick={() => navigateSection(label)} className={active === label ? 'active' : ''} href={`#${target}`}>{label}</a>
+              : isLandingPage
+                ? <a ref={(node) => { linkRefs.current[label] = node; }} key={label} onClick={() => navigateSection(label)} className={active === label ? 'active' : ''} href={`#${target}`}>{label}</a>
+                : <Link ref={(node) => { linkRefs.current[label] = node; }} key={label} to={`/#${target}`} className={active === label ? 'active' : ''}>{label}</Link>
           )}
           <span ref={indicator} className="nav-indicator" aria-hidden="true"/>
         </nav>
 
         <form className="nav-search" onSubmit={submit}>
-          <Search size={17}/>
+          <button type="submit" className="nav-search-submit" aria-label="Search content">
+            <Search size={17}/>
+          </button>
           <input
             ref={searchInputRef}
             aria-label="Search content"
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder="Tìm kiếm công thức, bài viết..."
+            placeholder="Search recipes, articles..."
           />
         </form>
 

@@ -72,12 +72,12 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
     e.preventDefault();
     const trimmedQuery = localQuery.trim();
     if (trimmedQuery) {
-      navigate(`/search?q=${encodeURIComponent(trimmedQuery)}`);
+      navigate(`/community/search?q=${encodeURIComponent(trimmedQuery)}`);
       if (onQueryChange) onQueryChange('');
       setLocalQuery('');
     } else {
       // Navigate to full search page even with empty query
-      navigate('/search');
+      navigate('/community/search');
     }
   };
 
@@ -105,10 +105,10 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
             ref={searchInputRef}
             value={localQuery}
             onChange={handleSearchChange}
-            placeholder="Tìm kiếm bài viết, video, công thức..."
-            aria-label="Tìm kiếm nội dung"
+            placeholder="Search articles, videos, recipes..."
+            aria-label="Search content"
           />
-          <button type="submit" className="community-search-btn" aria-label="Tìm kiếm">
+          <button type="submit" className="community-search-btn" aria-label="Search">
             <Search size={16}/>
           </button>
         </form>
