@@ -17,6 +17,10 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
 
     Page<Content> findByContentTypeAndStatus(String contentType, String status, Pageable pageable);
 
+    Page<Content> findByContentTypeAndStatusAndCategoryId(String contentType, String status, Integer categoryId, Pageable pageable);
+
+    Page<Content> findByStatusAndCategoryId(String status, Integer categoryId, Pageable pageable);
+
     Page<Content> findByContentTypeAndStatusAndUserUserId(String contentType, String status, Integer userId, Pageable pageable);
 
     Optional<Content> findBySlug(String slug);
@@ -48,6 +52,19 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
            "ORDER BY c.createdAt DESC")
     Page<Content> searchByKeywordAndType(@Param("keyword") String keyword, @Param("contentType") String contentType,
                                           @Param("status") String status, Pageable pageable);
+
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.categoryId = :categoryId AND " +
+           "(LOWER(c.title) LIKE :keyword OR LOWER(c.body) LIKE :keyword) " +
+           "ORDER BY c.createdAt DESC")
+    Page<Content> searchByKeywordAndCategory(@Param("keyword") String keyword, @Param("categoryId") Integer categoryId,
+                                             @Param("status") String status, Pageable pageable);
+
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.contentType = :contentType AND c.categoryId = :categoryId AND " +
+           "(LOWER(c.title) LIKE :keyword OR LOWER(c.body) LIKE :keyword) " +
+           "ORDER BY c.createdAt DESC")
+    Page<Content> searchByKeywordAndTypeAndCategory(@Param("keyword") String keyword, @Param("contentType") String contentType,
+                                                     @Param("categoryId") Integer categoryId, @Param("status") String status,
+                                                     Pageable pageable);
 
     Page<Content> findByStatus(String status, Pageable pageable);
 

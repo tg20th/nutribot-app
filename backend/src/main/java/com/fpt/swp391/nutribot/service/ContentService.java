@@ -27,7 +27,9 @@ public class ContentService {
     @Transactional(readOnly = true)
     public PagedResponse<ContentListResponse> getPublishedBlogs(int page, int size, Integer categoryId) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Content> contentPage = contentRepository.findByContentTypeAndStatus(BLOG_TYPE, PUBLISHED_STATUS, pageable);
+        Page<Content> contentPage = categoryId == null
+                ? contentRepository.findByContentTypeAndStatus(BLOG_TYPE, PUBLISHED_STATUS, pageable)
+                : contentRepository.findByContentTypeAndStatusAndCategoryId(BLOG_TYPE, PUBLISHED_STATUS, categoryId, pageable);
         Page<ContentListResponse> responsePage = contentPage.map(this::toBlogListResponse);
         return PagedResponse.of(responsePage);
     }
@@ -118,6 +120,7 @@ public class ContentService {
                 .title(content.getTitle())
                 .slug(content.getSlug())
                 .thumbnailUrl(content.getThumbnailUrl())
+                .categoryId(content.getCategoryId())
                 .authorName(content.getUser().getFullName())
                 .viewCount(content.getViewCount())
                 .voteCount(0)
@@ -131,6 +134,7 @@ public class ContentService {
                 .title(content.getTitle())
                 .body(content.getBody())
                 .thumbnailUrl(content.getThumbnailUrl())
+                .categoryId(content.getCategoryId())
                 .authorId(content.getUser().getUserId())
                 .authorName(content.getUser().getFullName())
                 .viewCount(content.getViewCount())
@@ -148,6 +152,7 @@ public class ContentService {
                 .thumbnailUrl(content.getThumbnailUrl())
                 .mediaUrl(content.getMediaUrl())
                 .durationSec(content.getDurationSec())
+                .categoryId(content.getCategoryId())
                 .authorName(content.getUser().getFullName())
                 .viewCount(content.getViewCount())
                 .voteCount(0)
@@ -163,6 +168,7 @@ public class ContentService {
                 .mediaUrl(content.getMediaUrl())
                 .thumbnailUrl(content.getThumbnailUrl())
                 .durationSec(content.getDurationSec())
+                .categoryId(content.getCategoryId())
                 .authorId(content.getUser().getUserId())
                 .authorName(content.getUser().getFullName())
                 .viewCount(content.getViewCount())
