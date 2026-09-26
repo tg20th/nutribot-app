@@ -28,6 +28,9 @@ public class VideoListResponse {
     @JsonProperty("durationSec")
     private Integer durationSec;
 
+    @JsonProperty("categoryId")
+    private Integer categoryId;
+
     @JsonProperty("authorName")
     private String authorName;
 

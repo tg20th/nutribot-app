@@ -1,4 +1,4 @@
-﻿-- =============================================
+-- =============================================
 -- Database: NutriBot
 -- Microsoft SQL Server (T-SQL) - FINAL
 -- Kiến trúc nghiệp vụ:
@@ -218,6 +218,7 @@ CREATE TABLE contents (
     content_id      INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
     user_id         INT NOT NULL,
     content_type    NVARCHAR(10) NOT NULL,               -- BLOG | VIDEO
+    category_id     INT NULL,
     title           NVARCHAR(255) NOT NULL,
     slug            NVARCHAR(280) NOT NULL,
     body            NVARCHAR(MAX) NULL,                 -- BLOG
@@ -230,6 +231,7 @@ CREATE TABLE contents (
     updated_at      DATETIME2(3) NOT NULL CONSTRAINT DF_contents_updated_at DEFAULT (SYSUTCDATETIME()),
     CONSTRAINT UQ_contents_slug UNIQUE (slug),
     CONSTRAINT FK_contents_users FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION,
+    CONSTRAINT FK_contents_categories FOREIGN KEY (category_id) REFERENCES categories(category_id),
     CONSTRAINT CK_contents_type CHECK (content_type IN (N'BLOG', N'VIDEO')),
     CONSTRAINT CK_contents_status CHECK (status IN (N'draft', N'under_review', N'published', N'flagged', N'rejected', N'archived')),
     CONSTRAINT CK_contents_view_count CHECK (view_count >= 0),
@@ -410,6 +412,7 @@ CREATE NONCLUSTERED INDEX IX_users_role_id              ON users(role_id);
 CREATE NONCLUSTERED INDEX IX_contents_user_id           ON contents(user_id);
 CREATE NONCLUSTERED INDEX IX_contents_status            ON contents(status) INCLUDE (title, content_type, created_at);
 CREATE NONCLUSTERED INDEX IX_contents_type_status       ON contents(content_type, status);
+CREATE NONCLUSTERED INDEX IX_contents_category_id       ON contents(category_id);
 
 CREATE NONCLUSTERED INDEX IX_comments_content_id        ON comments(content_id);
 CREATE NONCLUSTERED INDEX IX_comments_parent_id         ON comments(parent_id);

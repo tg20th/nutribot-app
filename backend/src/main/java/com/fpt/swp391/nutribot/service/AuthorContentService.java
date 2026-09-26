@@ -57,6 +57,7 @@ public class AuthorContentService {
         Content content = Content.builder()
                 .user(user)
                 .contentType(contentType)
+                .categoryId(request.getCategoryId())
                 .title(request.getTitle())
                 .slug(generateSlug(request.getTitle()))
                 .body(request.getBody())
@@ -104,6 +105,9 @@ public class AuthorContentService {
         }
         if (request.getBody() != null) {
             content.setBody(request.getBody());
+        }
+        if (request.getCategoryId() != null) {
+            content.setCategoryId(request.getCategoryId());
         }
         if (request.getMediaUrl() != null) {
             content.setMediaUrl(request.getMediaUrl());
@@ -156,6 +160,7 @@ public class AuthorContentService {
                 .title(content.getTitle())
                 .slug(content.getSlug())
                 .body(content.getBody())
+                .categoryId(content.getCategoryId())
                 .mediaUrl(content.getMediaUrl())
                 .thumbnailUrl(content.getThumbnailUrl())
                 .durationSec(content.getDurationSec())

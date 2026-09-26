@@ -25,6 +25,9 @@ public class Content {
     @Column(name = "content_type", nullable = false, length = 10)
     private String contentType;
 
+    @Column(name = "category_id")
+    private Integer categoryId;
+
     @Column(name = "title", nullable = false, length = 255)
     private String title;
 

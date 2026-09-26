@@ -29,13 +29,21 @@ public class SearchService {
 
         if (StringUtils.hasText(keyword)) {
             String searchKeyword = "%" + keyword.toLowerCase() + "%";
-            if (StringUtils.hasText(contentType)) {
+            if (StringUtils.hasText(contentType) && categoryId != null) {
+                contentPage = contentRepository.searchByKeywordAndTypeAndCategory(searchKeyword, contentType.toUpperCase(), categoryId, PUBLISHED_STATUS, pageable);
+            } else if (StringUtils.hasText(contentType)) {
                 contentPage = contentRepository.searchByKeywordAndType(searchKeyword, contentType.toUpperCase(), PUBLISHED_STATUS, pageable);
+            } else if (categoryId != null) {
+                contentPage = contentRepository.searchByKeywordAndCategory(searchKeyword, categoryId, PUBLISHED_STATUS, pageable);
             } else {
                 contentPage = contentRepository.searchByKeyword(searchKeyword, PUBLISHED_STATUS, pageable);
             }
+        } else if (StringUtils.hasText(contentType) && categoryId != null) {
+            contentPage = contentRepository.findByContentTypeAndStatusAndCategoryId(contentType.toUpperCase(), PUBLISHED_STATUS, categoryId, pageable);
         } else if (StringUtils.hasText(contentType)) {
             contentPage = contentRepository.findByContentTypeAndStatus(contentType.toUpperCase(), PUBLISHED_STATUS, pageable);
+        } else if (categoryId != null) {
+            contentPage = contentRepository.findByStatusAndCategoryId(PUBLISHED_STATUS, categoryId, pageable);
         } else {
             contentPage = contentRepository.findByStatus(PUBLISHED_STATUS, pageable);
         }
@@ -50,6 +58,7 @@ public class SearchService {
                 .title(content.getTitle())
                 .slug(content.getSlug())
                 .thumbnailUrl(content.getThumbnailUrl())
+                .categoryId(content.getCategoryId())
                 .authorName(content.getUser() != null ? content.getUser().getFullName() : null)
                 .viewCount(content.getViewCount())
                 .voteCount(0)

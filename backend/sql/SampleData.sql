@@ -363,10 +363,11 @@ GO
 ;WITH U AS (
     SELECT user_id, ROW_NUMBER() OVER (ORDER BY user_id) AS rn FROM users
 )
-INSERT INTO contents (user_id, content_type, title, slug, body, media_url, thumbnail_url, duration_sec, status, view_count)
+INSERT INTO contents (user_id, content_type, category_id, title, slug, body, media_url, thumbnail_url, duration_sec, status, view_count)
 SELECT
     u.user_id,
     CASE WHEN u.rn % 2 = 0 THEN N'BLOG' ELSE N'VIDEO' END,
+    (SELECT TOP 1 category_id FROM categories WHERE category_type = N'RECIPE' ORDER BY category_id),
     CASE WHEN u.rn % 2 = 0 THEN N'Bài viết dinh dưỡng số ' + CAST(u.rn AS NVARCHAR(10))
          ELSE N'Video nấu ăn số ' + CAST(u.rn AS NVARCHAR(10)) END,
     CASE WHEN u.rn % 2 = 0 THEN N'bai-viet-dinh-duong-' + CAST(u.rn AS NVARCHAR(10))

@@ -22,6 +22,9 @@ public class ContentListResponse {
     @JsonProperty("thumbnailUrl")
     private String thumbnailUrl;
 
+    @JsonProperty("categoryId")
+    private Integer categoryId;
+
     @JsonProperty("authorName")
     private String authorName;
 

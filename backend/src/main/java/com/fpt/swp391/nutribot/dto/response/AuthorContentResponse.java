@@ -25,6 +25,9 @@ public class AuthorContentResponse {
     @JsonProperty("body")
     private String body;
 
+    @JsonProperty("categoryId")
+    private Integer categoryId;
+
     @JsonProperty("mediaUrl")
     private String mediaUrl;
 
