@@ -21,6 +21,7 @@ import MyBlogsPage from './pages/MyBlogsPage';
 import CreateBlogPage from './pages/CreateBlogPage';
 import BlogListPage from './pages/BlogListPage';
 import BlogDetailPage from './pages/BlogDetailPage';
+import RestaurantRecommendationsPreviewPage from './pages/RestaurantRecommendationsPreviewPage';
 
 export default function App() {
   return <Routes>
@@ -53,6 +54,7 @@ export default function App() {
       <Route path="comments" element={<CommentManagementPage />} />
     </Route>
     <Route path="/search" element={<SearchPage />} />
+    {import.meta.env.DEV && <Route path="/dev/nb-56" element={<RestaurantRecommendationsPreviewPage />} />}
     <Route path="*" element={<HomePage />} />
   </Routes>;
 }
