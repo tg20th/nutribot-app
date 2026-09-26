@@ -22,9 +22,11 @@ import CreateBlogPage from './pages/CreateBlogPage';
 import BlogListPage from './pages/BlogListPage';
 import BlogDetailPage from './pages/BlogDetailPage';
 import RestaurantRecommendationsPreviewPage from './pages/RestaurantRecommendationsPreviewPage';
+import NB26ReviewPage from './pages/NB26ReviewPage';
 
 export default function App() {
   return <Routes>
+    {import.meta.env.DEV && <Route path="/review/nb-26" element={<NB26ReviewPage />} />}
     <Route path="/" element={<HomePage />} />
     <Route path="/home" element={<MemberRoute><CommunityFeedPage /></MemberRoute>} />
     <Route path="/register" element={<RegisterPage />} />
