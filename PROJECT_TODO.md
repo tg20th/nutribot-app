@@ -219,7 +219,7 @@
   - *Mô tả:* Phân tích món ăn người dùng yêu thích để gợi ý nhà hàng có phục vụ món tương tự.
 - [ ] **#59 [AI] Thuật toán Xếp hạng & Gợi ý Nội dung Liên quan**
   - *Mô tả:* So khớp độ tương đồng về tag và danh mục để đề xuất các bài viết/video liên quan.
-- [ ] **#52 & #53 [FE] Giao diện Lập Thực đơn AI & Xem trước Thực đơn**
+- [x] **#52 & #53 [FE] Giao diện Lập Thực đơn AI & Xem trước Thực đơn**
   - *Mô tả:* Form nhập thông tin nguyên liệu trong tủ lạnh -> Bấm "Tạo thực đơn" -> Hiển thị bản Preview 7 ngày do AI gợi ý -> Bấm "Lưu vào thực đơn của tôi".
   - *File cần tạo:* `frontend/src/pages/MealPlannerPage.jsx`.
 
