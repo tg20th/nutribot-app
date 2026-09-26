@@ -12,6 +12,7 @@ import com.fpt.swp391.nutribot.exception.CloudinaryUploadException;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -30,6 +31,7 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class UserProfileService {
 
     private static final long MAX_AVATAR_SIZE = 5L * 1024 * 1024;
@@ -115,13 +117,18 @@ public class UserProfileService {
         }
     }
 
-    @Transactional
     public AvatarResponse deleteAvatar(String username) {
         User user = findUser(username);
         String currentAvatarUrl = user.getAvatarUrl();
         user.setAvatarUrl(null);
         User savedUser = userRepository.saveAndFlush(user);
-        cloudinaryAvatarService.deleteAvatarByUrl(currentAvatarUrl);
+
+        try {
+            cloudinaryAvatarService.deleteAvatarByUrl(currentAvatarUrl);
+        } catch (RuntimeException cleanupException) {
+            log.warn("Avatar URL was cleared for user {} but Cloudinary cleanup failed.", username, cleanupException);
+        }
+
         return new AvatarResponse(savedUser.getAvatarUrl());
     }
 
