@@ -4,6 +4,13 @@ const authorBlogsPath = '/api/v1/author/blogs';
 const authorVideosPath = '/api/v1/author/videos';
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 
+function validateAuthorPage(data, label) {
+  if (!Array.isArray(data.content) || !Number.isInteger(data.totalPages) || !Number.isFinite(data.totalElements)) {
+    throw new Error(`Invalid author ${label} list response`);
+  }
+  return data;
+}
+
 export async function getBlogCategories(signal) {
   const items = unwrapData(await apiRequest('/api/v1/categories?type=RECIPE', { signal }), []);
   if (!Array.isArray(items)) throw new Error('Invalid blog categories response');
@@ -45,15 +52,23 @@ export async function createMyVideo(values) {
 
 export async function getMyBlogs(page = 0, size = 6, signal) {
   const data = unwrapData(await apiRequest(`${authorBlogsPath}?page=${page}&size=${size}`, { signal }), {});
-  if (!Array.isArray(data.content) || !Number.isInteger(data.totalPages) || !Number.isFinite(data.totalElements)) {
-    throw new Error('Invalid author blog list response');
-  }
-  return data;
+  return validateAuthorPage(data, 'blog');
+}
+
+export async function getMyVideos(page = 0, size = 6, signal) {
+  const data = unwrapData(await apiRequest(`${authorVideosPath}?page=${page}&size=${size}`, { signal }), {});
+  return validateAuthorPage(data, 'video');
 }
 
 export async function getMyBlog(id, signal) {
   const data = unwrapData(await apiRequest(`${authorBlogsPath}/${id}`, { signal }), {});
   if (data.contentId == null) throw new Error('Invalid author blog response');
+  return data;
+}
+
+export async function getMyVideo(id, signal) {
+  const data = unwrapData(await apiRequest(`${authorVideosPath}/${id}`, { signal }), {});
+  if (data.contentId == null) throw new Error('Invalid author video response');
   return data;
 }
 
@@ -64,4 +79,13 @@ export async function updateMyBlog(id, values) {
   }), {});
 }
 
+export async function updateMyVideo(id, values) {
+  return unwrapData(await apiRequest(`${authorVideosPath}/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(values),
+  }), {});
+}
+
 export const deleteMyBlog = (id) => apiRequest(`${authorBlogsPath}/${id}`, { method: 'DELETE' });
+
+export const deleteMyVideo = (id) => apiRequest(`${authorVideosPath}/${id}`, { method: 'DELETE' });

@@ -10,6 +10,9 @@
 .my-blogs-header h1 span { color: #799338; }
 .my-blogs-header p:last-child { margin: 16px 0 0; color: #637068; font-size: 14px; line-height: 1.6; }
 .my-blogs-header-mark { display: grid; place-items: center; flex: none; width: 94px; height: 94px; border-radius: 26px; background: #eaf0d9; transform: rotate(-7deg); }
+.my-blogs-tabs { display: inline-flex; gap: 8px; padding: 6px; margin: 0 0 24px; border: 1px solid #dce4d4; border-radius: 16px; background: #f4f6ee; }
+.my-blogs-tabs button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 9px 16px; border-radius: 11px; color: #637068; font-size: 13px; font-weight: 800; }
+.my-blogs-tabs button.is-active { background: #173529; color: #fffefa; box-shadow: 0 10px 24px rgba(23, 53, 41, .13); }
 .my-blogs-collection { border-top: 1px solid rgba(23, 53, 41, .15); }
 .my-blogs-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 26px 0 20px; }
 .my-blogs-list-heading h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 20px; letter-spacing: -.03em; }
@@ -73,7 +76,7 @@
 .my-blog-form fieldset { display: flex; flex-direction: column; gap: 9px; padding: 0; margin: 0 0 20px; border: 0; min-width: 0; }
 .my-blog-form label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 700; }
 .my-blog-form label span { color: #68746c; font-size: 11px; font-weight: 400; }
-.my-blog-form input, .my-blog-form textarea { width: 100%; min-width: 0; padding: 12px; margin-bottom: 12px; border: 1px solid #d2dbca; border-radius: 10px; background: #fffefa; color: #173529; font: 400 14px/1.6 'Outfit', sans-serif; }
+.my-blog-form input, .my-blog-form textarea, .my-blog-form select { width: 100%; min-width: 0; padding: 12px; margin-bottom: 12px; border: 1px solid #d2dbca; border-radius: 10px; background: #fffefa; color: #173529; font: 400 14px/1.6 'Outfit', sans-serif; }
 .my-blog-form textarea { min-height: 180px; resize: vertical; }
 .my-blog-dialog-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 22px; padding-top: 20px; border-top: 1px solid #dce2d5; }
 .my-blog-dialog-state { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 24px 0; font-size: 14px; }
