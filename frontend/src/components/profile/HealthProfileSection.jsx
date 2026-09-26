@@ -64,6 +64,7 @@ const validate = (health) => {
 export default function HealthProfileSection() {
   const [health, setHealth] = useState(EMPTY_HEALTH);
   const [savedHealth, setSavedHealth] = useState(EMPTY_HEALTH);
+  const [savedBmi, setSavedBmi] = useState(null);
   const [ingredients, setIngredients] = useState([]);
   const [query, setQuery] = useState('');
   const [errors, setErrors] = useState({});
@@ -78,6 +79,7 @@ export default function HealthProfileSection() {
         const mapped = toFormHealth(profile);
         setHealth(mapped);
         setSavedHealth(mapped);
+        setSavedBmi(profile.bmi ?? null);
         setIngredients(Array.isArray(ingredientOptions) ? ingredientOptions : []);
       })
       .catch((error) => {
@@ -91,10 +93,10 @@ export default function HealthProfileSection() {
     return () => controller.abort();
   }, []);
 
-  const bmi = calculateBmi(health.heightCm, health.weightKg);
+  const isDirty = JSON.stringify(health) !== JSON.stringify(savedHealth);
+  const bmi = isDirty ? calculateBmi(health.heightCm, health.weightKg) : savedBmi;
   const bmiStatus = classifyBmi(bmi);
   const bmiPosition = bmi == null ? 0 : Math.min(100, Math.max(0, ((bmi - 14) / 26) * 100));
-  const isDirty = JSON.stringify(health) !== JSON.stringify(savedHealth);
   const selectedIds = useMemo(() => new Set(health.allergyIngredientIds), [health.allergyIngredientIds]);
   const selectedIngredients = useMemo(
     () => ingredients.filter(({ ingredientId }) => selectedIds.has(ingredientId)),
@@ -151,6 +153,7 @@ export default function HealthProfileSection() {
       const mapped = toFormHealth(updated);
       setHealth(mapped);
       setSavedHealth(mapped);
+      setSavedBmi(updated.bmi ?? null);
       setNotice({ type: 'success', message: 'Your health profile is now up to date.' });
     } catch (error) {
       setNotice({ type: 'error', message: error?.message || 'We could not save your health profile.' });
