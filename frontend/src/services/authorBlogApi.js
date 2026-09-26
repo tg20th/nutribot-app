@@ -1,12 +1,17 @@
 import { apiRequest, unwrapData } from './apiClient';
 
 const authorBlogsPath = '/api/v1/author/blogs';
+const authorVideosPath = '/api/v1/author/videos';
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 
 export async function getBlogCategories(signal) {
-  const items = unwrapData(await apiRequest('/api/v1/blogs/categories', { signal }), []);
+  const items = unwrapData(await apiRequest('/api/v1/categories?type=RECIPE', { signal }), []);
   if (!Array.isArray(items)) throw new Error('Invalid blog categories response');
-  return items;
+  return items.map((item) => ({
+    ...item,
+    categoryId: item.categoryId ?? item.id,
+    name: item.name ?? item.categoryName ?? item.title,
+  }));
 }
 
 export async function uploadBlogThumbnail(file) {
@@ -29,6 +34,12 @@ export async function uploadBlogThumbnail(file) {
 export async function createMyBlog(values) {
   const data = unwrapData(await apiRequest(authorBlogsPath, { method: 'POST', body: JSON.stringify(values) }), {});
   if (data.contentId == null) throw new Error('Invalid create blog response');
+  return data;
+}
+
+export async function createMyVideo(values) {
+  const data = unwrapData(await apiRequest(authorVideosPath, { method: 'POST', body: JSON.stringify(values) }), {});
+  if (data.contentId == null) throw new Error('Invalid create video response');
   return data;
 }
 

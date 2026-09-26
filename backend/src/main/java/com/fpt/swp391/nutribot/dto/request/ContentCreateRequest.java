@@ -16,6 +16,8 @@ public class ContentCreateRequest {
 
     private String body;
 
+    private Integer categoryId;
+
     private String mediaUrl;
 
     private String thumbnailUrl;

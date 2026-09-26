@@ -132,7 +132,7 @@
 - [ ] **#21 [FE] Màn hình Danh sách & Chi tiết Video nấu ăn**
   - *Mô tả:* Lưới video hướng dẫn nấu ăn lành mạnh và màn hình xem video phát trực tiếp.
   - *File cần tạo:* `frontend/src/pages/VideoListPage.jsx`, `frontend/src/pages/VideoDetailPage.jsx`.
-- [ ] **#23 [FE] Form Đăng tải Video**
+- [x] **#23 [FE] Form Đăng tải Video**
   - *Mô tả:* Nhập tiêu đề, mô tả, gắn URL video (YouTube/MP4), chọn thời lượng và danh mục.
   - *File cần tạo:* `frontend/src/pages/CreateVideoPage.jsx`.
 - [ ] **#25 [FE] Màn hình "Video của tôi"**
