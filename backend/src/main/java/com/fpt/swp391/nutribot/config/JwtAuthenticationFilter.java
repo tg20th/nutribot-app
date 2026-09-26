@@ -14,6 +14,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.Locale;
 import java.util.Collections;
 
 @Component
@@ -36,8 +37,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             var userOpt = userRepository.findByUsername(username);
             if (userOpt.isPresent()) {
                 var user = userOpt.get();
+                String roleName = user.getRole().getRoleName();
+                String roleAuthority = roleName.regionMatches(true, 0, "ROLE_", 0, 5)
+                        ? "ROLE_" + roleName.substring(5).toUpperCase(Locale.ROOT)
+                        : "ROLE_" + roleName.toUpperCase(Locale.ROOT);
                 var authorities = Collections.singletonList(
-                        new SimpleGrantedAuthority(user.getRole().getRoleName())
+                        new SimpleGrantedAuthority(roleAuthority)
                 );
 
                 var authentication = new UsernamePasswordAuthenticationToken(
