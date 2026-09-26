@@ -12,6 +12,7 @@ import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import freshProduce from '../assets/fresh-produce.jpg';
 import { getMyProfile } from '../services/profileApi';
 import { addWeeklyMenuItem, createWeeklyMenu, deleteWeeklyMenuItem, getCurrentWeeklyMenu, getWeeklyMenuDishes, updateWeeklyMenu } from '../services/weeklyMealApi';
+import { generateMealPlan } from '../services/mealPlannerApi';
 import { createLocalMeal, MEAL_SLOTS, normalizeDishCatalog, normalizeWeeklyMenu, recalculateMenu, serializeMenu, shiftWeek, startOfWeek, toIsoDate } from '../utils/weeklyMenuModel';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -46,6 +47,12 @@ export default function WeeklyMealPlannerPage() {
   const [dishError, setDishError] = useState(false);
   const [editor, setEditor] = useState(null);
   const [showGrocery, setShowGrocery] = useState(false);
+  const [showAiGenerator, setShowAiGenerator] = useState(false);
+  const [aiIngredients, setAiIngredients] = useState('đậu hũ, nấm rơm, cà chua, rau cải');
+  const [aiAllergies, setAiAllergies] = useState('');
+  const [aiGoal, setAiGoal] = useState('maintain_weight');
+  const [aiCalories, setAiCalories] = useState(1800);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState(null);
@@ -182,6 +189,47 @@ export default function WeeklyMealPlannerPage() {
     setNotice({ type: 'success', text: 'Your meal plan was exported as a CSV file.' });
   };
 
+  const generateAiPlan = async (event) => {
+    event.preventDefault();
+    const availableIngredients = aiIngredients.split(',').map((item) => item.trim()).filter(Boolean);
+    const excludedAllergies = aiAllergies.split(',').map((item) => item.trim()).filter(Boolean);
+    if (!availableIngredients.length) {
+      setNotice({ type: 'offline', text: 'Add at least one ingredient before generating a plan.' });
+      return;
+    }
+    setGeneratingPlan(true);
+    try {
+      const result = await generateMealPlan({ targetCalories: Number(aiCalories), healthGoal: aiGoal, availableIngredients, excludedAllergies });
+      if (!Array.isArray(result.weeklyPlan) || !result.weeklyPlan.length) throw new Error('The AI response did not include a weekly plan.');
+      const aiSlots = [['Breakfast', 'breakfast'], ['Lunch', 'lunch'], ['Dinner', 'dinner']];
+      setMenu((current) => recalculateMenu({
+        ...current,
+        targetCalories: Number(result.estimatedDailyCalories ?? aiCalories),
+        days: current.days.map((day, dayIndex) => {
+          const generatedDay = result.weeklyPlan[dayIndex] ?? {};
+          return {
+            ...day,
+            calorieGoal: Number(result.estimatedDailyCalories ?? aiCalories),
+            meals: aiSlots.map(([slot, field], slotIndex) => ({
+              key: `ai-${Date.now()}-${dayIndex}-${slotIndex}`,
+              itemId: null, mealId: null, dishId: null, slot,
+              name: generatedDay[field] || `${slot} suggestion`,
+              kcal: Math.round(Number(result.estimatedDailyCalories ?? aiCalories) / 3), protein: 0,
+              baseCalories: Math.round(Number(result.estimatedDailyCalories ?? aiCalories) / 3), baseProtein: 0,
+              image: freshProduce, servings: 1, notes: 'Suggested by NutriBot AI', swapped: false,
+            }))
+          };
+        })
+      }));
+      setShowAiGenerator(false);
+      setNotice({ type: 'success', text: result.suggestedMenuTitle ? `AI created: ${result.suggestedMenuTitle}` : 'Your AI weekly plan is ready to review.' });
+    } catch (error) {
+      setNotice({ type: 'offline', text: error?.message || 'NutriBot could not generate a plan right now. Please try again.' });
+    } finally {
+      setGeneratingPlan(false);
+    }
+  };
+
   return <div className="community-page planner-page" ref={page}>
     <CommunityTopBar query={query} onQueryChange={setQuery}/>
     <div className="community-shell">
@@ -198,6 +246,7 @@ export default function WeeklyMealPlannerPage() {
               <h1>Plan a week that feels <span className="planner-inline-image" aria-hidden="true"/> good to keep.</h1>
               <p>Build breakfast, lunch, and dinner around your goals, then adjust the plan whenever real life changes.</p>
               <div className="planner-top-actions">
+                <button type="button" className="planner-btn-ai" onClick={() => setShowAiGenerator(true)}><Sparkles size={15}/> Generate with AI</button>
                 <button type="button" className="planner-btn-primary" onClick={() => loadWeek(weekStart)} disabled={loading}><RefreshCw size={15} className={loading ? 'is-spinning' : ''}/> Refresh this week</button>
                 <button type="button" className="planner-btn-ghost" onClick={() => setShowGrocery(true)}><ShoppingBasket size={15}/> Meal list <span>{groceryItems.length}</span></button>
               </div>
@@ -281,6 +330,18 @@ export default function WeeklyMealPlannerPage() {
         <header><div><span>{menu.week.range}</span><h2 id="meal-list-title">Meals this week</h2></div><button type="button" className="meal-dialog-close" onClick={() => setShowGrocery(false)} aria-label="Close meal list"><X size={18}/></button></header>
         <div className="grocery-list">{groceryItems.map((item) => <div key={`${item.day}-${item.key}`}><img src={item.image} alt=""/><span><b>{item.name}</b><small>{item.day} · {item.slot} · {item.servings} serving{item.servings === 1 ? '' : 's'}</small></span></div>)}{!groceryItems.length && <p>No meals have been added yet.</p>}</div>
         <footer><button type="button" className="planner-btn-primary" onClick={() => setShowGrocery(false)}>Done</button></footer>
+      </section>
+    </div>}
+    {showAiGenerator && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !generatingPlan && setShowAiGenerator(false)}>
+      <section className="meal-dialog ai-generator-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-generator-title">
+        <header><div><span>NutriBot AI</span><h2 id="ai-generator-title">Create this week's meals.</h2></div><button type="button" className="meal-dialog-close" onClick={() => setShowAiGenerator(false)} disabled={generatingPlan} aria-label="Close AI generator"><X size={18}/></button></header>
+        <form className="ai-generator-form" onSubmit={generateAiPlan}>
+          <label><span>What is already in your kitchen?</span><textarea value={aiIngredients} onChange={(event) => setAiIngredients(event.target.value)} placeholder="Tofu, mushrooms, tomatoes, greens" required/><small>Separate ingredients with commas.</small></label>
+          <label><span>Allergies or ingredients to avoid</span><input value={aiAllergies} onChange={(event) => setAiAllergies(event.target.value)} placeholder="Peanuts, shellfish"/></label>
+          <div className="ai-generator-grid"><label><span>Daily calorie target</span><input type="number" min="1000" max="4500" value={aiCalories} onChange={(event) => setAiCalories(event.target.value)} required/></label><label><span>Your focus</span><select value={aiGoal} onChange={(event) => setAiGoal(event.target.value)}><option value="lose_weight">Lose weight</option><option value="maintain_weight">Maintain balance</option><option value="gain_muscle">Gain muscle</option></select></label></div>
+          <p>NutriBot will replace the visible week with a seven-day preview. You can still swap or edit every meal after it is generated.</p>
+          <footer><button type="button" className="planner-btn-ghost" onClick={() => setShowAiGenerator(false)} disabled={generatingPlan}>Cancel</button><button type="submit" className="planner-btn-primary" disabled={generatingPlan}>{generatingPlan ? <><Loader2 size={15} className="is-spinning"/> Generating...</> : <><Sparkles size={15}/> Generate plan</>}</button></footer>
+        </form>
       </section>
     </div>}
     <ChatbotWidget/>
