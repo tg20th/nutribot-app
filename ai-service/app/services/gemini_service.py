@@ -9,6 +9,13 @@ from pydantic import ValidationError
 
 from app.config import Settings
 from app.exceptions import AIConfigurationError, AIProviderUnavailableError
+from app.planner import (
+    MealPlanRequest,
+    MealPlanResponse,
+    PLANNER_SYSTEM_INSTRUCTION,
+    build_meal_plan_prompt,
+    validate_meal_plan_safety,
+)
 from app.prompts import SYSTEM_INSTRUCTION, build_user_prompt
 from app.schemas.chat import ChatRequest, ChatResponse, GeminiChatResult
 
@@ -62,6 +69,29 @@ class GeminiService:
                 "NutriBot đang bận, vui lòng thử lại sau"
             ) from exc
 
+    async def generate_meal_plan(self, request: MealPlanRequest) -> MealPlanResponse:
+        client = self._get_client()
+        config = types.GenerateContentConfig(
+            system_instruction=PLANNER_SYSTEM_INSTRUCTION,
+            temperature=0.25,
+            max_output_tokens=2_500,
+            response_mime_type="application/json",
+            response_schema=MealPlanResponse,
+        )
+        try:
+            response = await self._generate_with_fallback(
+                client, build_meal_plan_prompt(request), config
+            )
+            plan = self._parse_meal_plan_response(response)
+            return validate_meal_plan_safety(plan, request.excluded_allergies)
+        except AIProviderUnavailableError:
+            raise
+        except Exception as exc:
+            logger.exception("Gemini could not generate meal plan: %s", type(exc).__name__)
+            raise AIProviderUnavailableError(
+                "NutriBot khong the tao thuc don an toan luc nay, vui long thu lai"
+            ) from exc
+
     async def _generate_with_fallback(
         self,
         client: Any,
@@ -94,6 +124,23 @@ class GeminiService:
                 contents=prompt,
                 config=config,
             )
+
+    @staticmethod
+    def _parse_meal_plan_response(response: Any) -> MealPlanResponse:
+        parsed = getattr(response, "parsed", None)
+        try:
+            if isinstance(parsed, MealPlanResponse):
+                return parsed
+            if parsed is not None:
+                return MealPlanResponse.model_validate(parsed)
+            content = getattr(response, "text", None)
+            if not content:
+                raise ValueError("Gemini returned empty content")
+            return MealPlanResponse.model_validate_json(content)
+        except (ValidationError, ValueError) as exc:
+            raise AIProviderUnavailableError(
+                "NutriBot nhan duoc phan hoi thuc don khong hop le, vui long thu lai"
+            ) from exc
 
     @staticmethod
     def _parse_response(response: Any) -> GeminiChatResult:

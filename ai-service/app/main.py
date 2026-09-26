@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import Settings
 from app.exceptions import AIServiceError
+from app.planner import MealPlanRequest, MealPlanResponse
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.gemini_service import GeminiService
 
@@ -102,6 +103,18 @@ def create_app(
         service: GeminiService = Depends(_get_gemini_service),
     ) -> ChatResponse:
         return await service.chat(chat_request)
+
+    @application.post(
+        "/api/ai/generate-meal-plan",
+        response_model=MealPlanResponse,
+        tags=["Meal Planner"],
+        summary="Generate a seven-day vegan meal-plan preview",
+    )
+    async def generate_meal_plan(
+        meal_plan_request: MealPlanRequest,
+        service: GeminiService = Depends(_get_gemini_service),
+    ) -> MealPlanResponse:
+        return await service.generate_meal_plan(meal_plan_request)
 
     return application
 

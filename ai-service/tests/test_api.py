@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.config import Settings
 from app.exceptions import AIProviderUnavailableError
 from app.main import create_app
+from app.planner import MealPlanResponse
 from app.schemas.chat import ChatResponse
 
 
@@ -15,6 +16,19 @@ class StubGeminiService:
         return ChatResponse(
             reply="Bạn có thể dùng sốt mè rang và kiểm tra nguy cơ nhiễm chéo.",
             recommendations=["Sốt mè rang", "Sốt hạt hướng dương"],
+        )
+
+
+class StubMealPlannerService(StubGeminiService):
+    async def generate_meal_plan(self, request):
+        self.meal_plan_request = request
+        return MealPlanResponse(
+            suggested_menu_title="Thực đơn chay 7 ngày",
+            estimated_daily_calories=1750,
+            weekly_plan=[
+                {"day": f"Thứ {index}", "breakfast": "Yến mạch rau quả", "lunch": "Đậu hũ nấm", "dinner": "Canh rau củ"}
+                for index in range(2, 9)
+            ],
         )
 
 
@@ -133,3 +147,23 @@ def test_missing_api_key_returns_service_unavailable_without_breaking_health():
         "AI service chưa được cấu hình GEMINI_API_KEY"
     )
     assert client.get("/health").status_code == 200
+
+
+def test_generate_meal_plan_matches_internal_contract():
+    service = StubMealPlannerService()
+    app = create_app(settings=Settings(gemini_api_key="test-key"), gemini_service=service)
+    response = TestClient(app).post(
+        "/api/ai/generate-meal-plan",
+        json={
+            "target_calories": 1800,
+            "health_goal": "maintain_weight",
+            "available_ingredients": ["Đậu hũ", "Nấm"],
+            "excluded_allergies": ["Đậu phộng"],
+            "bmi": 20.2,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["estimatedDailyCalories"] == 1750
+    assert len(response.json()["weeklyPlan"]) == 7
+    assert service.meal_plan_request.excluded_allergies == ["Đậu phộng"]

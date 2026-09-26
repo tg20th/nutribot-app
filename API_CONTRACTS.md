@@ -345,6 +345,26 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
 
 ## 7. AI Meal Planner (Sinh Thực Đơn Bằng AI - Lan & Thắng)
 
+### 7.0. Giao thức nội bộ Spring Boot → FastAPI (NB-54)
+
+- **URL nội bộ:** `POST http://ai-service:8000/api/ai/generate-meal-plan`
+- API public ở mục 7.1 luôn đi qua Spring Boot; trình duyệt không gọi FastAPI trực tiếp.
+- Spring Boot lấy BMI và dị ứng đã lưu trong hồ sơ, hợp nhất chúng với `excludedAllergies`, rồi chuyển payload camelCase dưới đây sang FastAPI:
+
+```json
+{
+  "targetCalories": 1800,
+  "healthGoal": "maintain_weight",
+  "availableIngredients": ["đậu phụ", "nấm rơm"],
+  "excludedAllergies": ["đậu phộng"],
+  "bmi": 20.2
+}
+```
+
+- FastAPI trả trực tiếp `suggestedMenuTitle`, `estimatedDailyCalories`, `weeklyPlan` (đúng 7 ngày, mỗi ngày `breakfast`, `lunch`, `dinner`). Spring Boot bọc kết quả theo `ApiResponse<T>` trước khi trả FE.
+
+### 7.1. API public
+
 - **Endpoint:** `POST /api/v1/meal-planner/generate`
 - **Request Body:**
 ```json
