@@ -24,7 +24,6 @@ export function normalizeContent(item = {}, fallbackType = 'Article') {
   const image = item.image ?? item.imageUrl ?? item.thumbnail ?? item.thumbnailUrl ?? item.coverImage ?? null;
   return {
     id: item.id ?? item.contentId ?? item._id ?? item.slug ?? `${item.title ?? 'story'}-${item.createdAt ?? Math.random()}`,
-    slug: item.slug ?? null,
     type: contentType(item.type ?? item.contentType, fallbackType),
     title: item.title ?? item.name ?? 'Untitled story',
     description: item.description ?? item.summary ?? item.excerpt ?? item.body ?? '',
