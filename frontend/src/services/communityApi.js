@@ -17,8 +17,8 @@ const normalizeComment = (item = {}) => ({
   likes: item.likes ?? item.likeCount ?? 0
 });
 
-const normalizePost = (item = {}) => {
-  const rawType = item.type ?? item.contentType ?? 'BLOG';
+const normalizePost = (item = {}, fallbackType = 'BLOG') => {
+  const rawType = item.type ?? item.contentType ?? fallbackType;
   const author = item.author ?? item.user ?? {};
   return {
     ...item,
@@ -39,12 +39,12 @@ const normalizePost = (item = {}) => {
   };
 };
 
-const getCollection = async (path, signal) => itemsFrom(await apiRequest(path, { signal })).map(normalizePost);
+const getCollection = async (path, signal, type) => itemsFrom(await apiRequest(path, { signal })).map((item) => normalizePost(item, type));
 
 export async function getPosts(signal) {
   const results = await Promise.allSettled([
-    getCollection('/api/v1/blogs?page=0&size=10', signal),
-    getCollection('/api/v1/videos?page=0&size=10', signal)
+    getCollection('/api/v1/blogs?page=0&size=10', signal, 'BLOG'),
+    getCollection('/api/v1/videos?page=0&size=10', signal, 'VIDEO')
   ]);
   const available = results.filter((result) => result.status === 'fulfilled').flatMap((result) => result.value);
   if (!available.length && results.every((result) => result.status === 'rejected')) throw results[0].reason;
@@ -53,10 +53,11 @@ export async function getPosts(signal) {
 
 export async function getPost(id, signal) {
   try {
-    return normalizePost(unwrapData(await apiRequest(`/api/v1/blogs/${id}`, { signal }), {}));
+    return normalizePost(unwrapData(await apiRequest(`/api/v1/blogs/id/${id}`, { signal }), {}), 'BLOG');
   } catch (blogError) {
     if (blogError.name === 'AbortError') throw blogError;
-    return normalizePost(unwrapData(await apiRequest(`/api/v1/videos/${id}`, { signal }), {}));
+    if (blogError.status !== 400 && blogError.status !== 404) throw blogError;
+    return normalizePost(unwrapData(await apiRequest(`/api/v1/videos/id/${id}`, { signal }), {}), 'VIDEO');
   }
 }
 
@@ -65,13 +66,6 @@ export const createPost = async (payload) => normalizePost(unwrapData(await apiR
   body: JSON.stringify({ title: payload.title, body: payload.body ?? payload.title })
 }), {}));
 
-export const getPostComments = async (id, signal) => itemsFrom(await apiRequest(`/api/v1/contents/${id}/comments`, { signal })).map(normalizeComment);
-export const createPostComment = async (id, payload) => normalizeComment(unwrapData(await apiRequest(`/api/v1/contents/${id}/comments`, {
-  method: 'POST',
-  body: JSON.stringify({ body: payload.body ?? payload.content, parentId: payload.parentId ?? null })
-}), {}));
-export const votePost = (id) => apiRequest(`/api/v1/contents/${id}/vote`, { method: 'POST' });
-export const removeVote = (id) => apiRequest(`/api/v1/contents/${id}/vote`, { method: 'DELETE' });
 export const getCommunityFilters = async (signal) => itemsFrom(await apiRequest('/api/v1/categories?type=RECIPE', { signal }))
   .map((item) => item.name ?? item.categoryName ?? item.label)
   .filter(Boolean);
