@@ -322,24 +322,30 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
 - **Request Body:**
 ```json
 {
-  "sessionId": 12,
-  "message": "Tôi bị dị ứng đậu phộng, tôi có thể thay thế bằng gì khi làm sốt salad?"
+  "sessionId": "guest-session-uuid",
+  "message": "Tôi bị dị ứng đậu phộng, tôi có thể thay thế bằng gì khi làm sốt salad?",
+  "conversationHistory": []
 }
 ```
+- Guest gửi `sessionId` ổn định để áp dụng quota 3 lượt; guest không tạo session hoặc lưu tin nhắn. Thành viên gửi session ID số, hoặc bỏ qua để tạo session mới. Lịch sử và hồ sơ sức khỏe của thành viên được lấy từ database.
 - **Response (200 OK):**
 ```json
 {
   "success": true,
   "message": "Success",
   "data": {
-    "sessionId": 12,
+    "sessionId": null,
     "senderType": "ASSISTANT",
     "content": "Chào bạn! Bạn hoàn toàn có thể thay thế đậu phộng bằng bơ mè (tahini)...",
+    "createdAt": null,
+    "reply": "Chào bạn! Bạn hoàn toàn có thể thay thế đậu phộng bằng bơ mè (tahini)...",
+    "recommendations": ["Sốt mè rang thuần chay", "Salad bơ hạt điều"],
     "remainingTrialCount": 2,
-    "createdAt": "2026-09-24T08:35:10Z"
+    "fallback": false
   }
 }
 ```
+- Guest response có `sessionId` và `createdAt` là `null`; member response có ID session và thời gian lưu. Khi AI tạm thời không sẵn sàng, gateway trả fallback với `fallback: true` và không trừ quota guest.
 
 ---
 
