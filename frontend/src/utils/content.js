@@ -21,7 +21,7 @@ const tags = (item) => asArray(item.tags ?? item.categories)
 // This adapter lets the UI accept different backend DTO field names.
 export function normalizeContent(item = {}, fallbackType = 'Article') {
   const author = item.author ?? item.user ?? item.createdBy ?? {};
-  const image = item.image ?? item.imageUrl ?? item.thumbnail ?? item.thumbnailUrl ?? item.coverImage ?? null;
+  const image = item.image ?? item.imageUrl ?? item.image_url ?? item.thumbnail ?? item.thumbnailUrl ?? item.thumbnail_url ?? item.coverImage ?? item.cover_image ?? null;
   return {
     id: item.id ?? item.contentId ?? item._id ?? item.slug ?? `${item.title ?? 'story'}-${item.createdAt ?? Math.random()}`,
     type: contentType(item.type ?? item.contentType, fallbackType),
@@ -31,7 +31,7 @@ export function normalizeContent(item = {}, fallbackType = 'Article') {
     videoUrl: item.videoUrl ?? item.url ?? item.mediaUrl ?? null,
     author: item.authorName ?? (typeof author === 'string' ? author : author.name ?? author.fullName) ?? 'NutriBot team',
     username: item.username ?? (typeof author === 'object' ? author.username : '') ?? '',
-    avatar: item.avatar ?? author.avatar ?? author.avatarUrl ?? null,
+    avatar: item.avatar ?? item.avatarUrl ?? item.avatar_url ?? author.avatar ?? author.avatarUrl ?? author.avatar_url ?? null,
     createdAt: item.createdAt ?? item.publishedAt ?? item.date ?? '',
     likes: item.likes ?? item.likeCount ?? item.voteCount ?? 0,
     comments: item.comments ?? item.commentCount ?? 0,

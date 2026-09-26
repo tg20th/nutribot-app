@@ -11,7 +11,7 @@ const normalizeComment = (item = {}) => ({
   ...item,
   id: item.id ?? item.commentId,
   author: item.authorName ?? item.author?.fullName ?? item.author?.name ?? item.user?.fullName ?? '',
-  avatar: item.avatar ?? item.avatarUrl ?? item.author?.avatarUrl ?? item.user?.avatarUrl ?? null,
+  avatar: item.avatar ?? item.avatarUrl ?? item.avatar_url ?? item.author?.avatarUrl ?? item.author?.avatar_url ?? item.user?.avatarUrl ?? item.user?.avatar_url ?? null,
   text: item.text ?? item.body ?? item.content ?? '',
   time: item.time ?? item.createdAt ?? '',
   likes: item.likes ?? item.likeCount ?? 0
@@ -26,9 +26,9 @@ const normalizePost = (item = {}) => {
     type: String(rawType).toUpperCase() === 'VIDEO' ? 'video' : 'blog',
     author: item.authorName ?? author.fullName ?? author.name ?? (typeof author === 'string' ? author : ''),
     username: item.username ?? author.username ?? '',
-    avatar: item.avatar ?? item.avatarUrl ?? author.avatarUrl ?? null,
-    image: item.image ?? item.imageUrl ?? item.thumbnailUrl ?? null,
-    images: item.images ?? item.imageUrls ?? [],
+    avatar: item.avatar ?? item.avatarUrl ?? item.avatar_url ?? author.avatarUrl ?? author.avatar_url ?? null,
+    image: item.image ?? item.imageUrl ?? item.image_url ?? item.thumbnailUrl ?? item.thumbnail_url ?? null,
+    images: item.images ?? item.imageUrls ?? item.image_urls ?? [],
     description: item.description ?? item.summary ?? item.body ?? '',
     videoUrl: item.videoUrl ?? item.mediaUrl ?? null,
     likes: item.likes ?? item.likeCount ?? item.voteCount ?? 0,
@@ -73,5 +73,5 @@ export const createPostComment = async (id, payload) => normalizeComment(unwrapD
 export const votePost = (id) => apiRequest(`/api/v1/contents/${id}/vote`, { method: 'POST' });
 export const removeVote = (id) => apiRequest(`/api/v1/contents/${id}/vote`, { method: 'DELETE' });
 export const getCommunityFilters = async (signal) => itemsFrom(await apiRequest('/api/v1/categories?type=RECIPE', { signal }))
-  .map((item) => item.name ?? item.label)
+  .map((item) => item.name ?? item.categoryName ?? item.label)
   .filter(Boolean);

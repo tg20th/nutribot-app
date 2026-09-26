@@ -2,6 +2,7 @@ import { Bookmark, ChevronLeft, ChevronRight, Flame, Heart, MessageCircle, MoreH
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPostComment, removeVote, votePost } from '../../services/communityApi';
+import ImageWithFallback from '../ImageWithFallback';
 
 export default function CommunityPostCard({ post, profile = {} }) {
   const navigate = useNavigate();
@@ -20,7 +21,7 @@ export default function CommunityPostCard({ post, profile = {} }) {
 
   return <article className="community-post">
     <header className="community-post-header">
-      <img src={post.avatar} alt=""/>
+      <ImageWithFallback src={post.avatar} alt=""/>
       <div><b>{post.author}</b><small>{post.username} &middot; {post.createdAt}</small></div>
       <button className="community-icon-btn" aria-label="Post options"><MoreHorizontal size={18}/></button>
     </header>
@@ -34,7 +35,7 @@ export default function CommunityPostCard({ post, profile = {} }) {
     </div>}
 
     {images[0] && <button className="community-post-media" type="button" aria-label={`View ${post.title}`} onClick={() => navigate(`/community/posts/${post.id}`)}>
-      <img src={images[slide]} alt=""/>
+      <ImageWithFallback src={images[slide]} alt="" />
       {post.type === 'video' && <span className="play-overlay"><Play fill="currentColor" size={20}/></span>}
       {images.length > 1 && <>
         <span role="button" tabIndex="0" className="community-media-nav prev" aria-label="Previous image" onClick={(event) => { event.stopPropagation(); setSlide((slide - 1 + images.length) % images.length); }}><ChevronLeft size={18}/></span>
@@ -59,13 +60,13 @@ export default function CommunityPostCard({ post, profile = {} }) {
 
     {comments.length > 0 && <div className="community-comments">
       {comments.map((c) => <div className="community-comment" key={c.id}>
-        <img src={c.avatar} alt=""/>
+        <ImageWithFallback src={c.avatar} alt=""/>
         <div><b>{c.author}</b> <span>{c.text}</span><small>{c.time} &middot; {c.likes} likes &middot; Reply</small></div>
       </div>)}
     </div>}
 
     <form className="community-comment-form" onSubmit={addComment}>
-      {profile.avatarUrl && <img src={profile.avatarUrl} alt=""/>}
+      {profile.avatarUrl && <ImageWithFallback src={profile.avatarUrl} alt=""/>}
       <input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Add a comment for this food match..." aria-label="Add a comment"/>
       <button type="submit" aria-label="Send comment"><Send size={15}/></button>
     </form>

@@ -5,6 +5,7 @@ import colorfulPlate from '../assets/colorful-plate.jpg';
 import freshProduce from '../assets/fresh-produce.jpg';
 import heroBowl from '../assets/hero-bowl.jpg';
 import nutribotHero from '../assets/nutribot-hero.png';
+import ImageWithFallback from './ImageWithFallback';
 
 const defaultTopics = [
   { name: 'Balanced meals', image: heroBowl },
@@ -17,7 +18,7 @@ const defaultTopics = [
 export function TopicAccordion({ topics = [] }) {
   const [active, setActive] = useState(0);
   const displayTopics = topics.length ? topics : defaultTopics;
-  return <section className="accordion-section" id="explore"><div className="wide-heading"><p>Find your way in</p><h2>Start wherever you are.</h2></div><div className="topic-accordion">{displayTopics.slice(0, 5).map((topic, i) => <button onMouseEnter={() => setActive(i)} onFocus={() => setActive(i)} onClick={() => setActive(i)} className={active === i ? 'active' : ''} key={topic.name} style={{ backgroundImage: `url(${topic.image})` }}><span>{topic.name}</span></button>)}</div></section>;
+  return <section className="accordion-section" id="explore"><div className="wide-heading"><p>Find your way in</p><h2>Start wherever you are.</h2></div><div className="topic-accordion">{displayTopics.slice(0, 5).map((topic, i) => <button onMouseEnter={() => setActive(i)} onFocus={() => setActive(i)} onClick={() => setActive(i)} className={active === i ? 'active' : ''} key={topic.name}><ImageWithFallback className="topic-accordion-image" src={topic.image} fallbackSrc={defaultTopics[i % defaultTopics.length].image} alt=""/><span>{topic.name}</span></button>)}</div></section>;
 }
 
 const notes = [

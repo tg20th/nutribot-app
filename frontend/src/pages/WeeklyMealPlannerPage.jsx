@@ -8,6 +8,7 @@ import CommunitySideNav from '../components/community/CommunitySideNav';
 import MealEditorDialog from '../components/community/MealEditorDialog';
 import MealPlanAssistant from '../components/community/MealPlanAssistant';
 import MealPlanMatrix from '../components/community/MealPlanMatrix';
+import ImageWithFallback from '../components/ImageWithFallback';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import freshProduce from '../assets/fresh-produce.jpg';
 import { getMyProfile } from '../services/profileApi';
@@ -192,7 +193,7 @@ export default function WeeklyMealPlannerPage() {
           <header className="planner-hero">
             <div className="planner-hero-copy">
               <div className="planner-person">
-                {communityUser.avatarUrl && <img src={communityUser.avatarUrl} alt=""/>}
+                {communityUser.avatarUrl && <ImageWithFallback src={communityUser.avatarUrl} alt=""/>}
                 <span>Curated for {communityUser.fullName ?? communityUser.name ?? 'you'}</span>
               </div>
               <h1>Plan a week that feels <span className="planner-inline-image" aria-hidden="true"/> good to keep.</h1>
@@ -203,7 +204,7 @@ export default function WeeklyMealPlannerPage() {
               </div>
             </div>
             <div className="planner-hero-image" aria-hidden="true">
-              <img src={heroMeal?.image ?? freshProduce} alt=""/>
+              <ImageWithFallback src={heroMeal?.image ?? freshProduce} alt="" fallbackSrc={freshProduce}/>
               <div><Sparkles size={15}/><span>Balanced, not rigid</span></div>
             </div>
           </header>
@@ -248,7 +249,7 @@ export default function WeeklyMealPlannerPage() {
                     <div className="planner-slot-heading"><span>{slot}</span><small>{slotMeals.length} {slotMeals.length === 1 ? 'dish' : 'dishes'}</small></div>
                     <div className="planner-slot-list">
                       {slotMeals.map((meal) => <div className="planner-meal" key={meal.key}>
-                        <img src={meal.image} alt=""/>
+                        <ImageWithFallback src={meal.image} alt="" fallbackSrc={freshProduce}/>
                         <div><span>{meal.swapped ? 'Replaced' : 'Dish'}</span><b>{meal.name}</b><small>{meal.kcal} kcal · {meal.protein}g protein · {meal.servings} serving{meal.servings === 1 ? '' : 's'}</small></div>
                         <div className="planner-meal-actions">
                           <button type="button" onClick={() => openEditor(day, slot, meal)} aria-label={`Replace ${meal.name}`}><Repeat2 size={13}/></button>
@@ -279,7 +280,7 @@ export default function WeeklyMealPlannerPage() {
     {showGrocery && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowGrocery(false)}>
       <section className="meal-dialog grocery-dialog" role="dialog" aria-modal="true" aria-labelledby="meal-list-title">
         <header><div><span>{menu.week.range}</span><h2 id="meal-list-title">Meals this week</h2></div><button type="button" className="meal-dialog-close" onClick={() => setShowGrocery(false)} aria-label="Close meal list"><X size={18}/></button></header>
-        <div className="grocery-list">{groceryItems.map((item) => <div key={`${item.day}-${item.key}`}><img src={item.image} alt=""/><span><b>{item.name}</b><small>{item.day} · {item.slot} · {item.servings} serving{item.servings === 1 ? '' : 's'}</small></span></div>)}{!groceryItems.length && <p>No meals have been added yet.</p>}</div>
+        <div className="grocery-list">{groceryItems.map((item) => <div key={`${item.day}-${item.key}`}><ImageWithFallback src={item.image} alt="" fallbackSrc={freshProduce}/><span><b>{item.name}</b><small>{item.day} · {item.slot} · {item.servings} serving{item.servings === 1 ? '' : 's'}</small></span></div>)}{!groceryItems.length && <p>No meals have been added yet.</p>}</div>
         <footer><button type="button" className="planner-btn-primary" onClick={() => setShowGrocery(false)}>Done</button></footer>
       </section>
     </div>}

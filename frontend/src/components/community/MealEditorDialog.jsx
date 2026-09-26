@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Search, X } from 'lucide-react';
+import ImageWithFallback from '../ImageWithFallback';
 
 export default function MealEditorDialog({ editor, dishes, onClose, onSubmit }) {
   const [query, setQuery] = useState('');
@@ -43,7 +44,7 @@ export default function MealEditorDialog({ editor, dishes, onClose, onSubmit }) 
         {filteredDishes.map((dish) => {
           const selected = String(dish.dishId) === String(selectedId);
           return <button type="button" key={dish.dishId} className={selected ? 'is-selected' : ''} onClick={() => setSelectedId(dish.dishId)} role="option" aria-selected={selected}>
-            <img src={dish.image} alt=""/>
+            <ImageWithFallback src={dish.image} alt="" />
             <span><b>{dish.name}</b><small>{dish.calories} kcal · {dish.protein}g protein</small></span>
             {selected && <Check size={16}/>} 
           </button>;

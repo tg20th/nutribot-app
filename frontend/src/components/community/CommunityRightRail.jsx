@@ -1,13 +1,14 @@
 import { Map, Star } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { getRestaurants } from '../../services/restaurantApi';
+import ImageWithFallback from '../ImageWithFallback';
 
 function TrendingEateries({ eateries }) {
   return <div className="community-widget">
     <div className="community-widget-head"><b>Trending Eateries</b><a href="#map"><Map size={14}/>View Map</a></div>
     <ul className="community-eateries">
       {eateries.map((e) => <li key={e.id}>
-        <img src={e.image} alt=""/>
+        <ImageWithFallback src={e.image} alt="" />
         <div><b>{e.name}</b><span><Star size={12} fill="currentColor"/>{e.rating}</span><small>{e.meta}</small></div>
       </li>)}
     </ul>
