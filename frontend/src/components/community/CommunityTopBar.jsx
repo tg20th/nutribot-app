@@ -1,6 +1,6 @@
 import { Bell, Bookmark, Search, Menu, X } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
 import { getCurrentUserFromToken } from '../../utils/auth';
 import { userDashboardNav } from './userDashboardNav';
 
@@ -21,12 +21,18 @@ const buildAvatarFromUsername = (username) => {
 
 export default function CommunityTopBar({ query, onQueryChange, hideSearch = false, activePath }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [localQuery, setLocalQuery] = useState(query || '');
+  const searchInputRef = useRef(null);
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const activeLocation = activePath ?? pathname;
   const currentUser = getCurrentUserFromToken();
   const username = currentUser?.username || 'NutriBot Member';
   const [profileAvatar, setProfileAvatar] = useState(() => sessionStorage.getItem('nutribot-profile-avatar') || '');
   const avatarSrc = profileAvatar || buildAvatarFromUsername(username);
+
+  // Sync local query with prop
+  useEffect(() => { setLocalQuery(query || ''); }, [query]);
 
   // Close drawer on navigation
   useEffect(() => { setDrawerOpen(false); }, [pathname]);
@@ -50,6 +56,37 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
     return () => { document.body.style.overflow = ''; };
   }, [drawerOpen]);
 
+  // Keyboard shortcut: Cmd/Ctrl+K to focus search
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    const trimmedQuery = localQuery.trim();
+    if (trimmedQuery) {
+      navigate(`/search?q=${encodeURIComponent(trimmedQuery)}`);
+      if (onQueryChange) onQueryChange('');
+      setLocalQuery('');
+    } else {
+      // Navigate to full search page even with empty query
+      navigate('/search');
+    }
+  };
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setLocalQuery(value);
+    if (onQueryChange) onQueryChange(value);
+  };
+
   return <>
     <header className="community-topbar">
       <button
@@ -62,10 +99,20 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
         <Menu size={22}/>
       </button>
       <Link to="/home" className="community-brand" aria-label="NutriBot member home"><span>Nutri</span>Bot<small>Good Food. Brighter You.</small></Link>
-      {!hideSearch && <div className="community-search">
-        <Search size={16}/>
-        <input value={query} onChange={(e) => onQueryChange(e.target.value)} placeholder="Search your feed, creators, plant-based tag..." aria-label="Search community feed"/>
-      </div>}
+      {!hideSearch && (
+        <form className="community-search community-search-form" onSubmit={handleSearchSubmit}>
+          <input
+            ref={searchInputRef}
+            value={localQuery}
+            onChange={handleSearchChange}
+            placeholder="Tìm kiếm bài viết, video, công thức..."
+            aria-label="Tìm kiếm nội dung"
+          />
+          <button type="submit" className="community-search-btn" aria-label="Tìm kiếm">
+            <Search size={16}/>
+          </button>
+        </form>
+      )}
       <div className="community-topbar-actions">
         <button className="community-icon-btn" aria-label="Notifications"><Bell size={18}/><span className="community-dot"/></button>
         <button className="community-icon-btn" aria-label="Saved posts"><Bookmark size={18}/></button>

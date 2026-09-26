@@ -5,6 +5,7 @@ import CommunityContentDetailPage from './pages/CommunityContentDetailPage';
 import WeeklyMealPlannerPage from './pages/WeeklyMealPlannerPage';
 import ProfilePage from './pages/ProfilePage';
 import HealthProfilePage from './pages/HealthProfilePage';
+import SearchPage from './pages/SearchPage';
 import AdminLayout from './layouts/AdminLayout';
 import AdminRoute from './components/admin/AdminRoute';
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -43,6 +44,7 @@ export default function App() {
       <Route path="content/videos/:id" element={<ContentDetailPage kind="Video" />} />
       <Route path="comments" element={<CommentManagementPage />} />
     </Route>
+    <Route path="/search" element={<SearchPage />} />
     <Route path="*" element={<HomePage />} />
   </Routes>;
 }

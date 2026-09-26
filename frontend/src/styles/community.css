@@ -173,6 +173,71 @@
   .community-pantry ul{grid-template-columns:1fr}
 }
 
+/* Community Search Bar Enhancement - NB-14 */
+.community-search-form {
+  display: flex;
+  align-items: center;
+  background: #eef1eb;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0 6px 0 16px;
+  gap: 8px;
+  flex: 1;
+  max-width: 420px;
+  height: 42px;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.community-search-form:focus-within {
+  background: #fff;
+  border-color: rgba(23, 53, 41, 0.24);
+  box-shadow: 0 0 0 3px rgba(49, 92, 43, 0.08);
+}
+
+.community-search-form svg {
+  color: #758078;
+  flex-shrink: 0;
+}
+
+.community-search-form input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--community-ink, #173529);
+  min-width: 0;
+}
+
+.community-search-form input::placeholder {
+  color: #9ba49b;
+}
+
+.community-search-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: #315c2b;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.2s, transform 0.2s, background 0.2s;
+}
+
+.community-search-form:focus-within .community-search-btn,
+.community-search-form input:not(:placeholder-shown) + .community-search-btn {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.community-search-btn:hover {
+  background: #21461e;
+}
+
 /* Community 2.0: a calmer editorial social feed. */
 .community-page{--community-ink:#173529;--community-acid:#d7f261;--community-mist:#eff3ed;--community-paper:#fbfbf7;background:radial-gradient(circle at 68% 3%,rgba(215,242,97,.17),transparent 19%),var(--community-paper);font-family:'Cabinet Grotesk','Outfit',Arial,sans-serif}
 .community-topbar{height:76px;background:rgba(251,251,247,.82);backdrop-filter:blur(20px);border-color:rgba(23,53,41,.1);padding:0 clamp(18px,4vw,60px)}
