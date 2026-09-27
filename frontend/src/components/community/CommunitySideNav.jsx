@@ -1,7 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { getCurrentUserFromToken } from '../../utils/auth';
 import { userDashboardNav } from './userDashboardNav';
+import { apiRequest } from '../../services/apiClient';
 
 
 const buildAvatarFromUsername = (username) => {
@@ -21,6 +24,7 @@ const buildAvatarFromUsername = (username) => {
 
 export default function CommunitySideNav({ activePath }) {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const activeLocation = activePath ?? pathname;
   const currentUser = getCurrentUserFromToken();
   const username = currentUser?.username || 'NutriBot Member';
@@ -33,6 +37,20 @@ export default function CommunitySideNav({ activePath }) {
     return () => window.removeEventListener('nutribot-profile-updated', handleProfileUpdate);
   }, []);
 
+  const handleLogout = async () => {
+    try {
+      await apiRequest('/api/v1/auth/logout', { method: 'POST' });
+    } catch {
+      // The application uses stateless JWTs. Clearing the local session still
+      // safely completes sign-out when the token has already expired.
+    } finally {
+      localStorage.removeItem('nutribot-auth-token');
+      localStorage.removeItem('nutribot-user');
+      sessionStorage.removeItem('nutribot-profile-avatar');
+      navigate('/', { replace: true });
+    }
+  };
+
   return (
     <nav className="community-sidenav" aria-label="Community sections">
       {userDashboardNav.map(({ label, icon: Icon, to }) => {
@@ -41,10 +59,13 @@ export default function CommunitySideNav({ activePath }) {
           ? <Link key={label} to={to} className={isActive ? 'is-active' : ''} title={label} aria-label={label} aria-current={to === pathname ? 'page' : undefined}><Icon size={20}/><span>{label}</span></Link>
           : <button key={label} type="button" title={label}><Icon size={20}/><span>{label}</span></button>;
       })}
-      <Link to="/profile" className={`community-sidenav-profile${activeLocation === '/profile' ? ' is-active' : ''}`} title={username} aria-label={`Open ${username} profile`}>
-        <img src={avatarSrc} alt={username}/>
-        <span><b>{username}</b><small>View your profile</small></span>
-      </Link>
+      <div className="community-sidenav-account">
+        <Link to="/profile" className={`community-sidenav-profile${activeLocation === '/profile' ? ' is-active' : ''}`} title={username} aria-label={`Open ${username} profile`}>
+          <img src={avatarSrc} alt={username}/>
+          <span><b>{username}</b><small>View your profile</small></span>
+        </Link>
+        <button className="community-sidenav-logout" type="button" onClick={handleLogout} title="Log out" aria-label="Log out"><LogOut size={17}/><span>Log out</span></button>
+      </div>
     </nav>
   );
 }
