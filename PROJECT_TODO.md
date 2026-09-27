@@ -163,7 +163,7 @@
 ---
 
 ### ☕ THẮNG (Backend - 6 tasks)
-- [ ] **#43 [BE] Entities Thực đơn Tuần & Món ăn**
+- [x] **#43 [BE] Entities Thực đơn Tuần & Món ăn**
   - *Mô tả:* Tạo các Entity `Dish`, `WeeklyMenu`, `WeeklyMenuMeal`, `WeeklyMenuItem` map bảng `dishes`, `weekly_menus`, `weekly_menu_meals`, `weekly_menu_items`.
   - *File cần tạo:* Các class trong package `entity/` và `repository/`.
 - [ ] **#42 [BE] API CRUD Thực đơn Tuần (Weekly Menu Engine)**
