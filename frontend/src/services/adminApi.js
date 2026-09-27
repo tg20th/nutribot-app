@@ -5,6 +5,45 @@ import moderationProduce from '../assets/fresh-produce.jpg';
 const list = (path) => async (signal) => unwrapData(await apiRequest(path, { signal }));
 const one = (path) => async (id, signal) => unwrapData(await apiRequest(`${path}/${id}`, { signal }), {});
 const status = (path) => (id, value) => apiRequest(`${path}/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status: value }) }).then((payload) => unwrapData(payload, {}));
+const categorySlug = (name = '') => {
+  const slug = name.trim().toLowerCase().replace(/\u0111/g, 'd').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return slug || `category-${Date.now()}`;
+};
+const mapCategory = (category) => ({
+  id: category.categoryId,
+  name: category.categoryName,
+  slug: category.slug,
+  type: category.categoryType === 'INGREDIENT' ? 'FOOD_TYPE' : 'RECIPE_TYPE',
+  description: category.description ?? '',
+  count: category.contentCount ?? 0,
+  active: category.active,
+});
+const getCategories = async (signal) => {
+  const categories = unwrapData(await apiRequest('/api/v1/categories', { signal }), []);
+  return categories.map(mapCategory);
+};
+const toCategoryRequest = (data) => ({
+  categoryName: data.name.trim(),
+  slug: categorySlug(data.name),
+  description: data.description?.trim() || null,
+  categoryType: data.type === 'FOOD_TYPE' ? 'INGREDIENT' : 'RECIPE',
+});
+const createCategory = async (data) => {
+  const payload = await apiRequest('/api/v1/categories', {
+    method: 'POST',
+    body: JSON.stringify(toCategoryRequest(data)),
+  });
+  return mapCategory(unwrapData(payload, {}));
+};
+const updateCategory = async (id, data) => {
+  const payload = await apiRequest(`/api/v1/categories/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ ...toCategoryRequest(data), active: data.active ?? true }),
+  });
+  return mapCategory(unwrapData(payload, {}));
+};
+const deleteCategory = (id) => apiRequest(`/api/v1/categories/${id}`, { method: 'DELETE' });
 const mapModerationItem = (item) => ({
   id: item.contentId,
   type: item.contentType,
@@ -64,7 +103,7 @@ export const adminApi = {
   getDashboard: (range, signal) => apiRequest(`/api/admin/dashboard?range=${encodeURIComponent(range ?? '7d')}`, { signal }).then((payload) => unwrapData(payload, {})),
   getUsers: (params, signal) => apiRequest(adminUserQuery(params), { signal }).then((payload) => mapAdminUserPage(unwrapData(payload, {}))), getUserById: one('/api/admin/users'), updateUserStatus: (id, value) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: value }) }).then((payload) => mapAdminUser(unwrapData(payload, {}))), lockUser: (id) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'BANNED' }) }),
   getModerationQueue, moderateContent,
-  getCategories: list('/api/admin/categories'), createCategory: (data) => apiRequest('/api/admin/categories', { method: 'POST', body: JSON.stringify(data) }).then((p) => unwrapData(p, {})), updateCategory: (id, data) => apiRequest(`/api/admin/categories/${id}`, { method: 'PUT', body: JSON.stringify(data) }).then((p) => unwrapData(p, {})), deleteCategory: (id) => apiRequest(`/api/admin/categories/${id}`, { method: 'DELETE' }),
+  getCategories, createCategory, updateCategory, deleteCategory,
   getBlogs: list('/api/admin/blogs'), getBlogById: one('/api/admin/blogs'), hideBlog: (id) => status('/api/admin/blogs')(id, 'Hidden'), deleteBlog: (id) => apiRequest(`/api/admin/blogs/${id}`, { method: 'DELETE' }),
   getVideos: list('/api/admin/videos'), getVideoById: one('/api/admin/videos'), hideVideo: (id) => status('/api/admin/videos')(id, 'Hidden'), deleteVideo: (id) => apiRequest(`/api/admin/videos/${id}`, { method: 'DELETE' }),
   getComments: list('/api/admin/comments'), deleteComment: (id) => apiRequest(`/api/admin/comments/${id}`, { method: 'DELETE' })
