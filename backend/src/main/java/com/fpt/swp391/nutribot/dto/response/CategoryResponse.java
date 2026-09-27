@@ -23,4 +23,13 @@ public class CategoryResponse {
 
     @JsonProperty("contentCount")
     private Long contentCount;
+
+    @JsonProperty("categoryType")
+    private String categoryType;
+
+    @JsonProperty("description")
+    private String description;
+
+    @JsonProperty("active")
+    private Boolean active;
 }
