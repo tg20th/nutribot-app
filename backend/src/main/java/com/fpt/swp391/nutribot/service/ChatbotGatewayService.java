@@ -1,22 +1,24 @@
 package com.fpt.swp391.nutribot.service;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import tools.jackson.databind.json.JsonMapper;
 
-import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,16 +30,15 @@ public class ChatbotGatewayService {
     private static final int MAX_MESSAGE_LENGTH = 2_000;
     private static final int MAX_SESSION_ID_LENGTH = 100;
     private static final Duration GUEST_QUOTA_TTL = Duration.ofHours(24);
+    private static final JsonMapper JSON_MAPPER = JsonMapper.shared();
 
     private final RestClient aiClient;
     private final ConcurrentHashMap<String, GuestQuota> guestQuotas = new ConcurrentHashMap<>();
 
     public ChatbotGatewayService(
             @Value("${ai.service.base-url:http://localhost:8000}") String aiServiceBaseUrl) {
-        HttpClient httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(3))
-                .build();
-        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(3));
         requestFactory.setReadTimeout(Duration.ofSeconds(35));
 
         this.aiClient = RestClient.builder()
@@ -56,13 +57,17 @@ public class ChatbotGatewayService {
 
         GuestQuota quota = guest ? reserveGuestTurn(sessionId) : null;
         try {
+            Map<String, Object> aiRequest = new LinkedHashMap<>();
+            aiRequest.put("message", message.trim());
+            aiRequest.put("session_id", sessionId);
+            aiRequest.put("user_context", userContext);
+            aiRequest.put("conversation_history", toAiHistory(conversationHistory));
+            String requestBody = JSON_MAPPER.writeValueAsString(aiRequest);
+
             AiChatResponse response = aiClient.post()
                     .uri("/api/ai/chat")
-                    .body(new AiChatRequest(
-                            message.trim(),
-                            sessionId,
-                            userContext,
-                            conversationHistory == null ? List.of() : conversationHistory))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(requestBody.getBytes(StandardCharsets.UTF_8))
                     .retrieve()
                     .body(AiChatResponse.class);
 
@@ -124,6 +129,13 @@ public class ChatbotGatewayService {
                 .toList();
     }
 
+    private List<Map<String, String>> toAiHistory(List<ConversationTurn> conversationHistory) {
+        if (conversationHistory == null) return List.of();
+        return conversationHistory.stream()
+                .map(turn -> Map.of("sender", turn.sender(), "content", turn.content()))
+                .toList();
+    }
+
     public record ConversationTurn(
             @NotBlank @Pattern(regexp = "USER|ASSISTANT") String sender,
             @NotBlank @Size(max = 2_000) String content) { }
@@ -141,13 +153,7 @@ public class ChatbotGatewayService {
         }
     }
 
-    private record AiChatRequest(
-            @JsonProperty("message") String message,
-            @JsonProperty("session_id") String sessionId,
-            @JsonProperty("user_context") Map<String, Object> userContext,
-            @JsonProperty("conversation_history") List<ConversationTurn> conversationHistory) { }
-
-    private record AiChatResponse(String reply, List<String> recommendations) { }
+    public record AiChatResponse(String reply, List<String> recommendations) { }
 
     private static final class GuestQuota {
         private int consumed;
