@@ -39,16 +39,34 @@ const normalizePost = (item = {}, fallbackType = 'BLOG') => {
   };
 };
 
-const getCollection = async (path, signal, type) => itemsFrom(await apiRequest(path, { signal })).map((item) => normalizePost(item, type));
+const getCollection = async (path, signal, type) => {
+  const data = unwrapData(await apiRequest(path, { signal }), {});
+  return {
+    posts: (Array.isArray(data?.content) ? data.content : itemsFrom(data)).map((item) => normalizePost(item, type)),
+    last: Boolean(data?.last)
+  };
+};
+
+export async function getPostsPage({ blogPage, videoPage, signal }) {
+  const requests = [
+    blogPage == null ? null : getCollection(`/api/v1/blogs?page=${blogPage}&size=10`, signal, 'BLOG'),
+    videoPage == null ? null : getCollection(`/api/v1/videos?page=${videoPage}&size=10`, signal, 'VIDEO')
+  ];
+  const results = await Promise.allSettled(requests.map((request) => request ?? Promise.resolve(null)));
+  const available = results
+    .filter((result) => result.status === 'fulfilled' && result.value)
+    .flatMap((result) => result.value.posts);
+  if (!available.length && results.every((result) => result.status === 'rejected')) throw results[0].reason;
+  return {
+    posts: available.sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0)),
+    blogLast: blogPage == null || (results[0].status === 'fulfilled' && results[0].value?.last),
+    videoLast: videoPage == null || (results[1].status === 'fulfilled' && results[1].value?.last)
+  };
+}
 
 export async function getPosts(signal) {
-  const results = await Promise.allSettled([
-    getCollection('/api/v1/blogs?page=0&size=10', signal, 'BLOG'),
-    getCollection('/api/v1/videos?page=0&size=10', signal, 'VIDEO')
-  ]);
-  const available = results.filter((result) => result.status === 'fulfilled').flatMap((result) => result.value);
-  if (!available.length && results.every((result) => result.status === 'rejected')) throw results[0].reason;
-  return available.sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0));
+  const result = await getPostsPage({ blogPage: 0, videoPage: 0, signal });
+  return result.posts;
 }
 
 export async function getPost(id, signal) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -11,7 +11,7 @@ import CommunityPostCard from '../components/community/CommunityPostCard';
 import CommunityRightRail from '../components/community/CommunityRightRail';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CreateBlogPage from './CreateBlogPage';
-import { getCommunityFilters, getPosts } from '../services/communityApi';
+import { getCommunityFilters, getPostsPage } from '../services/communityApi';
 import { getMyProfile } from '../services/profileApi';
 import colorfulPlate from '../assets/colorful-plate.jpg';
 import heroBowl from '../assets/hero-bowl.jpg';
@@ -36,22 +36,67 @@ const fallbackDiscoverPosts = [
 export default function CommunityFeedPage() {
   const page = useRef(null);
   const composerTrigger = useRef(null);
+  const loadMoreTrigger = useRef(null);
+  const pagination = useRef({ blogPage: 0, videoPage: 0, blogLast: false, videoLast: false });
+  const loadingNextPage = useRef(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All');
   const [composerOpen, setComposerOpen] = useState(false);
-  const [posts, setPosts] = useState([]); const [profile, setProfile] = useState({}); const [filters, setFilters] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('');
+  const [posts, setPosts] = useState([]); const [profile, setProfile] = useState({}); const [filters, setFilters] = useState([]); const [loading, setLoading] = useState(true); const [loadingMore, setLoadingMore] = useState(false); const [error, setError] = useState('');
+
+  const loadNextPage = useCallback(async (signal, { initial = false } = {}) => {
+    if (loadingNextPage.current || (!initial && pagination.current.blogLast && pagination.current.videoLast)) return;
+
+    loadingNextPage.current = true;
+    if (!initial) setLoadingMore(true);
+    const current = pagination.current;
+    try {
+      const result = await getPostsPage({
+        blogPage: current.blogLast ? null : current.blogPage,
+        videoPage: current.videoLast ? null : current.videoPage,
+        signal
+      });
+      if (signal?.aborted) return;
+      pagination.current = {
+        blogPage: result.blogLast ? current.blogPage : current.blogPage + 1,
+        videoPage: result.videoLast ? current.videoPage : current.videoPage + 1,
+        blogLast: result.blogLast,
+        videoLast: result.videoLast
+      };
+      setPosts((existing) => initial ? result.posts : [...existing, ...result.posts]);
+      setError('');
+    } catch (failure) {
+      if (!signal?.aborted) setError(initial ? 'Unable to load the community feed.' : failure.message || 'Unable to load more community posts.');
+    } finally {
+      loadingNextPage.current = false;
+      if (!initial && !signal?.aborted) setLoadingMore(false);
+    }
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
-    Promise.allSettled([getPosts(controller.signal), getMyProfile(controller.signal), getCommunityFilters(controller.signal)]).then(([postsResult, profileResult, filtersResult]) => {
+    Promise.allSettled([loadNextPage(controller.signal, { initial: true }), getMyProfile(controller.signal), getCommunityFilters(controller.signal)]).then(([, profileResult, filtersResult]) => {
       if (controller.signal.aborted) return;
-      if (postsResult.status === 'fulfilled') setPosts(postsResult.value);
-      else setError('Unable to load the community feed.');
       if (profileResult.status === 'fulfilled') setProfile(profileResult.value);
       if (filtersResult.status === 'fulfilled') setFilters(filtersResult.value);
       setLoading(false);
     });
-    return () => controller.abort();
-  }, []);
+    return () => {
+      controller.abort();
+      loadingNextPage.current = false;
+    };
+  }, [loadNextPage]);
+
+  useEffect(() => {
+    const trigger = loadMoreTrigger.current;
+    if (!trigger || loading || (pagination.current.blogLast && pagination.current.videoLast)) return;
+    const controller = new AbortController();
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) loadNextPage(controller.signal);
+    }, { rootMargin: '400px 0px' });
+    observer.observe(trigger);
+    return () => { observer.disconnect(); controller.abort(); };
+  }, [loadNextPage, loading, posts]);
 
   const visible = useMemo(() => posts.filter((post) => {
     const matchesFilter = filter === 'All' || post.title.toLowerCase().includes(filter.replace('#', '').toLowerCase());
@@ -91,7 +136,11 @@ export default function CommunityFeedPage() {
           <div className="feed-stream-heading"><div><span>The community stream</span><h2>What&apos;s nourishing people now</h2></div><p>Stories and videos, all in one thoughtful place.</p></div>
           <CommunityComposer onOpen={openComposer} profile={profile}/>
           <CommunityFilters filters={filters} active={filter} onChange={setFilter}/>
-          {loading ? <p className="content-status">Loading community posts...</p> : error ? <p className="content-status content-status--error">{error}</p> : visible.length ? visible.map((post) => <CommunityPostCard key={post.id} post={post} profile={profile}/>) : <div className="empty-results">No posts match that filter yet.</div>}
+          {loading ? <p className="content-status">Loading community posts...</p> : error && !posts.length ? <p className="content-status content-status--error">{error}</p> : visible.length ? visible.map((post) => <CommunityPostCard key={post.id} post={post} profile={profile}/>) : <div className="empty-results">No posts match that filter yet.</div>}
+          {!loading && <div ref={loadMoreTrigger} className="feed-load-more" aria-live="polite">
+            {loadingMore && <span>Loading more posts...</span>}
+            {error && posts.length > 0 && <span className="content-status--error">{error}</span>}
+          </div>}
         </main>
         <CommunityRightRail/>
       </div>
