@@ -5,5 +5,18 @@
 .ops-tags .tag-row small{font-size:13px;max-width:300px}
 .ops-tags .tag-row em{font-size:13px;padding:7px 10px}
 .ops-tags .tag-row>i{font-size:13px}
+.members-admin-hero{margin:-22px 0 24px;padding:34px clamp(24px,4vw,52px) 31px;border:1px solid #cfe5c4;border-radius:18px;background:linear-gradient(135deg,#173529 0%,#315c2b 54%,#e4f0dc 100%);box-shadow:0 18px 46px rgba(49,92,43,.12)}
+.members-admin-hero .admin-page-header{margin-bottom:0}
+.members-admin-hero .admin-page-header p,.members-admin-hero .admin-page-header h1{color:#fffefa}
+.members-admin-hero .admin-page-header span{color:#e4f0dc}
+.members-admin-toolbar{align-items:end;gap:16px;margin:0 0 20px}
+.members-admin-toolbar .admin-search{box-sizing:border-box;display:flex;flex-direction:row;height:44px;width:min(380px,100%);align-items:center;gap:9px;padding:0 12px;border-color:#c8d8c0;background:#fffefa}
+.members-admin-toolbar .admin-search svg{flex:none}
+.members-admin-toolbar .admin-search:focus-within{border-color:#315c2b;box-shadow:0 0 0 3px rgba(49,92,43,.1)}
+.members-admin-toolbar .admin-search input,.members-admin-toolbar .admin-search input:focus{box-sizing:border-box;display:block;flex:1;height:100%;min-height:0;min-width:0;padding:0;border:0;outline:0;box-shadow:none;line-height:normal;align-self:stretch;background:transparent}
+.members-admin-toolbar label select{height:44px;min-height:44px;border-color:#c8d8c0}
+.members-table-panel{border-color:#c8d8c0;box-shadow:0 14px 35px rgba(49,92,43,.06)}
+.status-banned,.status-suspended{background:#f1dfda;color:#8b493e}
+.status-deleted{background:#ecece7;color:#67655f}
 
-@media(max-width:600px){.ops-tags .tag-row small{max-width:105px}}
+@media(max-width:600px){.ops-tags .tag-row small{max-width:105px}.members-admin-hero{padding:28px 22px}.members-admin-toolbar .admin-search{width:100%}}
