@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import ChatbotWidget from '../ChatbotWidget';
 
@@ -147,10 +147,9 @@ describe('ChatbotWidget', () => {
       expect(badge).not.toBeInTheDocument();
     });
 
-    it('shows trial badge after first message for guests', async () => {
+    it('shows all remaining trial questions for guests when opened', async () => {
       // Guest: no token
       localStorage.clear();
-      localStorage.setItem('nutribot_guest_trial_count', '2');
 
       renderWithRouter(<ChatbotWidget />);
       const launcher = screen.getByRole('button', { name: /open nutribot chat/i });
@@ -158,7 +157,64 @@ describe('ChatbotWidget', () => {
 
       const badge = document.querySelector('.chatbot-widget__trial-badge');
       expect(badge).toBeInTheDocument();
-      expect(badge.textContent).toContain('2/3 questions left');
+      expect(badge.textContent).toContain('3/3 questions left');
+    });
+
+    it('only consumes a guest trial after NutriBot answers', async () => {
+      renderWithRouter(<ChatbotWidget />);
+      fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+
+      fireEvent.click(screen.getByRole('button', { name: /build a balanced plate/i }));
+
+      await waitFor(() => {
+        expect(localStorage.getItem('nutribot_guest_trial_count')).toBe('2');
+      });
+      expect(document.querySelector('.chatbot-widget__trial-badge').textContent)
+        .toContain('2/3 questions left');
+    });
+
+    it('shows the registration modal after the final successful trial answer', async () => {
+      localStorage.setItem('nutribot_guest_trial_count', '1');
+      renderWithRouter(<ChatbotWidget />);
+      fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+      fireEvent.click(screen.getByRole('button', { name: /build a balanced plate/i }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog', { name: /your free trial has ended/i })).toBeInTheDocument();
+      });
+      expect(localStorage.getItem('nutribot_guest_trial_count')).toBe('0');
+    });
+
+    it('shows the registration modal when an exhausted guest reopens chat', async () => {
+      localStorage.setItem('nutribot_guest_trial_count', '0');
+      renderWithRouter(<ChatbotWidget />);
+      fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+
+      expect(screen.getByRole('dialog', { name: /your free trial has ended/i })).toBeInTheDocument();
+    });
+
+    it('opens the existing sign-up modal from the trial modal', async () => {
+      localStorage.setItem('nutribot_guest_trial_count', '0');
+      renderWithRouter(<ChatbotWidget />);
+      fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+      fireEvent.click(screen.getByRole('button', { name: /sign up/i }));
+
+      expect(screen.getByRole('dialog', { name: /make nourishment personal/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /create account/i })).toBeInTheDocument();
+    });
+
+    it('does not consume a guest trial when NutriBot cannot answer', async () => {
+      const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+      requestNutritionAdvice.mockRejectedValueOnce(new Error('AI unavailable'));
+
+      renderWithRouter(<ChatbotWidget />);
+      fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+      fireEvent.click(screen.getByRole('button', { name: /build a balanced plate/i }));
+
+      await waitFor(() => {
+        expect(screen.getByText(/NutriBot chưa thể trả lời/i)).toBeInTheDocument();
+      });
+      expect(localStorage.getItem('nutribot_guest_trial_count')).toBeNull();
     });
   });
 });
