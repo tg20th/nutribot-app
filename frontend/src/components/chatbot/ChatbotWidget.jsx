@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getChatMessages, getChatSessions, requestNutritionAdvice } from '../../services/chatbotApi';
 import { googleAuthUrl } from '../../services/contentApi';
 import AuthModal from '../AuthModal';
@@ -48,7 +49,8 @@ const INITIAL_MESSAGES = [
   },
 ];
 
-export default function ChatbotWidget({ onSend }) {
+export default function ChatbotWidget({ onSend, onAuth }) {
+  const navigate = useNavigate();
   const [isMounted, setIsMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [draft, setDraft] = useState('');
@@ -78,6 +80,15 @@ export default function ChatbotWidget({ onSend }) {
   }, [isGuest]);
 
   const showTrialBadge = isGuest && guestTrialsLeft > 0 && guestTrialsLeft < GUEST_TRIAL_LIMIT;
+
+  const openAuth = (mode) => {
+    setShowLimitModal(false);
+    if (onAuth) {
+      onAuth(mode);
+      return;
+    }
+    navigate('/', { state: { authMode: mode } });
+  };
 
   const loadSessions = useCallback(async () => {
     setHistoryLoading(true);
@@ -282,7 +293,7 @@ export default function ChatbotWidget({ onSend }) {
 
   return (
     <div className="chatbot-widget">
-      {isMounted && (
+      {isMounted && !showLimitModal && (
         <section
           ref={panelRef}
           id="nutribot-chat-panel"
@@ -423,8 +434,8 @@ export default function ChatbotWidget({ onSend }) {
             <p>You have used all {GUEST_TRIAL_LIMIT} free questions with NutriBot.</p>
             <p className="chatbot-widget__modal-cta">Create an account or log in to keep chatting with NutriBot.</p>
             <div className="chatbot-widget__modal-actions">
-              <button type="button" onClick={() => { setShowLimitModal(false); setAuthMode('signup'); }} className="chatbot-widget__modal-btn chatbot-widget__modal-btn--primary">Sign up</button>
-              <button type="button" onClick={() => { setShowLimitModal(false); setAuthMode('login'); }} className="chatbot-widget__modal-btn chatbot-widget__modal-btn--secondary">Log in</button>
+              <button type="button" className="chatbot-widget__modal-btn chatbot-widget__modal-btn--primary" onClick={() => openAuth('signup')}>Sign Up</button>
+              <button type="button" className="chatbot-widget__modal-btn chatbot-widget__modal-btn--secondary" onClick={() => openAuth('login')}>Log In</button>
             </div>
           </div>
         </div>
