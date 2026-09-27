@@ -1,6 +1,7 @@
 package com.fpt.swp391.nutribot.controller;
 
 import com.fpt.swp391.nutribot.dto.request.WeeklyMenuCreateRequest;
+import com.fpt.swp391.nutribot.dto.request.WeeklyMenuAiSaveRequest;
 import com.fpt.swp391.nutribot.dto.request.WeeklyMenuItemCreateRequest;
 import com.fpt.swp391.nutribot.dto.request.WeeklyMenuUpdateRequest;
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
@@ -38,6 +39,15 @@ public class WeeklyMenuController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
                 "Tạo thực đơn tuần thành công",
                 weeklyMenuService.createWeeklyMenu(principal.getName(), request)));
+    }
+
+    @PostMapping("/ai-generated")
+    public ResponseEntity<ApiResponse<WeeklyMenuResponse>> saveAiGeneratedMenu(
+            Principal principal,
+            @Valid @RequestBody WeeklyMenuAiSaveRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Lưu thực đơn AI thành công",
+                weeklyMenuService.saveAiGeneratedMenu(principal.getName(), request)));
     }
 
     @GetMapping("/current")

@@ -339,6 +339,32 @@ Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/c
 }
 ```
 
+### 5.3a. Lưu thực đơn do AI tạo
+- **Endpoint:** `POST /api/v1/weekly-menus/ai-generated` (200 OK, yêu cầu Bearer token)
+- `startDate` phải là Thứ Hai. `generatedMenu.weeklyPlan` có đúng 7 ngày theo thứ tự Thứ Hai đến Chủ Nhật, mỗi ngày có đủ `breakfast`, `lunch`, `dinner`.
+- Mỗi bữa phải có `dishId` tham chiếu món đang hoạt động, có calo trong cơ sở dữ liệu và `servings` từ 0.01 đến 99.99. Tên và dữ liệu dinh dưỡng từ AI chỉ dùng để hiển thị; dữ liệu lưu được xác thực/đọc lại từ món trong database.
+- Lưu lại cùng tuần của user sẽ thay thế nội dung tuần hiện có trong một transaction. User được xác định từ Bearer token.
+- **Request Body:**
+```json
+{
+  "startDate": "2026-09-21",
+  "dietaryGoal": "balanced",
+  "generatedMenu": {
+    "suggestedMenuTitle": "Balanced weekly menu",
+    "estimatedDailyCalories": 1800,
+    "weeklyPlan": [
+      {
+        "day": "Monday",
+        "breakfast": { "dishId": 5, "servings": 1.0 },
+        "lunch": { "dishId": 8, "servings": 1.0 },
+        "dinner": { "dishId": 11, "servings": 1.0 }
+      }
+    ]
+  }
+}
+```
+- `weeklyPlan` trong ví dụ cần có đủ 7 phần tử khi gọi thật.
+
 ### 5.4. Thêm món vào bữa
 - **Endpoint:** `POST /api/v1/weekly-menus/{menuId}/items` (201 Created)
 - Món phải đang hoạt động và có calo; số suất phải lớn hơn 0. Không thể thêm cùng một món hai lần vào cùng một bữa.
@@ -447,11 +473,16 @@ Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/c
   "healthGoal": "maintain_weight",
   "availableIngredients": ["đậu phụ", "nấm rơm"],
   "excludedAllergies": ["đậu phộng"],
+  "availableDishes": [
+    { "dishId": 5, "name": "Yến mạch hoa quả", "calories": 350, "proteinG": 12.5 }
+  ],
   "bmi": 20.2
 }
 ```
 
-- FastAPI trả trực tiếp `suggestedMenuTitle`, `estimatedDailyCalories`, `weeklyPlan` (đúng 7 ngày, mỗi ngày `breakfast`, `lunch`, `dinner`). Spring Boot bọc kết quả theo `ApiResponse<T>` trước khi trả FE.
+- FastAPI chỉ chọn `dishId` thuộc `availableDishes`, trả `dishId` và `servings` cho mỗi bữa, và kiểm tra lại mọi ID thuộc danh mục được phép.
+- Spring Boot xác minh ID lần nữa rồi bổ sung tên, calo, protein và ảnh chính thức từ DB trước khi trả preview theo `ApiResponse<T>`.
+- `weeklyPlan` luôn dùng nhãn tiếng Anh theo đúng thứ tự Monday đến Sunday; thứ tự này được dùng để gán ngày khi lưu menu.
 
 ### 7.1. API public
 
@@ -475,10 +506,10 @@ Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/c
     "estimatedDailyCalories": 1750,
     "weeklyPlan": [
       {
-        "day": "Thứ 2",
-        "breakfast": "Cháo yến mạch nấm rơm",
-        "lunch": "Đậu phụ sốt cà chua, canh cải nấu nấm, cơm gạo lứt",
-        "dinner": "Salad rau củ sốt mè, canh rong biển đậu hũ"
+        "day": "Monday",
+        "breakfast": { "dishId": 5, "dishName": "Yến mạch hoa quả", "calories": 350, "proteinG": 12.5, "servings": 1 },
+        "lunch": { "dishId": 8, "dishName": "Đậu phụ sốt cà chua", "calories": 420, "proteinG": 24, "servings": 1 },
+        "dinner": { "dishId": 12, "dishName": "Canh rau củ", "calories": 300, "proteinG": 9, "servings": 1 }
       }
     ]
   }

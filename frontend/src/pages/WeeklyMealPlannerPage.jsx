@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Plus, RefreshCw, Repeat2, ShoppingBasket, Sparkles, Trash2, WifiOff, X } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Plus, RefreshCw, Repeat2, Save, ShoppingBasket, Sparkles, Trash2, WifiOff, X } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import MealEditorDialog from '../components/community/MealEditorDialog';
@@ -12,7 +12,7 @@ import ImageWithFallback from '../components/ImageWithFallback';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import freshProduce from '../assets/fresh-produce.jpg';
 import { getMyProfile } from '../services/profileApi';
-import { addWeeklyMenuItem, createWeeklyMenu, deleteWeeklyMenuItem, getCurrentWeeklyMenu, getWeeklyMenuDishes, updateWeeklyMenu } from '../services/weeklyMealApi';
+import { addWeeklyMenuItem, createWeeklyMenu, deleteWeeklyMenuItem, getCurrentWeeklyMenu, getWeeklyMenuDishes, saveAiGeneratedMenu, updateWeeklyMenu } from '../services/weeklyMealApi';
 import { generateMealPlan } from '../services/mealPlannerApi';
 import { createLocalMeal, MEAL_SLOTS, normalizeDishCatalog, normalizeWeeklyMenu, recalculateMenu, serializeMenu, shiftWeek, startOfWeek, toIsoDate } from '../utils/weeklyMenuModel';
 
@@ -58,6 +58,8 @@ export default function WeeklyMealPlannerPage() {
   const [aiPreview, setAiPreview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingAiPreview, setSavingAiPreview] = useState(false);
+  const [aiSaveError, setAiSaveError] = useState('');
   const [notice, setNotice] = useState(null);
 
   const loadWeek = useCallback(async (startDate, signal) => {
@@ -224,6 +226,26 @@ export default function WeeklyMealPlannerPage() {
     }
   };
 
+  const persistAiPreview = async () => {
+    if (!aiPreview) return;
+    setSavingAiPreview(true);
+    setAiSaveError('');
+    try {
+      const savedMenu = await saveAiGeneratedMenu({
+        startDate: weekStart,
+        dietaryGoal: aiGoal,
+        generatedMenu: aiPreview
+      });
+      setMenu(normalizeWeeklyMenu(savedMenu, weekStart));
+      setAiPreview(null);
+      setNotice({ type: 'success', text: 'Your AI weekly plan was saved to your account.' });
+    } catch (error) {
+      setAiSaveError(error?.message || 'We could not save your AI plan. Please sign in and try again.');
+    } finally {
+      setSavingAiPreview(false);
+    }
+  };
+
   const applyAiPreview = () => {
     if (!aiPreview) return;
     const aiSlots = [['Breakfast', 'breakfast'], ['Lunch', 'lunch'], ['Dinner', 'dinner']];
@@ -235,14 +257,20 @@ export default function WeeklyMealPlannerPage() {
           return {
             ...day,
             calorieGoal: Number(aiPreview.estimatedDailyCalories ?? aiCalories),
-            meals: aiSlots.map(([slot, field], slotIndex) => ({
-              key: `ai-${Date.now()}-${dayIndex}-${slotIndex}`,
-              itemId: null, mealId: null, dishId: null, slot,
-              name: generatedDay[field] || `${slot} suggestion`,
-              kcal: Math.round(Number(aiPreview.estimatedDailyCalories ?? aiCalories) / 3), protein: 0,
-              baseCalories: Math.round(Number(aiPreview.estimatedDailyCalories ?? aiCalories) / 3), baseProtein: 0,
-              image: freshProduce, servings: 1, notes: 'Suggested by NutriBot AI', swapped: false,
-            }))
+            meals: aiSlots.map(([slot, field], slotIndex) => {
+              const selection = generatedDay[field] ?? {};
+              const servings = Number(selection.servings ?? 1);
+              const baseCalories = Number(selection.calories ?? 0);
+              const baseProtein = Number(selection.proteinG ?? 0);
+              return {
+                key: `ai-${Date.now()}-${dayIndex}-${slotIndex}`,
+                itemId: null, mealId: null, dishId: selection.dishId ?? null, slot,
+                name: selection.dishName || `${slot} suggestion`,
+                kcal: Math.round(baseCalories * servings), protein: Math.round(baseProtein * servings),
+                baseCalories, baseProtein,
+                image: selection.imageUrl || freshProduce, servings, notes: 'Suggested by NutriBot AI', swapped: false,
+              };
+            })
           };
         })
       }));
@@ -371,11 +399,12 @@ export default function WeeklyMealPlannerPage() {
         </form>
       </section>
     </div>}
-    {aiPreview && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setAiPreview(null)}>
+    {aiPreview && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !savingAiPreview && setAiPreview(null)}>
       <section className="meal-dialog ai-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-preview-title">
-        <header><div><span>NutriBot AI weekly preview</span><h2 id="ai-preview-title">{aiPreview.suggestedMenuTitle || 'Your seven-day menu'}</h2><p>{aiPreview.estimatedDailyCalories ?? aiCalories} kcal average each day</p></div><button type="button" className="meal-dialog-close" onClick={() => setAiPreview(null)} aria-label="Close weekly preview"><X size={18}/></button></header>
-        <div className="ai-preview-days">{aiPreview.weeklyPlan.slice(0, 7).map((day, index) => <article key={`${day.day}-${index}`}><header><span>{String(index + 1).padStart(2, '0')}</span><b>{day.day || `Day ${index + 1}`}</b></header><dl><div><dt>Breakfast</dt><dd>{day.breakfast || 'No suggestion'}</dd></div><div><dt>Lunch</dt><dd>{day.lunch || 'No suggestion'}</dd></div><div><dt>Dinner</dt><dd>{day.dinner || 'No suggestion'}</dd></div></dl></article>)}</div>
-        <footer><button type="button" className="planner-btn-ghost" onClick={() => setAiPreview(null)}>Edit request</button><button type="button" className="planner-btn-primary" onClick={applyAiPreview}><CheckCircle2 size={15}/> Use this plan</button></footer>
+        <header><div><span>NutriBot AI weekly preview</span><h2 id="ai-preview-title">{aiPreview.suggestedMenuTitle || 'Your seven-day menu'}</h2><p>{aiPreview.estimatedDailyCalories ?? aiCalories} kcal average each day</p></div><button type="button" className="meal-dialog-close" onClick={() => setAiPreview(null)} disabled={savingAiPreview} aria-label="Close weekly preview"><X size={18}/></button></header>
+        <div className="ai-preview-days">{aiPreview.weeklyPlan.slice(0, 7).map((day, index) => <article key={`${day.day}-${index}`}><header><span>{String(index + 1).padStart(2, '0')}</span><b>{day.day || `Day ${index + 1}`}</b></header><dl><div><dt>Breakfast</dt><dd>{day.breakfast?.dishName || 'No suggestion'}</dd></div><div><dt>Lunch</dt><dd>{day.lunch?.dishName || 'No suggestion'}</dd></div><div><dt>Dinner</dt><dd>{day.dinner?.dishName || 'No suggestion'}</dd></div></dl></article>)}</div>
+        {aiSaveError && <div className="planner-notice is-offline" role="alert"><WifiOff size={15}/><span>{aiSaveError}</span></div>}
+        <footer><button type="button" className="planner-btn-ghost" onClick={() => setAiPreview(null)} disabled={savingAiPreview}>Edit request</button><button type="button" className="planner-btn-ghost" onClick={persistAiPreview} disabled={savingAiPreview}>{savingAiPreview ? <Loader2 size={15} className="is-spinning"/> : <Save size={15}/>} {savingAiPreview ? 'Saving...' : 'Save to my plans'}</button><button type="button" className="planner-btn-primary" onClick={applyAiPreview} disabled={savingAiPreview}><CheckCircle2 size={15}/> Use this plan</button></footer>
       </section>
     </div>}
     <ChatbotWidget/>

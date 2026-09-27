@@ -5,7 +5,7 @@ import lombok.Data;
 @Data
 public class MealPlanDayResponse {
     private String day;
-    private String breakfast;
-    private String lunch;
-    private String dinner;
+    private MealPlanDishResponse breakfast;
+    private MealPlanDishResponse lunch;
+    private MealPlanDishResponse dinner;
 }
