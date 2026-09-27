@@ -47,6 +47,7 @@ export default function WeeklyMealPlannerPage() {
   const [dishes, setDishes] = useState([]);
   const [dishError, setDishError] = useState(false);
   const [editor, setEditor] = useState(null);
+  const [pendingMealRemoval, setPendingMealRemoval] = useState(null);
   const [showGrocery, setShowGrocery] = useState(false);
   const [showAiGenerator, setShowAiGenerator] = useState(false);
   const [aiIngredients, setAiIngredients] = useState('đậu hũ, nấm rơm, cà chua, rau cải');
@@ -155,7 +156,6 @@ export default function WeeklyMealPlannerPage() {
   };
 
   const removeMeal = async (dayIndex, meal) => {
-    if (!window.confirm(`Remove ${meal.name} from this plan?`)) return;
     setMenu((current) => recalculateMenu({ ...current, days: current.days.map((day, index) => index === dayIndex ? { ...day, meals: day.meals.filter((item) => item.key !== meal.key) } : day) }));
     if (!menu.menuId || !meal.itemId) {
       setNotice({ type: 'success', text: `${meal.name} was removed from your local draft.` });
@@ -167,6 +167,13 @@ export default function WeeklyMealPlannerPage() {
     } catch {
       setNotice({ type: 'offline', text: 'The backend could not delete this meal. The local draft was updated.' });
     }
+  };
+
+  const confirmMealRemoval = async () => {
+    if (!pendingMealRemoval) return;
+    const { dayIndex, meal } = pendingMealRemoval;
+    setPendingMealRemoval(null);
+    await removeMeal(dayIndex, meal);
   };
 
   const savePlan = async () => {
@@ -314,7 +321,7 @@ export default function WeeklyMealPlannerPage() {
                         <div><span>{meal.swapped ? 'Replaced' : 'Dish'}</span><b>{meal.name}</b><small>{meal.kcal} kcal · {meal.protein}g protein · {meal.servings} serving{meal.servings === 1 ? '' : 's'}</small></div>
                         <div className="planner-meal-actions">
                           <button type="button" onClick={() => openEditor(day, slot, meal)} aria-label={`Replace ${meal.name}`}><Repeat2 size={13}/></button>
-                          <button type="button" onClick={() => removeMeal(dayIndex, meal)} aria-label={`Delete ${meal.name}`}><Trash2 size={13}/></button>
+                          <button type="button" onClick={() => setPendingMealRemoval({ dayIndex, meal })} aria-label={`Delete ${meal.name}`}><Trash2 size={13}/></button>
                         </div>
                       </div>)}
                     </div>
@@ -343,6 +350,13 @@ export default function WeeklyMealPlannerPage() {
         <header><div><span>{menu.week.range}</span><h2 id="meal-list-title">Meals this week</h2></div><button type="button" className="meal-dialog-close" onClick={() => setShowGrocery(false)} aria-label="Close meal list"><X size={18}/></button></header>
         <div className="grocery-list">{groceryItems.map((item) => <div key={`${item.day}-${item.key}`}><ImageWithFallback src={item.image} alt="" fallbackSrc={freshProduce}/><span><b>{item.name}</b><small>{item.day} · {item.slot} · {item.servings} serving{item.servings === 1 ? '' : 's'}</small></span></div>)}{!groceryItems.length && <p>No meals have been added yet.</p>}</div>
         <footer><button type="button" className="planner-btn-primary" onClick={() => setShowGrocery(false)}>Done</button></footer>
+      </section>
+    </div>}
+    {pendingMealRemoval && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setPendingMealRemoval(null)}>
+      <section className="meal-dialog meal-delete-dialog" role="alertdialog" aria-modal="true" aria-labelledby="meal-delete-title" aria-describedby="meal-delete-description">
+        <header><div><span>Confirm removal</span><h2 id="meal-delete-title">Remove this meal?</h2></div><button type="button" className="meal-dialog-close" onClick={() => setPendingMealRemoval(null)} aria-label="Cancel removal"><X size={18}/></button></header>
+        <p id="meal-delete-description">Remove <strong>{pendingMealRemoval.meal.name}</strong> from this weekly plan?</p>
+        <footer><button type="button" className="planner-btn-ghost" onClick={() => setPendingMealRemoval(null)}>Cancel</button><button type="button" className="planner-btn-primary meal-delete-confirm" onClick={confirmMealRemoval}><Trash2 size={15}/> Remove meal</button></footer>
       </section>
     </div>}
     {showAiGenerator && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !generatingPlan && setShowAiGenerator(false)}>
