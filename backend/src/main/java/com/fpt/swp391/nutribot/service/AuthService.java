@@ -91,4 +91,49 @@ public class AuthService {
     public Optional<User> getUserByUsername(String username) {
         return userRepository.findByUsername(username);
     }
+
+    @Transactional(readOnly = true)
+    public Optional<String> getRoleNameByUsername(String username) {
+        return userRepository.findByUsername(username)
+                .map(user -> user.getRole().getRoleName());
+    }
+
+    @Transactional
+    public AuthResponse handleOAuth2Login(String email) {
+        Optional<User> existingUser = userRepository.findByEmail(email);
+
+        User user;
+        if (existingUser.isPresent()) {
+            user = existingUser.get();
+        } else {
+            Role userRole = roleRepository.findByRoleName("ROLE_USER")
+                    .or(() -> roleRepository.findByRoleName("User"))
+                    .orElseThrow(() -> new BadRequestException("Không tìm thấy role mặc định"));
+
+            String randomPassword = java.util.UUID.randomUUID().toString();
+            user = User.builder()
+                    .username(email.split("@")[0] + "_" + System.currentTimeMillis())
+                    .email(email)
+                    .passwordHash(passwordEncoder.encode(randomPassword))
+                    .fullName("")
+                    .role(userRole)
+                    .build();
+            user = userRepository.save(user);
+        }
+
+        if (!"ACTIVE".equals(user.getStatus())) {
+            throw new BadRequestException("Tài khoản đã bị khóa hoặc suspend");
+        }
+
+        String token = jwtTokenProvider.generateToken(
+                user.getUsername(),
+                user.getRole().getRoleName()
+        );
+
+        return AuthResponse.builder()
+                .token(token)
+                .username(user.getUsername())
+                .role(user.getRole().getRoleName())
+                .build();
+    }
 }

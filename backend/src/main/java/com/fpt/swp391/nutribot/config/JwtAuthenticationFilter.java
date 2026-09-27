@@ -1,15 +1,14 @@
 package com.fpt.swp391.nutribot.config;
 
-import com.fpt.swp391.nutribot.repository.UserRepository;
+import com.fpt.swp391.nutribot.service.AuthService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -19,11 +18,20 @@ import java.util.Collections;
 import java.util.Locale;
 
 @Component
-@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
-    private final UserRepository userRepository;
+    private final AuthService authService;
+
+    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider, @Lazy AuthService authService) {
+        this.jwtTokenProvider = jwtTokenProvider;
+        this.authService = authService;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return request.getServletPath().startsWith("/api/v1/auth/");
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -35,20 +43,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
             String username = jwtTokenProvider.getUsernameFromToken(token);
 
-            var userOpt = userRepository.findByUsername(username);
-            if (userOpt.isPresent()) {
-                var user = userOpt.get();
+            var roleOpt = authService.getRoleNameByUsername(username);
+            if (roleOpt.isPresent()) {
                 var authorities = Collections.singletonList(
-                        new SimpleGrantedAuthority(toSpringAuthority(user.getRole().getRoleName()))
+                        new SimpleGrantedAuthority(toSpringAuthority(roleOpt.get()))
                 );
-                UserDetails principal = org.springframework.security.core.userdetails.User
-                        .withUsername(user.getUsername())
-                        .password("")
-                        .authorities(authorities)
-                        .build();
 
                 var authentication = new UsernamePasswordAuthenticationToken(
-                        principal,
+                        username,
                         null,
                         authorities
                 );

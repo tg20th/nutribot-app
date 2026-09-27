@@ -17,6 +17,7 @@ import CommentManagementPage from './pages/admin/CommentManagementPage';
 import { ContentDetailPage, ContentManagementPage } from './pages/admin/ContentPages';
 import RegisterPage from './pages/RegisterPage';
 import LoginPage from './pages/LoginPage';
+import OAuthCallbackPage from './pages/OAuthCallbackPage';
 import MemberRoute from './components/MemberRoute';
 import MyBlogsPage from './pages/MyBlogsPage';
 import MyVideosPage from './pages/MyVideosPage';
@@ -34,6 +35,7 @@ export default function App() {
     <Route path="/home" element={<MemberRoute><CommunityFeedPage /></MemberRoute>} />
     <Route path="/register" element={<RegisterPage />} />
     <Route path="/login" element={<LoginPage />} />
+    <Route path="/auth/callback" element={<OAuthCallbackPage />} />
     <Route path="/community" element={<Navigate to="/home" replace />} />
     <Route path="/blogs" element={<BlogListPage />} />
     <Route path="/blogs/id/:id" element={<BlogDetailPage byId />} />
