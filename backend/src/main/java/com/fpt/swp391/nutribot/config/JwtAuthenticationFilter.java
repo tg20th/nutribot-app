@@ -5,6 +5,7 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -16,6 +17,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.Locale;
+
+@Slf4j
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
@@ -39,9 +42,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
 
         String token = getJwtFromRequest(request);
+        log.debug("JWT Filter - Path: {}, Token present: {}", request.getRequestURI(), StringUtils.hasText(token));
 
         if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
             String username = jwtTokenProvider.getUsernameFromToken(token);
+            log.debug("JWT Filter - Token valid, username: {}", username);
 
             var roleOpt = authService.getRoleNameByUsername(username);
             if (roleOpt.isPresent()) {
@@ -55,6 +60,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         authorities
                 );
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+                log.debug("JWT Filter - Authentication set for user: {}, role: {}", username, roleOpt.get());
             }
         }
 

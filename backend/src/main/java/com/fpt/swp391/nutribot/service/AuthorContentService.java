@@ -11,6 +11,7 @@ import com.fpt.swp391.nutribot.exception.ForbiddenException;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +20,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+
+@Slf4j
 
 @Service
 @RequiredArgsConstructor
@@ -33,8 +36,12 @@ public class AuthorContentService {
 
     @Transactional(readOnly = true)
     public PagedResponse<AuthorContentResponse> getMyContent(String username, String contentType, int page, int size) {
+        log.info("getMyContent - username: {}, contentType: {}, page: {}, size: {}", username, contentType, page, size);
+
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
+
+        log.debug("Found user: {}, userId: {}", user.getUsername(), user.getUserId());
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "updatedAt"));
 
@@ -46,6 +53,9 @@ public class AuthorContentService {
         }
 
         Page<AuthorContentResponse> responsePage = contentPage.map(this::toAuthorResponse);
+
+        log.info("getMyContent - Found {} contents for user: {}", contentPage.getTotalElements(), username);
+
         return PagedResponse.of(responsePage);
     }
 
