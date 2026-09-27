@@ -81,7 +81,7 @@
   - *Mô tả:* Tạo Entity `Category` và API `GET/POST/PUT/DELETE /api/v1/categories` (đẩy sớm vào Sprint 1 để cung cấp ID phân loại cho Blog/Video).
   - *File cần tạo:* `entity/Category.java`, `repository/CategoryRepository.java`, `controller/CategoryController.java`.
   - *Blocked by:* Không có.
-- [ ] **#31 [BE] Java Chatbot Gateway Service**
+- [x] **#31 [BE] Java Chatbot Gateway Service**
   - *Mô tả:* Dùng `RestClient` trong Spring Boot làm cầu nối gọi sang Python AI Service của Lan (`POST http://localhost:8000/api/ai/chat`), có cơ chế fallback khi AI bận.
   - *File cần tạo:* `service/ChatbotGatewayService.java`, `controller/ChatbotController.java` (`POST /api/v1/chatbot/query`).
   - *Blocked by:* Không có (có thể mock data trước khi Lan hoàn thành Python).

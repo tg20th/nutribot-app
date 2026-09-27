@@ -1,6 +1,4 @@
-import { apiRequest, unwrapData } from './apiClient';
-
-const aiBaseUrl = (import.meta.env.VITE_AI_API_BASE_URL ?? '').replace(/\/$/, '');
+import { apiRequest, ApiError, unwrapData } from './apiClient';
 
 export class ChatbotApiError extends Error {
   constructor(message, status, payload) {
@@ -18,40 +16,18 @@ export const saveChatMessage = async (sessionId, senderType, content) => unwrapD
   method: 'POST', body: JSON.stringify({ senderType, content }),
 }), null);
 
-export async function requestNutritionAdvice({
-  message,
-  sessionId,
-  userContext,
-  conversationHistory = [],
-  signal,
-}) {
-  const response = await fetch(`${aiBaseUrl}/api/ai/chat`, {
-    method: 'POST',
-    signal,
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      message,
-      session_id: sessionId,
-      user_context: userContext,
-      conversation_history: conversationHistory,
-    }),
-  });
-
-  const contentType = response.headers.get('content-type') ?? '';
-  const payload = contentType.includes('application/json')
-    ? await response.json()
-    : await response.text();
-
-  if (!response.ok) {
-    throw new ChatbotApiError(
-      payload?.message || `NutriBot request failed (${response.status})`,
-      response.status,
-      payload,
-    );
+export async function requestNutritionAdvice({ message, sessionId, conversationHistory = [], signal }) {
+  try {
+    const response = await apiRequest('/api/v1/chatbot/query', {
+      method: 'POST',
+      signal,
+      body: JSON.stringify({ sessionId, message, conversationHistory }),
+    });
+    return unwrapData(response, {});
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw new ChatbotApiError(error.message, error.status, error.payload);
+    }
+    throw error;
   }
-
-  return payload;
 }

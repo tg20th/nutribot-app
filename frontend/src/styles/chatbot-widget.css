@@ -166,6 +166,7 @@
   position: fixed;
   inset: 0;
   z-index: 100;
+  pointer-events: auto;
   display: grid;
   place-items: center;
   background: rgba(16, 47, 35, 0.7);
@@ -264,6 +265,9 @@
   border: 0;
   cursor: pointer;
   text-decoration: none;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
   transition: transform .2s ease, box-shadow .2s ease;
 }
 

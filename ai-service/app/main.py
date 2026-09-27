@@ -1,6 +1,7 @@
 """FastAPI application cho NutriBot AI Service."""
 
 from datetime import UTC, datetime
+import logging
 from typing import Any
 
 from fastapi import Depends, FastAPI, Request, status
@@ -12,6 +13,8 @@ from app.exceptions import AIServiceError
 from app.planner import MealPlanRequest, MealPlanResponse
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.gemini_service import GeminiService
+
+logger = logging.getLogger(__name__)
 
 
 def _timestamp() -> str:
@@ -57,7 +60,14 @@ def create_app(
         first_error = exc.errors()[0] if exc.errors() else {}
         location = ".".join(str(part) for part in first_error.get("loc", [])[1:])
         detail = first_error.get("msg", "Dữ liệu không hợp lệ")
-        message = f"{location}: {detail}" if location else detail
+        body_keys = sorted(exc.body.keys()) if isinstance(exc.body, dict) else None
+        logger.warning(
+            "Chat request validation failed at '%s'; body type=%s, body keys=%s",
+            location or "body",
+            type(exc.body).__name__,
+            body_keys,
+        )
+        message = f"{location or 'body'}: {detail}"
         return _error_response(message, 422)
 
     @application.exception_handler(AIServiceError)
