@@ -22,6 +22,7 @@ function CommentStatus({ value }) {
 }
 
 export default function CommentManagementPage() {
+  const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview') === '1';
   const [page, setPage] = useState(1);
   const [result, setResult] = useState({ content: [], totalPages: 0, totalElements: 0 });
   const [selectedId, setSelectedId] = useState(null);
@@ -144,5 +145,6 @@ export default function CommentManagementPage() {
       onConfirm={removeComment}
     />
     <Toast message={toast} onDismiss={() => setToast('')} />
+    {preview && <span className="comment-admin-preview-marker">Preview data</span>}
   </div>;
 }
