@@ -1,0 +1,54 @@
+.comment-admin-page{min-width:0}
+.comment-admin-hero{display:flex;align-items:center;justify-content:space-between;gap:22px;margin:-22px 0 28px;padding:32px clamp(22px,3.5vw,46px);border:1px solid #c9dfbd;border-radius:16px;background:linear-gradient(115deg,#173529,#315c2b 65%,#52764b);box-shadow:0 16px 38px rgba(35,75,40,.12)}
+.comment-admin-hero p{margin:0 0 10px;color:#d7e8ce;font-size:10px;font-weight:700;letter-spacing:.14em}
+.comment-admin-hero h1{margin:0;color:#fffefa;font:500 clamp(32px,4vw,42px)/1.08 'Playfair Display',Georgia,serif}
+.comment-admin-hero>div:first-child>span{display:block;margin-top:9px;color:#e5efdf;font-size:13px}
+.comment-admin-total{display:flex;align-items:center;gap:9px;flex:none;padding:12px 15px;border:1px solid rgba(255,255,255,.36);border-radius:9px;background:rgba(255,255,255,.12);color:#fffefa;font-size:12px}
+.comment-admin-total strong{font-size:19px}
+.comment-admin-intro{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:17px}
+.comment-admin-intro h2{margin:0;font:500 27px/1.15 'Playfair Display',Georgia,serif}
+.comment-admin-intro p{margin:6px 0 0;color:#6e6a63;font-size:12px}
+.comment-admin-intro>span{color:#6e6a63;font-size:11px;white-space:nowrap}
+.comment-admin-board{display:grid;grid-template-columns:minmax(300px,1fr) minmax(0,1.1fr);align-items:start;gap:17px}
+.comment-admin-list,.comment-admin-detail{min-width:0;overflow:hidden;border-color:#d8dfd2;border-radius:11px;background:#fffefa}
+.comment-admin-list-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:18px 20px;border-bottom:1px solid #e8e8df}
+.comment-admin-list-head h3{margin:0;font-size:13px}
+.comment-admin-list-head span{color:#77736c;font-size:11px}
+.comment-admin-list-items{display:grid}
+.comment-admin-item{display:flex;width:100%;align-items:start;gap:12px;padding:17px 18px;border-bottom:1px solid #e8e8df;background:#fffefa;color:#25231f;text-align:left;transition:background .15s}
+.comment-admin-item:hover{background:#f6f9f2}
+.comment-admin-item.is-selected{background:#edf5e8;box-shadow:inset 3px 0 #315c2b}
+.comment-admin-avatar{display:grid;place-items:center;flex:none;width:37px;height:37px;border-radius:50%;background:#dcebcf;color:#315c2b;font-size:14px;font-weight:700}
+.comment-admin-item-copy{display:grid;min-width:0;flex:1;gap:7px}
+.comment-admin-item-top,.comment-admin-item-bottom{display:flex;align-items:center;justify-content:space-between;gap:9px;min-width:0}
+.comment-admin-item-top strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.comment-admin-item-top time{flex:none;color:#77736c;font-size:10px}
+.comment-admin-excerpt{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;color:#514f49;font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.comment-admin-item-bottom>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#6e6a63;font-size:10px}
+.comment-admin-status{display:inline-block;flex:none;padding:5px 8px;border-radius:999px;background:#ecece7;color:#67655f;font-size:10px;font-weight:700;white-space:nowrap}
+.comment-admin-status.is-published{background:#e4f0dc;color:#315c2b}
+.comment-admin-status.is-hidden{background:#f4ead1;color:#846416}
+.comment-admin-status.is-rejected{background:#f1dfda;color:#8b493e}
+.comment-admin-pagination{display:flex;align-items:center;justify-content:flex-end;gap:12px;padding:12px 18px;border-top:1px solid #e8e8df;color:#6e6a63;font-size:11px}
+.comment-admin-pagination button{display:grid;place-items:center;width:30px;height:30px;border:1px solid #d8dfd2;border-radius:6px;background:#fffefa;color:#315c2b}
+.comment-admin-pagination button:disabled{opacity:.4;cursor:not-allowed}
+.comment-admin-detail-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:19px 23px;border-bottom:1px solid #e8e8df}
+.comment-admin-detail-head>span:first-child{color:#315c2b;font-size:10px;font-weight:700;letter-spacing:.1em}
+.comment-admin-detail-body{padding:25px clamp(20px,3vw,34px) 30px}
+.comment-admin-author{display:flex;align-items:center;gap:11px}
+.comment-admin-author>div{display:grid;gap:3px;min-width:0}
+.comment-admin-author strong{font-size:14px}
+.comment-admin-author small{overflow-wrap:anywhere;color:#6e6a63;font-size:11px}
+.comment-admin-detail-body>time{display:block;margin:17px 0;color:#77736c;font-size:11px}
+.comment-admin-detail blockquote{margin:0;padding:24px;border-left:3px solid #9dbf8d;border-radius:0 8px 8px 0;background:#f5f8f1;color:#25231f;font:500 clamp(18px,2vw,22px)/1.5 'Playfair Display',Georgia,serif;white-space:pre-wrap;overflow-wrap:anywhere}
+.comment-admin-context{display:grid;gap:6px;margin-top:26px;padding:20px;border:1px solid #e0e9da;border-radius:9px;background:#fbfcf8}
+.comment-admin-context>span{color:#6c8064;font-size:10px;font-weight:700;letter-spacing:.11em}
+.comment-admin-context strong{font-size:13px;overflow-wrap:anywhere}
+.comment-admin-context small{color:#6e6a63;font-size:11px}
+.comment-admin-actions{display:flex;justify-content:flex-end;padding:16px 22px;border-top:1px solid #e8e8df;background:#fbfbf7}
+.comment-admin-actions .admin-btn:disabled{opacity:.55;cursor:wait}
+.comment-admin-state{display:grid;min-height:250px;place-items:center}
+.comment-admin-state .admin-empty{padding:40px 20px}
+@media(max-width:920px){.comment-admin-board{grid-template-columns:minmax(250px,.9fr) minmax(0,1fr);gap:12px}.comment-admin-item{padding:14px 12px}.comment-admin-item-top{align-items:start;flex-direction:column;gap:3px}}
+@media(max-width:700px){.comment-admin-hero{margin:-17px 0 22px;padding:25px 20px;align-items:start}.comment-admin-total{padding:9px}.comment-admin-total span{display:none}.comment-admin-board{grid-template-columns:1fr}.comment-admin-item-top{align-items:center;flex-direction:row}.comment-admin-detail-body{padding:20px}.comment-admin-detail blockquote{padding:18px}}
+@media(max-width:480px){.comment-admin-hero{display:block}.comment-admin-total{width:max-content;margin-top:17px}.comment-admin-intro{align-items:start;flex-direction:column}.comment-admin-item-top,.comment-admin-item-bottom{align-items:start;flex-direction:column}.comment-admin-detail-head{padding:16px}}
