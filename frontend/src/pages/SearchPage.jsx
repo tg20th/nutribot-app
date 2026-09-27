@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -33,7 +33,7 @@ const normalizeItem = (item, selectedType) => ({
   createdAt: item.createdAt ?? item.created_at
 });
 
-function ResultCard({ item, index, isMember, onPreview }) {
+function ResultCard({ item, index, isMember, onPreview, returnTo }) {
   const isVideo = item.type === 'VIDEO';
   const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently updated';
   const content = <>
@@ -49,7 +49,7 @@ function ResultCard({ item, index, isMember, onPreview }) {
     </div>
   </>;
   return <article className={`search-result-card search-result-card--${index % 6}`}>
-    {isMember ? <Link to={`/community/posts/${item.id}`} aria-label={`Open ${item.title}`}>{content}</Link> : <button type="button" onClick={() => onPreview(item)} aria-label={`Preview ${item.title}`}>{content}</button>}
+    {isMember ? <Link to={`/community/posts/${item.id}`} state={{ returnTo }} aria-label={`Open ${item.title}`}>{content}</Link> : <button type="button" onClick={() => onPreview(item)} aria-label={`Preview ${item.title}`}>{content}</button>}
   </article>;
 }
 
@@ -76,6 +76,7 @@ function PreviewDialog({ item, onClose }) {
 }
 
 function SearchExperience({ isMember }) {
+  const location = useLocation();
   const pageRef = useRef(null);
   const loadMoreRef = useRef(null);
   const requestRef = useRef(null);
@@ -153,6 +154,7 @@ function SearchExperience({ isMember }) {
   const updateParams = (changes) => { const next = new URLSearchParams(searchParams); Object.entries(changes).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key)); setSearchParams(next); };
   const submitSearch = (event) => { event.preventDefault(); updateParams({ q: draft.trim() }); };
   const activeCategory = categories.find((category) => String(category.categoryId ?? category.id) === categoryId);
+  const returnTo = `${location.pathname}${location.search}`;
 
   if (!isMember) return <main className="public-search-main" ref={pageRef}>
     <section className="public-search-intro" aria-labelledby="public-search-title">
@@ -197,7 +199,7 @@ function SearchExperience({ isMember }) {
 
     <section className="search-results" id="search-results" aria-live="polite">
       <header><div><span>{query ? `Results for “${query}”` : 'Discover new content'}</span><h2>{loading ? 'Searching the library...' : `${meta.totalElements.toLocaleString('en-US')} matching results`}</h2></div>{(query || contentType || categoryId) && <button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>Clear all filters <X size={15} /></button>}</header>
-      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Finding the right content...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage(0)}>Try again</button></div> : sortedResults.length ? <div className="search-results-grid">{sortedResults.map((item, index) => <ResultCard key={`${item.id}-${index}`} item={item} index={index} isMember={isMember} onPreview={setPreview} />)}</div> : <div className="search-empty"><Search size={34} /><h3>No matching content found</h3><p>Try a shorter keyword or choose another content type.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all content</button></div>}
+      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Finding the right content...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage(0)}>Try again</button></div> : sortedResults.length ? <div className="search-results-grid">{sortedResults.map((item, index) => <ResultCard key={`${item.id}-${index}`} item={item} index={index} isMember={isMember} onPreview={setPreview} returnTo={returnTo} />)}</div> : <div className="search-empty"><Search size={34} /><h3>No matching content found</h3><p>Try a shorter keyword or choose another content type.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all content</button></div>}
       {meta.page < meta.totalPages - 1 && <div className="search-load-more" ref={loadMoreRef}>{loadingMore && <LoaderCircle className="search-spinner" />}</div>}
     </section>
 
