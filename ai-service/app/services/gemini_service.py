@@ -14,6 +14,7 @@ from app.planner import (
     MealPlanResponse,
     PLANNER_SYSTEM_INSTRUCTION,
     build_meal_plan_prompt,
+    prepare_meal_plan_constraints,
     validate_meal_plan_safety,
 )
 from app.prompts import SYSTEM_INSTRUCTION, build_user_prompt
@@ -71,6 +72,7 @@ class GeminiService:
 
     async def generate_meal_plan(self, request: MealPlanRequest) -> MealPlanResponse:
         client = self._get_client()
+        constraints = prepare_meal_plan_constraints(request)
         config = types.GenerateContentConfig(
             system_instruction=PLANNER_SYSTEM_INSTRUCTION,
             temperature=0.25,
@@ -80,10 +82,14 @@ class GeminiService:
         )
         try:
             response = await self._generate_with_fallback(
-                client, build_meal_plan_prompt(request), config
+                client, build_meal_plan_prompt(constraints), config
             )
             plan = self._parse_meal_plan_response(response)
-            return validate_meal_plan_safety(plan, request.excluded_allergies)
+            return validate_meal_plan_safety(
+                plan,
+                constraints.excluded_allergies,
+                constraints.target_calories,
+            )
         except AIProviderUnavailableError:
             raise
         except Exception as exc:

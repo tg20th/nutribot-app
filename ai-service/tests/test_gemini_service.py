@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from google.genai import errors
 
 from app.config import Settings
+from app.planner import MealPlanRequest, MealPlanResponse
 from app.prompts import SYSTEM_INSTRUCTION, build_user_prompt
 from app.schemas.chat import ChatRequest, GeminiChatResult
 from app.services.gemini_service import GeminiService
@@ -36,6 +37,21 @@ class TransientFailureModels(FakeModels):
                 {"error": {"code": 503, "message": "High demand", "status": "UNAVAILABLE"}},
             )
         return await super().generate_content(**kwargs)
+
+
+class MealPlanModels(FakeModels):
+    async def generate_content(self, **kwargs):
+        self.call = kwargs
+        return SimpleNamespace(
+            parsed=MealPlanResponse(
+                suggested_menu_title="Thực đơn chay 7 ngày",
+                estimated_daily_calories=1800,
+                weekly_plan=[
+                    {"day": f"Thứ {index}", "breakfast": "Yến mạch", "lunch": "Đậu hũ nấm", "dinner": "Canh rau"}
+                    for index in range(2, 9)
+                ],
+            )
+        )
 
 
 def test_gemini_service_uses_structured_output_and_configured_model():
@@ -111,3 +127,22 @@ def test_gemini_service_falls_back_when_latest_model_is_overloaded():
 
     assert response.reply
     assert models.models == ["gemini-latest", "gemini-stable"]
+
+
+def test_meal_planner_sends_filtered_constraints_and_validates_mocked_gemini_plan():
+    models = MealPlanModels()
+    service = GeminiService(
+        Settings(gemini_api_key="test-key", gemini_model="test-model"),
+        client=SimpleNamespace(aio=SimpleNamespace(models=models)),
+    )
+
+    result = asyncio.run(service.generate_meal_plan(MealPlanRequest(
+        target_calories=1800,
+        health_goal="maintain",
+        available_ingredients=["Đậu hũ", "Nấm", "Đậu phộng"],
+        excluded_allergies=["đậu phộng"],
+    )))
+
+    assert result.estimated_daily_calories == 1800
+    assert '"safe_available_ingredients": [\n    "Đậu hũ",\n    "Nấm"\n  ]' in models.call["contents"]
+    assert models.call["config"].response_schema is MealPlanResponse
