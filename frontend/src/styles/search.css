@@ -14,6 +14,18 @@
 .search-page{--search-font:'Google Sans','Product Sans','Roboto',Arial,sans-serif;font-family:var(--search-font)}
 .search-results>header h2{font-family:var(--search-font);letter-spacing:-.045em}
 .search-type-accordion button.is-active,.search-type-accordion button.is-active b,.search-type-accordion button.is-active small,.search-type-accordion button.is-active svg{color:#fff!important}
+
+/* NB-14 public-preview authentication actions. */
+.search-preview>div>div{display:grid;grid-template-columns:max-content max-content;align-items:center;gap:10px;margin-top:24px}
+.search-preview>div>div button{min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:0 17px;border:1px solid transparent;border-radius:10px;font:800 11px/1 var(--search-font);letter-spacing:.01em;white-space:nowrap;transition:transform .2s ease,background-color .2s ease,border-color .2s ease,color .2s ease}
+.search-preview>div>div button:first-child{background:var(--search-ink);color:#fff;box-shadow:0 8px 18px rgba(23,53,41,.14)}
+.search-preview>div>div button:last-child{border-color:rgba(23,53,41,.22);background:#fff;color:var(--search-ink)}
+.search-preview>div>div button:hover{transform:translateY(-1px)}
+.search-preview>div>div button:first-child:hover{background:#264c3c}
+.search-preview>div>div button:last-child:hover{border-color:var(--search-ink);background:#f0f4ee}
+.search-preview>div>div button:active{transform:translateY(0)}
+.search-preview>div>div button:focus-visible{outline:3px solid rgba(49,92,43,.28);outline-offset:3px}
+@media(max-width:520px){.search-preview>div>div{grid-template-columns:1fr;width:100%}.search-preview>div>div button{width:100%}}
 .search-type-accordion button.is-active small{opacity:.78}
 
 /* Restrained public search: preserve the landing header and prioritize utility. */
