@@ -97,6 +97,11 @@
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- OAuth2 Client for Google Login -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-client</artifactId>
+        </dependency>
         <!-- JWT -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
