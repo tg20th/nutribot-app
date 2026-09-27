@@ -194,7 +194,7 @@
 ---
 
 ### 📋 KHÁNH (BA & React FE - 6 tasks)
-- [ ] **#33 [FE] Màn hình Admin: Quản lý Danh mục (`/admin/categories`)**
+- [x] **#33 [FE] Màn hình Admin: Quản lý Danh mục (`/admin/categories`)**
   - *Mô tả:* Bảng quản lý danh mục món ăn/nguyên liệu, modal thêm/sửa danh mục, lọc theo loại.
 - [x] **#35 [FE] Màn hình Admin: Quản lý Thành viên (`/admin/users`)**
   - *Mô tả:* Bảng danh sách thành viên, tìm kiếm theo email/username, nút chuyển đổi trạng thái Khóa / Mở khóa tài khoản.
