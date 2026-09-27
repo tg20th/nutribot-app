@@ -13,22 +13,23 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { createChatSession, getChatMessages, getChatSessions, requestNutritionAdvice, saveChatMessage } from '../../services/chatbotApi';
+import { useNavigate } from 'react-router-dom';
+import { getChatMessages, getChatSessions, requestNutritionAdvice } from '../../services/chatbotApi';
 import { googleAuthUrl } from '../../services/contentApi';
 import AuthModal from '../AuthModal';
 import '../../styles/chatbot-widget.css';
 
 const GUEST_TRIAL_LIMIT = 3;
-const GUEST_TRIAL_KEY = 'nutribot_guest_trial_count';
+const GUEST_SESSION_KEY = 'nutribot_guest_chat_session_id';
 
-const getGuestTrialsLeft = () => {
-  const stored = localStorage.getItem(GUEST_TRIAL_KEY);
-  if (stored === null) return GUEST_TRIAL_LIMIT;
-
-  const parsed = Number.parseInt(stored, 10);
-  return Number.isInteger(parsed) && parsed >= 0 && parsed <= GUEST_TRIAL_LIMIT
-    ? parsed
-    : GUEST_TRIAL_LIMIT;
+const getGuestSessionId = () => {
+  let sessionId = localStorage.getItem(GUEST_SESSION_KEY);
+  if (!sessionId) {
+    sessionId = globalThis.crypto?.randomUUID?.()
+      || `guest-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(GUEST_SESSION_KEY, sessionId);
+  }
+  return sessionId;
 };
 
 const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
@@ -48,7 +49,8 @@ const INITIAL_MESSAGES = [
   },
 ];
 
-export default function ChatbotWidget({ onSend }) {
+export default function ChatbotWidget({ onSend, onAuth }) {
+  const navigate = useNavigate();
   const [isMounted, setIsMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [draft, setDraft] = useState('');
@@ -61,32 +63,32 @@ export default function ChatbotWidget({ onSend }) {
   const [isLoading, setIsLoading] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [authMode, setAuthMode] = useState(null);
-  const [guestTrialsLeft, setGuestTrialsLeft] = useState(getGuestTrialsLeft);
+  const [guestTrialsLeft, setGuestTrialsLeft] = useState(GUEST_TRIAL_LIMIT);
   const panelRef = useRef(null);
   const threadRef = useRef(null);
   const inputRef = useRef(null);
   const requestControllerRef = useRef(null);
   const sessionIdRef = useRef(null);
-  const aiSessionIdRef = useRef(globalThis.crypto?.randomUUID?.() || `guest-${Date.now()}`);
 
   const isGuest = !localStorage.getItem('nutribot-auth-token');
 
-  const checkGuestLimit = useCallback(() => {
-    if (!isGuest) return true;
-    return guestTrialsLeft > 0;
-  }, [isGuest, guestTrialsLeft]);
-
-  const decrementGuestTrial = useCallback(() => {
-    if (!isGuest) return;
-
-    setGuestTrialsLeft((current) => {
-      const next = Math.max(0, current - 1);
-      localStorage.setItem(GUEST_TRIAL_KEY, String(next));
-      return next;
-    });
+  const syncGuestTrialCount = useCallback((remaining) => {
+    if (!isGuest || !Number.isInteger(remaining)) return;
+    const count = Math.max(0, Math.min(GUEST_TRIAL_LIMIT, remaining));
+    setGuestTrialsLeft(count);
+    if (count === 0) setShowLimitModal(true);
   }, [isGuest]);
 
-  const showTrialBadge = isGuest && guestTrialsLeft > 0;
+  const showTrialBadge = isGuest && guestTrialsLeft > 0 && guestTrialsLeft < GUEST_TRIAL_LIMIT;
+
+  const openAuth = (mode) => {
+    setShowLimitModal(false);
+    if (onAuth) {
+      onAuth(mode);
+      return;
+    }
+    navigate('/', { state: { authMode: mode } });
+  };
 
   const loadSessions = useCallback(async () => {
     setHistoryLoading(true);
@@ -218,12 +220,6 @@ export default function ChatbotWidget({ onSend }) {
     const message = value.trim();
     if (!message || isLoading) return;
 
-    // Check guest trial limit
-    if (!checkGuestLimit()) {
-      setShowLimitModal(true);
-      return;
-    }
-
     const conversationHistory = messages
       .filter((item) => item.id !== 'welcome' && !item.pending && !item.error)
       .slice(-40)
@@ -251,24 +247,16 @@ export default function ChatbotWidget({ onSend }) {
     requestControllerRef.current = controller;
 
     try {
-      const isMember = Boolean(localStorage.getItem('nutribot-auth-token'));
-      if (isMember && !sessionIdRef.current) {
-        const session = await createChatSession();
-        sessionIdRef.current = session.sessionId;
-      }
-      if (isMember) await saveChatMessage(sessionIdRef.current, 'USER', message);
+      const guest = !localStorage.getItem('nutribot-auth-token');
       const response = await requestNutritionAdvice({
         message,
-        sessionId: sessionIdRef.current ?? aiSessionIdRef.current,
-        conversationHistory,
+        sessionId: guest ? getGuestSessionId() : sessionIdRef.current,
+        conversationHistory: guest ? conversationHistory : [],
         signal: controller.signal,
       });
-      const recommendations = response.recommendations ?? [];
-      const recommendationText = recommendations.length
-        ? `\n\nGợi ý nhanh:\n${recommendations.map((item) => `• ${item}`).join('\n')}`
-        : '';
-      const assistantText = `${response.reply}${recommendationText}`;
-      if (isMember) await saveChatMessage(sessionIdRef.current, 'ASSISTANT', assistantText);
+      if (!guest && response.sessionId != null) sessionIdRef.current = response.sessionId;
+      if (guest) syncGuestTrialCount(response.remainingTrialCount);
+      const assistantText = response.content || response.reply || 'NutriBot could not provide a response.';
       setMessages((current) => [
         ...current.filter((item) => item.id !== pendingId),
         {
@@ -277,16 +265,17 @@ export default function ChatbotWidget({ onSend }) {
           text: assistantText,
         },
       ]);
-      decrementGuestTrial();
-      if (isGuest && guestTrialsLeft === 1) setShowLimitModal(true);
     } catch (error) {
       if (error.name === 'AbortError') {
         setMessages((current) => current.filter((item) => item.id !== pendingId));
         return;
       }
-      const messageText = error.status === 503
-        ? 'NutriBot đang quá tải tạm thời. Bạn hãy thử lại sau ít phút.'
-        : 'NutriBot chưa thể trả lời lúc này. Vui lòng kiểm tra AI service và thử lại.';
+      if (error.status === 429 && isGuest) syncGuestTrialCount(0);
+      const messageText = error.status === 429
+        ? 'You have used all 3 free questions with NutriBot.'
+        : error.status === 503
+        ? 'NutriBot is temporarily unavailable. Please try again shortly.'
+        : 'NutriBot could not respond right now. Please try again.';
       setMessages((current) => [
         ...current.filter((item) => item.id !== pendingId),
         {
@@ -304,7 +293,7 @@ export default function ChatbotWidget({ onSend }) {
 
   return (
     <div className="chatbot-widget">
-      {isMounted && (
+      {isMounted && !showLimitModal && (
         <section
           ref={panelRef}
           id="nutribot-chat-panel"
@@ -445,8 +434,8 @@ export default function ChatbotWidget({ onSend }) {
             <p>You have used all {GUEST_TRIAL_LIMIT} free questions with NutriBot.</p>
             <p className="chatbot-widget__modal-cta">Create an account or log in to keep chatting with NutriBot.</p>
             <div className="chatbot-widget__modal-actions">
-              <button type="button" onClick={() => { setShowLimitModal(false); setAuthMode('signup'); }} className="chatbot-widget__modal-btn chatbot-widget__modal-btn--primary">Sign up</button>
-              <button type="button" onClick={() => { setShowLimitModal(false); setAuthMode('login'); }} className="chatbot-widget__modal-btn chatbot-widget__modal-btn--secondary">Log in</button>
+              <button type="button" className="chatbot-widget__modal-btn chatbot-widget__modal-btn--primary" onClick={() => openAuth('signup')}>Sign Up</button>
+              <button type="button" className="chatbot-widget__modal-btn chatbot-widget__modal-btn--secondary" onClick={() => openAuth('login')}>Log In</button>
             </div>
           </div>
         </div>

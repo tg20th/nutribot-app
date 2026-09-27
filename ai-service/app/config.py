@@ -22,7 +22,9 @@ class Settings:
 
     @property
     def gemini_configured(self) -> bool:
-        return bool(self.gemini_api_key and self.gemini_api_key.strip())
+        if not self.gemini_api_key or not self.gemini_api_key.strip():
+            return False
+        return self.gemini_api_key.strip() != "your_gemini_api_key_here"
 
     @classmethod
     def from_env(cls) -> "Settings":
