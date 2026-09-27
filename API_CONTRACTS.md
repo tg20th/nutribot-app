@@ -258,8 +258,27 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
 
 ## 5. Thực đơn tuần (Weekly Menu - Thắng & Lan)
 
-### 5.1. Xem thực đơn tuần hiện tại
-- **Endpoint:** `GET /api/v1/weekly-menus/current`
+Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/cập nhật bởi user sở hữu menu. `dayOfWeek` dùng số 1–7 (Thứ Hai–Chủ Nhật), `mealType` nhận `breakfast`, `lunch`, `dinner`, `snack`.
+
+### 5.1. Tải danh mục món ăn
+- **Endpoint:** `GET /api/v1/dishes`
+- Chỉ trả món đang hoạt động và có dữ liệu calo.
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Success",
+  "data": [
+    { "dishId": 5, "name": "Yến mạch hoa quả hạt chia", "calories": 350, "proteinG": 12.5, "imageUrl": "https://example.com/oats.jpg" }
+  ],
+  "timestamp": "2026-09-27T12:00:00Z"
+}
+```
+
+### 5.2. Tải thực đơn của một tuần
+- **Endpoint:** `GET /api/v1/weekly-menus/current?startDate=2026-09-21`
+- `startDate` không bắt buộc; mặc định là Thứ Hai của tuần hiện tại. Nếu chưa có menu, trả cấu trúc rỗng với tổng calo ngày/tuần bằng 0.
+- Mỗi `totalCalories` của món là `calories × servings`, làm tròn đến số nguyên gần nhất. `dailyTotals` và `totalCalories` là tổng của các món trong menu.
 - **Response (200 OK):**
 ```json
 {
@@ -270,6 +289,7 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
     "startDate": "2026-09-21",
     "endDate": "2026-09-27",
     "targetCalories": 1800,
+    "status": "saved",
     "meals": [
       {
         "mealId": 10,
@@ -281,15 +301,79 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
             "dishId": 5,
             "dishName": "Yến mạch hoa quả hạt chia",
             "calories": 350,
+            "proteinG": 12.5,
+            "imageUrl": "https://example.com/oats.jpg",
             "servings": 1.0,
-            "notes": "Ăn kèm sữa hạnh nhân"
+            "notes": "Ăn kèm sữa hạnh nhân",
+            "totalCalories": 350
           }
         ]
       }
-    ]
-  }
+    ],
+    "dailyTotals": [
+      { "dayOfWeek": 1, "totalCalories": 350 },
+      { "dayOfWeek": 2, "totalCalories": 0 },
+      { "dayOfWeek": 3, "totalCalories": 0 },
+      { "dayOfWeek": 4, "totalCalories": 0 },
+      { "dayOfWeek": 5, "totalCalories": 0 },
+      { "dayOfWeek": 6, "totalCalories": 0 },
+      { "dayOfWeek": 7, "totalCalories": 0 }
+    ],
+    "totalCalories": 350
+  },
+  "timestamp": "2026-09-27T12:00:00Z"
 }
 ```
+
+### 5.3. Tạo thực đơn tuần
+- **Endpoint:** `POST /api/v1/weekly-menus` (201 Created)
+- `endDate` phải đúng 6 ngày sau `startDate`; trạng thái mới tạo là `initialized`.
+- **Request Body:**
+```json
+{
+  "title": "Meal plan · Sep 21 - 27, 2026",
+  "startDate": "2026-09-21",
+  "endDate": "2026-09-27",
+  "targetCalories": 1800,
+  "dietaryGoal": "balanced"
+}
+```
+
+### 5.4. Thêm món vào bữa
+- **Endpoint:** `POST /api/v1/weekly-menus/{menuId}/items` (201 Created)
+- Món phải đang hoạt động và có calo; số suất phải lớn hơn 0. Không thể thêm cùng một món hai lần vào cùng một bữa.
+- **Request Body:**
+```json
+{
+  "dayOfWeek": 1,
+  "mealType": "breakfast",
+  "dishId": 5,
+  "servings": 1.0,
+  "notes": "Ăn kèm sữa hạnh nhân"
+}
+```
+
+### 5.5. Thay thế nội dung thực đơn tuần
+- **Endpoint:** `PUT /api/v1/weekly-menus/{menuId}` (200 OK)
+- PUT thay thế toàn bộ metadata và danh sách món hiện có. `meals` là danh sách phẳng; mỗi dòng xác định ngày, bữa và món. Gửi `meals: []` để xóa toàn bộ món trong menu.
+- Mọi món và dữ liệu ngày phải hợp lệ trước khi thay đổi được lưu. Sau khi lưu, trạng thái menu là `saved`.
+- **Request Body:**
+```json
+{
+  "title": "Meal plan · Sep 21 - 27, 2026",
+  "startDate": "2026-09-21",
+  "endDate": "2026-09-27",
+  "targetCalories": 1800,
+  "dietaryGoal": "balanced",
+  "meals": [
+    { "dayOfWeek": 1, "mealType": "breakfast", "dishId": 5, "servings": 1.0, "notes": "Oats" }
+  ]
+}
+```
+
+### 5.6. Xóa món khỏi thực đơn
+- **Endpoint:** `DELETE /api/v1/weekly-menus/{menuId}/items/{itemId}` (204 No Content)
+- Chỉ xóa món khỏi menu của user đang đăng nhập; bản ghi món ăn trong danh mục không bị xóa.
 
 ---
 
