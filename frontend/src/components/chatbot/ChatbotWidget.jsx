@@ -14,10 +14,24 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createChatSession, getChatMessages, getChatSessions, requestNutritionAdvice, saveChatMessage } from '../../services/chatbotApi';
+import { googleAuthUrl } from '../../services/contentApi';
+import AuthModal from '../AuthModal';
 import '../../styles/chatbot-widget.css';
 
 const GUEST_TRIAL_LIMIT = 3;
 const GUEST_TRIAL_KEY = 'nutribot_guest_trial_count';
+
+const getGuestTrialsLeft = () => {
+  const stored = localStorage.getItem(GUEST_TRIAL_KEY);
+  if (stored === null) return GUEST_TRIAL_LIMIT;
+
+  const parsed = Number.parseInt(stored, 10);
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= GUEST_TRIAL_LIMIT
+    ? parsed
+    : GUEST_TRIAL_LIMIT;
+};
+
+const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
 const QUICK_PROMPTS = [
   'Build a balanced plate',
@@ -46,10 +60,8 @@ export default function ChatbotWidget({ onSend }) {
   const [historyQuery, setHistoryQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [guestTrialsLeft, setGuestTrialsLeft] = useState(() => {
-    const stored = localStorage.getItem(GUEST_TRIAL_KEY);
-    return stored ? parseInt(stored, 10) : GUEST_TRIAL_LIMIT;
-  });
+  const [authMode, setAuthMode] = useState(null);
+  const [guestTrialsLeft, setGuestTrialsLeft] = useState(getGuestTrialsLeft);
   const panelRef = useRef(null);
   const threadRef = useRef(null);
   const inputRef = useRef(null);
@@ -66,15 +78,15 @@ export default function ChatbotWidget({ onSend }) {
 
   const decrementGuestTrial = useCallback(() => {
     if (!isGuest) return;
-    const newCount = Math.max(0, guestTrialsLeft - 1);
-    setGuestTrialsLeft(newCount);
-    localStorage.setItem(GUEST_TRIAL_KEY, String(newCount));
-    if (newCount === 0) {
-      setShowLimitModal(true);
-    }
-  }, [isGuest, guestTrialsLeft]);
 
-  const showTrialBadge = isGuest && guestTrialsLeft > 0 && guestTrialsLeft < GUEST_TRIAL_LIMIT;
+    setGuestTrialsLeft((current) => {
+      const next = Math.max(0, current - 1);
+      localStorage.setItem(GUEST_TRIAL_KEY, String(next));
+      return next;
+    });
+  }, [isGuest]);
+
+  const showTrialBadge = isGuest && guestTrialsLeft > 0;
 
   const loadSessions = useCallback(async () => {
     setHistoryLoading(true);
@@ -105,7 +117,7 @@ export default function ChatbotWidget({ onSend }) {
 
   const closeWidget = useCallback(() => {
     const panel = panelRef.current;
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reduceMotion = prefersReducedMotion();
 
     if (!panel || reduceMotion) {
       setIsOpen(false);
@@ -144,7 +156,11 @@ export default function ChatbotWidget({ onSend }) {
   useEffect(() => () => requestControllerRef.current?.abort(), []);
 
   useEffect(() => {
-    threadRef.current?.scrollTo({
+    if (isOpen && isGuest && guestTrialsLeft === 0) setShowLimitModal(true);
+  }, [guestTrialsLeft, isGuest, isOpen]);
+
+  useEffect(() => {
+    threadRef.current?.scrollTo?.({
       top: threadRef.current.scrollHeight,
       behavior: 'smooth',
     });
@@ -153,7 +169,7 @@ export default function ChatbotWidget({ onSend }) {
   useGSAP(() => {
     if (!isMounted || !isOpen || !panelRef.current) return;
 
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reduceMotion = prefersReducedMotion();
     if (reduceMotion) {
       gsap.set(panelRef.current, { autoAlpha: 1, x: 0, y: 0, scale: 1 });
       inputRef.current?.focus();
@@ -208,8 +224,6 @@ export default function ChatbotWidget({ onSend }) {
       return;
     }
 
-    decrementGuestTrial();
-
     const conversationHistory = messages
       .filter((item) => item.id !== 'welcome' && !item.pending && !item.error)
       .slice(-40)
@@ -263,8 +277,13 @@ export default function ChatbotWidget({ onSend }) {
           text: assistantText,
         },
       ]);
+      decrementGuestTrial();
+      if (isGuest && guestTrialsLeft === 1) setShowLimitModal(true);
     } catch (error) {
-      if (error.name === 'AbortError') return;
+      if (error.name === 'AbortError') {
+        setMessages((current) => current.filter((item) => item.id !== pendingId));
+        return;
+      }
       const messageText = error.status === 503
         ? 'NutriBot đang quá tải tạm thời. Bạn hãy thử lại sau ít phút.'
         : 'NutriBot chưa thể trả lời lúc này. Vui lòng kiểm tra AI service và thử lại.';
@@ -315,12 +334,6 @@ export default function ChatbotWidget({ onSend }) {
               <ChevronDown size={21} />
             </button>
             </div>
-            {showTrialBadge && (
-              <div className="chatbot-widget__trial-badge" aria-live="polite">
-                <AlertCircle size={14} />
-                <span>{guestTrialsLeft}/{GUEST_TRIAL_LIMIT} questions left</span>
-              </div>
-            )}
           </header>
 
           {historyOpen && (
@@ -407,6 +420,12 @@ export default function ChatbotWidget({ onSend }) {
               <Send size={18} />
             </button>
           </form>
+          {showTrialBadge && (
+            <div className="chatbot-widget__trial-badge" aria-live="polite">
+              <AlertCircle size={14} />
+              <span>{guestTrialsLeft}/{GUEST_TRIAL_LIMIT} questions left</span>
+            </div>
+          )}
           <p className="chatbot-widget__notice">
             NutriBot offers general guidance, not medical advice.
           </p>
@@ -422,16 +441,18 @@ export default function ChatbotWidget({ onSend }) {
             <div className="chatbot-widget__modal-icon">
               <AlertCircle size={48} />
             </div>
-            <h2 id="limit-modal-title">Trial Ended</h2>
-            <p>You have used all 3 free questions with NutriBot.</p>
-            <p className="chatbot-widget__modal-cta">Sign up for an account to continue chatting with NutriBot.</p>
+            <h2 id="limit-modal-title">Your free trial has ended</h2>
+            <p>You have used all {GUEST_TRIAL_LIMIT} free questions with NutriBot.</p>
+            <p className="chatbot-widget__modal-cta">Create an account or log in to keep chatting with NutriBot.</p>
             <div className="chatbot-widget__modal-actions">
-              <a href="/register" className="chatbot-widget__modal-btn chatbot-widget__modal-btn--primary">Sign Up</a>
-              <a href="/login" className="chatbot-widget__modal-btn chatbot-widget__modal-btn--secondary">Log In</a>
+              <button type="button" onClick={() => { setShowLimitModal(false); setAuthMode('signup'); }} className="chatbot-widget__modal-btn chatbot-widget__modal-btn--primary">Sign up</button>
+              <button type="button" onClick={() => { setShowLimitModal(false); setAuthMode('login'); }} className="chatbot-widget__modal-btn chatbot-widget__modal-btn--secondary">Log in</button>
             </div>
           </div>
         </div>
       )}
+
+      {authMode && <AuthModal mode={authMode} backdropClassName="chatbot-auth-backdrop" onClose={() => setAuthMode(null)} onSubmit={(_, mode) => setAuthMode(mode)} onAuthenticated={() => setAuthMode(null)} onGoogle={() => window.location.assign(googleAuthUrl())} />}
 
       <button
         type="button"

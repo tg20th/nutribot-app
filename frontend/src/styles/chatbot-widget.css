@@ -98,7 +98,7 @@
   width: min(360px, calc(100vw - 48px));
   height: min(520px, calc(100dvh - 124px));
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
   overflow: hidden;
   border: 1px solid rgba(24, 61, 45, 0.16);
   border-radius: 22px;
@@ -148,15 +148,12 @@
 
 /* Trial Badge */
 .chatbot-widget__trial-badge {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  padding: 4px 10px;
+  padding: 7px 12px;
+  border-top: 1px solid rgba(24, 61, 45, 0.12);
   background: rgba(215, 244, 91, 0.9);
   color: #173529;
   font-size: 10px;
@@ -174,6 +171,7 @@
   background: rgba(16, 47, 35, 0.7);
   backdrop-filter: blur(4px);
   animation: chatbot-modal-fade-in .25s ease;
+  pointer-events: auto;
 }
 
 @keyframes chatbot-modal-fade-in {
@@ -263,6 +261,8 @@
   border-radius: 13px;
   font-size: 13px;
   font-weight: 700;
+  border: 0;
+  cursor: pointer;
   text-decoration: none;
   transition: transform .2s ease, box-shadow .2s ease;
 }
@@ -290,6 +290,8 @@
 .chatbot-widget__modal-btn--secondary:hover {
   background: rgba(24, 61, 45, 0.18);
 }
+
+.chatbot-auth-backdrop { z-index: 110; pointer-events: auto; }
 
 .chatbot-widget__header::after {
   content: '';
