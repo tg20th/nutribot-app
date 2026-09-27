@@ -1,4 +1,4 @@
-import { Bell, Bookmark, Search, Menu, X } from 'lucide-react';
+import { Search, Menu, X } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 import { getCurrentUserFromToken } from '../../utils/auth';
@@ -113,10 +113,6 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
           </button>
         </form>
       )}
-      <div className="community-topbar-actions">
-        <button className="community-icon-btn" aria-label="Notifications"><Bell size={18}/><span className="community-dot"/></button>
-        <button className="community-icon-btn" aria-label="Saved posts"><Bookmark size={18}/></button>
-      </div>
     </header>
 
     {/* Mobile drawer overlay */}
