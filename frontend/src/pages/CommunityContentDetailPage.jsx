@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ArrowLeft, Bookmark, Clock3, Play, Share2, UsersRound } from 'lucide-react';
@@ -13,6 +13,10 @@ import { getPost } from '../services/communityApi';
 
 export default function CommunityContentDetailPage() {
   const { postId } = useParams();
+  const location = useLocation();
+  const requestedReturnTo = location.state?.returnTo;
+  const returnTo = typeof requestedReturnTo === 'string' && requestedReturnTo.startsWith('/community/search') ? requestedReturnTo : '/home';
+  const isSearchReturn = returnTo.startsWith('/community/search');
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const page = useRef(null);
@@ -42,9 +46,9 @@ export default function CommunityContentDetailPage() {
   if (!post) return <div className="community-page community-detail-page">
     <CommunityTopBar query={query} onQueryChange={setQuery}/>
     <div className="community-shell">
-      <CommunitySideNav activePath="/home"/>
+      <CommunitySideNav activePath={isSearchReturn ? '/community/search' : '/home'}/>
       <span className="community-sidenav-spacer" aria-hidden="true"/>
-      <main className="detail-not-found">{loading ? <p role="status">Loading story...</p> : <><h1>That story is no longer available.</h1><Link to="/home">Return to home</Link></>}</main>
+      <main className="detail-not-found">{loading ? <p role="status">Loading story...</p> : <><h1>That story is no longer available.</h1><Link to={returnTo}>{isSearchReturn ? 'Return to search results' : 'Return to home'}</Link></>}</main>
     </div>
   </div>;
 
@@ -54,10 +58,10 @@ export default function CommunityContentDetailPage() {
   return <div className="community-page community-detail-page" ref={page}>
     <CommunityTopBar query={query} onQueryChange={setQuery}/>
     <div className="community-shell">
-      <CommunitySideNav activePath="/home"/>
+      <CommunitySideNav activePath={isSearchReturn ? '/community/search' : '/home'}/>
       <span className="community-sidenav-spacer" aria-hidden="true"/>
       <main className="content-detail-main">
-        <Link className="detail-back detail-reveal" to="/home"><ArrowLeft size={16}/> Back to home</Link>
+        <Link className="detail-back detail-reveal" to={returnTo}><ArrowLeft size={16}/>{isSearchReturn ? 'Back to search results' : 'Back to home'}</Link>
         <section className="detail-hero detail-reveal">
           <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1><p>{post.description}</p><div className="detail-author"><img src={post.avatar} alt=""/><div><b>{post.author}</b><small>{post.username} · {post.createdAt}</small></div></div></div>
           <div className="detail-media"><img src={image} alt={post.title}/>{post.type === 'video' && <button className="detail-play" type="button" aria-label="Play video"><Play fill="currentColor" size={24}/></button>}<span className="detail-duration"><Clock3 size={13}/>{post.prepTime} prep</span></div>
