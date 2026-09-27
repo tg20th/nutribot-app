@@ -33,6 +33,11 @@ const normalizeItem = (item, selectedType) => ({
   createdAt: item.createdAt ?? item.created_at
 });
 
+const appendUnique = (current, incoming) => {
+  const known = new Set(current.map((item) => `${item.type}:${item.id}`));
+  return [...current, ...incoming.filter((item) => !known.has(`${item.type}:${item.id}`))];
+};
+
 function ResultCard({ item, index, isMember, onPreview, returnTo }) {
   const isVideo = item.type === 'VIDEO';
   const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently updated';
@@ -80,6 +85,8 @@ function SearchExperience({ isMember, onAuth }) {
   const pageRef = useRef(null);
   const loadMoreRef = useRef(null);
   const requestRef = useRef(null);
+  const loadingRef = useRef(false);
+  const cursorRef = useRef({ page: 0, blogPage: 0, videoPage: 0, last: false });
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
   const contentType = searchParams.get('type') || '';
@@ -87,25 +94,47 @@ function SearchExperience({ isMember, onAuth }) {
   const [draft, setDraft] = useState(query);
   const [results, setResults] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [meta, setMeta] = useState({ totalElements: 0, totalPages: 0, page: 0 });
+  const [meta, setMeta] = useState({ totalElements: 0, totalPages: 0, page: 0, last: false });
   const [sort, setSort] = useState('newest');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null);
 
   useEffect(() => setDraft(query), [query]);
   useEffect(() => { const controller = new AbortController(); getCategories(controller.signal).then(setCategories).catch(() => setCategories([])); return () => controller.abort(); }, []);
 
-  const fetchPage = useCallback(async (page = 0, append = false) => {
-    requestRef.current?.abort();
+  const fetchPage = useCallback(async ({ reset = false } = {}) => {
+    if (reset) {
+      requestRef.current?.abort();
+      loadingRef.current = false;
+      cursorRef.current = { page: 0, blogPage: 0, videoPage: 0, last: false };
+      setResults([]);
+      setMeta({ totalElements: 0, totalPages: 0, page: 0, last: false });
+      setHasMore(false);
+    }
+    if (loadingRef.current || (!reset && cursorRef.current.last)) return;
+
+    const cursor = cursorRef.current;
     const controller = new AbortController();
     requestRef.current = controller;
+    loadingRef.current = true;
+    const append = !reset;
     append ? setLoadingMore(true) : setLoading(true);
     setError('');
     try {
-      const searchArgs = { keyword: query, contentType, categoryId: categoryId ? Number(categoryId) : undefined, page, size: 12, signal: controller.signal };
+      const searchArgs = {
+        keyword: query,
+        contentType,
+        categoryId: categoryId ? Number(categoryId) : undefined,
+        page: cursor.page,
+        blogPage: cursor.blogPage,
+        videoPage: cursor.videoPage,
+        size: 12,
+        signal: controller.signal
+      };
       let response;
       if (!isMember) {
         response = await searchPublicContent(searchArgs);
@@ -122,22 +151,36 @@ function SearchExperience({ isMember, onAuth }) {
         }
       }
       const incoming = response.items.map((item) => normalizeItem(item, contentType));
-      setResults((current) => append ? [...current, ...incoming] : incoming);
+      if (requestRef.current !== controller || controller.signal.aborted) return;
+      setResults((current) => append ? appendUnique(current, incoming) : appendUnique([], incoming));
       setMeta(response.meta);
+      const last = Boolean(response.meta.last);
+      cursorRef.current = response.meta.source === 'public'
+        ? {
+            page: (response.meta.page ?? cursor.page) + 1,
+            blogPage: response.meta.blogLast ? cursor.blogPage : cursor.blogPage + 1,
+            videoPage: response.meta.videoLast ? cursor.videoPage : cursor.videoPage + 1,
+            last
+          }
+        : { page: Number(response.meta.page ?? cursor.page) + 1, blogPage: 0, videoPage: 0, last };
+      setHasMore(!last);
     } catch (fetchError) {
-      if (fetchError.name !== 'AbortError') { setError('We could not load the results. Check your connection and try again.'); if (!append) setResults([]); }
+      if (fetchError.name !== 'AbortError' && requestRef.current === controller) { setError('We could not load the results. Check your connection and try again.'); if (!append) setResults([]); }
     } finally {
-      if (!controller.signal.aborted) { setLoading(false); setLoadingMore(false); }
+      if (requestRef.current === controller) {
+        loadingRef.current = false;
+        if (!controller.signal.aborted) { setLoading(false); setLoadingMore(false); }
+      }
     }
   }, [categoryId, contentType, isMember, query]);
 
-  useEffect(() => { fetchPage(0); return () => requestRef.current?.abort(); }, [fetchPage]);
+  useEffect(() => { fetchPage({ reset: true }); return () => requestRef.current?.abort(); }, [fetchPage]);
   useEffect(() => {
-    if (loading || loadingMore || meta.page >= meta.totalPages - 1) return undefined;
-    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) fetchPage(meta.page + 1, true); }, { rootMargin: '240px' });
+    if (loading || loadingMore || !hasMore) return undefined;
+    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) fetchPage(); }, { rootMargin: '240px' });
     if (loadMoreRef.current) observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
-  }, [fetchPage, loading, loadingMore, meta.page, meta.totalPages]);
+  }, [fetchPage, hasMore, loading, loadingMore]);
 
   useGSAP(() => {
     gsap.utils.toArray('.search-result-card').forEach((card) => gsap.fromTo(card, { scale: .88, opacity: .25 }, { scale: 1, opacity: 1, ease: 'none', scrollTrigger: { trigger: card, start: 'top 96%', end: 'top 62%', scrub: .5 } }));
@@ -176,8 +219,8 @@ function SearchExperience({ isMember, onAuth }) {
 
     <section className="public-search-results" id="search-results" aria-live="polite">
       <header><h2>{query ? `Results for “${query}”` : 'All content'}</h2>{!loading && <span>{meta.totalElements.toLocaleString('en-US')} results</span>}</header>
-      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Searching...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage(0)}>Try again</button></div> : sortedResults.length ? <div className="public-results-grid">{sortedResults.map((item, index) => <PublicResultCard key={`${item.id}-${index}`} item={item} onPreview={setPreview} />)}</div> : <div className="search-empty"><Search size={30} /><h3>No content found</h3><p>Try another keyword or clear the current filters.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all</button></div>}
-      {meta.page < meta.totalPages - 1 && <div className="search-load-more" ref={loadMoreRef}>{loadingMore && <LoaderCircle className="search-spinner" />}</div>}
+      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Searching...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage({ reset: true })}>Try again</button></div> : sortedResults.length ? <div className="public-results-grid">{sortedResults.map((item, index) => <PublicResultCard key={`${item.id}-${index}`} item={item} onPreview={setPreview} />)}</div> : <div className="search-empty"><Search size={30} /><h3>No content found</h3><p>Try another keyword or clear the current filters.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all</button></div>}
+      {hasMore && <div className="search-load-more" ref={loadMoreRef}>{loadingMore && <LoaderCircle className="search-spinner" />}</div>}
     </section>
     <PreviewDialog item={preview} onClose={() => setPreview(null)} onAuth={(mode) => { setPreview(null); onAuth?.(mode); }} />
   </main>;
@@ -188,7 +231,7 @@ function SearchExperience({ isMember, onAuth }) {
       <form className="search-main-form" onSubmit={submitSearch}><label><span className="sr-only">Search keyword</span><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Try: high-protein breakfast" />{draft && <button type="button" onClick={() => setDraft('')} aria-label="Clear keyword"><X size={17} /></button>}</label><button type="submit"><Search size={18} /> Search</button></form>
     </section>
 
-    <div className="member-search-suggestions" aria-label="Search suggestions">{SUGGESTIONS.map((suggestion) => <button type="button" key={suggestion} onClick={() => { setDraft(suggestion); updateParams({ q: suggestion }); }}>{suggestion}<ArrowRight size={14} /></button>)}</div>
+    <div className="member-search-suggestions" aria-label="Search suggestions">{SUGGESTIONS.map((suggestion) => <button type="button" key={suggestion} onClick={() => setDraft(suggestion)}>{suggestion}<ArrowRight size={14} /></button>)}</div>
 
     <section className="search-controls" aria-label="Search filters">
       <div className="search-type-accordion">{TYPES.map(({ value, label, description, icon: Icon }) => <button type="button" key={label} className={contentType === value ? 'is-active' : ''} onClick={() => updateParams({ type: value })}><Icon size={19} /><span><b>{label}</b><small>{description}</small></span></button>)}</div>
@@ -199,8 +242,8 @@ function SearchExperience({ isMember, onAuth }) {
 
     <section className="search-results" id="search-results" aria-live="polite">
       <header><div><span>{query ? `Results for “${query}”` : 'Discover new content'}</span><h2>{loading ? 'Searching the library...' : `${meta.totalElements.toLocaleString('en-US')} matching results`}</h2></div>{(query || contentType || categoryId) && <button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>Clear all filters <X size={15} /></button>}</header>
-      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Finding the right content...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage(0)}>Try again</button></div> : sortedResults.length ? <div className="search-results-grid">{sortedResults.map((item, index) => <ResultCard key={`${item.id}-${index}`} item={item} index={index} isMember={isMember} onPreview={setPreview} returnTo={returnTo} />)}</div> : <div className="search-empty"><Search size={34} /><h3>No matching content found</h3><p>Try a shorter keyword or choose another content type.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all content</button></div>}
-      {meta.page < meta.totalPages - 1 && <div className="search-load-more" ref={loadMoreRef}>{loadingMore && <LoaderCircle className="search-spinner" />}</div>}
+      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Finding the right content...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage({ reset: true })}>Try again</button></div> : sortedResults.length ? <div className="search-results-grid">{sortedResults.map((item, index) => <ResultCard key={`${item.id}-${index}`} item={item} index={index} isMember={isMember} onPreview={setPreview} returnTo={returnTo} />)}</div> : <div className="search-empty"><Search size={34} /><h3>No matching content found</h3><p>Try a shorter keyword or choose another content type.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all content</button></div>}
+      {hasMore && <div className="search-load-more" ref={loadMoreRef}>{loadingMore && <LoaderCircle className="search-spinner" />}</div>}
     </section>
 
     <PreviewDialog item={preview} onClose={() => setPreview(null)} />
