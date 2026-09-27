@@ -73,7 +73,6 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
     const trimmedQuery = localQuery.trim();
     if (trimmedQuery) {
       navigate(`/community/search?q=${encodeURIComponent(trimmedQuery)}`);
-      if (onQueryChange) onQueryChange('');
       setLocalQuery('');
     } else {
       // Navigate to full search page even with empty query
@@ -84,7 +83,6 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setLocalQuery(value);
-    if (onQueryChange) onQueryChange(value);
   };
 
   return <>
