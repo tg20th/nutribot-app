@@ -42,13 +42,14 @@ class TransientFailureModels(FakeModels):
 class MealPlanModels(FakeModels):
     async def generate_content(self, **kwargs):
         self.call = kwargs
+        weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         return SimpleNamespace(
             parsed=MealPlanResponse(
                 suggested_menu_title="Thực đơn chay 7 ngày",
                 estimated_daily_calories=1800,
                 weekly_plan=[
-                    {"day": f"Thứ {index}", "breakfast": "Yến mạch", "lunch": "Đậu hũ nấm", "dinner": "Canh rau"}
-                    for index in range(2, 9)
+                    {"day": weekdays[index], "breakfast": {"dishId": 1, "servings": 1}, "lunch": {"dishId": 2, "servings": 1}, "dinner": {"dishId": 3, "servings": 1}}
+                    for index in range(7)
                 ],
             )
         )
@@ -140,7 +141,8 @@ def test_meal_planner_sends_filtered_constraints_and_validates_mocked_gemini_pla
         target_calories=1800,
         health_goal="maintain",
         available_ingredients=["Đậu hũ", "Nấm", "Đậu phộng"],
-        excluded_allergies=["đậu phộng"],
+        excluded_allergies=["Đậu phộng"],
+        available_dishes=[{"dishId": 1, "name": "Oatmeal", "calories": 350}, {"dishId": 2, "name": "Tofu mushrooms", "calories": 500}, {"dishId": 3, "name": "Vegetable soup", "calories": 250}],
     )))
 
     assert result.estimated_daily_calories == 1800
