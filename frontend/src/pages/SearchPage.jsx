@@ -9,10 +9,8 @@ import CommunityTopBar from '../components/community/CommunityTopBar';
 import Header from '../components/Header';
 import ImageWithFallback from '../components/ImageWithFallback';
 import AuthModal from '../components/AuthModal';
-import { getCategories, searchContent } from '../services/searchApi';
+import { decodeLegacyText, getCategories, searchContent, searchPublicContent } from '../services/searchApi';
 import { googleAuthUrl } from '../services/contentApi';
-import freshProduce from '../assets/fresh-produce.jpg';
-import heroBowl from '../assets/hero-bowl.jpg';
 import '../styles/search.css';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -28,9 +26,9 @@ const normalizeItem = (item, selectedType) => ({
   ...item,
   id: item.contentId ?? item.id,
   type: item.contentType ?? item.type ?? selectedType,
-  title: item.title || 'Content from NutriBot',
+  title: decodeLegacyText(item.title) || 'Content from NutriBot',
   thumbnailUrl: item.thumbnailUrl ?? item.thumbnail_url ?? item.imageUrl ?? item.image_url ?? item.image,
-  authorName: item.authorName ?? item.author?.fullName ?? 'NutriBot',
+  authorName: decodeLegacyText(item.authorName ?? item.author?.fullName) || 'NutriBot',
   viewCount: item.viewCount ?? item.views ?? 0,
   createdAt: item.createdAt ?? item.created_at
 });
@@ -106,7 +104,22 @@ function SearchExperience({ isMember }) {
     append ? setLoadingMore(true) : setLoading(true);
     setError('');
     try {
-      const response = await searchContent({ keyword: query, contentType, categoryId: categoryId ? Number(categoryId) : undefined, page, size: 12, signal: controller.signal });
+      const searchArgs = { keyword: query, contentType, categoryId: categoryId ? Number(categoryId) : undefined, page, size: 12, signal: controller.signal };
+      let response;
+      if (!isMember) {
+        response = await searchPublicContent(searchArgs);
+      } else {
+        try {
+          response = await searchContent(searchArgs);
+          // The current database has legacy-encoded Vietnamese titles. The
+          // protected API can return no match for a correctly typed keyword,
+          // so use the normalized public collection in that case.
+          if (query.trim() && response.items.length === 0) response = await searchPublicContent(searchArgs);
+        } catch (searchError) {
+          if (searchError.name === 'AbortError') throw searchError;
+          response = await searchPublicContent(searchArgs);
+        }
+      }
       const incoming = response.items.map((item) => normalizeItem(item, contentType));
       setResults((current) => append ? [...current, ...incoming] : incoming);
       setMeta(response.meta);
@@ -115,7 +128,7 @@ function SearchExperience({ isMember }) {
     } finally {
       if (!controller.signal.aborted) { setLoading(false); setLoadingMore(false); }
     }
-  }, [categoryId, contentType, query]);
+  }, [categoryId, contentType, isMember, query]);
 
   useEffect(() => { fetchPage(0); return () => requestRef.current?.abort(); }, [fetchPage]);
   useEffect(() => {
@@ -167,18 +180,13 @@ function SearchExperience({ isMember }) {
     <PreviewDialog item={preview} onClose={() => setPreview(null)} />
   </main>;
 
-  return <main className="search-experience" ref={pageRef}>
-    <section className="search-hero" aria-labelledby="search-title">
-      <div className="search-hero-copy">
-        <span className="search-eyebrow">Your nutrition library</span>
-        <h1 id="search-title">Find something nourishing <i style={{ backgroundImage: `url(${freshProduce})` }} /> for today&apos;s table.</h1>
-        <p>Explore practical articles and videos shared across the NutriBot community.</p>
-        <form className="search-main-form" onSubmit={submitSearch}><label><span className="sr-only">Search keyword</span><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Try: high-protein breakfast" />{draft && <button type="button" onClick={() => setDraft('')} aria-label="Clear keyword"><X size={17} /></button>}</label><button type="submit"><Search size={18} /> Search</button></form>
-      </div>
-      <div className="search-hero-art" aria-hidden="true"><img src={heroBowl} alt="" /><span><b>{meta.totalElements.toLocaleString('en-US')}</b> ideas ready to explore</span></div>
+  return <main className="search-experience search-experience--member" ref={pageRef}>
+    <section className="member-search-header" aria-labelledby="search-title">
+      <div><span className="search-eyebrow">Nutrition library</span><h1 id="search-title">Find the nutrition content you need.</h1><p>Search articles and videos, then narrow results with simple filters.</p></div>
+      <form className="search-main-form" onSubmit={submitSearch}><label><span className="sr-only">Search keyword</span><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Try: high-protein breakfast" />{draft && <button type="button" onClick={() => setDraft('')} aria-label="Clear keyword"><X size={17} /></button>}</label><button type="submit"><Search size={18} /> Search</button></form>
     </section>
 
-    <div className="search-suggestion-marquee" aria-label="Search suggestions"><div>{[...SUGGESTIONS, ...SUGGESTIONS].map((suggestion, index) => <button type="button" key={`${suggestion}-${index}`} onClick={() => { setDraft(suggestion); updateParams({ q: suggestion }); }}>{suggestion}<ArrowRight size={14} /></button>)}</div></div>
+    <div className="member-search-suggestions" aria-label="Search suggestions">{SUGGESTIONS.map((suggestion) => <button type="button" key={suggestion} onClick={() => { setDraft(suggestion); updateParams({ q: suggestion }); }}>{suggestion}<ArrowRight size={14} /></button>)}</div>
 
     <section className="search-controls" aria-label="Search filters">
       <div className="search-type-accordion">{TYPES.map(({ value, label, description, icon: Icon }) => <button type="button" key={label} className={contentType === value ? 'is-active' : ''} onClick={() => updateParams({ type: value })}><Icon size={19} /><span><b>{label}</b><small>{description}</small></span></button>)}</div>
