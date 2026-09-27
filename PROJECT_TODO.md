@@ -198,7 +198,7 @@
   - *Mô tả:* Bảng quản lý danh mục món ăn/nguyên liệu, modal thêm/sửa danh mục, lọc theo loại.
 - [x] **#35 [FE] Màn hình Admin: Quản lý Thành viên (`/admin/users`)**
   - *Mô tả:* Bảng danh sách thành viên, tìm kiếm theo email/username, nút chuyển đổi trạng thái Khóa / Mở khóa tài khoản.
-- [ ] **#37 [FE] Màn hình Admin: Kiểm duyệt Nội dung (`/admin/moderation`)**
+- [x] **#37 [FE] Màn hình Admin: Kiểm duyệt Nội dung (`/admin/moderation`)**
   - *Mô tả:* Hàng đợi các bài viết Blog/Video chờ duyệt, xem nội dung chi tiết, nút Duyệt / Từ chối / Ẩn bài.
 - [ ] **#39 [FE] Màn hình Admin: Quản lý Bình luận (`/admin/comments`)**
   - *Mô tả:* Danh sách bình luận bị báo cáo xấu và thao tác xóa bình luận.
