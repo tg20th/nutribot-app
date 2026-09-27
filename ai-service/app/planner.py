@@ -49,7 +49,13 @@ def _normalise_names(values: list[str]) -> list[str]:
 
 
 def _contains_term(text: str, term: str) -> bool:
-    return bool(re.search(r"(?<![a-z0-9])" + re.escape(_term_key(term)) + r"(?![a-z0-9])", _term_key(text)))
+    normalized_term = _term_key(term)
+    # Ingredient and allergy labels often differ only by a regular English
+    # plural (for example, "Peanut" vs "Peanuts"). Treat those as the same
+    # safety term while retaining whole-word matching to avoid substrings.
+    plural_suffix = r"s?" if normalized_term and normalized_term[-1].isalnum() else ""
+    pattern = r"(?<![a-z0-9])" + re.escape(normalized_term) + plural_suffix + r"(?![a-z0-9])"
+    return bool(re.search(pattern, _term_key(text)))
 
 
 def _is_allergy_conflict(ingredient: str, allergies: list[str]) -> bool:
