@@ -4,12 +4,14 @@ import json
 import re
 import unicodedata
 from dataclasses import asdict, dataclass
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 MealGoal = Literal["lose_weight", "maintain_weight", "gain_muscle"]
+WEEKDAY_ORDER = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
 # Gemini's daily calorie field is an estimate. This service has no structured
 # per-meal nutrition dataset, so Python can only apply a sanity check here.
@@ -19,6 +21,8 @@ ANIMAL_DERIVED_TERMS = (
     "thịt", "gà", "bò", "heo", "lợn", "cá", "hải sản", "tôm", "cua",
     "trứng", "sữa bò", "sữa dê", "phô mai", "mật ong", "gelatin", "whey",
     "casein", "mỡ động vật", "nước mắm",
+    "meat", "chicken", "beef", "pork", "fish", "seafood", "shrimp", "crab",
+    "egg", "milk", "cheese", "honey", "gelatin", "butter", "cream", "yogurt",
 )
 
 
@@ -52,6 +56,10 @@ def _is_allergy_conflict(ingredient: str, allergies: list[str]) -> bool:
     return any(_contains_term(ingredient, allergy) for allergy in allergies)
 
 
+def _is_animal_derived(value: str) -> bool:
+    return any(_contains_term(value, term) for term in ANIMAL_DERIVED_TERMS)
+
+
 class MealPlanRequest(BaseModel):
     """Existing AI-service contract received from the integration layer."""
 
@@ -61,6 +69,7 @@ class MealPlanRequest(BaseModel):
     available_ingredients: list[str] = Field(min_length=1, max_length=40)
     excluded_allergies: list[str] = Field(default_factory=list, max_length=30)
     bmi: float | None = Field(default=None, gt=0, le=100)
+    available_dishes: list["MealPlanDishOption"] = Field(min_length=1)
 
     @field_validator("health_goal", mode="before")
     @classmethod
@@ -80,25 +89,59 @@ class MealPlanRequest(BaseModel):
             raise ValueError("Tất cả nguyên liệu có sẵn đều xung đột với dị ứng")
         return self
 
+    @model_validator(mode="after")
+    def require_unique_available_dish_ids(self) -> "MealPlanRequest":
+        dish_ids = [dish.dish_id for dish in self.available_dishes]
+        if len(set(dish_ids)) != len(dish_ids):
+            raise ValueError("Available dishes must have unique IDs")
+        return self
+
+
+class MealPlanDishOption(BaseModel):
+    model_config = ConfigDict(extra="forbid", alias_generator=_to_camel, populate_by_name=True)
+    dish_id: int = Field(gt=0)
+    name: str = Field(min_length=1, max_length=150)
+    calories: int = Field(ge=0)
+    protein_g: float | None = Field(default=None, ge=0)
+
+
+class MealPlanSelection(BaseModel):
+    model_config = ConfigDict(extra="ignore", alias_generator=_to_camel, populate_by_name=True)
+    dish_id: int = Field(ge=1)
+    servings: float = Field(ge=0.01, le=99)
+
+    @field_validator("servings")
+    @classmethod
+    def limit_serving_precision(cls, value: float) -> float:
+        if Decimal(str(value)).as_tuple().exponent < -2:
+            raise ValueError("Servings support at most two decimal places")
+        return value
+
+
+MealPlanRequest.model_rebuild()
+
 
 class MealPlanDay(BaseModel):
-    model_config = ConfigDict(extra="forbid", alias_generator=_to_camel, populate_by_name=True)
+    model_config = ConfigDict(extra="ignore", alias_generator=_to_camel, populate_by_name=True)
     day: str = Field(min_length=1, max_length=30)
-    breakfast: str = Field(min_length=3, max_length=500)
-    lunch: str = Field(min_length=3, max_length=500)
-    dinner: str = Field(min_length=3, max_length=500)
+    breakfast: MealPlanSelection
+    lunch: MealPlanSelection
+    dinner: MealPlanSelection
 
 
 class MealPlanResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid", alias_generator=_to_camel, populate_by_name=True)
+    model_config = ConfigDict(extra="ignore", alias_generator=_to_camel, populate_by_name=True)
     suggested_menu_title: str = Field(min_length=3, max_length=150)
     estimated_daily_calories: int = Field(ge=800, le=5_000)
     weekly_plan: list[MealPlanDay] = Field(min_length=7, max_length=7)
 
     @model_validator(mode="after")
     def require_unique_days(self) -> "MealPlanResponse":
-        if len({_term_key(item.day) for item in self.weekly_plan}) != 7:
+        day_labels = [_term_key(item.day) for item in self.weekly_plan]
+        if len(set(day_labels)) != 7:
             raise ValueError("Thực đơn phải có bảy ngày khác nhau")
+        if tuple(day_labels) != WEEKDAY_ORDER:
+            raise ValueError("Days must be ordered Monday through Sunday")
         return self
 
 
@@ -111,6 +154,7 @@ class MealPlanConstraints:
     safe_available_ingredients: list[str]
     excluded_allergies: list[str]
     bmi: float | None
+    available_dishes: list[MealPlanDishOption]
 
 
 def safe_available_ingredients(ingredients: list[str], allergies: list[str]) -> list[str]:
@@ -122,12 +166,16 @@ def prepare_meal_plan_constraints(request: MealPlanRequest) -> MealPlanConstrain
     safe_ingredients = safe_available_ingredients(request.available_ingredients, request.excluded_allergies)
     if not safe_ingredients:
         raise ValueError("Tất cả nguyên liệu có sẵn đều xung đột với dị ứng")
+    vegan_dishes = [dish for dish in request.available_dishes if not _is_animal_derived(dish.name)]
+    if not vegan_dishes:
+        raise ValueError("Không có món thuần chay trong danh mục để tạo thực đơn")
     return MealPlanConstraints(
         target_calories=request.target_calories,
         health_goal=request.health_goal,
         safe_available_ingredients=safe_ingredients,
         excluded_allergies=request.excluded_allergies,
         bmi=request.bmi,
+        available_dishes=vegan_dishes,
     )
 
 
@@ -140,6 +188,7 @@ targetCalories và healthGoal do hệ thống cung cấp là ràng buộc cứng
 safeAvailableIngredients, nhưng có thể bổ sung nguyên liệu vegan phổ biến để bữa ăn hợp lý và đa dạng.
 BMI chỉ là ngữ cảnh hỗ trợ, không tính lại BMI và không đưa ra chẩn đoán hay lời khuyên y khoa.
 estimatedDailyCalories là ước lượng hợp lý quanh targetCalories, không khẳng định là số liệu y khoa chính xác.
+Chỉ chọn dishId trong availableDishes; mỗi món trả đúng dishId và servings, không tự đặt tên hoặc dinh dưỡng.
 """.strip()
 
 
@@ -147,11 +196,15 @@ def build_meal_plan_prompt(constraints: MealPlanConstraints | MealPlanRequest) -
     """Build Gemini input from normalized constraints, never unsafe raw ingredients."""
     if isinstance(constraints, MealPlanRequest):
         constraints = prepare_meal_plan_constraints(constraints)
+    prompt_data = asdict(constraints)
+    prompt_data["available_dishes"] = [dish.model_dump(by_alias=True) for dish in constraints.available_dishes]
     return (
-        "Tạo bản xem trước thực đơn từ dữ liệu đã được hệ thống xác thực. Tên ngày dùng Thứ 2 đến Chủ Nhật. "
+        "Generate the seven days in this exact order with these exact English labels: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday. "
+        "Tạo bản xem trước thực đơn từ dữ liệu đã được hệ thống xác thực. Nhãn ngày phải dùng chính xác tên tiếng Anh được liệt kê phía trên. "
         "Không nhắc lại cảnh báo dị ứng trong tên món. JSON chỉ gồm suggestedMenuTitle, "
-        "estimatedDailyCalories và weeklyPlan.\n"
-        + json.dumps(asdict(constraints), ensure_ascii=False, indent=2)
+        "estimatedDailyCalories và weeklyPlan. Mỗi bữa chỉ trả về dishId có trong availableDishes và servings; "
+        "không tự tạo tên món hoặc mã món.\n"
+        + json.dumps(prompt_data, ensure_ascii=False, indent=2)
     )
 
 
@@ -161,18 +214,28 @@ def validate_meal_plan_structure(plan: MealPlanResponse) -> MealPlanResponse:
     return plan
 
 
-def _plan_text(plan: MealPlanResponse) -> str:
-    return " ".join([plan.suggested_menu_title] + [meal for day in plan.weekly_plan for meal in (day.breakfast, day.lunch, day.dinner)])
+def _selected_dishes(plan: MealPlanResponse, available_dishes: list[MealPlanDishOption]) -> list[MealPlanDishOption]:
+    dishes_by_id = {dish.dish_id: dish for dish in available_dishes}
+    selected: list[MealPlanDishOption] = []
+    for day in plan.weekly_plan:
+        for meal in (day.breakfast, day.lunch, day.dinner):
+            dish = dishes_by_id.get(meal.dish_id)
+            if dish is None:
+                raise ValueError("Meal plan contains a dish outside the allowed catalog")
+            selected.append(dish)
+    return selected
 
 
-def validate_allergies(plan: MealPlanResponse, excluded_allergies: list[str]) -> MealPlanResponse:
-    if any(_contains_term(_plan_text(plan), allergy) for allergy in excluded_allergies):
+def validate_allergies(plan: MealPlanResponse, excluded_allergies: list[str], available_dishes: list[MealPlanDishOption]) -> MealPlanResponse:
+    text = " ".join([plan.suggested_menu_title] + [dish.name for dish in _selected_dishes(plan, available_dishes)])
+    if any(_contains_term(text, allergy) for allergy in excluded_allergies):
         raise ValueError("Kế hoạch AI chứa nguyên liệu dị ứng không an toàn")
     return plan
 
 
-def validate_vegan_safety(plan: MealPlanResponse) -> MealPlanResponse:
-    if any(_contains_term(_plan_text(plan), term) for term in ANIMAL_DERIVED_TERMS):
+def validate_vegan_safety(plan: MealPlanResponse, available_dishes: list[MealPlanDishOption]) -> MealPlanResponse:
+    text = " ".join([plan.suggested_menu_title] + [dish.name for dish in _selected_dishes(plan, available_dishes)])
+    if _is_animal_derived(text):
         raise ValueError("Kế hoạch AI chứa thành phần không thuần chay")
     return plan
 
@@ -187,11 +250,14 @@ def validate_meal_plan_safety(
     plan: MealPlanResponse,
     excluded_allergies: list[str],
     target_calories: int | None = None,
+    available_dishes: list[MealPlanDishOption] | None = None,
 ) -> MealPlanResponse:
-    """Post-Gemini deterministic validation; keeps the previous public call shape."""
+    """Validate generated structure, catalog IDs, diet and calorie range."""
+    if not available_dishes:
+        raise ValueError("An allowed dish catalog is required to validate a plan")
     validate_meal_plan_structure(plan)
-    validate_vegan_safety(plan)
-    validate_allergies(plan, excluded_allergies)
+    validate_vegan_safety(plan, available_dishes)
+    validate_allergies(plan, excluded_allergies, available_dishes)
     if target_calories is not None:
         validate_calorie_range(plan, target_calories)
     return plan

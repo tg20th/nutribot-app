@@ -89,6 +89,7 @@ class GeminiService:
                 plan,
                 constraints.excluded_allergies,
                 constraints.target_calories,
+                constraints.available_dishes,
             )
         except AIProviderUnavailableError:
             raise

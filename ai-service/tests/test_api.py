@@ -22,12 +22,13 @@ class StubGeminiService:
 class StubMealPlannerService(StubGeminiService):
     async def generate_meal_plan(self, request):
         self.meal_plan_request = request
+        weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         return MealPlanResponse(
             suggested_menu_title="Thực đơn chay 7 ngày",
             estimated_daily_calories=1750,
             weekly_plan=[
-                {"day": f"Thứ {index}", "breakfast": "Yến mạch rau quả", "lunch": "Đậu hũ nấm", "dinner": "Canh rau củ"}
-                for index in range(2, 9)
+                {"day": weekdays[index], "breakfast": {"dishId": 1, "servings": 1}, "lunch": {"dishId": 2, "servings": 1}, "dinner": {"dishId": 3, "servings": 1}}
+                for index in range(7)
             ],
         )
 
@@ -159,6 +160,11 @@ def test_generate_meal_plan_matches_internal_contract():
             "health_goal": "maintain_weight",
             "available_ingredients": ["Đậu hũ", "Nấm"],
             "excluded_allergies": ["Đậu phộng"],
+            "available_dishes": [
+                {"dish_id": 1, "name": "Oatmeal", "calories": 350},
+                {"dish_id": 2, "name": "Tofu mushrooms", "calories": 500},
+                {"dish_id": 3, "name": "Vegetable soup", "calories": 250},
+            ],
             "bmi": 20.2,
         },
     )

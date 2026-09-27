@@ -1,10 +1,13 @@
 package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.request.WeeklyMenuCreateRequest;
+import com.fpt.swp391.nutribot.dto.request.WeeklyMenuAiSaveRequest;
 import com.fpt.swp391.nutribot.dto.request.WeeklyMenuItemCreateRequest;
 import com.fpt.swp391.nutribot.dto.request.WeeklyMenuUpdateRequest;
 import com.fpt.swp391.nutribot.dto.response.WeeklyMenuResponse;
 import com.fpt.swp391.nutribot.dto.response.DishOptionResponse;
+import com.fpt.swp391.nutribot.dto.response.MealPlanDayResponse;
+import com.fpt.swp391.nutribot.dto.response.MealPlanDishResponse;
 import com.fpt.swp391.nutribot.entity.DailyMenu;
 import com.fpt.swp391.nutribot.entity.Dish;
 import com.fpt.swp391.nutribot.entity.User;
@@ -77,6 +80,103 @@ public class WeeklyMenuService {
                 .status("initialized")
                 .build();
         menu = weeklyMenuRepository.save(menu);
+        return toWeeklyMenuResponse(menu);
+    }
+
+    @Transactional
+    public WeeklyMenuResponse saveAiGeneratedMenu(String username, WeeklyMenuAiSaveRequest request) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new NotFoundException("Không tìm thấy người dùng"));
+        LocalDate startDate = request.getStartDate();
+        if (startDate == null || !startDate.getDayOfWeek().equals(DayOfWeek.MONDAY)) {
+            throw new BadRequestException("Ngày bắt đầu tuần phải là Thứ Hai");
+        }
+
+        var generatedMenu = request.getGeneratedMenu();
+        if (generatedMenu == null || generatedMenu.getWeeklyPlan() == null
+                || generatedMenu.getWeeklyPlan().size() != 7) {
+            throw new BadRequestException("Thực đơn phải có đúng 7 ngày");
+        }
+        if (generatedMenu.getSuggestedMenuTitle() == null
+                || generatedMenu.getSuggestedMenuTitle().isBlank()
+                || generatedMenu.getSuggestedMenuTitle().length() > 150) {
+            throw new BadRequestException("Tên thực đơn không hợp lệ");
+        }
+        if (generatedMenu.getEstimatedDailyCalories() == null
+                || generatedMenu.getEstimatedDailyCalories() <= 0) {
+            throw new BadRequestException("Lượng calo mục tiêu phải lớn hơn 0");
+        }
+        if (request.getDietaryGoal() != null && request.getDietaryGoal().length() > 100) {
+            throw new BadRequestException("Mục tiêu dinh dưỡng tối đa 100 ký tự");
+        }
+
+        List<MealPlanDishResponse> requestedDishes = new ArrayList<>(21);
+        for (MealPlanDayResponse day : generatedMenu.getWeeklyPlan()) {
+            if (day == null || day.getBreakfast() == null || day.getLunch() == null || day.getDinner() == null) {
+                throw new BadRequestException("Mỗi ngày phải có đủ bữa sáng, trưa và tối");
+            }
+            requestedDishes.add(day.getBreakfast());
+            requestedDishes.add(day.getLunch());
+            requestedDishes.add(day.getDinner());
+        }
+
+        Set<Integer> dishIds = new HashSet<>();
+        for (MealPlanDishResponse meal : requestedDishes) {
+            if (meal.getDishId() == null || meal.getDishId() <= 0) {
+                throw new BadRequestException("Mỗi bữa ăn phải tham chiếu một món ăn hợp lệ");
+            }
+            if (meal.getServings() == null || meal.getServings().signum() <= 0
+                    || meal.getServings().stripTrailingZeros().scale() > 2
+                    || meal.getServings().compareTo(new BigDecimal("99.99")) > 0) {
+                throw new BadRequestException("Khẩu phần phải nằm trong khoảng 0.01 đến 99.99");
+            }
+            dishIds.add(meal.getDishId());
+        }
+
+        Map<Integer, Dish> dishesById = dishRepository.findAllByDishIdInAndActiveTrue(dishIds).stream()
+                .filter(dish -> dish.getCalories() != null)
+                .collect(Collectors.toMap(Dish::getDishId, Function.identity()));
+        if (dishesById.size() != dishIds.size()) {
+            throw new BadRequestException("Thực đơn chứa món không tồn tại, không hoạt động hoặc thiếu calo");
+        }
+
+        WeeklyMenu menu = weeklyMenuRepository
+                .findFirstByUserUserIdAndStartDateOrderByUpdatedAtDesc(user.getUserId(), startDate)
+                .orElseGet(() -> WeeklyMenu.builder().user(user).startDate(startDate).endDate(startDate.plusDays(6)).build());
+
+        List<DailyMenu> oldMeals = menu.getMenuId() == null ? List.of()
+                : dailyMenuRepository.findByWeeklyMenuMenuIdOrderByDayOfWeekAscMealTypeAsc(menu.getMenuId());
+        if (!oldMeals.isEmpty()) {
+            dailyMenuRepository.deleteAll(oldMeals);
+            dailyMenuRepository.flush();
+        }
+
+        menu.setTitle(generatedMenu.getSuggestedMenuTitle().trim());
+        menu.setStartDate(startDate);
+        menu.setEndDate(startDate.plusDays(6));
+        menu.setTargetCalories(generatedMenu.getEstimatedDailyCalories());
+        menu.setDietaryGoal(request.getDietaryGoal());
+        menu.setStatus("saved");
+        menu = weeklyMenuRepository.save(menu);
+
+        List<MealPlanDishResponse> mealsInOrder = new ArrayList<>(requestedDishes);
+        String[] mealTypes = {"breakfast", "lunch", "dinner"};
+        for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
+            for (int mealIndex = 0; mealIndex < mealTypes.length; mealIndex++) {
+                MealPlanDishResponse selected = mealsInOrder.get(dayIndex * 3 + mealIndex);
+                DailyMenu dailyMenu = dailyMenuRepository.save(DailyMenu.builder()
+                        .weeklyMenu(menu)
+                        .dayOfWeek(dayIndex + 1)
+                        .mealType(mealTypes[mealIndex])
+                        .build());
+                weeklyMenuItemRepository.save(WeeklyMenuItem.builder()
+                        .dailyMenu(dailyMenu)
+                        .dish(dishesById.get(selected.getDishId()))
+                        .servings(selected.getServings().setScale(2, RoundingMode.UNNECESSARY))
+                        .notes("Suggested by NutriBot AI")
+                        .build());
+            }
+        }
         return toWeeklyMenuResponse(menu);
     }
 

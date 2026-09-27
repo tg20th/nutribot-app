@@ -16,6 +16,12 @@ export const createWeeklyMenu = async (payload) =>
     body: JSON.stringify(payload)
   }), {});
 
+export const saveAiGeneratedMenu = async (payload) =>
+  unwrapData(await apiRequest('/api/v1/weekly-menus/ai-generated', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }), {});
+
 export const updateWeeklyMenu = async (id, payload) =>
   unwrapData(await apiRequest(`/api/v1/weekly-menus/${id}`, {
     method: 'PUT',
