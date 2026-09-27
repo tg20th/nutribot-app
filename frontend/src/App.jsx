@@ -12,6 +12,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagementPage from './pages/admin/UserManagementPage';
 import UserDetailPage from './pages/admin/UserDetailPage';
 import CategoryManagementPage from './pages/admin/CategoryManagementPage';
+import AdminModerationPage from './pages/admin/AdminModerationPage';
 import CommentManagementPage from './pages/admin/CommentManagementPage';
 import { ContentDetailPage, ContentManagementPage } from './pages/admin/ContentPages';
 import RegisterPage from './pages/RegisterPage';
@@ -52,6 +53,7 @@ export default function App() {
       <Route path="users" element={<UserManagementPage />} />
       <Route path="users/:id" element={<UserDetailPage />} />
       <Route path="categories" element={<CategoryManagementPage />} />
+      <Route path="moderation" element={<AdminModerationPage />} />
       <Route path="content" element={<ContentManagementPage kind="Blog" />} />
       <Route path="content/blogs" element={<ContentManagementPage kind="Blog" />} />
       <Route path="content/blogs/:id" element={<ContentDetailPage kind="Blog" />} />
