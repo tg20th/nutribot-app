@@ -64,18 +64,18 @@ function PublicResultCard({ item, onPreview }) {
   </article>;
 }
 
-function PreviewDialog({ item, onClose }) {
+function PreviewDialog({ item, onClose, onAuth }) {
   if (!item) return null;
   return <div className="search-preview-backdrop" role="presentation" onMouseDown={onClose}>
     <section className="search-preview" role="dialog" aria-modal="true" aria-labelledby="preview-title" onMouseDown={(event) => event.stopPropagation()}>
       <button type="button" className="search-preview-close" onClick={onClose} aria-label="Close preview"><X /></button>
       <ImageWithFallback src={item.thumbnailUrl} alt="" />
-      <div><span>Public content from NutriBot</span><h2 id="preview-title">{item.title}</h2><p>Create a free account to read the full story, save favorites, and receive recommendations tailored to your goals.</p><div><Link to="/register">Create an account <ArrowRight size={16} /></Link><Link to="/login">I already have an account</Link></div></div>
+      <div><span>Public content from NutriBot</span><h2 id="preview-title">{item.title}</h2><p>Create a free account to read the full story, save favorites, and receive recommendations tailored to your goals.</p><div><button type="button" onClick={() => onAuth?.('signup')}>Create an account <ArrowRight size={16} /></button><button type="button" onClick={() => onAuth?.('login')}>I already have an account</button></div></div>
     </section>
   </div>;
 }
 
-function SearchExperience({ isMember }) {
+function SearchExperience({ isMember, onAuth }) {
   const location = useLocation();
   const pageRef = useRef(null);
   const loadMoreRef = useRef(null);
@@ -179,7 +179,7 @@ function SearchExperience({ isMember }) {
       {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Searching...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage(0)}>Try again</button></div> : sortedResults.length ? <div className="public-results-grid">{sortedResults.map((item, index) => <PublicResultCard key={`${item.id}-${index}`} item={item} onPreview={setPreview} />)}</div> : <div className="search-empty"><Search size={30} /><h3>No content found</h3><p>Try another keyword or clear the current filters.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all</button></div>}
       {meta.page < meta.totalPages - 1 && <div className="search-load-more" ref={loadMoreRef}>{loadingMore && <LoaderCircle className="search-spinner" />}</div>}
     </section>
-    <PreviewDialog item={preview} onClose={() => setPreview(null)} />
+    <PreviewDialog item={preview} onClose={() => setPreview(null)} onAuth={(mode) => { setPreview(null); onAuth?.(mode); }} />
   </main>;
 
   return <main className="search-experience search-experience--member" ref={pageRef}>
@@ -210,6 +210,6 @@ function SearchExperience({ isMember }) {
 export default function SearchPage({ member = false }) {
   const navigate = useNavigate();
   const [authMode, setAuthMode] = useState(null);
-  if (!member) return <div className="search-page search-page--public"><Header onAuth={setAuthMode} /><SearchExperience isMember={false} />{authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} onSubmit={(_, mode) => setAuthMode(mode)} onAuthenticated={() => navigate('/home')} onGoogle={() => window.location.assign(googleAuthUrl())} />}</div>;
+  if (!member) return <div className="search-page search-page--public"><Header onAuth={setAuthMode} /><SearchExperience isMember={false} onAuth={setAuthMode} />{authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} onSubmit={(_, mode) => setAuthMode(mode)} onAuthenticated={() => navigate('/home')} onGoogle={() => window.location.assign(googleAuthUrl())} />}</div>;
   return <div className="community-page search-page search-page--member"><CommunityTopBar hideSearch activePath="/community/search" /><div className="community-shell"><CommunitySideNav activePath="/community/search" /><span className="community-sidenav-spacer" aria-hidden="true" /><SearchExperience isMember /></div></div>;
 }
