@@ -41,7 +41,9 @@ export async function searchContent({ keyword, categoryId, contentType, page = 0
     totalElements: data?.totalElements ?? data?.total ?? items.length,
     totalPages: data?.totalPages ?? 1,
     page: data?.page ?? data?.number ?? page,
-    size: data?.size ?? size
+    size: data?.size ?? size,
+    last: typeof data?.last === 'boolean' ? data.last : page >= (data?.totalPages ?? 1) - 1,
+    source: 'search'
   };
 
   return { items, meta };
@@ -50,21 +52,26 @@ export async function searchContent({ keyword, categoryId, contentType, page = 0
 const publicCollection = async (path, type, signal) => {
   const payload = await apiRequest(path, { signal });
   const data = unwrapData(payload, {});
-  return itemsFrom(data).map((item) => ({ ...item, contentType: type }));
+  const items = itemsFrom(data).map((item) => ({ ...item, contentType: type }));
+  return {
+    items,
+    totalElements: Number(data?.totalElements) || items.length,
+    last: typeof data?.last === 'boolean' ? data.last : true
+  };
 };
 
 // The consolidated search API is intentionally authenticated by the current backend.
 // Guests therefore use the two existing public content collections and filter their
 // published list in the browser. This keeps the public search usable without changing
 // backend security or database data.
-export async function searchPublicContent({ keyword, categoryId, contentType, signal }) {
-  const [blogs, videos] = await Promise.all([
-    publicCollection('/api/v1/blogs?page=0&size=100', 'BLOG', signal),
-    publicCollection('/api/v1/videos?page=0&size=100', 'VIDEO', signal)
+export async function searchPublicContent({ keyword, categoryId, contentType, blogPage = 0, videoPage = 0, size = 12, signal }) {
+  const [blogResult, videoResult] = await Promise.all([
+    blogPage == null ? null : publicCollection(`/api/v1/blogs?page=${blogPage}&size=${size}`, 'BLOG', signal),
+    videoPage == null ? null : publicCollection(`/api/v1/videos?page=${videoPage}&size=${size}`, 'VIDEO', signal)
   ]);
 
   const normalizedKeyword = decodeLegacyText(keyword?.trim()).toLocaleLowerCase();
-  const items = [...blogs, ...videos].filter((item) => {
+  const items = [...(blogResult?.items ?? []), ...(videoResult?.items ?? [])].filter((item) => {
     const searchableTitle = decodeLegacyText(item.title).toLocaleLowerCase();
     const matchesKeyword = !normalizedKeyword || searchableTitle.includes(normalizedKeyword);
     const matchesType = !contentType || item.contentType === contentType;
@@ -74,7 +81,15 @@ export async function searchPublicContent({ keyword, categoryId, contentType, si
 
   return {
     items,
-    meta: { totalElements: items.length, totalPages: 1, page: 0, size: items.length }
+    meta: {
+      totalElements: (blogResult?.totalElements ?? 0) + (videoResult?.totalElements ?? 0),
+      page: Math.max(blogPage ?? 0, videoPage ?? 0),
+      size,
+      blogLast: blogPage == null || blogResult?.last,
+      videoLast: videoPage == null || videoResult?.last,
+      last: (blogPage == null || blogResult?.last) && (videoPage == null || videoResult?.last),
+      source: 'public'
+    }
   };
 }
 
