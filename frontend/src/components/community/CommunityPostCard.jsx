@@ -1,11 +1,10 @@
-import { Bookmark, ChevronLeft, ChevronRight, Flame, MessageCircle, MoreHorizontal, Play, Sprout } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Flame, MessageCircle, MoreHorizontal, Play, Sprout } from 'lucide-react';
 import { useState } from 'react';
 import ImageWithFallback from '../ImageWithFallback';
 import PostDiscussionModal from '../content/PostDiscussionModal';
 import VoteButton from '../content/VoteButton';
 
 export default function CommunityPostCard({ post, interactionApi = {}, loadPost }) {
-  const [saved, setSaved] = useState(false);
   const [slide, setSlide] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [focusComments, setFocusComments] = useState(false);
@@ -50,8 +49,6 @@ export default function CommunityPostCard({ post, interactionApi = {}, loadPost 
       <VoteButton key={voteRevision} contentId={post.id} compact loadVote={interactionApi.loadVote} submitVote={interactionApi.submitVote}/>
       <button type="button" aria-haspopup="dialog" aria-expanded={commentsOpen} onClick={() => openPost(true)}>
         <MessageCircle size={17}/> Comments</button>
-      <span className="community-shares">{post.shares} shares</span>
-      <button onClick={() => setSaved(!saved)} className={saved ? 'is-active save' : 'save'} aria-label="Save post"><Bookmark size={17} fill={saved ? 'currentColor' : 'none'}/></button>
     </div>
 
     {commentsOpen && <PostDiscussionModal post={post} onClose={closePost} focusComments={focusComments} interactionApi={interactionApi} loadPost={loadPost}/>}

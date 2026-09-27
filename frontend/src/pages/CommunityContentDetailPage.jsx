@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { ArrowLeft, Bookmark, Clock3, Play, Share2, UsersRound } from 'lucide-react';
+import { ArrowLeft, Clock3, Play, UsersRound } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import RestaurantRecommendations from '../components/community/RestaurantRecommendations';
@@ -21,7 +21,6 @@ export default function CommunityContentDetailPage() {
   const [loading, setLoading] = useState(true);
   const page = useRef(null);
   const [query, setQuery] = useState('');
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -75,7 +74,7 @@ export default function CommunityContentDetailPage() {
           <article className="detail-method"><div className="detail-section-head"><span>Make it yours</span><h2>Method</h2><small>{post.prepTime} prep · {post.cookTime} cook</small></div><ol>{(post.steps ?? []).map((step, index) => <li key={step}><b>{index + 1}</b><p>{step}</p></li>)}</ol></article>
         </section>
         <RestaurantRecommendations dishName={post.title}/>
-        <section className="detail-actions detail-reveal"><VoteButton contentId={post.id}/><button type="button" onClick={() => setSaved(!saved)} className={saved ? 'is-saved' : ''}><Bookmark fill={saved ? 'currentColor' : 'none'} size={17}/>{saved ? 'Saved to your table' : 'Save recipe'}</button><button type="button"><Share2 size={17}/> Share</button></section>
+        <section className="detail-actions detail-reveal"><VoteButton contentId={post.id}/></section>
         <section className="detail-comments detail-reveal"><CommentSection contentId={post.id}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><Link to="/home">Open the feed</Link></div></section>
       </main>
     </div>
