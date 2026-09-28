@@ -2,7 +2,7 @@ package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.response.*;
 import com.fpt.swp391.nutribot.entity.Content;
-import com.fpt.swp391.nutribot.exception.BadRequestException;
+import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -26,26 +26,20 @@ public class ContentService {
 
     @Transactional(readOnly = true)
     public PagedResponse<ContentListResponse> getPublishedBlogs(int page, int size, Integer categoryId) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, Math.min(50, size));
+        Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt", "contentId"));
         Page<Content> contentPage = categoryId == null
-                ? contentRepository.findByContentTypeAndStatus(BLOG_TYPE, PUBLISHED_STATUS, pageable)
-                : contentRepository.findByContentTypeAndStatusAndCategoryId(BLOG_TYPE, PUBLISHED_STATUS, categoryId, pageable);
+                ? contentRepository.findPublishedByType(BLOG_TYPE, PUBLISHED_STATUS, pageable)
+                : contentRepository.findPublishedByTypeAndCategory(BLOG_TYPE, categoryId, PUBLISHED_STATUS, pageable);
         Page<ContentListResponse> responsePage = contentPage.map(this::toBlogListResponse);
         return PagedResponse.of(responsePage);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ContentDetailResponse getBlogBySlug(String slug) {
-        Content content = contentRepository.findBySlug(slug)
-                .orElseThrow(() -> new BadRequestException("Bài viết không tồn tại"));
-
-        if (!BLOG_TYPE.equals(content.getContentType())) {
-            throw new BadRequestException("Bài viết không tồn tại");
-        }
-
-        if (!PUBLISHED_STATUS.equals(content.getStatus())) {
-            throw new BadRequestException("Bài viết không khả dụng");
-        }
+        Content content = contentRepository.findPublishedBySlugAndType(slug, BLOG_TYPE, PUBLISHED_STATUS)
+                .orElseThrow(() -> new NotFoundException("Bài viết không tồn tại"));
 
         contentRepository.incrementViewCount(content.getContentId());
         content.setViewCount(content.getViewCount() + 1);
@@ -53,14 +47,10 @@ public class ContentService {
         return toBlogDetailResponse(content, null);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ContentDetailResponse getBlogById(Integer id) {
-        Content content = contentRepository.findByContentIdAndType(id, BLOG_TYPE)
-                .orElseThrow(() -> new BadRequestException("Bài viết không tồn tại"));
-
-        if (!PUBLISHED_STATUS.equals(content.getStatus())) {
-            throw new BadRequestException("Bài viết không khả dụng");
-        }
+        Content content = contentRepository.findPublishedByIdAndType(id, BLOG_TYPE, PUBLISHED_STATUS)
+                .orElseThrow(() -> new NotFoundException("Bài viết không tồn tại"));
 
         contentRepository.incrementViewCount(content.getContentId());
         content.setViewCount(content.getViewCount() + 1);
@@ -72,24 +62,18 @@ public class ContentService {
 
     @Transactional(readOnly = true)
     public PagedResponse<VideoListResponse> getPublishedVideos(int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Content> contentPage = contentRepository.findByContentTypeAndStatus(VIDEO_TYPE, PUBLISHED_STATUS, pageable);
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, Math.min(50, size));
+        Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt", "contentId"));
+        Page<Content> contentPage = contentRepository.findPublishedByType(VIDEO_TYPE, PUBLISHED_STATUS, pageable);
         Page<VideoListResponse> responsePage = contentPage.map(this::toVideoListResponse);
         return PagedResponse.of(responsePage);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public VideoDetailResponse getVideoBySlug(String slug) {
-        Content content = contentRepository.findBySlug(slug)
-                .orElseThrow(() -> new BadRequestException("Video không tồn tại"));
-
-        if (!VIDEO_TYPE.equals(content.getContentType())) {
-            throw new BadRequestException("Video không tồn tại");
-        }
-
-        if (!PUBLISHED_STATUS.equals(content.getStatus())) {
-            throw new BadRequestException("Video không khả dụng");
-        }
+        Content content = contentRepository.findPublishedBySlugAndType(slug, VIDEO_TYPE, PUBLISHED_STATUS)
+                .orElseThrow(() -> new NotFoundException("Video không tồn tại"));
 
         contentRepository.incrementViewCount(content.getContentId());
         content.setViewCount(content.getViewCount() + 1);
@@ -97,14 +81,10 @@ public class ContentService {
         return toVideoDetailResponse(content, null);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public VideoDetailResponse getVideoById(Integer id) {
-        Content content = contentRepository.findByContentIdAndType(id, VIDEO_TYPE)
-                .orElseThrow(() -> new BadRequestException("Video không tồn tại"));
-
-        if (!PUBLISHED_STATUS.equals(content.getStatus())) {
-            throw new BadRequestException("Video không khả dụng");
-        }
+        Content content = contentRepository.findPublishedByIdAndType(id, VIDEO_TYPE, PUBLISHED_STATUS)
+                .orElseThrow(() -> new NotFoundException("Video không tồn tại"));
 
         contentRepository.incrementViewCount(content.getContentId());
         content.setViewCount(content.getViewCount() + 1);

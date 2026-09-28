@@ -30,6 +30,18 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
     @Query("SELECT c FROM Content c WHERE c.contentId = :contentId AND c.contentType = :contentType")
     Optional<Content> findByContentIdAndType(@Param("contentId") Integer contentId, @Param("contentType") String contentType);
 
+    @Query("SELECT c FROM Content c WHERE c.slug = :slug AND c.contentType = :contentType AND c.status = :status AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE")
+    Optional<Content> findPublishedBySlugAndType(
+            @Param("slug") String slug,
+            @Param("contentType") String contentType,
+            @Param("status") String status);
+
+    @Query("SELECT c FROM Content c WHERE c.contentId = :contentId AND c.contentType = :contentType AND c.status = :status AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE")
+    Optional<Content> findPublishedByIdAndType(
+            @Param("contentId") Integer contentId,
+            @Param("contentType") String contentType,
+            @Param("status") String status);
+
     Optional<Content> findByContentIdAndUserUserId(Integer contentId, Integer userId);
 
     Page<Content> findByUserUserId(Integer userId, Pageable pageable);
