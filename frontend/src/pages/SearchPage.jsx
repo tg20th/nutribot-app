@@ -11,6 +11,7 @@ import ImageWithFallback from '../components/ImageWithFallback';
 import AuthModal from '../components/AuthModal';
 import { decodeLegacyText, getCategories, searchContent, searchPublicContent } from '../services/searchApi';
 import { googleAuthUrl } from '../services/contentApi';
+import { isAdminRole } from '../utils/auth';
 import '../styles/search.css';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -253,6 +254,6 @@ function SearchExperience({ isMember, onAuth }) {
 export default function SearchPage({ member = false }) {
   const navigate = useNavigate();
   const [authMode, setAuthMode] = useState(null);
-  if (!member) return <div className="search-page search-page--public"><Header onAuth={setAuthMode} /><SearchExperience isMember={false} onAuth={setAuthMode} />{authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} onSubmit={(_, mode) => setAuthMode(mode)} onAuthenticated={() => navigate('/home')} onGoogle={() => window.location.assign(googleAuthUrl())} />}</div>;
+  if (!member) return <div className="search-page search-page--public"><Header onAuth={setAuthMode} /><SearchExperience isMember={false} onAuth={setAuthMode} />{authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} onSubmit={(_, mode) => setAuthMode(mode)} onAuthenticated={(data) => navigate(isAdminRole(data?.role) ? '/admin' : '/home')} onGoogle={() => window.location.assign(googleAuthUrl())} />}</div>;
   return <div className="community-page search-page search-page--member"><CommunityTopBar hideSearch activePath="/community/search" /><div className="community-shell"><CommunitySideNav activePath="/community/search" /><span className="community-sidenav-spacer" aria-hidden="true" /><SearchExperience isMember /></div></div>;
 }

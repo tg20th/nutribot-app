@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { isAdminRole } from '../utils/auth';
 
 export default function OAuthCallbackPage() {
   const [searchParams] = useSearchParams();
@@ -21,7 +22,7 @@ export default function OAuthCallbackPage() {
     if (token && username && role) {
       localStorage.setItem('nutribot-auth-token', token);
       localStorage.setItem('nutribot-user', JSON.stringify({ username, role }));
-      const destination = role === 'ROLE_ADMIN' || role === 'Admin' ? '/admin' : '/home';
+      const destination = isAdminRole(role) ? '/admin' : '/home';
       navigate(destination);
     } else {
       navigate('/');
