@@ -50,7 +50,7 @@ CREATE TABLE users (
     CONSTRAINT UQ_users_email UNIQUE (email),
     CONSTRAINT FK_users_roles FOREIGN KEY (role_id) REFERENCES roles(role_id),
     CONSTRAINT CK_users_strike_count CHECK (strike_count >= 0),
-    CONSTRAINT CK_users_status CHECK (status IN (N'ACTIVE', N'WARN', N'SUSPENDED', N'BANNED'))
+    CONSTRAINT CK_users_status CHECK (status IN (N'ACTIVE', N'WARN', N'SUSPENDED', N'BANNED', N'PENDING_VERIFY'))
 );
 GO
 
@@ -65,7 +65,7 @@ BEGIN
 
     UPDATE u
     SET status = CASE
-                    WHEN i.status = N'BANNED' THEN N'BANNED'
+                    WHEN i.status IN (N'BANNED', N'PENDING_VERIFY') THEN i.status
                     WHEN i.strike_count >= 3 THEN N'SUSPENDED'
                     WHEN i.strike_count BETWEEN 1 AND 2 THEN N'WARN'
                     ELSE N'ACTIVE'
@@ -74,6 +74,18 @@ BEGIN
     FROM users u
     INNER JOIN inserted i ON u.user_id = i.user_id;
 END;
+GO
+
+-- Mã OTP xác thực email khi đăng ký
+CREATE TABLE email_otps (
+    otp_id         INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    email          NVARCHAR(255) NOT NULL,
+    otp_code       NVARCHAR(6) NOT NULL,
+    expires_at     DATETIME2(3) NOT NULL,
+    is_used        BIT NOT NULL CONSTRAINT DF_email_otps_is_used DEFAULT (0),
+    created_at     DATETIME2(3) NOT NULL CONSTRAINT DF_email_otps_created_at DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT CK_email_otps_otp_code CHECK (LEN(otp_code) = 6 AND otp_code NOT LIKE '%[^0-9]%')
+);
 GO
 
 CREATE TABLE user_profiles (
@@ -409,6 +421,7 @@ GO
 -- INDEXES
 ------------------------------------------------
 CREATE NONCLUSTERED INDEX IX_users_role_id              ON users(role_id);
+CREATE NONCLUSTERED INDEX IX_email_otps_email           ON email_otps(email, expires_at, is_used) WHERE is_used = 0;
 CREATE NONCLUSTERED INDEX IX_contents_user_id           ON contents(user_id);
 CREATE NONCLUSTERED INDEX IX_contents_status            ON contents(status) INCLUDE (title, content_type, created_at);
 CREATE NONCLUSTERED INDEX IX_contents_type_status       ON contents(content_type, status);
