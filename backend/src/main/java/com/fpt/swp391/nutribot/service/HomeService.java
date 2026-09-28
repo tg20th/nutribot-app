@@ -38,8 +38,8 @@ public class HomeService {
 
         List<Category> categories = categoryRepository.findRootCategories();
 
-        Long totalBlogs = contentRepository.countByContentTypeAndStatus(BLOG_TYPE, PUBLISHED_STATUS);
-        Long totalVideos = contentRepository.countByContentTypeAndStatus(VIDEO_TYPE, PUBLISHED_STATUS);
+        Long totalBlogs = contentRepository.countPublishedByTypeAndActiveAuthor(BLOG_TYPE, PUBLISHED_STATUS);
+        Long totalVideos = contentRepository.countPublishedByTypeAndActiveAuthor(VIDEO_TYPE, PUBLISHED_STATUS);
         Long totalUsers = userRepository.count();
 
         return HomeSummaryResponse.builder()
@@ -60,6 +60,7 @@ public class HomeService {
                 .title(content.getTitle())
                 .slug(content.getSlug())
                 .thumbnailUrl(content.getThumbnailUrl())
+                .categoryId(content.getCategoryId())
                 .authorName(content.getUser() != null ? content.getUser().getFullName() : null)
                 .viewCount(content.getViewCount())
                 .voteCount(0)

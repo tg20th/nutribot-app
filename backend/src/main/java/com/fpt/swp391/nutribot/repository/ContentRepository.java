@@ -36,8 +36,11 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
 
     Page<Content> findByUserUserIdAndContentType(Integer userId, String contentType, Pageable pageable);
 
-    @Query("SELECT c FROM Content c WHERE c.contentType = :contentType AND c.status = :status ORDER BY c.viewCount DESC, c.createdAt DESC")
+    @Query("SELECT c FROM Content c WHERE c.contentType = :contentType AND c.status = :status AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE ORDER BY c.viewCount DESC, c.createdAt DESC, c.contentId DESC")
     List<Content> findPublishedByTypeWithLimit(@Param("contentType") String contentType, @Param("status") String status, Pageable pageable);
+
+    @Query("SELECT COUNT(c) FROM Content c WHERE c.contentType = :contentType AND c.status = :status AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE")
+    Long countPublishedByTypeAndActiveAuthor(@Param("contentType") String contentType, @Param("status") String status);
 
     Long countByContentTypeAndStatus(String contentType, String status);
 
