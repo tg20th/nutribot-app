@@ -25,8 +25,8 @@
   - *File đã tạo:* `entity/Role.java`, `entity/User.java`, `entity/AccountStatus.java`, `entity/RoleName.java`, `repository/RoleRepository.java`, `repository/UserRepository.java`.
   - *Blocked by:* Không có.
 - [x] **#2 [BE] Registration API & Password Handling** ✅
-  - *Mô tả:* API `POST /api/v1/auth/register`, validate email/username duy nhất, mã hóa mật khẩu bằng BCrypt.
-  - *File đã tạo:* `dto/request/RegisterRequest.java`, `service/AuthService.java`, `controller/AuthController.java`.
+  - *Mô tả:* API `POST /api/v1/auth/register`, validate email/username duy nhất, mã hóa mật khẩu bằng BCrypt, cấp mã OTP email. Chuẩn hóa giá trị mặc định của bảng `users` sang `PENDING_VERIFY`, sửa trigger `TR_users_auto_update_status_by_strike` bảo lưu trạng thái chờ xác thực, cung cấp script migration `update_user_status_and_trigger.sql`.
+  - *File đã tạo/cập nhật:* `dto/request/RegisterRequest.java`, `service/AuthService.java`, `controller/AuthController.java`, `sql/Database.sql`, `sql/NutriBotV2_Database.sql`, `sql/update_user_status_and_trigger.sql`.
   - *Blocked by:* `#3` ✅ (đã xong).
 - [x] **#5 [BE] Login Flow & JWT Token Generation / Authentication Contract** ✅
   - *Mô tả:* API `POST /api/v1/auth/login`, xác thực username/password, cấp phát JWT token có hạn sử dụng. Đóng toàn diện các tiêu chuẩn bảo mật BL-003 (chống Account Enumeration với generic error message), BL-026 (kiểm soát trạng thái tài khoản ACTIVE khi xác thực và vô hiệu hóa thời gian thực tại JWT filter), BL-027 (kiểm tra độ dài khóa ký JWT Base64 >= 512 bits tại startup `@PostConstruct`).
