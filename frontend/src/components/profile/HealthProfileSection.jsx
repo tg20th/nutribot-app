@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   ChevronDown,
   LoaderCircle,
+  Leaf,
   RotateCcw,
   Save,
   Search,
@@ -19,7 +20,31 @@ const EMPTY_HEALTH = {
   heightCm: '',
   weightKg: '',
   healthGoal: 'maintain',
+  vegetarianType: '',
   allergyIngredientIds: [],
+};
+
+const VEGETARIAN_TYPE_STORAGE_KEY = 'nutribot-vegetarian-type';
+
+const VEGETARIAN_TYPES = [
+  { value: 'VEGAN', title: 'Vegan', copy: 'No ingredients or products derived from animals.' },
+  { value: 'LACTO_OVO', title: 'Lacto-ovo vegetarian', copy: 'Plant-forward meals with eggs and dairy included.' },
+  { value: 'LACTO', title: 'Lacto vegetarian', copy: 'Includes dairy, without eggs, meat, or seafood.' },
+  { value: 'OVO', title: 'Ovo vegetarian', copy: 'Includes eggs, without dairy, meat, or seafood.' },
+];
+
+const vegetarianTypeValues = new Set(VEGETARIAN_TYPES.map(({ value }) => value));
+
+const getStoredVegetarianType = () => {
+  if (typeof window === 'undefined') return '';
+  const value = window.localStorage.getItem(VEGETARIAN_TYPE_STORAGE_KEY) || '';
+  return vegetarianTypeValues.has(value) ? value : '';
+};
+
+const saveVegetarianType = (value) => {
+  if (typeof window === 'undefined') return;
+  if (value) window.localStorage.setItem(VEGETARIAN_TYPE_STORAGE_KEY, value);
+  else window.localStorage.removeItem(VEGETARIAN_TYPE_STORAGE_KEY);
 };
 
 const GOALS = [
@@ -32,6 +57,9 @@ const toFormHealth = (data = {}) => ({
   heightCm: data.heightCm == null ? '' : String(data.heightCm),
   weightKg: data.weightKg == null ? '' : String(data.weightKg),
   healthGoal: data.healthGoal || 'maintain',
+  vegetarianType: vegetarianTypeValues.has(data.vegetarianType)
+    ? data.vegetarianType
+    : getStoredVegetarianType(),
   allergyIngredientIds: Array.isArray(data.allergyIngredientIds) ? data.allergyIngredientIds : [],
 });
 
@@ -150,7 +178,8 @@ export default function HealthProfileSection() {
         healthGoal: health.healthGoal,
         allergyIngredientIds: health.allergyIngredientIds,
       });
-      const mapped = toFormHealth(updated);
+      saveVegetarianType(health.vegetarianType);
+      const mapped = toFormHealth({ ...updated, vegetarianType: health.vegetarianType });
       setHealth(mapped);
       setSavedHealth(mapped);
       setSavedBmi(updated.bmi ?? null);
@@ -217,6 +246,21 @@ export default function HealthProfileSection() {
                 <small>{goal.copy}</small>
               </button>
             ))}
+          </div>
+        </section>
+
+        <section className="health-card health-dietary-card" aria-labelledby="dietary-preference-title">
+          <header><div><span>Plant-forward eating</span><h2 id="dietary-preference-title">The way you want to eat</h2></div><Leaf size={23} /></header>
+          <p>Choose the dietary direction that feels closest to you. Your choice stays on this device until profile syncing is available.</p>
+          <div className="health-dietary-preferences" role="radiogroup" aria-label="Dietary preference">
+            {VEGETARIAN_TYPES.map((vegetarianType) => {
+              const selected = health.vegetarianType === vegetarianType.value;
+              return <button key={vegetarianType.value} type="button" className={selected ? 'is-selected' : ''} onClick={() => setHealth((current) => ({ ...current, vegetarianType: vegetarianType.value }))} role="radio" aria-checked={selected}>
+                <span>{selected ? <CheckCircle2 size={18} /> : <i />}</span>
+                <b>{vegetarianType.title}</b>
+                <small>{vegetarianType.copy}</small>
+              </button>;
+            })}
           </div>
         </section>
 

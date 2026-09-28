@@ -65,4 +65,13 @@ describe('searchContent', () => {
     expect(apiRequest).toHaveBeenCalledWith('/api/v1/search?keyword=tofu&contentType=VIDEO&page=0&size=12', { signal: undefined });
     expect(result.meta.totalElements).toBe(7);
   });
+
+  it('passes sort parameter to the API when provided', async () => {
+    apiRequest.mockResolvedValueOnce({ data: { content: [{ contentId: 10, title: 'Popular tofu' }], totalPages: 1, last: true } });
+
+    const result = await searchContent({ keyword: 'tofu', sort: 'popular', page: 0, size: 12 });
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/v1/search?keyword=tofu&sort=popular&page=0&size=12', { signal: undefined });
+    expect(result.items).toHaveLength(1);
+  });
 });

@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 const statusMessages = {
   verifying: 'Verifying...',
   invalid: 'Invalid verification code. Please try again.',
-  expired: 'This verification code has expired. Please request a new one.',
+  expired: 'Mã OTP đã hết hạn. Vui lòng gửi lại mã mới.',
   alreadyUsed: 'This verification code has already been used.',
   tooManyAttempts: 'Too many verification attempts. Please request a new code.',
   resending: 'Sending...',
@@ -42,13 +42,14 @@ export default function EmailVerificationStep({
   email,
   code,
   boxCount = 6,
+  onEmailChange,
   onCodeChange,
   onVerify,
   onResend,
   onBack,
   purpose = 'registration',
   verificationState = 'idle',
-  cooldownSeconds,
+  otpRemainingSeconds,
 }) {
   const resolvedBoxCount = Number.isInteger(boxCount) && boxCount > 0 ? boxCount : 6;
   const copy = copyByPurpose[purpose] ?? copyByPurpose.registration;
@@ -59,10 +60,14 @@ export default function EmailVerificationStep({
   const isVerifying = verificationState === 'verifying';
   const isResending = verificationState === 'resending';
   const isVerified = verificationState === 'verified';
-  const hasCooldown = Number.isFinite(cooldownSeconds) && cooldownSeconds > 0;
+  const hasOtpTimer = Number.isFinite(otpRemainingSeconds);
+  const isExpired = verificationState === 'expired' || otpRemainingSeconds === 0;
   const statusMessage = statusMessages[verificationState];
   const isError = errorStates.has(verificationState);
   const verificationCode = boxes.join('');
+  const formattedRemainingTime = hasOtpTimer
+    ? `${String(Math.floor(otpRemainingSeconds / 60)).padStart(2, '0')}:${String(otpRemainingSeconds % 60).padStart(2, '0')}`
+    : null;
 
   useEffect(() => {
     setBoxes(createBoxes(code, resolvedBoxCount));
@@ -137,7 +142,9 @@ export default function EmailVerificationStep({
       <span>{copy.description}</span>
     </div>
 
-    {email && <p className="email-verification__recipient">Code sent to <strong>{email}</strong></p>}
+    {email
+      ? <p className="email-verification__recipient">Code sent to <strong>{email}</strong></p>
+      : <label className="email-verification__email">Email<input type="email" value={email || ''} onChange={(event) => onEmailChange?.(event.target.value)} placeholder="you@example.com" autoComplete="email" /></label>}
 
     <form className="email-verification__form" noValidate onSubmit={verify}>
       <fieldset className={`email-verification__code${isError ? ' email-verification__code--error' : ''}`} disabled={isVerified} aria-describedby={statusMessage ? messageId : undefined}>
@@ -167,15 +174,15 @@ export default function EmailVerificationStep({
 
       {statusMessage && <p id={messageId} className={`email-verification__status${isError ? ' email-verification__status--error' : ''}`} role={isError ? 'alert' : 'status'} aria-live="polite">{statusMessage}</p>}
 
-      <button className="auth-submit" type="submit" disabled={!onVerify || verificationCode.length !== resolvedBoxCount || isVerifying || isResending || isVerified}>{isVerifying ? 'Verifying...' : 'Verify'}</button>
+      <button className="auth-submit" type="submit" disabled={!onVerify || verificationCode.length !== resolvedBoxCount || isVerifying || isResending || isVerified || isExpired}>{isVerifying ? 'Verifying...' : 'Verify'}</button>
     </form>
 
     <div className="email-verification__resend">
       <span>Didn't receive the code?</span>
-      {hasCooldown
-        ? <span className="email-verification__cooldown">Resend code in {cooldownSeconds}s</span>
-        : <button type="button" onClick={() => onResend?.()} disabled={!onResend || isVerifying || isResending || isVerified}>{isResending ? 'Sending...' : 'Resend code'}</button>}
+      <button type="button" onClick={() => onResend?.()} disabled={!onResend || !email || isVerifying || isResending || isVerified}>{isResending ? 'Sending...' : 'Resend code'}</button>
     </div>
+
+    {formattedRemainingTime && <p className={`email-verification__timer${isExpired ? ' email-verification__timer--expired' : ''}`} role="status" aria-live="polite">{isExpired ? 'Mã OTP đã hết hạn' : `Mã OTP còn hiệu lực: ${formattedRemainingTime}`}</p>}
 
     {onBack && <button className="auth-switch email-verification__back" type="button" onClick={onBack}>{copy.backLabel}</button>}
   </section>;
