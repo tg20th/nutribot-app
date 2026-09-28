@@ -3,8 +3,9 @@ import { useState } from 'react';
 import ImageWithFallback from '../ImageWithFallback';
 import PostDiscussionModal from '../content/PostDiscussionModal';
 import VoteButton from '../content/VoteButton';
+import FeedContentDetail from '../content/FeedContentDetail';
 
-export default function CommunityPostCard({ post, interactionApi = {}, loadPost }) {
+export default function CommunityPostCard({ post, interactionApi = {}, loadPost, fullPageDetail = false }) {
   const [slide, setSlide] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const [focusComments, setFocusComments] = useState(false);
@@ -51,6 +52,8 @@ export default function CommunityPostCard({ post, interactionApi = {}, loadPost 
         <MessageCircle size={17}/> Comments</button>
     </div>
 
-    {commentsOpen && <PostDiscussionModal post={post} onClose={closePost} focusComments={focusComments} interactionApi={interactionApi} loadPost={loadPost}/>}
+    {commentsOpen && (fullPageDetail
+      ? <FeedContentDetail post={post} onClose={closePost} focusComments={focusComments} interactionApi={interactionApi} loadPost={loadPost}/>
+      : <PostDiscussionModal post={post} onClose={closePost} focusComments={focusComments} interactionApi={interactionApi} loadPost={loadPost}/>)}
   </article>;
 }

@@ -136,7 +136,7 @@ export default function CommunityFeedPage() {
           <div className="feed-stream-heading"><div><span>The community stream</span><h2>What&apos;s nourishing people now</h2></div><p>Stories and videos, all in one thoughtful place.</p></div>
           <CommunityComposer onOpen={openComposer} profile={profile}/>
           <CommunityFilters filters={filters} active={filter} onChange={setFilter}/>
-          {loading ? <p className="content-status">Loading community posts...</p> : error && !posts.length ? <p className="content-status content-status--error">{error}</p> : visible.length ? visible.map((post) => <CommunityPostCard key={post.id} post={post} profile={profile}/>) : <div className="empty-results">No posts match that filter yet.</div>}
+          {loading ? <p className="content-status">Loading community posts...</p> : error && !posts.length ? <p className="content-status content-status--error">{error}</p> : visible.length ? visible.map((post) => <CommunityPostCard key={post.id} post={post} profile={profile} fullPageDetail/>) : <div className="empty-results">No posts match that filter yet.</div>}
           {!loading && <div ref={loadMoreTrigger} className="feed-load-more" aria-live="polite">
             {loadingMore && <span>Loading more posts...</span>}
             {error && posts.length > 0 && <span className="content-status--error">{error}</span>}
