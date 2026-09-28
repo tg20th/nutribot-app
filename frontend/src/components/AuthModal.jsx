@@ -8,6 +8,7 @@ import '../styles/auth-popup.css';
 
 const emptyForm = { name: '', username: '', email: '', password: '', confirmPassword: '' };
 const OTP_VALIDITY_SECONDS = 5 * 60;
+const EMAIL_CHANGE_OTP_VALIDITY_SECONDS = 30 * 60;
 const PENDING_OTP_STORAGE_KEY = 'nutribot-pending-email-verification';
 
 function normalizeEmail(value) {
@@ -46,6 +47,7 @@ function isUnverifiedAccountError(error) {
 
 function otpErrorState(error) {
   const message = (error?.message || '').toLocaleLowerCase();
+  if (message.includes('incorrect')) return 'invalid';
   if (message.includes('hết hạn') || message.includes('expired')) return 'expired';
   if (message.includes('đã sử dụng') || message.includes('already been used')) return 'alreadyUsed';
   if (message.includes('quá nhiều') || message.includes('too many')) return 'tooManyAttempts';
@@ -81,17 +83,17 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState(() => getPendingOtp()?.email || '');
+  const [registeredEmail, setRegisteredEmail] = useState(() => verification.email || getPendingOtp()?.email || '');
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationState, setVerificationState] = useState('idle');
-  const [otpExpiresAt, setOtpExpiresAt] = useState(() => getPendingOtp()?.expiresAt || null);
+  const [otpExpiresAt, setOtpExpiresAt] = useState(() => verification.onVerify ? verification.expiresAt || null : getPendingOtp()?.expiresAt || null);
   const [otpRemainingSeconds, setOtpRemainingSeconds] = useState(null);
   const [pendingVerificationEmail, setPendingVerificationEmail] = useState('');
   const isVerification = mode === 'verify-email';
   const isSignup = mode === 'signup';
   const validationErrors = isSignup ? validateSignup(form) : validateLogin(form);
   const fieldError = (name) => touched[name] && validationErrors[name];
-  const email = registeredEmail || verification.email;
+  const email = verification.email || registeredEmail;
 
   useEffect(() => {
     const close = (event) => event.key === 'Escape' && onClose();
@@ -175,6 +177,12 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
     }
     setVerificationState('verifying');
     try {
+      if (verification.onVerify) {
+        const data = await verification.onVerify(otpCode);
+        setVerificationState('verified');
+        verification.onVerified?.(data);
+        return;
+      }
       const data = await verifyRegistrationOtp({ email, otpCode });
       localStorage.setItem('nutribot-auth-token', data.token);
       clearPendingOtp();
@@ -191,6 +199,13 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
     }
     setVerificationState('resending');
     try {
+      if (verification.onResend) {
+        await verification.onResend();
+        setVerificationCode('');
+        setOtpExpiresAt(Date.now() + (verification.expirationSeconds || EMAIL_CHANGE_OTP_VALIDITY_SECONDS) * 1000);
+        setVerificationState('resendSuccess');
+        return;
+      }
       await resendRegistrationOtp(email);
       setVerificationCode('');
       setVerificationState('resendSuccess');

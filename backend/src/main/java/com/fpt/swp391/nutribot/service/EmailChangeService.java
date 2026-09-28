@@ -60,7 +60,8 @@ public class EmailChangeService {
         EmailChangeRequest request = pendingRequest
                 .filter(current -> current.getExpiresAt().isAfter(now))
                 .orElseGet(() -> EmailChangeRequest.builder()
-                        .userId(user.getUserId())
+                        // @MapsId derives this entity's primary key from its User association.
+                        // Leave userId null so Spring Data uses persist, not merge, for a new row.
                         .user(user)
                         .build());
         request.setUser(user);
