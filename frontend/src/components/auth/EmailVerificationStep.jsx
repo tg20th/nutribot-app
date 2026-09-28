@@ -34,6 +34,7 @@ function createBoxes(value, boxCount) {
 }
 
 /**
+ * OTP presentation component. Network handlers are supplied by AuthModal.
  * Presentation-only OTP step. API handlers and every verification state must
  * be supplied by a backend integration; this component never verifies a code.
  */
@@ -79,7 +80,7 @@ export default function EmailVerificationStep({
   const focusBox = (index) => inputRefs.current[index]?.focus();
 
   const fillFrom = (startIndex, rawValue) => {
-    const characters = Array.from(rawValue);
+    const characters = Array.from(rawValue).filter((character) => /\d/.test(character));
     if (!characters.length) return;
     const nextBoxes = [...boxes];
     characters.slice(0, resolvedBoxCount - startIndex).forEach((character, offset) => {
@@ -90,7 +91,7 @@ export default function EmailVerificationStep({
   };
 
   const changeBox = (index, event) => {
-    const value = event.target.value;
+    const value = event.target.value.replace(/\D/g, '');
     if (value.length > 1) {
       fillFrom(index, value);
       return;
@@ -148,6 +149,8 @@ export default function EmailVerificationStep({
             id={`${inputId}-${index}`}
             name={`verificationCode-${index}`}
             type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
             autoComplete={index === 0 ? 'one-time-code' : 'off'}
             spellCheck="false"
             maxLength={index === 0 ? resolvedBoxCount : 1}
@@ -164,7 +167,7 @@ export default function EmailVerificationStep({
 
       {statusMessage && <p id={messageId} className={`email-verification__status${isError ? ' email-verification__status--error' : ''}`} role={isError ? 'alert' : 'status'} aria-live="polite">{statusMessage}</p>}
 
-      <button className="auth-submit" type="submit" disabled={!onVerify || !verificationCode || isVerifying || isResending || isVerified}>{isVerifying ? 'Verifying...' : 'Verify'}</button>
+      <button className="auth-submit" type="submit" disabled={!onVerify || verificationCode.length !== resolvedBoxCount || isVerifying || isResending || isVerified}>{isVerifying ? 'Verifying...' : 'Verify'}</button>
     </form>
 
     <div className="email-verification__resend">

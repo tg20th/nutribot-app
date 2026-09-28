@@ -1,12 +1,21 @@
 import { Eye, EyeOff, LoaderCircle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ApiError } from '../services/apiClient';
-import { loginAccount, registerAccount } from '../services/authApi';
+import { loginAccount, registerAccount, resendRegistrationOtp, verifyRegistrationOtp } from '../services/authApi';
 import AuthToast from './AuthToast';
 import EmailVerificationStep from './auth/EmailVerificationStep';
 import '../styles/auth-popup.css';
 
 const emptyForm = { name: '', username: '', email: '', password: '', confirmPassword: '' };
+const OTP_RESEND_COOLDOWN_SECONDS = 60;
+
+function otpErrorState(error) {
+  const message = (error?.message || '').toLocaleLowerCase();
+  if (message.includes('hết hạn') || message.includes('expired')) return 'expired';
+  if (message.includes('đã sử dụng') || message.includes('already been used')) return 'alreadyUsed';
+  if (message.includes('quá nhiều') || message.includes('too many')) return 'tooManyAttempts';
+  return message.includes('otp') || message.includes('mã') || message.includes('invalid') ? 'invalid' : 'error';
+}
 
 function validateSignup(form) {
   const errors = {};
@@ -37,6 +46,10 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationState, setVerificationState] = useState('idle');
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const isVerification = mode === 'verify-email';
   const isSignup = mode === 'signup';
   const validationErrors = isSignup ? validateSignup(form) : validateLogin(form);
@@ -47,6 +60,12 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
     window.addEventListener('keydown', close);
     return () => window.removeEventListener('keydown', close);
   }, [onClose]);
+
+  useEffect(() => {
+    if (!cooldownSeconds) return undefined;
+    const timer = window.setInterval(() => setCooldownSeconds((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [Boolean(cooldownSeconds)]);
 
   const update = (event) => {
     const { name, value } = event.target;
@@ -67,9 +86,17 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
       const data = isSignup
         ? await registerAccount({ fullName: form.name.trim(), username: form.username.trim(), email: form.email.trim(), password: form.password })
         : await loginAccount({ usernameOrEmail: form.email.trim(), password: form.password });
+      if (isSignup) {
+        setRegisteredEmail(form.email.trim());
+        setVerificationCode('');
+        setVerificationState('idle');
+        setCooldownSeconds(0);
+        onSubmit?.(null, 'verify-email');
+        return;
+      }
       if (data.token) localStorage.setItem('nutribot-auth-token', data.token);
       onAuthenticated?.(data, mode);
-      setSuccess(isSignup ? 'Account created successfully.' : 'Welcome back.');
+      setSuccess('Welcome back.');
       window.setTimeout(onClose, 700);
     } catch (requestError) {
       setError(requestError instanceof ApiError ? requestError.message : requestError.message || 'Something went wrong. Please try again.');
@@ -78,10 +105,43 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
     }
   };
 
+  const email = registeredEmail || verification.email;
+  const verifyOtp = async (otpCode) => {
+    if (!email || otpCode.length !== 6) return;
+    setVerificationState('verifying');
+    try {
+      const data = await verifyRegistrationOtp({ email, otpCode });
+      localStorage.setItem('nutribot-auth-token', data.token);
+      setVerificationState('verified');
+      onAuthenticated?.(data, 'verify-email');
+    } catch (requestError) {
+      setVerificationState(otpErrorState(requestError));
+    }
+  };
+  const resendOtp = async () => {
+    if (!email || cooldownSeconds) return;
+    setVerificationState('resending');
+    try {
+      await resendRegistrationOtp(email);
+      setVerificationCode('');
+      setVerificationState('resendSuccess');
+      setCooldownSeconds(OTP_RESEND_COOLDOWN_SECONDS);
+    } catch (requestError) {
+      setVerificationState(otpErrorState(requestError));
+    }
+  };
+  const backToSignup = () => {
+    setVerificationCode('');
+    setVerificationState('idle');
+    setCooldownSeconds(0);
+    verification.onBack?.();
+    if (!verification.onBack) onSubmit?.(null, 'signup');
+  };
+
   if (isVerification) return <div className={`modal-backdrop auth-backdrop ${backdropClassName}`.trim()} role="dialog" aria-modal="true" aria-labelledby="email-verification-title" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <div className="auth-modal auth-modal--verification">
       <button className="modal-close" type="button" onClick={onClose} aria-label="Close"><X size={19} /></button>
-      <EmailVerificationStep {...verification} onBack={verification.onBack || (() => onSubmit?.(null, 'signup'))} />
+      <EmailVerificationStep {...verification} email={email} code={verificationCode} onCodeChange={(code) => { setVerificationCode(code); setVerificationState('idle'); }} onVerify={verifyOtp} onResend={resendOtp} onBack={backToSignup} verificationState={verificationState} cooldownSeconds={cooldownSeconds} />
     </div>
   </div>;
 
