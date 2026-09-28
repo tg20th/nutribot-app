@@ -21,8 +21,8 @@
 
 ### ☕ TRƯỜNG (Backend - 7 tasks)
 - [x] **#3 [BE] User & Role Entities & Repositories** ✅
-  - *Mô tả:* Tạo JPA Entity `User`, `Role` map bảng `users`, `roles` trong `Database.sql`.
-  - *File cần tạo:* `entity/Role.java`, `entity/User.java`, `repository/RoleRepository.java`, `repository/UserRepository.java`.
+  - *Mô tả:* Tạo JPA Entity `User`, `Role` map bảng `users`, `roles` trong `Database.sql`. Bổ sung canonical enums `AccountStatus`, `RoleName`, lifecycle normalization và normalized identity query policy trong `UserRepository`.
+  - *File đã tạo:* `entity/Role.java`, `entity/User.java`, `entity/AccountStatus.java`, `entity/RoleName.java`, `repository/RoleRepository.java`, `repository/UserRepository.java`.
   - *Blocked by:* Không có.
 - [x] **#2 [BE] Registration API & Password Handling** ✅
   - *Mô tả:* API `POST /api/v1/auth/register`, validate email/username duy nhất, mã hóa mật khẩu bằng BCrypt.
