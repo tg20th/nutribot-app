@@ -9,7 +9,22 @@ const statusMessages = {
   resending: 'Sending...',
   resendSuccess: 'A new verification code has been sent to your email.',
   verified: 'Email verified successfully.',
-  error: 'Something went wrong. Please try again.'
+  error: 'Something went wrong. Please try again.',
+};
+
+const copyByPurpose = {
+  registration: {
+    eyebrow: 'EMAIL VERIFICATION',
+    title: 'Verify your email',
+    description: 'We\'ve sent a verification code to your email. Enter the code below to verify your account.',
+    backLabel: 'Back to registration',
+  },
+  emailChange: {
+    eyebrow: 'EMAIL CONFIRMATION',
+    title: 'Verify your new email',
+    description: 'We\'ve sent a verification code to your new email address. Enter the code below to confirm the change.',
+    backLabel: 'Back to profile',
+  },
 };
 
 const errorStates = new Set(['invalid', 'expired', 'alreadyUsed', 'tooManyAttempts', 'error']);
@@ -20,6 +35,8 @@ function createBoxes(value, boxCount) {
 
 /**
  * OTP presentation component. Network handlers are supplied by AuthModal.
+ * Presentation-only OTP step. API handlers and every verification state must
+ * be supplied by a backend integration; this component never verifies a code.
  */
 export default function EmailVerificationStep({
   email,
@@ -29,10 +46,12 @@ export default function EmailVerificationStep({
   onVerify,
   onResend,
   onBack,
+  purpose = 'registration',
   verificationState = 'idle',
-  cooldownSeconds
+  cooldownSeconds,
 }) {
   const resolvedBoxCount = Number.isInteger(boxCount) && boxCount > 0 ? boxCount : 6;
+  const copy = copyByPurpose[purpose] ?? copyByPurpose.registration;
   const [boxes, setBoxes] = useState(() => createBoxes(code, resolvedBoxCount));
   const inputRefs = useRef([]);
   const inputId = useId();
@@ -113,9 +132,9 @@ export default function EmailVerificationStep({
 
   return <section className="email-verification" aria-labelledby="email-verification-title">
     <div className="email-verification__heading">
-      <p>EMAIL VERIFICATION</p>
-      <h2 id="email-verification-title" tabIndex="-1">Verify your email</h2>
-      <span>We've sent a verification code to your email. Enter the code below to verify your account.</span>
+      <p>{copy.eyebrow}</p>
+      <h2 id="email-verification-title" tabIndex="-1">{copy.title}</h2>
+      <span>{copy.description}</span>
     </div>
 
     {email && <p className="email-verification__recipient">Code sent to <strong>{email}</strong></p>}
@@ -158,6 +177,6 @@ export default function EmailVerificationStep({
         : <button type="button" onClick={() => onResend?.()} disabled={!onResend || isVerifying || isResending || isVerified}>{isResending ? 'Sending...' : 'Resend code'}</button>}
     </div>
 
-    {onBack && <button className="auth-switch email-verification__back" type="button" onClick={onBack}>Back to registration</button>}
+    {onBack && <button className="auth-switch email-verification__back" type="button" onClick={onBack}>{copy.backLabel}</button>}
   </section>;
 }

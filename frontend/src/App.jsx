@@ -25,12 +25,15 @@ import BlogListPage from './pages/BlogListPage';
 import BlogDetailPage from './pages/BlogDetailPage';
 import RestaurantRecommendationsPreviewPage from './pages/RestaurantRecommendationsPreviewPage';
 import NB26ReviewPage from './pages/NB26ReviewPage';
+import NB07EmailChangeVerificationPreviewPage from './pages/NB07EmailChangeVerificationPreviewPage';
 import NB01EmailVerificationPreviewPage from './pages/NB01EmailVerificationPreviewPage';
 
 export default function App() {
   return <Routes>
     {import.meta.env.DEV && <Route path="/review/nb-26" element={<NB26ReviewPage />} />}
+    {import.meta.env.DEV && <Route path="/dev/nb-07-email-change-verification" element={<NB07EmailChangeVerificationPreviewPage />} />}
     {import.meta.env.DEV && <Route path="/dev/nb-01-email-verification" element={<NB01EmailVerificationPreviewPage />} />}
+    {import.meta.env.DEV && <Route path="/dev/nb-07-email-change-verification" element={<NB07EmailChangeVerificationPreviewPage />} />}
     <Route path="/" element={<HomePage />} />
     <Route path="/home" element={<MemberRoute><CommunityFeedPage /></MemberRoute>} />
     <Route path="/register" element={<Navigate to="/" replace state={{ authMode: 'signup' }} />} />
