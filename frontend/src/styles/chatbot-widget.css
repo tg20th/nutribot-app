@@ -56,6 +56,8 @@
 
 .chatbot-widget__launcher:focus-visible,
 .chatbot-widget__minimize:focus-visible,
+.chatbot-widget__history-toggle:focus-visible,
+.chatbot-widget__history-head button:focus-visible,
 .chatbot-widget__prompt:focus-visible,
 .chatbot-widget__composer button:focus-visible {
   outline: 3px solid rgba(215, 244, 91, 0.78);
