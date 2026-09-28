@@ -37,8 +37,8 @@
   - *File đã tạo/cập nhật:* `config/SecurityConfig.java`, `config/JwtAuthenticationFilter.java`, `service/TokenBlacklistService.java`, `config/JwtTokenProvider.java`, `config/SecurityAuthorizationAndLogoutTest.java`, `service/TokenBlacklistServiceTest.java`.
   - *Blocked by:* `#3` ✅, `#5` ✅ (đã xong).
 - [x] **#17 [BE] Public Blog List & Detail APIs** ✅
-  - *Mô tả:* Tạo Entity `Content` và API `GET /api/v1/blogs`, `GET /api/v1/blogs/{id}` phân trang các bài viết đã duyệt (`status='published'`).
-  - *File cần tạo:* `entity/Content.java`, `repository/ContentRepository.java`, `controller/ContentController.java`.
+  - *Mô tả:* Xây dựng public Blog APIs cho list/detail với visibility rule thống nhất (Audit Gap BL-011). Ngăn chặn triệt để lỗ hổng rò rỉ bản nháp: trả về HTTP 404 Not Found khi truy cập bài viết chưa công khai; lọc trực tiếp `status = 'published'` và `user.status = ACTIVE` ở tầng DB; sắp xếp deterministic `createdAt DESC, contentId DESC`; bảo vệ DTO allowlist.
+  - *File đã tạo/cập nhật:* `entity/Content.java`, `repository/ContentRepository.java`, `service/ContentService.java`, `controller/ContentController.java`, `service/ContentServiceTest.java`.
   - *Blocked by:* Không có.
 - [x] **#22 [BE] Public Video List & Detail APIs** ✅
   - *Mô tả:* Tận dụng bảng `contents` với `content_type='VIDEO'`, API `GET /api/v1/videos`, `GET /api/v1/videos/{id}`.
