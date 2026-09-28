@@ -23,7 +23,49 @@
 }
 
 .auth-modal .password-input {
+  position: relative;
   display: block;
+}
+
+.auth-modal .password-input input {
+  padding-right: 46px;
+}
+
+.auth-modal .password-input button {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: grid;
+  width: 37px;
+  height: 37px;
+  padding: 0;
+  place-items: center;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.auth-modal .password-input button:hover {
+  background: #edf3e7;
+  color: var(--primary);
+}
+
+.auth-modal input[aria-invalid='true'] {
+  border-color: #b44435;
+}
+
+.auth-modal label small {
+  color: #b44435;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.auth-spinner {
+  animation: auth-spin .8s linear infinite;
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
 }
 
 .auth-modal .google-auth,
