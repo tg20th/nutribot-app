@@ -66,6 +66,15 @@ public class JwtTokenProvider {
         return claims.getSubject();
     }
 
+    public Date getExpirationDateFromToken(String token) {
+        Claims claims = Jwts.parserBuilder()
+                .setSigningKey(getSigningKey())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+        return claims.getExpiration();
+    }
+
     public boolean validateToken(String token) {
         try {
             Jwts.parserBuilder()
