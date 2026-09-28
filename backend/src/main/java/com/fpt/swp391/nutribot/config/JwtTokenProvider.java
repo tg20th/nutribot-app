@@ -3,12 +3,14 @@ package com.fpt.swp391.nutribot.config;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
 
+@Slf4j
 @Component
 public class JwtTokenProvider {
 
@@ -27,13 +29,16 @@ public class JwtTokenProvider {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpiration);
 
-        return Jwts.builder()
+        String token = Jwts.builder()
                 .setSubject(username)
                 .claim("role", role)
                 .setIssuedAt(now)
                 .setExpiration(expiryDate)
                 .signWith(getSigningKey(), SignatureAlgorithm.HS512)
                 .compact();
+
+        log.debug("Generated token for user: {}, role: {}", username, role);
+        return token;
     }
 
     public String getUsernameFromToken(String token) {
@@ -52,7 +57,14 @@ public class JwtTokenProvider {
                     .build()
                     .parseClaimsJws(token);
             return true;
+        } catch (ExpiredJwtException e) {
+            log.warn("JWT Token expired: {}", e.getMessage());
+            return false;
+        } catch (MalformedJwtException e) {
+            log.warn("JWT Token malformed: {}", e.getMessage());
+            return false;
         } catch (JwtException | IllegalArgumentException e) {
+            log.warn("JWT Token validation failed: {}", e.getMessage());
             return false;
         }
     }

@@ -15,8 +15,6 @@ import CategoryManagementPage from './pages/admin/CategoryManagementPage';
 import AdminModerationPage from './pages/admin/AdminModerationPage';
 import CommentManagementPage from './pages/admin/CommentManagementPage';
 import { ContentDetailPage, ContentManagementPage } from './pages/admin/ContentPages';
-import RegisterPage from './pages/RegisterPage';
-import LoginPage from './pages/LoginPage';
 import OAuthCallbackPage from './pages/OAuthCallbackPage';
 import MemberRoute from './components/MemberRoute';
 import MyBlogsPage from './pages/MyBlogsPage';
@@ -27,14 +25,16 @@ import BlogListPage from './pages/BlogListPage';
 import BlogDetailPage from './pages/BlogDetailPage';
 import RestaurantRecommendationsPreviewPage from './pages/RestaurantRecommendationsPreviewPage';
 import NB26ReviewPage from './pages/NB26ReviewPage';
+import NB01EmailVerificationPreviewPage from './pages/NB01EmailVerificationPreviewPage';
 
 export default function App() {
   return <Routes>
     {import.meta.env.DEV && <Route path="/review/nb-26" element={<NB26ReviewPage />} />}
+    {import.meta.env.DEV && <Route path="/dev/nb-01-email-verification" element={<NB01EmailVerificationPreviewPage />} />}
     <Route path="/" element={<HomePage />} />
     <Route path="/home" element={<MemberRoute><CommunityFeedPage /></MemberRoute>} />
-    <Route path="/register" element={<RegisterPage />} />
-    <Route path="/login" element={<LoginPage />} />
+    <Route path="/register" element={<Navigate to="/" replace state={{ authMode: 'signup' }} />} />
+    <Route path="/login" element={<Navigate to="/" replace state={{ authMode: 'login' }} />} />
     <Route path="/auth/callback" element={<OAuthCallbackPage />} />
     <Route path="/community" element={<Navigate to="/home" replace />} />
     <Route path="/blogs" element={<BlogListPage />} />

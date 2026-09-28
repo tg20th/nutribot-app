@@ -14,6 +14,8 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -24,6 +26,7 @@ import java.net.URLEncoder;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 @Configuration
 @EnableWebSecurity
@@ -86,8 +89,15 @@ public class SecurityConfig {
     private AuthenticationSuccessHandler oauth2SuccessHandler() {
         return (request, response, authentication) -> {
             try {
-                String email = authentication.getName();
-                var authResponse = authService.handleOAuth2Login(email);
+                OAuth2AuthenticationToken authToken = (OAuth2AuthenticationToken) authentication;
+                OAuth2User oauth2User = authToken.getPrincipal();
+                Map<String, Object> attrs = oauth2User.getAttributes();
+
+                String email = (String) attrs.get("email");
+                String fullName = (String) attrs.get("name");
+                String picture = (String) attrs.get("picture");
+
+                var authResponse = authService.handleOAuth2Login(email, fullName, picture);
 
                 String frontendUrl = "http://localhost:5173/auth/callback?token=" + URLEncoder.encode(authResponse.getToken(), "UTF-8")
                         + "&username=" + URLEncoder.encode(authResponse.getUsername(), "UTF-8")
