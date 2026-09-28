@@ -41,7 +41,7 @@ class UserProfileServiceTest {
                 .username("alice")
                 .avatarUrl("https://res.cloudinary.com/example/image/upload/nutribot/avatars/7_photo.jpg")
                 .build();
-        when(userRepository.findByUsername("alice")).thenReturn(Optional.of(user));
+        when(userRepository.findByUsernameForUpdate("alice")).thenReturn(Optional.of(user));
         when(userRepository.saveAndFlush(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
         doThrow(new IllegalStateException("Cloudinary unavailable"))
                 .when(cloudinaryAvatarService).deleteAvatarByUrl(user.getAvatarUrl());
