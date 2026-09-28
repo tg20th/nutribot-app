@@ -4,6 +4,7 @@ import com.fpt.swp391.nutribot.config.JwtTokenProvider;
 import com.fpt.swp391.nutribot.dto.request.LoginRequest;
 import com.fpt.swp391.nutribot.dto.request.RegisterRequest;
 import com.fpt.swp391.nutribot.dto.response.AuthResponse;
+import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Role;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
@@ -28,11 +29,11 @@ public class AuthService {
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        if (userRepository.existsByUsername(request.getUsername())) {
+        if (userRepository.existsByNormalizedUsername(request.getUsername())) {
             throw new BadRequestException("Username đã được sử dụng");
         }
 
-        if (userRepository.existsByEmail(request.getEmail())) {
+        if (userRepository.existsByNormalizedEmail(request.getEmail())) {
             throw new BadRequestException("Email đã được sử dụng");
         }
 
@@ -41,11 +42,11 @@ public class AuthService {
                 .orElseThrow(() -> new BadRequestException("Không tìm thấy role mặc định"));
 
         User user = User.builder()
-                .username(request.getUsername())
-                .email(request.getEmail())
+                .username(request.getUsername().trim())
+                .email(request.getEmail().trim().toLowerCase())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .fullName(request.getFullName())
-                .status("PENDING_VERIFY")
+                .status(AccountStatus.PENDING_VERIFY)
                 .role(userRole)
                 .build();
 
@@ -66,14 +67,14 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse verifyRegister(String email, String otpCode) {
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByNormalizedEmail(email)
                 .orElseThrow(() -> new BadRequestException("Tài khoản không tồn tại"));
 
-        if ("ACTIVE".equals(user.getStatus())) {
+        if (user.getStatus() == AccountStatus.ACTIVE) {
             throw new BadRequestException("Tài khoản đã được xác thực trước đó");
         }
 
-        if (!"PENDING_VERIFY".equals(user.getStatus())) {
+        if (user.getStatus() != AccountStatus.PENDING_VERIFY) {
             throw new BadRequestException("Tài khoản đang ở trạng thái không hợp lệ");
         }
 
@@ -81,7 +82,7 @@ public class AuthService {
         otpService.verifyOtp(email, otpCode);
 
         // Kích hoạt tài khoản
-        user.setStatus("ACTIVE");
+        user.setStatus(AccountStatus.ACTIVE);
         userRepository.save(user);
 
         String token = jwtTokenProvider.generateToken(
@@ -101,14 +102,14 @@ public class AuthService {
      */
     @Transactional
     public void resendOtp(String email) {
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByNormalizedEmail(email)
                 .orElseThrow(() -> new BadRequestException("Tài khoản không tồn tại"));
 
-        if ("ACTIVE".equals(user.getStatus())) {
+        if (user.getStatus() == AccountStatus.ACTIVE) {
             throw new BadRequestException("Tài khoản đã được xác thực trước đó");
         }
 
-        if (!"PENDING_VERIFY".equals(user.getStatus())) {
+        if (user.getStatus() != AccountStatus.PENDING_VERIFY) {
             throw new BadRequestException("Tài khoản đang ở trạng thái không hợp lệ");
         }
 
@@ -117,16 +118,15 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
-        User user = userRepository.findByUsername(request.getUsernameOrEmail())
-                .or(() -> userRepository.findByEmail(request.getUsernameOrEmail()))
+        User user = userRepository.findByNormalizedUsernameOrEmail(request.getUsernameOrEmail())
                 .orElseThrow(() -> new BadRequestException("Tài khoản không tồn tại"));
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new BadRequestException("Mật khẩu không chính xác");
         }
 
-        if (!"ACTIVE".equals(user.getStatus())) {
-            if ("PENDING_VERIFY".equals(user.getStatus())) {
+        if (user.getStatus() != AccountStatus.ACTIVE) {
+            if (user.getStatus() == AccountStatus.PENDING_VERIFY) {
                 throw new BadRequestException("Tài khoản chưa xác thực email. Vui lòng kiểm tra hộp thư.");
             }
             throw new BadRequestException("Tài khoản đã bị khóa hoặc suspend");
@@ -173,8 +173,8 @@ public class AuthService {
                 updated = true;
             }
             // Nếu account đang PENDING_VERIFY mà login Google → tự activate
-            if ("PENDING_VERIFY".equals(user.getStatus())) {
-                user.setStatus("ACTIVE");
+            if (user.getStatus() == AccountStatus.PENDING_VERIFY) {
+                user.setStatus(AccountStatus.ACTIVE);
                 updated = true;
             }
             if (updated) {
@@ -190,17 +190,18 @@ public class AuthService {
 
             user = User.builder()
                     .username(username)
-                    .email(email)
+                    .email(email.trim().toLowerCase())
                     .passwordHash(passwordEncoder.encode(randomPassword))
                     .fullName(fullName != null ? fullName : "")
                     .avatarUrl(picture)
                     .role(userRole)
+                    .status(AccountStatus.ACTIVE)
                     .build();
             user = userRepository.save(user);
         }
 
         // Chỉ block account bị khóa thực sự (SUSPENDED, BANNED, WARN)
-        if (!"ACTIVE".equals(user.getStatus())) {
+        if (user.getStatus() != AccountStatus.ACTIVE) {
             throw new BadRequestException("Tài khoản đã bị khóa hoặc suspend");
         }
 

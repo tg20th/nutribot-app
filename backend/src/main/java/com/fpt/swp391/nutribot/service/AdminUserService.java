@@ -3,7 +3,9 @@ package com.fpt.swp391.nutribot.service;
 import com.fpt.swp391.nutribot.dto.request.AdminUserStatusRequest;
 import com.fpt.swp391.nutribot.dto.response.AdminUserResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
+import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.User;
+import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -39,9 +41,9 @@ public class AdminUserService {
         }
 
         if (status != null && !status.isBlank()) {
-            final String s = status.toUpperCase();
+            final String s = status.trim().toUpperCase();
             filtered = filtered.stream()
-                    .filter(u -> u.getStatus().equalsIgnoreCase(s))
+                    .filter(u -> u.getStatus() != null && u.getStatus().name().equalsIgnoreCase(s))
                     .toList();
         }
 
@@ -62,7 +64,14 @@ public class AdminUserService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy người dùng với ID: " + userId));
 
-        user.setStatus(request.getStatus().toUpperCase());
+        AccountStatus newStatus;
+        try {
+            newStatus = AccountStatus.fromString(request.getStatus());
+        } catch (IllegalArgumentException e) {
+            throw new BadRequestException("Trạng thái tài khoản không hợp lệ: " + request.getStatus());
+        }
+
+        user.setStatus(newStatus);
         User saved = userRepository.save(user);
         return toResponse(saved);
     }
@@ -74,7 +83,7 @@ public class AdminUserService {
                 .email(user.getEmail())
                 .fullName(user.getFullName())
                 .roleName(user.getRole() != null ? user.getRole().getRoleName() : null)
-                .status(user.getStatus())
+                .status(user.getStatus() != null ? user.getStatus().name() : null)
                 .strikeCount(user.getStrikeCount())
                 .createdAt(user.getCreatedAt())
                 .build();
