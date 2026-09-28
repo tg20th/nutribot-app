@@ -42,7 +42,7 @@ CREATE TABLE users (
     bio             NVARCHAR(500) NULL,
     role_id         INT NOT NULL,
     strike_count    TINYINT NOT NULL CONSTRAINT DF_users_strike_count DEFAULT (0),
-    status          NVARCHAR(20) NOT NULL CONSTRAINT DF_users_status DEFAULT (N'ACTIVE'),
+    status          NVARCHAR(20) NOT NULL CONSTRAINT DF_users_status DEFAULT (N'PENDING_VERIFY'),
     created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_users_created_at DEFAULT (SYSUTCDATETIME()),
     updated_at      DATETIME2(3) NOT NULL CONSTRAINT DF_users_updated_at DEFAULT (SYSUTCDATETIME()),
 
