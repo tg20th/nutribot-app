@@ -159,7 +159,7 @@ public class UserProfileService {
                 .bio(user.getBio())
                 .roleName(user.getRole() == null ? null : user.getRole().getRoleName())
                 .strikeCount(user.getStrikeCount())
-                .status(user.getStatus())
+                .status(user.getStatus() != null ? user.getStatus().name() : null)
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .heightCm(height)

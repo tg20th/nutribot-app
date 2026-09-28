@@ -44,9 +44,10 @@ public class User {
     @Builder.Default
     private Integer strikeCount = 0;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
-    private String status = "ACTIVE";
+    private AccountStatus status = AccountStatus.ACTIVE;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -55,13 +56,34 @@ public class User {
     private LocalDateTime updatedAt;
 
     @PrePersist
-    protected void onCreate() {
+    public void onCreate() {
+        if (email != null) {
+            email = email.trim().toLowerCase();
+        }
+        if (username != null) {
+            username = username.trim();
+        }
+        if (status == null) {
+            status = AccountStatus.ACTIVE;
+        }
+        if (strikeCount == null || strikeCount < 0) {
+            strikeCount = 0;
+        }
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
     }
 
     @PreUpdate
-    protected void onUpdate() {
+    public void onUpdate() {
+        if (email != null) {
+            email = email.trim().toLowerCase();
+        }
+        if (username != null) {
+            username = username.trim();
+        }
+        if (strikeCount == null || strikeCount < 0) {
+            strikeCount = 0;
+        }
         updatedAt = LocalDateTime.now();
     }
 }
