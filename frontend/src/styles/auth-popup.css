@@ -50,6 +50,14 @@
   color: var(--primary);
 }
 
+.auth-modal .google-auth,
+.auth-modal .auth-submit {
+  height: 50px;
+  min-height: 50px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 .auth-modal input[aria-invalid='true'] {
   border-color: #b44435;
 }
@@ -66,14 +74,6 @@
 
 @keyframes auth-spin {
   to { transform: rotate(360deg); }
-}
-
-.auth-modal .google-auth,
-.auth-modal .auth-submit {
-  height: 50px;
-  min-height: 50px;
-  padding-top: 0;
-  padding-bottom: 0;
 }
 @media (max-width: 767px) {
   .auth-modal {

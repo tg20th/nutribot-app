@@ -7,6 +7,20 @@ import '../styles/auth-popup.css';
 
 const emptyForm = { name: '', username: '', email: '', password: '', confirmPassword: '' };
 
+function validateSignup(form) {
+  const errors = {};
+  if (!form.name.trim()) errors.name = 'Please enter your full name.';
+  if (!form.username.trim()) errors.username = 'Please enter a username.';
+  else if (form.username.trim().length < 3) errors.username = 'Username must be at least 3 characters.';
+  if (!form.email.trim()) errors.email = 'Please enter your email.';
+  else if (!/^\S+@\S+\.\S+$/.test(form.email)) errors.email = 'Please enter a valid email address.';
+  if (!form.password) errors.password = 'Please enter your password.';
+  else if (form.password.length < 8) errors.password = 'Password must be at least 8 characters.';
+  if (!form.confirmPassword) errors.confirmPassword = 'Please confirm your password.';
+  else if (form.password !== form.confirmPassword) errors.confirmPassword = 'Passwords do not match.';
+  return errors;
+}
+
 function validateLogin(form) {
   const errors = {};
   if (!form.email.trim()) errors.email = 'Please enter your email or username.';
@@ -16,15 +30,15 @@ function validateLogin(form) {
 
 export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthenticated, backdropClassName = '' }) {
   const [form, setForm] = useState(emptyForm);
-  const [loginTouched, setLoginTouched] = useState({});
+  const [touched, setTouched] = useState({});
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const isSignup = mode === 'signup';
-  const loginErrors = isSignup ? {} : validateLogin(form);
-  const loginFieldError = (name) => loginTouched[name] && loginErrors[name];
+  const validationErrors = isSignup ? validateSignup(form) : validateLogin(form);
+  const fieldError = (name) => touched[name] && validationErrors[name];
 
   useEffect(() => {
     const close = (event) => event.key === 'Escape' && onClose();
@@ -37,20 +51,13 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
     setForm((current) => ({ ...current, [name]: value }));
     setError('');
   };
+  const touch = (name) => setTouched((current) => ({ ...current, [name]: true }));
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!isSignup) {
-      setLoginTouched({ email: true, password: true });
-      if (Object.keys(loginErrors).length) return;
-    }
-    if (isSignup && !form.name.trim()) return setError('Please enter your full name.');
-    if (isSignup && !form.username.trim()) return setError('Please enter a username.');
-    if (!form.email.trim()) return setError(isSignup ? 'Please enter your email.' : 'Please enter your email or username.');
-    if (!/^\S+@\S+\.\S+$/.test(form.email) && isSignup) return setError('Please enter a valid email address.');
-    if (!form.password) return setError('Please enter your password.');
-    if (isSignup && form.password.length < 8) return setError('Password must be at least 8 characters.');
-    if (isSignup && form.password !== form.confirmPassword) return setError('Passwords do not match.');
+    const fieldNames = isSignup ? ['name', 'username', 'email', 'password', 'confirmPassword'] : ['email', 'password'];
+    setTouched(Object.fromEntries(fieldNames.map((name) => [name, true])));
+    if (Object.keys(validationErrors).length) return;
 
     setSubmitting(true);
     setError('');
@@ -79,22 +86,22 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
         <span>{isSignup ? 'Create an account to save ideas, videos and recipes.' : 'Sign in to continue your healthy routine.'}</span>
         <button className="google-auth" type="button" onClick={onGoogle}><b className="google-mark">G</b><span>Continue with Google</span></button>
         <div className="auth-divider"><span>or use email</span></div>
-        {isSignup && <label>Full name<input required name="name" value={form.name} onChange={update} placeholder="Your name" /></label>}
-        {isSignup && <label>Username<input required name="username" value={form.username} onChange={update} placeholder="Choose a username" /></label>}
+        {isSignup && <label>Full name<input name="name" autoComplete="name" value={form.name} onChange={update} onBlur={() => touch('name')} aria-invalid={Boolean(fieldError('name'))} aria-describedby={fieldError('name') ? 'name-error' : undefined} placeholder="Your name" />{fieldError('name') && <small id="name-error">{fieldError('name')}</small>}</label>}
+        {isSignup && <label>Username<input name="username" autoComplete="username" value={form.username} onChange={update} onBlur={() => touch('username')} aria-invalid={Boolean(fieldError('username'))} aria-describedby={fieldError('username') ? 'username-error' : undefined} placeholder="Choose a username" />{fieldError('username') && <small id="username-error">{fieldError('username')}</small>}</label>}
         <label>
           {isSignup ? 'Email' : 'Email or username'}
-          <input required name="email" type={isSignup ? 'email' : 'text'} autoComplete={isSignup ? 'email' : 'username'} value={form.email} onChange={update} onBlur={() => !isSignup && setLoginTouched((current) => ({ ...current, email: true }))} aria-invalid={Boolean(loginFieldError('email'))} aria-describedby={loginFieldError('email') ? 'login-email-error' : undefined} placeholder={isSignup ? 'you@example.com' : 'you@example.com or username'} />
-          {loginFieldError('email') && <small id="login-email-error">{loginFieldError('email')}</small>}
+          <input name="email" type={isSignup ? 'email' : 'text'} autoComplete={isSignup ? 'email' : 'username'} value={form.email} onChange={update} onBlur={() => touch('email')} aria-invalid={Boolean(fieldError('email'))} aria-describedby={fieldError('email') ? 'email-error' : undefined} placeholder={isSignup ? 'you@example.com' : 'you@example.com or username'} />
+          {fieldError('email') && <small id="email-error">{fieldError('email')}</small>}
         </label>
         <label>
           Password
           <span className="password-input">
-            <input required name="password" type={showPassword ? 'text' : 'password'} autoComplete={isSignup ? 'new-password' : 'current-password'} minLength={isSignup ? 8 : 1} value={form.password} onChange={update} onBlur={() => !isSignup && setLoginTouched((current) => ({ ...current, password: true }))} aria-invalid={Boolean(loginFieldError('password'))} aria-describedby={loginFieldError('password') ? 'login-password-error' : undefined} placeholder="Your password" />
+            <input name="password" type={showPassword ? 'text' : 'password'} autoComplete={isSignup ? 'new-password' : 'current-password'} value={form.password} onChange={update} onBlur={() => touch('password')} aria-invalid={Boolean(fieldError('password'))} aria-describedby={fieldError('password') ? 'password-error' : undefined} placeholder="Your password" />
             <button type="button" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button>
           </span>
-          {loginFieldError('password') && <small id="login-password-error">{loginFieldError('password')}</small>}
+          {fieldError('password') && <small id="password-error">{fieldError('password')}</small>}
         </label>
-        {isSignup && <label>Confirm password<span className="password-input"><input required name="confirmPassword" type={showConfirmation ? 'text' : 'password'} value={form.confirmPassword} onChange={update} placeholder="Repeat your password" /><button type="button" onClick={() => setShowConfirmation((current) => !current)} aria-label={showConfirmation ? 'Hide password confirmation' : 'Show password confirmation'}>{showConfirmation ? <EyeOff size={18} /> : <Eye size={18} />}</button></span></label>}
+        {isSignup && <label>Confirm password<span className="password-input"><input name="confirmPassword" type={showConfirmation ? 'text' : 'password'} autoComplete="new-password" value={form.confirmPassword} onChange={update} onBlur={() => touch('confirmPassword')} aria-invalid={Boolean(fieldError('confirmPassword'))} aria-describedby={fieldError('confirmPassword') ? 'confirm-password-error' : undefined} placeholder="Repeat your password" /><button type="button" onClick={() => setShowConfirmation((current) => !current)} aria-label={showConfirmation ? 'Hide password confirmation' : 'Show password confirmation'}>{showConfirmation ? <EyeOff size={18} /> : <Eye size={18} />}</button></span>{fieldError('confirmPassword') && <small id="confirm-password-error">{fieldError('confirmPassword')}</small>}</label>}
         <button className="auth-submit" type="submit" disabled={submitting || Boolean(success)}>{submitting ? <><LoaderCircle className="auth-spinner" size={17} />Please wait...</> : isSignup ? 'Create account' : 'Log in'}</button>
         <button className="auth-switch" type="button" onClick={() => onSubmit?.(null, isSignup ? 'login' : 'signup')}>{isSignup ? 'Already have an account? Log in' : 'New here? Create an account'}</button>
       </form>
