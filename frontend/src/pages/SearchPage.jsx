@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -39,7 +39,7 @@ const appendUnique = (current, incoming) => {
   return [...current, ...incoming.filter((item) => !known.has(`${item.type}:${item.id}`))];
 };
 
-function ResultCard({ item, index, isMember, onPreview, returnTo }) {
+function ResultCard({ item, index, isMember, onPreview, onOpen, returnTo }) {
   const isVideo = item.type === 'VIDEO';
   const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently updated';
   const content = <>
@@ -55,7 +55,7 @@ function ResultCard({ item, index, isMember, onPreview, returnTo }) {
     </div>
   </>;
   return <article className={`search-result-card search-result-card--${index % 6}`}>
-    {isMember ? <Link to={`/community/posts/${item.id}`} state={{ returnTo }} aria-label={`Open ${item.title}`}>{content}</Link> : <button type="button" onClick={() => onPreview(item)} aria-label={`Preview ${item.title}`}>{content}</button>}
+    {isMember ? <Link to={`/community/posts/${item.id}`} state={{ returnTo, restoreSearch: true }} onClick={onOpen} aria-label={`Open ${item.title}`}>{content}</Link> : <button type="button" onClick={() => onPreview(item)} aria-label={`Preview ${item.title}`}>{content}</button>}
   </article>;
 }
 
@@ -83,11 +83,14 @@ function PreviewDialog({ item, onClose, onAuth }) {
 
 function SearchExperience({ isMember, onAuth }) {
   const location = useLocation();
+  const navigationType = useNavigationType();
   const pageRef = useRef(null);
   const loadMoreRef = useRef(null);
   const requestRef = useRef(null);
   const loadingRef = useRef(false);
   const cursorRef = useRef({ page: 0, blogPage: 0, videoPage: 0, last: false });
+  const restoredSnapshotRef = useRef(false);
+  const pendingScrollRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
   const contentType = searchParams.get('type') || '';
@@ -95,17 +98,55 @@ function SearchExperience({ isMember, onAuth }) {
   const [draft, setDraft] = useState(query);
   const [results, setResults] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [meta, setMeta] = useState({ totalElements: 0, totalPages: 0, page: 0, last: false });
-  const [sort, setSort] = useState('newest');
+  const [meta, setMeta] = useState({ totalElements: null, totalPages: 0, page: 0, last: false });
+  const sort = searchParams.get('sort') || 'newest';
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null);
+  const searchStateKey = `nutribot-search-state:${location.pathname}${location.search}`;
+
+  const saveSearchSnapshot = useCallback(() => {
+    try {
+      sessionStorage.setItem(searchStateKey, JSON.stringify({
+        results,
+        meta,
+        cursor: cursorRef.current,
+        hasMore,
+        scrollY: window.scrollY
+      }));
+    } catch {
+      // Search remains usable when browser storage is unavailable.
+    }
+  }, [hasMore, meta, results, searchStateKey]);
 
   useEffect(() => setDraft(query), [query]);
   useEffect(() => { const controller = new AbortController(); getCategories(controller.signal).then(setCategories).catch(() => setCategories([])); return () => controller.abort(); }, []);
+
+  useEffect(() => {
+    restoredSnapshotRef.current = false;
+    pendingScrollRef.current = null;
+    if (navigationType !== 'POP' && location.state?.restoreSearch !== true) return;
+    try {
+      const snapshot = JSON.parse(sessionStorage.getItem(searchStateKey) ?? 'null');
+      if (!snapshot || !Array.isArray(snapshot.results) || !snapshot.cursor) return;
+      requestRef.current?.abort();
+      loadingRef.current = false;
+      cursorRef.current = snapshot.cursor;
+      setResults(snapshot.results);
+      setMeta(snapshot.meta ?? { totalElements: null, totalPages: 0, page: 0, last: false });
+      setHasMore(Boolean(snapshot.hasMore));
+      setLoading(false);
+      setLoadingMore(false);
+      setError('');
+      pendingScrollRef.current = Number(snapshot.scrollY) || 0;
+      restoredSnapshotRef.current = true;
+    } catch {
+      // Fall through to a fresh request when a stored snapshot is invalid.
+    }
+  }, [navigationType, searchStateKey]);
 
   const fetchPage = useCallback(async ({ reset = false } = {}) => {
     if (reset) {
@@ -113,7 +154,7 @@ function SearchExperience({ isMember, onAuth }) {
       loadingRef.current = false;
       cursorRef.current = { page: 0, blogPage: 0, videoPage: 0, last: false };
       setResults([]);
-      setMeta({ totalElements: 0, totalPages: 0, page: 0, last: false });
+      setMeta({ totalElements: null, totalPages: 0, page: 0, last: false });
       setHasMore(false);
     }
     if (loadingRef.current || (!reset && cursorRef.current.last)) return;
@@ -143,10 +184,6 @@ function SearchExperience({ isMember, onAuth }) {
       } else {
         try {
           response = await searchContent(searchArgs);
-          // The current database has legacy-encoded Vietnamese titles. The
-          // protected API can return no match for a correctly typed keyword,
-          // so use the normalized public collection in that case.
-          if (query.trim() && response.items.length === 0) response = await searchPublicContent(searchArgs);
         } catch (searchError) {
           if (searchError.name === 'AbortError') throw searchError;
           response = await searchPublicContent(searchArgs);
@@ -156,7 +193,7 @@ function SearchExperience({ isMember, onAuth }) {
       if (requestRef.current !== controller || controller.signal.aborted) return;
       setResults((current) => append ? appendUnique(current, incoming) : appendUnique([], incoming));
       setMeta(response.meta);
-      const last = Boolean(response.meta.last);
+      const last = response.meta.last === true;
       cursorRef.current = response.meta.source === 'public'
         ? {
             page: (response.meta.page ?? cursor.page) + 1,
@@ -176,13 +213,28 @@ function SearchExperience({ isMember, onAuth }) {
     }
   }, [categoryId, contentType, isMember, query, sort]);
 
-  useEffect(() => { fetchPage({ reset: true }); return () => requestRef.current?.abort(); }, [fetchPage]);
+  useEffect(() => {
+    if (restoredSnapshotRef.current) {
+      restoredSnapshotRef.current = false;
+      return undefined;
+    }
+    fetchPage({ reset: true });
+    return () => requestRef.current?.abort();
+  }, [fetchPage, searchStateKey]);
   useEffect(() => {
     if (loading || loadingMore || !hasMore) return undefined;
     const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) fetchPage(); }, { rootMargin: '240px' });
     if (loadMoreRef.current) observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
   }, [fetchPage, hasMore, loading, loadingMore]);
+
+  useEffect(() => {
+    if (pendingScrollRef.current == null || loading) return;
+    const scrollY = pendingScrollRef.current;
+    const frame = requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'auto' }));
+    pendingScrollRef.current = null;
+    return () => cancelAnimationFrame(frame);
+  }, [loading, results.length]);
 
   useGSAP(() => {
     gsap.utils.toArray('.search-result-card').forEach((card) => gsap.fromTo(card, { scale: .88, opacity: .25 }, { scale: 1, opacity: 1, ease: 'none', scrollTrigger: { trigger: card, start: 'top 96%', end: 'top 62%', scrub: .5 } }));
@@ -195,6 +247,8 @@ function SearchExperience({ isMember, onAuth }) {
     const first = new Date(a.createdAt || 0).getTime(); const second = new Date(b.createdAt || 0).getTime();
     return sort === 'oldest' ? first - second : second - first;
   }), [results, sort]);
+
+  const resultCount = Number.isFinite(meta.totalElements) ? meta.totalElements.toLocaleString('en-US') : null;
 
   const updateParams = (changes) => { const next = new URLSearchParams(searchParams); Object.entries(changes).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key)); setSearchParams(next); };
   const submitSearch = (event) => { event.preventDefault(); updateParams({ q: draft.trim() }); };
@@ -216,11 +270,11 @@ function SearchExperience({ isMember, onAuth }) {
     <section className="public-search-filters" aria-label="Search filters">
       <div className="public-type-tabs">{TYPES.map(({ value, label }) => <button type="button" key={label} className={contentType === value ? 'is-active' : ''} onClick={() => updateParams({ type: value })}>{label}</button>)}</div>
       <label>Category<select value={categoryId} onChange={(event) => updateParams({ category: event.target.value })}><option value="">All</option>{categories.map((category) => { const id = String(category.categoryId ?? category.id); return <option value={id} key={id}>{category.name}</option>; })}</select></label>
-      <label>Sort by<select value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Newest</option><option value="popular">Most viewed</option><option value="oldest">Oldest</option></select></label>
+      <label>Sort by<select value={sort} onChange={(event) => updateParams({ sort: event.target.value === 'newest' ? '' : event.target.value })}><option value="newest">Newest</option><option value="popular">Most viewed</option><option value="oldest">Oldest</option></select></label>
     </section>
 
     <section className="public-search-results" id="search-results" aria-live="polite">
-      <header><h2>{query ? `Results for “${query}”` : 'All content'}</h2>{!loading && <span>{meta.totalElements.toLocaleString('en-US')} results</span>}</header>
+      <header><h2>{query ? `Results for “${query}”` : 'All content'}</h2>{!loading && resultCount && <span>{resultCount} results</span>}</header>
       {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Searching...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage({ reset: true })}>Try again</button></div> : sortedResults.length ? <div className="public-results-grid">{sortedResults.map((item, index) => <PublicResultCard key={`${item.id}-${index}`} item={item} onPreview={setPreview} />)}</div> : <div className="search-empty"><Search size={30} /><h3>No content found</h3><p>Try another keyword or clear the current filters.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all</button></div>}
       {hasMore && <div className="search-load-more" ref={loadMoreRef}>{loadingMore && <LoaderCircle className="search-spinner" />}</div>}
     </section>
@@ -238,13 +292,13 @@ function SearchExperience({ isMember, onAuth }) {
     <section className="search-controls" aria-label="Search filters">
       <div className="search-type-accordion">{TYPES.map(({ value, label, description, icon: Icon }) => <button type="button" key={label} className={contentType === value ? 'is-active' : ''} onClick={() => updateParams({ type: value })}><Icon size={19} /><span><b>{label}</b><small>{description}</small></span></button>)}</div>
       <button type="button" className={`search-filter-trigger${filtersOpen ? ' is-active' : ''}`} onClick={() => setFiltersOpen((open) => !open)}><SlidersHorizontal size={17} /> Categories {activeCategory && <span>1</span>}</button>
-      <label className="search-sort-control">Sort by<select value={sort} onChange={(event) => setSort(event.target.value)}><option value="newest">Newest</option><option value="popular">Most viewed</option><option value="oldest">Oldest</option></select></label>
+      <label className="search-sort-control">Sort by<select value={sort} onChange={(event) => updateParams({ sort: event.target.value === 'newest' ? '' : event.target.value })}><option value="newest">Newest</option><option value="popular">Most viewed</option><option value="oldest">Oldest</option></select></label>
       {filtersOpen && <div className="search-category-panel"><button type="button" className={!categoryId ? 'is-active' : ''} onClick={() => updateParams({ category: '' })}>All categories</button>{categories.map((category) => { const id = String(category.categoryId ?? category.id); return <button type="button" key={id} className={categoryId === id ? 'is-active' : ''} onClick={() => updateParams({ category: id })}>{category.name}</button>; })}</div>}
     </section>
 
     <section className="search-results" id="search-results" aria-live="polite">
-      <header><div><span>{query ? `Results for “${query}”` : 'Discover new content'}</span><h2>{loading ? 'Searching the library...' : `${meta.totalElements.toLocaleString('en-US')} matching results`}</h2></div>{(query || contentType || categoryId) && <button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>Clear all filters <X size={15} /></button>}</header>
-      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Finding the right content...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage({ reset: true })}>Try again</button></div> : sortedResults.length ? <div className="search-results-grid">{sortedResults.map((item, index) => <ResultCard key={`${item.id}-${index}`} item={item} index={index} isMember={isMember} onPreview={setPreview} returnTo={returnTo} />)}</div> : <div className="search-empty"><Search size={34} /><h3>No matching content found</h3><p>Try a shorter keyword or choose another content type.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all content</button></div>}
+      <header><div><span>{query ? `Results for “${query}”` : 'Discover new content'}</span><h2>{loading ? 'Searching the library...' : resultCount ? `${resultCount} matching results` : 'Matching results'}</h2></div>{(query || contentType || categoryId) && <button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>Clear all filters <X size={15} /></button>}</header>
+      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Finding the right content...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage({ reset: true })}>Try again</button></div> : sortedResults.length ? <div className="search-results-grid">{sortedResults.map((item, index) => <ResultCard key={`${item.id}-${index}`} item={item} index={index} isMember={isMember} onPreview={setPreview} onOpen={saveSearchSnapshot} returnTo={returnTo} />)}</div> : <div className="search-empty"><Search size={34} /><h3>No matching content found</h3><p>Try a shorter keyword or choose another content type.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all content</button></div>}
       {hasMore && <div className="search-load-more" ref={loadMoreRef}>{loadingMore && <LoaderCircle className="search-spinner" />}</div>}
     </section>
 

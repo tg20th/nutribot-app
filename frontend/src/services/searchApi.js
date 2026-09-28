@@ -8,6 +8,12 @@ const itemsFrom = (payload) => {
   return [];
 };
 
+const totalFrom = (value, fallback) => {
+  if (value == null || value === '') return fallback;
+  const total = Number(value);
+  return Number.isFinite(total) ? total : fallback;
+};
+
 const mojibakePattern = /(?:Ã.|Â.|Ä.|Æ.|áº.|á».)/;
 
 // The seeded SQL data is stored as UTF-8 bytes interpreted as Windows-1252.
@@ -39,7 +45,7 @@ export async function searchContent({ keyword, categoryId, contentType, sort, pa
   const data = unwrapData(payload, {});
   const items = itemsFrom(data);
   const meta = {
-    totalElements: data?.totalElements ?? data?.total ?? items.length,
+    totalElements: totalFrom(data?.totalElements ?? data?.total, items.length),
     totalPages: data?.totalPages ?? 1,
     page: data?.page ?? data?.number ?? page,
     size: data?.size ?? size,
@@ -56,7 +62,7 @@ const publicCollection = async (path, type, signal) => {
   const items = itemsFrom(data).map((item) => ({ ...item, contentType: type }));
   return {
     items,
-    totalElements: Number(data?.totalElements) || items.length,
+    totalElements: totalFrom(data?.totalElements, items.length),
     last: typeof data?.last === 'boolean' ? data.last : true
   };
 };
@@ -66,9 +72,12 @@ const publicCollection = async (path, type, signal) => {
 // published list in the browser. This keeps the public search usable without changing
 // backend security or database data.
 export async function searchPublicContent({ keyword, categoryId, contentType, blogPage = 0, videoPage = 0, size = 12, signal }) {
+  const categoryQuery = categoryId ? `&categoryId=${encodeURIComponent(categoryId)}` : '';
+  const loadBlogs = !contentType || contentType === 'BLOG';
+  const loadVideos = !contentType || contentType === 'VIDEO';
   const [blogResult, videoResult] = await Promise.all([
-    blogPage == null ? null : publicCollection(`/api/v1/blogs?page=${blogPage}&size=${size}`, 'BLOG', signal),
-    videoPage == null ? null : publicCollection(`/api/v1/videos?page=${videoPage}&size=${size}`, 'VIDEO', signal)
+    !loadBlogs || blogPage == null ? null : publicCollection(`/api/v1/blogs?page=${blogPage}&size=${size}${categoryQuery}`, 'BLOG', signal),
+    !loadVideos || videoPage == null ? null : publicCollection(`/api/v1/videos?page=${videoPage}&size=${size}${categoryQuery}`, 'VIDEO', signal)
   ]);
 
   const normalizedKeyword = decodeLegacyText(keyword?.trim()).toLocaleLowerCase();
@@ -80,15 +89,20 @@ export async function searchPublicContent({ keyword, categoryId, contentType, bl
     return matchesKeyword && matchesType && matchesCategory;
   });
 
+  const blogLast = !loadBlogs || blogPage == null || Boolean(blogResult?.last);
+  const videoLast = !loadVideos || videoPage == null || Boolean(videoResult?.last);
+
   return {
     items,
     meta: {
-      totalElements: (blogResult?.totalElements ?? 0) + (videoResult?.totalElements ?? 0),
+      // Public collections do not accept a keyword, so their totals cannot be
+      // presented as a keyword-match count.
+      totalElements: keyword?.trim() ? null : (blogResult?.totalElements ?? 0) + (videoResult?.totalElements ?? 0),
       page: Math.max(blogPage ?? 0, videoPage ?? 0),
       size,
-      blogLast: blogPage == null || blogResult?.last,
-      videoLast: videoPage == null || videoResult?.last,
-      last: (blogPage == null || blogResult?.last) && (videoPage == null || videoResult?.last),
+      blogLast,
+      videoLast,
+      last: blogLast && videoLast,
       source: 'public'
     }
   };
