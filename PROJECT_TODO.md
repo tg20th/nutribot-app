@@ -52,9 +52,9 @@
   - *File đã tạo/cập nhật:* `controller/HomeController.java`, `service/HomeService.java`, `repository/ContentRepository.java`, `dto/response/HomeSummaryResponse.java`, `service/HomeServiceTest.java`.
   - *Blocked by:* `#17` ✅, `#22` ✅ (đã xong).
 - [x] **#15 [BE] API Tìm kiếm Đa tiêu chí cho Blog & Video** ✅
-  - *Mô tả:* API `GET /api/v1/search` tìm kiếm nội dung theo keyword, categoryId, contentType.
-  - *File cần tạo:* `controller/SearchController.java`, `service/SearchService.java`.
-  - *Blocked by:* `#17`, `#22`.
+  - *Mô tả:* API `GET /api/v1/search` tìm kiếm nội dung đa tiêu chí theo keyword, categoryId, contentType, sort (`newest`, `popular`, `oldest`). Triển khai sắp xếp deterministic với tie-breaker `contentId`, kẹp an toàn giới hạn phân trang `page >= 0` và `size in [1, 50]`, trim từ khóa, áp dụng visibility policy lọc bài viết published của tác giả active. Đồng bộ mapping 1-1 hoàn chỉnh với frontend (`searchApi.js` và `SearchPage.jsx`).
+  - *File đã tạo/cập nhật:* `controller/SearchController.java`, `service/SearchService.java`, `repository/ContentRepository.java`, `service/SearchServiceTest.java`, `frontend/src/services/searchApi.js`, `frontend/src/pages/SearchPage.jsx`.
+  - *Blocked by:* `#17` ✅, `#22` ✅ (đã xong).
 - [x] **#27 [BE] API CRUD Bình luận (Comment Engine)** ✅
   - *Mô tả:* Entity Comment, API `GET/POST/DELETE /api/v1/comments`, hỗ trợ bình luận lồng nhau.
   - *File cần tạo:* `entity/Comment.java`, `repository/CommentRepository.java`, `controller/CommentController.java`.
