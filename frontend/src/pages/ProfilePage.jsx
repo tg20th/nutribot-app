@@ -42,6 +42,20 @@ const EMPTY_PROFILE = {
   gender: '',
 };
 
+const normalizeProfileText = (value, maxLength = Number.POSITIVE_INFINITY) => (
+  typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
+);
+
+const getTrustedAvatarUrl = (value) => {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' ? url.toString() : '';
+  } catch {
+    return '';
+  }
+};
+
 const PROFILE_GUIDE = [
   {
     id: 'identity',
@@ -85,11 +99,11 @@ const normalizeGender = (gender) => {
 };
 
 const toFormProfile = (profile = {}, fallbackUser = {}) => ({
-  username: profile.username ?? fallbackUser.username ?? '',
-  email: profile.email ?? fallbackUser.email ?? '',
-  fullName: profile.fullName ?? '',
-  avatarUrl: profile.avatarUrl ?? '',
-  bio: profile.bio ?? '',
+  username: normalizeProfileText(profile.username ?? fallbackUser.username, 50),
+  email: normalizeProfileText(profile.email ?? fallbackUser.email, 255),
+  fullName: normalizeProfileText(profile.fullName, 150),
+  avatarUrl: getTrustedAvatarUrl(profile.avatarUrl),
+  bio: normalizeProfileText(profile.bio, 500),
   dateOfBirth: profile.dateOfBirth ? String(profile.dateOfBirth).slice(0, 10) : '',
   gender: normalizeGender(profile.gender),
 });
@@ -129,6 +143,8 @@ export default function ProfilePage() {
   const [savedProfile, setSavedProfile] = useState(() => toFormProfile(EMPTY_PROFILE, fallbackUser));
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedProfile, setHasLoadedProfile] = useState(false);
+  const [profileLoadAttempt, setProfileLoadAttempt] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState(null);
   const [activeGuide, setActiveGuide] = useState('identity');
@@ -141,23 +157,29 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    setIsLoading(true);
+    setHasLoadedProfile(false);
     getMyProfile(controller.signal)
       .then((data) => {
         const mapped = toFormProfile(data, fallbackUser);
         setProfile(mapped);
         setSavedProfile(mapped);
+        setHasLoadedProfile(true);
         publishProfileUpdate(mapped);
       })
       .catch((error) => {
         if (error?.name !== 'AbortError') {
-          setNotice({ type: 'error', message: 'We could not load your saved profile. You can still review the available account details.' });
+          const emptyProfile = toFormProfile(EMPTY_PROFILE);
+          setProfile(emptyProfile);
+          setSavedProfile(emptyProfile);
+          setNotice({ type: 'error', message: 'We could not load your saved profile. Please try again before making changes.' });
         }
       })
       .finally(() => {
         if (!controller.signal.aborted) setIsLoading(false);
       });
     return () => controller.abort();
-  }, [fallbackUser]);
+  }, [fallbackUser, profileLoadAttempt]);
 
   useEffect(() => () => {
     if (avatarPreview) URL.revokeObjectURL(avatarPreview);
@@ -216,6 +238,10 @@ export default function ProfilePage() {
   }, { scope: pageRef });
 
   const isDirty = JSON.stringify(profile) !== JSON.stringify(savedProfile) || Boolean(avatarFile) || avatarRemoved;
+  // savedProfile only changes after an accepted server response, so it remains
+  // the source of truth for the currently confirmed email address.
+  const currentEmail = savedProfile.email;
+  const pendingEmail = profile.email.trim() && profile.email.trim() !== currentEmail ? profile.email.trim() : '';
   const completion = [profile.fullName, profile.email, profile.dateOfBirth, profile.gender, profile.bio].filter(Boolean).length * 20;
   const visibleAvatar = avatarPreview || (!avatarRemoved ? profile.avatarUrl : '');
 
@@ -233,6 +259,11 @@ export default function ProfilePage() {
     setAvatarRemoved(false);
     setErrors({});
     setNotice(null);
+  };
+
+  const retryProfileLoad = () => {
+    setNotice(null);
+    setProfileLoadAttempt((attempt) => attempt + 1);
   };
 
   const handleAvatarChange = (event) => {
@@ -263,6 +294,7 @@ export default function ProfilePage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (!hasLoadedProfile) return;
     const nextErrors = validateProfile(profile);
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
@@ -359,6 +391,15 @@ export default function ProfilePage() {
                   <LoaderCircle size={25} className="nb-profile-spinner" />
                   <span>Loading your profile...</span>
                 </div>
+              ) : !hasLoadedProfile ? (
+                <div className="nb-profile-load-error" role="alert">
+                  <AlertCircle size={22} />
+                  <div>
+                    <b>Your profile is unavailable.</b>
+                    <span>Load the current account details before editing your profile.</span>
+                  </div>
+                  <button type="button" onClick={retryProfileLoad}>Try again</button>
+                </div>
               ) : (
                 <div className="nb-profile-fields">
                   <div className="nb-profile-photo-field nb-profile-field--wide">
@@ -389,8 +430,8 @@ export default function ProfilePage() {
 
                   <label className="nb-profile-field nb-profile-field--wide">
                     <span>Email address</span>
-                    <div><Mail size={17} /><input type="email" name="email" value={profile.email} onChange={updateField} placeholder="name@example.com" autoComplete="email" aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'email-error' : 'email-help'} /></div>
-                    {errors.email ? <small id="email-error">{errors.email}</small> : <em id="email-help">Used for account access and important updates.</em>}
+                    <div><Mail size={17} /><input type="email" name="email" value={profile.email} onChange={updateField} placeholder="name@example.com" autoComplete="email" maxLength={255} aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'email-error' : 'email-help'} /></div>
+                    {errors.email ? <small id="email-error">{errors.email}</small> : <em id="email-help">{pendingEmail ? `Current email: ${currentEmail}` : 'Used for account access and important updates.'}</em>}
                   </label>
 
                   <label className="nb-profile-field">
@@ -414,8 +455,8 @@ export default function ProfilePage() {
               )}
 
               <footer className="nb-profile-actions">
-                <button type="button" className="nb-profile-button nb-profile-button--secondary" onClick={resetForm} disabled={!isDirty || isSaving || isLoading}><RotateCcw size={16} /> Discard changes</button>
-                <button type="submit" className="nb-profile-button nb-profile-button--primary" disabled={!isDirty || isSaving || isLoading}>{isSaving ? <LoaderCircle size={17} className="nb-profile-spinner" /> : <Save size={17} />} {isSaving ? 'Saving...' : 'Save profile'}</button>
+                <button type="button" className="nb-profile-button nb-profile-button--secondary" onClick={resetForm} disabled={!isDirty || isSaving || isLoading || !hasLoadedProfile}><RotateCcw size={16} /> Discard changes</button>
+                <button type="submit" className="nb-profile-button nb-profile-button--primary" disabled={!isDirty || isSaving || isLoading || !hasLoadedProfile}>{isSaving ? <LoaderCircle size={17} className="nb-profile-spinner" /> : <Save size={17} />} {isSaving ? 'Saving...' : 'Save profile'}</button>
               </footer>
             </form>
 
@@ -430,7 +471,8 @@ export default function ProfilePage() {
                 <div className="nb-profile-identity-card__avatar">{visibleAvatar ? <img src={visibleAvatar} alt="" /> : getInitials(profile)}</div>
                 <span className="nb-profile-identity-card__username">@{profile.username || 'member'}</span>
                 <h3>{profile.fullName || profile.username || 'NutriBot Member'}</h3>
-                <p>{profile.email || 'No email available'}</p>
+                <p>{currentEmail || 'No email available'}</p>
+                {pendingEmail && <small className="nb-profile-pending-email">New email: {pendingEmail}</small>}
                 {profile.bio && <blockquote>{profile.bio}</blockquote>}
               </div>
 
