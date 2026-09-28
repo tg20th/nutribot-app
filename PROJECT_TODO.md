@@ -32,10 +32,10 @@
   - *Mô tả:* API `POST /api/v1/auth/login`, xác thực username/password, cấp phát JWT token có hạn sử dụng. Đóng toàn diện các tiêu chuẩn bảo mật BL-003 (chống Account Enumeration với generic error message), BL-026 (kiểm soát trạng thái tài khoản ACTIVE khi xác thực và vô hiệu hóa thời gian thực tại JWT filter), BL-027 (kiểm tra độ dài khóa ký JWT Base64 >= 512 bits tại startup `@PostConstruct`).
   - *File đã tạo/cập nhật:* `dto/request/LoginRequest.java`, `dto/response/AuthResponse.java`, `config/JwtTokenProvider.java`, `service/AuthService.java`, `service/AuthLoginAndJwtSecurityTest.java`.
   - *Blocked by:* `#3` ✅ (đã xong).
-- [x] **#6 [BE] Spring Security Config & Logout** ✅
-  - *Mô tả:* Cấu hình `SecurityFilterChain`, phân quyền `ROLE_USER`, `ROLE_ADMIN`, cho phép CORS từ port 5173/3000, API Đăng xuất.
-  - *File cần tạo:* `config/SecurityConfig.java`, `config/JwtAuthenticationFilter.java`.
-  - *Blocked by:* `#3`, `#5`.
+- [x] **#6 [BE] Spring Security Config, Role Authorization & Logout Invalidation** ✅
+  - *Mô tả:* Cấu hình `SecurityFilterChain`, phân quyền server-side chặt chẽ (`ROLE_USER`, `ROLE_ADMIN`), allowlist tối thiểu (deny-by-default), xử lý lỗi 401 Unauthorized và 403 Forbidden đồng nhất theo format `ApiResponse`, thu hồi quyền tức thời khi account bị SUSPENDED/BANNED, xây dựng `TokenBlacklistService` (SHA-256 + TTL) thu hồi token khi đăng xuất (BL-029).
+  - *File đã tạo/cập nhật:* `config/SecurityConfig.java`, `config/JwtAuthenticationFilter.java`, `service/TokenBlacklistService.java`, `config/JwtTokenProvider.java`, `config/SecurityAuthorizationAndLogoutTest.java`, `service/TokenBlacklistServiceTest.java`.
+  - *Blocked by:* `#3` ✅, `#5` ✅ (đã xong).
 - [x] **#17 [BE] Public Blog List & Detail APIs** ✅
   - *Mô tả:* Tạo Entity `Content` và API `GET /api/v1/blogs`, `GET /api/v1/blogs/{id}` phân trang các bài viết đã duyệt (`status='published'`).
   - *File cần tạo:* `entity/Content.java`, `repository/ContentRepository.java`, `controller/ContentController.java`.
