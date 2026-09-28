@@ -28,10 +28,10 @@
   - *Mô tả:* API `POST /api/v1/auth/register`, validate email/username duy nhất, mã hóa mật khẩu bằng BCrypt.
   - *File đã tạo:* `dto/request/RegisterRequest.java`, `service/AuthService.java`, `controller/AuthController.java`.
   - *Blocked by:* `#3` ✅ (đã xong).
-- [x] **#5 [BE] Login Flow & JWT Token Generation** ✅
-  - *Mô tả:* API `POST /api/v1/auth/login`, xác thực username/password, cấp phát JWT token có hạn sử dụng.
-  - *File cần tạo:* `dto/request/LoginRequest.java`, `dto/response/AuthResponse.java`, `config/JwtTokenProvider.java`.
-  - *Blocked by:* `#3`.
+- [x] **#5 [BE] Login Flow & JWT Token Generation / Authentication Contract** ✅
+  - *Mô tả:* API `POST /api/v1/auth/login`, xác thực username/password, cấp phát JWT token có hạn sử dụng. Đóng toàn diện các tiêu chuẩn bảo mật BL-003 (chống Account Enumeration với generic error message), BL-026 (kiểm soát trạng thái tài khoản ACTIVE khi xác thực và vô hiệu hóa thời gian thực tại JWT filter), BL-027 (kiểm tra độ dài khóa ký JWT Base64 >= 512 bits tại startup `@PostConstruct`).
+  - *File đã tạo/cập nhật:* `dto/request/LoginRequest.java`, `dto/response/AuthResponse.java`, `config/JwtTokenProvider.java`, `service/AuthService.java`, `service/AuthLoginAndJwtSecurityTest.java`.
+  - *Blocked by:* `#3` ✅ (đã xong).
 - [x] **#6 [BE] Spring Security Config & Logout** ✅
   - *Mô tả:* Cấu hình `SecurityFilterChain`, phân quyền `ROLE_USER`, `ROLE_ADMIN`, cho phép CORS từ port 5173/3000, API Đăng xuất.
   - *File cần tạo:* `config/SecurityConfig.java`, `config/JwtAuthenticationFilter.java`.
