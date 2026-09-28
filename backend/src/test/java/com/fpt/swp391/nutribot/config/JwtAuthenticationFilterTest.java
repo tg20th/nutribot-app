@@ -26,8 +26,10 @@ class JwtAuthenticationFilterTest {
     void loadsRoleWithUserBeforeBuildingAuthentication() throws Exception {
         JwtTokenProvider tokenProvider = mock(JwtTokenProvider.class);
         AuthService authService = mock(AuthService.class);
-        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(tokenProvider, authService);
+        com.fpt.swp391.nutribot.service.TokenBlacklistService blacklistService = mock(com.fpt.swp391.nutribot.service.TokenBlacklistService.class);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(tokenProvider, authService, blacklistService);
         when(tokenProvider.validateToken("valid-token")).thenReturn(true);
+        when(blacklistService.isBlacklisted("valid-token")).thenReturn(false);
         when(tokenProvider.getUsernameFromToken("valid-token")).thenReturn("profile-user");
         when(authService.getRoleNameByUsername("profile-user")).thenReturn(Optional.of("User"));
 
