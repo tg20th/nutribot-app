@@ -1,6 +1,8 @@
 -- Migration: Add category_id to contents table
 -- Required for NB-23 feature (video with categories)
 -- Date: 2026-09-27
+USE [NutriBotV2]
+GO
 
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'contents' AND COLUMN_NAME = 'category_id')
 BEGIN
