@@ -23,11 +23,12 @@ export const decodeLegacyText = (value) => {
   }
 };
 
-export async function searchContent({ keyword, categoryId, contentType, page = 0, size = 12, signal }) {
+export async function searchContent({ keyword, categoryId, contentType, sort, page = 0, size = 12, signal }) {
   const params = new URLSearchParams();
   if (keyword?.trim()) params.append('keyword', keyword.trim());
   if (categoryId) params.append('categoryId', categoryId);
   if (contentType && contentType !== 'All') params.append('contentType', contentType);
+  if (sort) params.append('sort', sort);
   params.append('page', page);
   params.append('size', size);
 
