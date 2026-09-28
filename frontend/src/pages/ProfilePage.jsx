@@ -249,6 +249,7 @@ export default function ProfilePage() {
   // confirmedEmail stays active until the pending address is verified.
   const currentEmail = confirmedEmail;
   const pendingEmail = serverPendingEmail;
+  const profileEmailMatchesPending = pendingEmail && profile.email.trim().toLowerCase() === pendingEmail.toLowerCase();
   const hasUnsubmittedEmailChange = profile.email.trim() && profile.email.trim() !== currentEmail;
   const completion = [profile.fullName, profile.email, profile.dateOfBirth, profile.gender, profile.bio].filter(Boolean).length * 20;
   const visibleAvatar = avatarPreview || (!avatarRemoved ? profile.avatarUrl : '');
@@ -479,7 +480,7 @@ export default function ProfilePage() {
                     {errors.email ? <small id="email-error">{errors.email}</small> : <em id="email-help">{pendingEmail || hasUnsubmittedEmailChange ? `Current email: ${currentEmail}` : 'Used for account access and important updates.'}</em>}
                   </label>
 
-                  {pendingEmail && !isEmailVerificationOpen && <button type="button" className="nb-profile-button nb-profile-button--secondary nb-profile-field--wide" onClick={() => { setEmailVerificationTarget(pendingEmail); setIsEmailVerificationOpen(true); }}>Reopen email verification</button>}
+                  {profileEmailMatchesPending && !isEmailVerificationOpen && <button type="button" className="nb-profile-button nb-profile-button--secondary nb-profile-field--wide" onClick={() => { setEmailVerificationTarget(pendingEmail); setIsEmailVerificationOpen(true); }}>Reopen email verification</button>}
 
                   <label className="nb-profile-field">
                     <span>Date of birth</span>
