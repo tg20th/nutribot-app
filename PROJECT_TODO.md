@@ -45,8 +45,9 @@
   - *File cần tạo:* Bổ sung query trong `ContentRepository.java` và endpoint trong `ContentController.java`.
   - *Blocked by:* Không có.
 - [x] **#19 & #24 [BE] Author Blog/Video CRUD & Upload** ✅
-  - *Mô tả:* API cho tác giả thêm, sửa, xóa Blog (`POST/PUT/DELETE /api/v1/blogs`) và Video (`POST/PUT/DELETE /api/v1/videos`), kiểm tra quyền sở hữu bài viết.
-  - *Blocked by:* `#17`, `#22`.
+  - *Mô tả:* API cho tác giả thêm, sửa, xóa Blog (`POST/PUT/DELETE /api/v1/author/blogs`), upload thumbnail (`POST /api/v1/blogs/thumbnails`), submit/recall (`POST /api/v1/author/blogs/{id}/submit|recall`). Đóng toàn diện các tiêu chuẩn kiểm toán BL-005 (xác thực ownership chống IDOR từ principal), BL-006 (State Machine cấm author can thiệp status, hạ về draft khi sửa bài published/rejected), BL-013 (Category Guard RECIPE active & kiểm định thumbnail 5MB), BL-020 (khử dấu slug tiếng Việt và dọn dẹp orphan media trên Cloudinary).
+  - *File đã tạo/cập nhật:* `controller/BlogAuthorController.java`, `controller/BlogThumbnailController.java`, `service/AuthorContentService.java`, `service/CloudinaryMediaService.java`, `repository/ContentRepository.java`, `service/AuthorContentServiceTest.java`, `service/CloudinaryMediaServiceTest.java`.
+  - *Blocked by:* `#17` ✅, `#22` ✅.
 - [x] **#13 [BE] API Lấy dữ liệu Trang chủ tổng hợp / Welcome Aggregator** ✅
   - *Mô tả:* API `GET /api/v1/home` tổng hợp Top 6 blog nổi bật, Top 6 video mới nhất, danh mục gốc và số liệu thống kê. Tối ưu hóa truy vấn với tie-breaker `contentId DESC` đảm bảo sắp xếp deterministic ổn định, đồng thời áp dụng chính sách visibility lọc loại bỏ bài viết của tác giả bị khóa (`status = ACTIVE`).
   - *File đã tạo/cập nhật:* `controller/HomeController.java`, `service/HomeService.java`, `repository/ContentRepository.java`, `dto/response/HomeSummaryResponse.java`, `service/HomeServiceTest.java`.
