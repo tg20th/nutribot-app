@@ -12,11 +12,13 @@ import com.fpt.swp391.nutribot.repository.RoleRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -119,23 +121,27 @@ public class AuthService {
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByNormalizedUsernameOrEmail(request.getUsernameOrEmail())
-                .orElseThrow(() -> new BadRequestException("Tài khoản không tồn tại"));
+                .orElse(null);
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new BadRequestException("Mật khẩu không chính xác");
+        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            log.warn("Đăng nhập thất bại: thông tin xác thực không hợp lệ");
+            throw new BadRequestException("Tài khoản hoặc mật khẩu không chính xác");
         }
 
         if (user.getStatus() != AccountStatus.ACTIVE) {
+            log.warn("Đăng nhập bị từ chối: tài khoản {} đang có trạng thái {}", user.getUsername(), user.getStatus());
             if (user.getStatus() == AccountStatus.PENDING_VERIFY) {
                 throw new BadRequestException("Tài khoản chưa xác thực email. Vui lòng kiểm tra hộp thư.");
             }
-            throw new BadRequestException("Tài khoản đã bị khóa hoặc suspend");
+            throw new BadRequestException("Tài khoản đã bị khóa hoặc tạm ngưng hoạt động");
         }
 
         String token = jwtTokenProvider.generateToken(
                 user.getUsername(),
                 user.getRole().getRoleName()
         );
+
+        log.info("Đăng nhập thành công cho người dùng: {}", user.getUsername());
 
         return AuthResponse.builder()
                 .token(token)
@@ -152,6 +158,7 @@ public class AuthService {
     @Transactional(readOnly = true)
     public Optional<String> getRoleNameByUsername(String username) {
         return userRepository.findByUsername(username)
+                .filter(user -> user.getStatus() == AccountStatus.ACTIVE)
                 .map(user -> user.getRole().getRoleName());
     }
 
