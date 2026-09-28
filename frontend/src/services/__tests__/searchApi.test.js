@@ -20,7 +20,18 @@ describe('searchPublicContent', () => {
     expect(apiRequest).toHaveBeenNthCalledWith(1, '/api/v1/blogs?page=0&size=12', { signal: undefined });
     expect(apiRequest).toHaveBeenNthCalledWith(2, '/api/v1/videos?page=0&size=12', { signal: undefined });
     expect(result.items).toHaveLength(2);
-    expect(result.meta).toMatchObject({ blogLast: false, videoLast: true, last: false });
+    expect(result.meta).toMatchObject({ totalElements: null, blogLast: false, videoLast: true, last: false });
+  });
+
+  it('uses public totals only when they describe the active type and filters', async () => {
+    apiRequest.mockResolvedValueOnce({ data: { content: [{ contentId: 1, title: 'Salad' }], totalElements: 13, last: true } });
+
+    const result = await searchPublicContent({ contentType: 'BLOG', categoryId: 4, blogPage: 0, videoPage: 0, size: 12 });
+
+    expect(apiRequest).toHaveBeenCalledTimes(1);
+    expect(apiRequest).toHaveBeenCalledWith('/api/v1/blogs?page=0&size=12&categoryId=4', { signal: undefined });
+    expect(result.meta.totalElements).toBe(13);
+    expect(result.meta).toMatchObject({ blogLast: true, videoLast: true, last: true });
   });
 
   it('does not request a source that has already reached its last page', async () => {
@@ -44,6 +55,15 @@ describe('searchContent', () => {
 
     expect(apiRequest).toHaveBeenCalledWith('/api/v1/search?keyword=tofu&page=1&size=12', { signal: undefined });
     expect(result.meta).toMatchObject({ page: 1, totalPages: 4, last: false, source: 'search' });
+  });
+
+  it('keeps the API total for the active content type', async () => {
+    apiRequest.mockResolvedValueOnce({ data: { content: [{ contentId: 10, title: 'Tofu video' }], totalElements: 7, last: true } });
+
+    const result = await searchContent({ keyword: 'tofu', contentType: 'VIDEO', page: 0, size: 12 });
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/v1/search?keyword=tofu&contentType=VIDEO&page=0&size=12', { signal: undefined });
+    expect(result.meta.totalElements).toBe(7);
   });
 
   it('passes sort parameter to the API when provided', async () => {
