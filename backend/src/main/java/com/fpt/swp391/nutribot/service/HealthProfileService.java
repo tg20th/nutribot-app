@@ -51,7 +51,10 @@ public class HealthProfileService {
 
     @Transactional
     public HealthProfileResponse updateHealthProfile(String username, HealthProfileUpdateRequest request) {
-        User user = findUser(username);
+        // Share the per-user lock with generic profile writes so concurrent
+        // first-time creation cannot insert duplicate user_profiles rows.
+        User user = userRepository.findByUsernameForUpdate(username)
+                .orElseThrow(() -> new NotFoundException("User was not found."));
         UserProfile profile = userProfileRepository.findById(user.getUserId())
                 .orElseGet(() -> UserProfile.builder().user(user).build());
 

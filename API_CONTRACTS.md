@@ -96,10 +96,19 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
 
 ### 2.4. Cập nhật thông tin cá nhân cơ bản
 - **Endpoint:** `PUT /api/v1/users/profile`
+
+- Request allowlist: `username`, `email`, `fullName`, `bio`, `gender`, `dateOfBirth`; `username` and `email` are required. Null/blank `fullName`, `bio`, and `gender` clear those fields; null `dateOfBirth` clears the date (a blank date string is invalid). Unknown fields such as `userId`, `role`, `status`, `strikeCount`, and passwords are ignored.
+- `email` remains required for backward compatibility and is normalized to lowercase. If it differs from the current address, the API records it as pending and requests OTP delivery through the `EmailOtpSender` integration point. The current email stays active until the new address is verified; the pending address is not used for login or treated as trusted identity.
+- An address already active on another account or pending verification for another account returns HTTP 409. The six-digit OTP expires after 30 minutes and is stored as a BCrypt hash. Verification requires the authenticated user and permits at most five attempts; an expired or exhausted request is invalidated, while the current email remains active.
+- OTP delivery is not implemented in this task. Until an `EmailOtpSender` bean is provided by the OTP integration task, changed-email requests return HTTP 503 and are rolled back; no pending address is left behind.
+- The target user comes only from the authenticated principal. Profile writes are serialized per user with last-write-wins behavior, and the `user_profiles.user_id` primary key enforces one profile per user.
+- `users.avatar_url` and `users.bio` are canonical. Run [`backend/sql/migrations/NB-08-canonical-profile-fields.sql`](backend/sql/migrations/NB-08-canonical-profile-fields.sql) before deploying to an existing database; it copies legacy values where the canonical value is empty, then removes duplicate columns.
+
 - **Header:** `Authorization: Bearer <token>`
 - **Request Body:**
 ```json
 {
+  "username": "hoanglan_ai",
   "fullName": "Hoàng Thị Lan",
   "email": "lan@nutribot.com",
   "bio": "Yêu thích các món ăn lành mạnh và giàu đạm thực vật.",
@@ -108,6 +117,8 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
 }
 ```
 - **Response (200 OK):** Trả về `ApiResponse` chứa hồ sơ đã cập nhật.
+
+- **Email verification:** Authenticated `POST /api/v1/users/profile/email/verify` accepts `{"otp":"123456"}` and returns the newly active email in `data.email`. The target account comes only from the JWT principal. OTP delivery is intentionally delegated to the future `EmailOtpSender` adapter.
 
 ### 2.5. Cập nhật hoặc xóa ảnh đại diện
 - **Cập nhật:** `PUT /api/v1/users/profile/avatar`

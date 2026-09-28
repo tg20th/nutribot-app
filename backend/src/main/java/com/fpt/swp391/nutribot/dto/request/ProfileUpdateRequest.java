@@ -1,8 +1,10 @@
 package com.fpt.swp391.nutribot.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PastOrPresent;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -15,10 +17,12 @@ import java.time.LocalDate;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ProfileUpdateRequest {
 
     @NotBlank(message = "Username is required.")
     @Size(min = 3, max = 50, message = "Username must be between 3 and 50 characters.")
+    @Pattern(regexp = "^[A-Za-z0-9._-]{3,50}$", message = "Username may contain letters, numbers, dots, underscores, and hyphens.")
     private String username;
 
     @NotBlank(message = "Email is required.")
@@ -27,6 +31,7 @@ public class ProfileUpdateRequest {
     private String email;
 
     @Size(max = 150, message = "Full name must not exceed 150 characters.")
+    @Pattern(regexp = "^\\s*$|^[\\p{L}\\p{M}][\\p{L}\\p{M} .'()-]*$", message = "Full name contains unsupported characters.")
     private String fullName;
 
     @Size(max = 500, message = "Bio must not exceed 500 characters.")
@@ -36,5 +41,6 @@ public class ProfileUpdateRequest {
     private LocalDate dateOfBirth;
 
     @Size(max = 20, message = "Gender must not exceed 20 characters.")
+    @Pattern(regexp = "(?i)^\\s*(male|female|other)?\\s*$", message = "Gender must be Male, Female, Other, or blank.")
     private String gender;
 }

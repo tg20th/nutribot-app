@@ -61,4 +61,18 @@ public class EmailService {
             log.info("================");
         }
     }
+
+    /** Sends security-sensitive mail only when SMTP is configured and reports delivery failures. */
+    public void sendEmailOrThrow(String to, String subject, String body) {
+        if (!emailEnabled || mailSender == null) {
+            throw new IllegalStateException("Email delivery is disabled.");
+        }
+
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(to);
+        message.setSubject(subject);
+        message.setText(body);
+        mailSender.send(message);
+        log.info("Email sent to {}", to);
+    }
 }
