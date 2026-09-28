@@ -95,6 +95,9 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
         return;
       }
       if (data.token) localStorage.setItem('nutribot-auth-token', data.token);
+      if (data.username && data.role) {
+        localStorage.setItem('nutribot-user', JSON.stringify({ username: data.username, role: data.role }));
+      }
       onAuthenticated?.(data, mode);
       setSuccess('Welcome back.');
       window.setTimeout(onClose, 700);

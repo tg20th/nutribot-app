@@ -43,3 +43,11 @@ export function getCurrentUserFromToken() {
     userId: payload?.userId || payload?.id || null,
   };
 }
+
+/**
+ * Check whether a role value represents an administrator role.
+ */
+export function isAdminRole(role) {
+  const normalizedRole = String(role ?? '').trim().toUpperCase();
+  return normalizedRole === 'ADMIN' || normalizedRole === 'ROLE_ADMIN';
+}

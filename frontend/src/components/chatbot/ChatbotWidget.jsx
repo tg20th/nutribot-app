@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getChatMessages, getChatSessions, requestNutritionAdvice } from '../../services/chatbotApi';
 import { googleAuthUrl } from '../../services/contentApi';
+import { isAdminRole } from '../../utils/auth';
 import AuthModal from '../AuthModal';
 import '../../styles/chatbot-widget.css';
 
@@ -441,7 +442,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
         </div>
       )}
 
-      {authMode && <AuthModal mode={authMode} backdropClassName="chatbot-auth-backdrop" onClose={() => setAuthMode(null)} onSubmit={(_, mode) => setAuthMode(mode)} onAuthenticated={() => navigate('/home', { replace: true })} onGoogle={() => window.location.assign(googleAuthUrl())} />}
+      {authMode && <AuthModal mode={authMode} backdropClassName="chatbot-auth-backdrop" onClose={() => setAuthMode(null)} onSubmit={(_, mode) => setAuthMode(mode)} onAuthenticated={(data) => navigate(isAdminRole(data?.role) ? '/admin' : '/home', { replace: true })} onGoogle={() => window.location.assign(googleAuthUrl())} />}
 
       <button
         type="button"

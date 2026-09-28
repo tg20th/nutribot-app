@@ -1,2 +1,10 @@
 import { Navigate, useLocation } from 'react-router-dom';
-export default function AdminRoute({ children }) { const role = localStorage.getItem('nutribot-dev-role') || 'ADMIN'; return role === 'ADMIN' ? children : <Navigate to="/" replace state={{ from: useLocation().pathname }}/>; }
+import { getCurrentUserFromToken, isAdminRole } from '../../utils/auth';
+
+export default function AdminRoute({ children }) {
+  const user = getCurrentUserFromToken();
+  const role = user?.role;
+  const isAdmin = isAdminRole(role);
+
+  return isAdmin ? children : <Navigate to="/" replace state={{ from: useLocation().pathname }} />;
+}
