@@ -47,10 +47,10 @@
 - [x] **#19 & #24 [BE] Author Blog/Video CRUD & Upload** ✅
   - *Mô tả:* API cho tác giả thêm, sửa, xóa Blog (`POST/PUT/DELETE /api/v1/blogs`) và Video (`POST/PUT/DELETE /api/v1/videos`), kiểm tra quyền sở hữu bài viết.
   - *Blocked by:* `#17`, `#22`.
-- [x] **#13 [BE] API Lấy dữ liệu Trang chủ tổng hợp** ✅
-  - *Mô tả:* API `GET /api/v1/home` tổng hợp blog nổi bật, video mới nhất và danh mục.
-  - *File cần tạo:* `dto/response/HomeSummaryResponse.java`, `controller/HomeController.java`.
-  - *Blocked by:* `#17`, `#22`.
+- [x] **#13 [BE] API Lấy dữ liệu Trang chủ tổng hợp / Welcome Aggregator** ✅
+  - *Mô tả:* API `GET /api/v1/home` tổng hợp Top 6 blog nổi bật, Top 6 video mới nhất, danh mục gốc và số liệu thống kê. Tối ưu hóa truy vấn với tie-breaker `contentId DESC` đảm bảo sắp xếp deterministic ổn định, đồng thời áp dụng chính sách visibility lọc loại bỏ bài viết của tác giả bị khóa (`status = ACTIVE`).
+  - *File đã tạo/cập nhật:* `controller/HomeController.java`, `service/HomeService.java`, `repository/ContentRepository.java`, `dto/response/HomeSummaryResponse.java`, `service/HomeServiceTest.java`.
+  - *Blocked by:* `#17` ✅, `#22` ✅ (đã xong).
 - [x] **#15 [BE] API Tìm kiếm Đa tiêu chí cho Blog & Video** ✅
   - *Mô tả:* API `GET /api/v1/search` tìm kiếm nội dung theo keyword, categoryId, contentType.
   - *File cần tạo:* `controller/SearchController.java`, `service/SearchService.java`.
