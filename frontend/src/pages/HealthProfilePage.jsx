@@ -1,7 +1,7 @@
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { Activity, ArrowDown, ArrowRight, ShieldCheck, Target } from 'lucide-react';
+import { ArrowDown, ArrowRight } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
@@ -24,14 +24,12 @@ export default function HealthProfilePage() {
       const heroCopy = scopedTargets('.health-hero-copy > *');
       const heroImage = scopedTargets('.health-hero-visual img');
       const hero = scopedTargets('.health-hero');
-      const intentionCards = scopedTargets('.health-intention-card');
       const healthCards = scopedTargets('.health-bento > *');
 
       if (heroCopy.length) gsap.from(heroCopy, { y: 22, opacity: 0, duration: 0.72, stagger: 0.08, ease: 'power3.out' });
       if (heroImage.length && hero.length) {
         gsap.fromTo(heroImage, { scale: 0.88, opacity: 0.72 }, { scale: 1.04, opacity: 0.56, ease: 'none', scrollTrigger: { trigger: hero[0], start: 'top top+=76', end: 'bottom top+=76', scrub: true } });
       }
-      if (intentionCards.length) gsap.from(intentionCards, { y: 28, opacity: 0, duration: 0.65, stagger: 0.09, ease: 'power3.out', delay: 0.2 });
       if (healthCards.length) gsap.from(healthCards, { y: 46, opacity: 0, scale: 0.97, duration: 0.7, stagger: 0.11, ease: 'power3.out', delay: 0.22 });
     });
     return () => media.revert();
@@ -57,20 +55,6 @@ export default function HealthProfilePage() {
             <div className="health-hero-visual">
               <img src={colorfulPlate} alt="A person holding a colorful plant-based bowl" />
             </div>
-          </section>
-          <section className="health-intentions" aria-label="How your health profile helps">
-            <article className="health-intention-card">
-              <Activity size={19} />
-              <span><b>Understand your baseline</b><small>Body metrics show where your plan begins.</small></span>
-            </article>
-            <article className="health-intention-card">
-              <Target size={19} />
-              <span><b>Move toward your goal</b><small>Your direction shapes every suggestion.</small></span>
-            </article>
-            <article className="health-intention-card">
-              <ShieldCheck size={19} />
-              <span><b>Keep every meal safer</b><small>Allergies stay part of the whole picture.</small></span>
-            </article>
           </section>
           <HealthProfileSection />
         </main>
