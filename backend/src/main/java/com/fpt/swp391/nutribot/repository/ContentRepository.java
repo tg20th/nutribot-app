@@ -25,6 +25,8 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
 
     Optional<Content> findBySlug(String slug);
 
+    boolean existsBySlug(String slug);
+
     Optional<Content> findByContentIdAndContentType(Integer contentId, String contentType);
 
     @Query("SELECT c FROM Content c WHERE c.contentId = :contentId AND c.contentType = :contentType")

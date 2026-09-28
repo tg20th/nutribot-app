@@ -61,4 +61,20 @@ public class BlogAuthorController {
         authorContentService.deleteContent(user.getUsername(), id);
         return ResponseEntity.ok(ApiResponse.success("Xóa bài viết thành công", null));
     }
+
+    @PostMapping("/{id}/submit")
+    public ResponseEntity<ApiResponse<AuthorContentResponse>> submitBlog(
+            @AuthenticationPrincipal UserDetails user,
+            @PathVariable Integer id) {
+        AuthorContentResponse response = authorContentService.submitContent(user.getUsername(), id);
+        return ResponseEntity.ok(ApiResponse.success("Nộp bài viết chờ duyệt thành công", response));
+    }
+
+    @PostMapping("/{id}/recall")
+    public ResponseEntity<ApiResponse<AuthorContentResponse>> recallBlog(
+            @AuthenticationPrincipal UserDetails user,
+            @PathVariable Integer id) {
+        AuthorContentResponse response = authorContentService.recallContent(user.getUsername(), id);
+        return ResponseEntity.ok(ApiResponse.success("Rút bài viết về bản nháp thành công", response));
+    }
 }

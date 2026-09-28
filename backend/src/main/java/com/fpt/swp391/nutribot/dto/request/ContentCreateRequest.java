@@ -18,8 +18,10 @@ public class ContentCreateRequest {
 
     private Integer categoryId;
 
+    @Size(max = 500, message = "Đường dẫn media không được vượt quá 500 ký tự")
     private String mediaUrl;
 
+    @Size(max = 500, message = "Đường dẫn thumbnail không được vượt quá 500 ký tự")
     private String thumbnailUrl;
 
     private Integer durationSec;
