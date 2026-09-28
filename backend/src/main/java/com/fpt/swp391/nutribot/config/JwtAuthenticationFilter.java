@@ -1,6 +1,7 @@
 package com.fpt.swp391.nutribot.config;
 
 import com.fpt.swp391.nutribot.service.AuthService;
+import com.fpt.swp391.nutribot.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,15 +27,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final AuthService authService;
+    private final TokenBlacklistService tokenBlacklistService;
 
-    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider, @Lazy AuthService authService) {
+    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
+                                   @Lazy AuthService authService,
+                                   TokenBlacklistService tokenBlacklistService) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.authService = authService;
-    }
-
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        return request.getServletPath().startsWith("/api/v1/auth/");
+        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     @Override
@@ -45,26 +45,34 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String token = getJwtFromRequest(request);
         log.debug("JWT Filter - Path: {}, Token present: {}", request.getRequestURI(), StringUtils.hasText(token));
 
-        if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
-            String username = jwtTokenProvider.getUsernameFromToken(token);
-            log.debug("JWT Filter - Token valid, username: {}", username);
+        if (StringUtils.hasText(token)) {
+            if (jwtTokenProvider.validateToken(token) && !tokenBlacklistService.isBlacklisted(token)) {
+                String username = jwtTokenProvider.getUsernameFromToken(token);
+                log.debug("JWT Filter - Token valid, username: {}", username);
 
-            var roleOpt = authService.getRoleNameByUsername(username);
-            if (roleOpt.isPresent()) {
-                var authorities = Collections.singletonList(
-                        new SimpleGrantedAuthority(toSpringAuthority(roleOpt.get()))
-                );
+                var roleOpt = authService.getRoleNameByUsername(username);
+                if (roleOpt.isPresent()) {
+                    var authorities = Collections.singletonList(
+                            new SimpleGrantedAuthority(toSpringAuthority(roleOpt.get()))
+                    );
 
-                var authentication = new UsernamePasswordAuthenticationToken(
-                        User.withUsername(username)
-                                .password("")
-                                .authorities(authorities)
-                                .build(),
-                        null,
-                        authorities
-                );
-                SecurityContextHolder.getContext().setAuthentication(authentication);
-                log.debug("JWT Filter - Authentication set for user: {}, role: {}", username, roleOpt.get());
+                    var authentication = new UsernamePasswordAuthenticationToken(
+                            User.withUsername(username)
+                                    .password("")
+                                    .authorities(authorities)
+                                    .build(),
+                            null,
+                            authorities
+                    );
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    log.debug("JWT Filter - Authentication set for user: {}, role: {}", username, roleOpt.get());
+                } else {
+                    log.warn("JWT Filter - User {} is suspended/banned or not found, rejecting authentication", username);
+                    SecurityContextHolder.clearContext();
+                }
+            } else {
+                log.warn("JWT Filter - Token invalid or blacklisted, clearing security context");
+                SecurityContextHolder.clearContext();
             }
         }
 

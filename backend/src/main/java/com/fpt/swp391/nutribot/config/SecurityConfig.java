@@ -2,12 +2,16 @@ package com.fpt.swp391.nutribot.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fpt.swp391.nutribot.dto.response.ApiResponse;
 import com.fpt.swp391.nutribot.service.AuthService;
+import com.fpt.swp391.nutribot.service.TokenBlacklistService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.util.StringUtils;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -25,6 +29,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import java.net.URLEncoder;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -34,10 +39,17 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final AuthService authService;
+    private final TokenBlacklistService tokenBlacklistService;
+    private final JwtTokenProvider jwtTokenProvider;
 
-    public SecurityConfig(@Lazy JwtAuthenticationFilter jwtAuthenticationFilter, @Lazy AuthService authService) {
+    public SecurityConfig(@Lazy JwtAuthenticationFilter jwtAuthenticationFilter,
+                          @Lazy AuthService authService,
+                          TokenBlacklistService tokenBlacklistService,
+                          JwtTokenProvider jwtTokenProvider) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authService = authService;
+        this.tokenBlacklistService = tokenBlacklistService;
+        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     @Bean
@@ -47,43 +59,102 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/**").permitAll()
+                        // Public Auth Endpoints
+                        .requestMatchers(
+                                "/api/v1/auth/login",
+                                "/api/v1/auth/register",
+                                "/api/v1/auth/verify-otp",
+                                "/api/v1/auth/resend-otp"
+                        ).permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
+
+                        // Public Content Endpoints
                         .requestMatchers(HttpMethod.GET, "/api/v1/blogs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/home/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/contents/*/comments").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/contents/*/comments").authenticated()
-                        .requestMatchers(HttpMethod. DELETE, "/api/v1/comments/*").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/categories").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/categories/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/categories/**").hasRole("ADMIN")
+
+                        // Public Chatbot query (hỗ trợ khách vãng lai)
                         .requestMatchers(HttpMethod.POST, "/api/v1/chatbot/query").permitAll()
+
+                        // Actuator & OAuth
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/login/oauth2/code/**").permitAll()
+
+                        // Admin APIs
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/categories/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/categories/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/categories/**").hasRole("ADMIN")
+
+                        // Member/Authenticated endpoints (Deny-by-default)
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2
                         .successHandler(oauth2SuccessHandler())
                 )
-                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, exception) -> {
-                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    response.setContentType("application/json");
-                    response.setCharacterEncoding("UTF-8");
-                    response.getWriter().write("{\"success\":false,\"message\":\"Authentication required.\",\"data\":null,\"timestamp\":\""
-                            + Instant.now() + "\"}");
-                }))
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint((request, response, exception) -> {
+                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                            response.setContentType("application/json");
+                            response.setCharacterEncoding("UTF-8");
+                            ApiResponse<Void> apiResponse = ApiResponse.error("Vui lòng đăng nhập để tiếp tục");
+                            response.getWriter().write(writeJsonResponse(apiResponse));
+                        })
+                        .accessDeniedHandler((request, response, exception) -> {
+                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                            response.setContentType("application/json");
+                            response.setCharacterEncoding("UTF-8");
+                            ApiResponse<Void> apiResponse = ApiResponse.error("Bạn không có quyền truy cập tài nguyên này");
+                            response.getWriter().write(writeJsonResponse(apiResponse));
+                        })
+                )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")
+                        .addLogoutHandler((request, response, authentication) -> {
+                            String token = extractToken(request);
+                            if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
+                                try {
+                                    Date expiryDate = jwtTokenProvider.getExpirationDateFromToken(token);
+                                    tokenBlacklistService.blacklistToken(token, expiryDate);
+                                } catch (Exception e) {
+                                    // Bỏ qua lỗi parse expiration nếu token bị lỗi
+                                }
+                            }
+                            SecurityContextHolder.clearContext();
+                        })
                         .logoutSuccessHandler((request, response, authentication) -> {
-                            response.setStatus(200);
+                            response.setStatus(HttpServletResponse.SC_OK);
                             response.setContentType("application/json");
-                            response.getWriter().write("{\"success\":true,\"message\":\"Đăng xuất thành công\"}");
+                            response.setCharacterEncoding("UTF-8");
+                            ApiResponse<Void> apiResponse = ApiResponse.success("Đăng xuất thành công", null);
+                            response.getWriter().write(writeJsonResponse(apiResponse));
                         })
                 );
 
         return http.build();
+    }
+
+    private String extractToken(jakarta.servlet.http.HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7).trim();
+        }
+        return null;
+    }
+
+    private String writeJsonResponse(Object body) {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.findAndRegisterModules();
+            mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+            return mapper.writeValueAsString(body);
+        } catch (Exception e) {
+            return "{\"success\":false,\"message\":\"Internal error\"}";
+        }
     }
 
     private AuthenticationSuccessHandler oauth2SuccessHandler() {
@@ -142,6 +213,7 @@ public class SecurityConfig {
     @Bean
     public ObjectMapper objectMapper() {
         ObjectMapper mapper = new ObjectMapper();
+        mapper.findAndRegisterModules();
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         return mapper;
     }
