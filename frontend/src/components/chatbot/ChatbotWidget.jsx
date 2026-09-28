@@ -441,7 +441,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
         </div>
       )}
 
-      {authMode && <AuthModal mode={authMode} backdropClassName="chatbot-auth-backdrop" onClose={() => setAuthMode(null)} onSubmit={(_, mode) => setAuthMode(mode)} onAuthenticated={() => setAuthMode(null)} onGoogle={() => window.location.assign(googleAuthUrl())} />}
+      {authMode && <AuthModal mode={authMode} backdropClassName="chatbot-auth-backdrop" onClose={() => setAuthMode(null)} onSubmit={(_, mode) => setAuthMode(mode)} onAuthenticated={() => navigate('/home', { replace: true })} onGoogle={() => window.location.assign(googleAuthUrl())} />}
 
       <button
         type="button"
