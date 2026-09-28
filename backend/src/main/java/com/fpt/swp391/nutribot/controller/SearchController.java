@@ -20,10 +20,11 @@ public class SearchController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Integer categoryId,
             @RequestParam(required = false) String contentType,
+            @RequestParam(defaultValue = "newest") String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
 
-        PagedResponse<ContentListResponse> response = searchService.search(keyword, categoryId, contentType, page, size);
+        PagedResponse<ContentListResponse> response = searchService.search(keyword, categoryId, contentType, sort, page, size);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 }

@@ -129,6 +129,7 @@ function SearchExperience({ isMember, onAuth }) {
         keyword: query,
         contentType,
         categoryId: categoryId ? Number(categoryId) : undefined,
+        sort,
         page: cursor.page,
         blogPage: cursor.blogPage,
         videoPage: cursor.videoPage,
@@ -172,7 +173,7 @@ function SearchExperience({ isMember, onAuth }) {
         if (!controller.signal.aborted) { setLoading(false); setLoadingMore(false); }
       }
     }
-  }, [categoryId, contentType, isMember, query]);
+  }, [categoryId, contentType, isMember, query, sort]);
 
   useEffect(() => { fetchPage({ reset: true }); return () => requestRef.current?.abort(); }, [fetchPage]);
   useEffect(() => {
