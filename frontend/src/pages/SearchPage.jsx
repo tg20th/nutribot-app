@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
@@ -38,7 +38,7 @@ const appendUnique = (current, incoming) => {
   return [...current, ...incoming.filter((item) => !known.has(`${item.type}:${item.id}`))];
 };
 
-function ResultCard({ item, index, isMember, onPreview, returnTo }) {
+function ResultCard({ item, index, isMember, onPreview, onOpen, returnTo }) {
   const isVideo = item.type === 'VIDEO';
   const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently updated';
   const content = <>
@@ -54,7 +54,7 @@ function ResultCard({ item, index, isMember, onPreview, returnTo }) {
     </div>
   </>;
   return <article className={`search-result-card search-result-card--${index % 6}`}>
-    {isMember ? <Link to={`/community/posts/${item.id}`} state={{ returnTo }} aria-label={`Open ${item.title}`}>{content}</Link> : <button type="button" onClick={() => onPreview(item)} aria-label={`Preview ${item.title}`}>{content}</button>}
+    {isMember ? <Link to={`/community/posts/${item.id}`} state={{ returnTo, restoreSearch: true }} onClick={onOpen} aria-label={`Open ${item.title}`}>{content}</Link> : <button type="button" onClick={() => onPreview(item)} aria-label={`Preview ${item.title}`}>{content}</button>}
   </article>;
 }
 
@@ -82,11 +82,14 @@ function PreviewDialog({ item, onClose, onAuth }) {
 
 function SearchExperience({ isMember, onAuth }) {
   const location = useLocation();
+  const navigationType = useNavigationType();
   const pageRef = useRef(null);
   const loadMoreRef = useRef(null);
   const requestRef = useRef(null);
   const loadingRef = useRef(false);
   const cursorRef = useRef({ page: 0, blogPage: 0, videoPage: 0, last: false });
+  const restoredSnapshotRef = useRef(false);
+  const pendingScrollRef = useRef(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get('q') || '';
   const contentType = searchParams.get('type') || '';
@@ -102,9 +105,47 @@ function SearchExperience({ isMember, onAuth }) {
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null);
+  const searchStateKey = `nutribot-search-state:${location.pathname}${location.search}`;
+
+  const saveSearchSnapshot = useCallback(() => {
+    try {
+      sessionStorage.setItem(searchStateKey, JSON.stringify({
+        results,
+        meta,
+        cursor: cursorRef.current,
+        hasMore,
+        scrollY: window.scrollY
+      }));
+    } catch {
+      // Search remains usable when browser storage is unavailable.
+    }
+  }, [hasMore, meta, results, searchStateKey]);
 
   useEffect(() => setDraft(query), [query]);
   useEffect(() => { const controller = new AbortController(); getCategories(controller.signal).then(setCategories).catch(() => setCategories([])); return () => controller.abort(); }, []);
+
+  useEffect(() => {
+    restoredSnapshotRef.current = false;
+    pendingScrollRef.current = null;
+    if (navigationType !== 'POP' && location.state?.restoreSearch !== true) return;
+    try {
+      const snapshot = JSON.parse(sessionStorage.getItem(searchStateKey) ?? 'null');
+      if (!snapshot || !Array.isArray(snapshot.results) || !snapshot.cursor) return;
+      requestRef.current?.abort();
+      loadingRef.current = false;
+      cursorRef.current = snapshot.cursor;
+      setResults(snapshot.results);
+      setMeta(snapshot.meta ?? { totalElements: null, totalPages: 0, page: 0, last: false });
+      setHasMore(Boolean(snapshot.hasMore));
+      setLoading(false);
+      setLoadingMore(false);
+      setError('');
+      pendingScrollRef.current = Number(snapshot.scrollY) || 0;
+      restoredSnapshotRef.current = true;
+    } catch {
+      // Fall through to a fresh request when a stored snapshot is invalid.
+    }
+  }, [navigationType, searchStateKey]);
 
   const fetchPage = useCallback(async ({ reset = false } = {}) => {
     if (reset) {
@@ -170,13 +211,28 @@ function SearchExperience({ isMember, onAuth }) {
     }
   }, [categoryId, contentType, isMember, query]);
 
-  useEffect(() => { fetchPage({ reset: true }); return () => requestRef.current?.abort(); }, [fetchPage]);
+  useEffect(() => {
+    if (restoredSnapshotRef.current) {
+      restoredSnapshotRef.current = false;
+      return undefined;
+    }
+    fetchPage({ reset: true });
+    return () => requestRef.current?.abort();
+  }, [fetchPage, searchStateKey]);
   useEffect(() => {
     if (loading || loadingMore || !hasMore) return undefined;
     const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) fetchPage(); }, { rootMargin: '240px' });
     if (loadMoreRef.current) observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
   }, [fetchPage, hasMore, loading, loadingMore]);
+
+  useEffect(() => {
+    if (pendingScrollRef.current == null || loading) return;
+    const scrollY = pendingScrollRef.current;
+    const frame = requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'auto' }));
+    pendingScrollRef.current = null;
+    return () => cancelAnimationFrame(frame);
+  }, [loading, results.length]);
 
   useGSAP(() => {
     gsap.utils.toArray('.search-result-card').forEach((card) => gsap.fromTo(card, { scale: .88, opacity: .25 }, { scale: 1, opacity: 1, ease: 'none', scrollTrigger: { trigger: card, start: 'top 96%', end: 'top 62%', scrub: .5 } }));
@@ -240,7 +296,7 @@ function SearchExperience({ isMember, onAuth }) {
 
     <section className="search-results" id="search-results" aria-live="polite">
       <header><div><span>{query ? `Results for “${query}”` : 'Discover new content'}</span><h2>{loading ? 'Searching the library...' : resultCount ? `${resultCount} matching results` : 'Matching results'}</h2></div>{(query || contentType || categoryId) && <button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>Clear all filters <X size={15} /></button>}</header>
-      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Finding the right content...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage({ reset: true })}>Try again</button></div> : sortedResults.length ? <div className="search-results-grid">{sortedResults.map((item, index) => <ResultCard key={`${item.id}-${index}`} item={item} index={index} isMember={isMember} onPreview={setPreview} returnTo={returnTo} />)}</div> : <div className="search-empty"><Search size={34} /><h3>No matching content found</h3><p>Try a shorter keyword or choose another content type.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all content</button></div>}
+      {loading ? <div className="search-state"><LoaderCircle className="search-spinner" /><p>Finding the right content...</p></div> : error ? <div className="search-state search-state--error"><p>{error}</p><button type="button" onClick={() => fetchPage({ reset: true })}>Try again</button></div> : sortedResults.length ? <div className="search-results-grid">{sortedResults.map((item, index) => <ResultCard key={`${item.id}-${index}`} item={item} index={index} isMember={isMember} onPreview={setPreview} onOpen={saveSearchSnapshot} returnTo={returnTo} />)}</div> : <div className="search-empty"><Search size={34} /><h3>No matching content found</h3><p>Try a shorter keyword or choose another content type.</p><button type="button" onClick={() => { setDraft(''); setSearchParams({}); }}>View all content</button></div>}
       {hasMore && <div className="search-load-more" ref={loadMoreRef}>{loadingMore && <LoaderCircle className="search-spinner" />}</div>}
     </section>
 
