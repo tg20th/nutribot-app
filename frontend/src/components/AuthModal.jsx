@@ -7,7 +7,42 @@ import EmailVerificationStep from './auth/EmailVerificationStep';
 import '../styles/auth-popup.css';
 
 const emptyForm = { name: '', username: '', email: '', password: '', confirmPassword: '' };
-const OTP_RESEND_COOLDOWN_SECONDS = 60;
+const OTP_VALIDITY_SECONDS = 5 * 60;
+const PENDING_OTP_STORAGE_KEY = 'nutribot-pending-email-verification';
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLocaleLowerCase();
+}
+
+function isEmail(value) {
+  return /^\S+@\S+\.\S+$/.test(value);
+}
+
+function getPendingOtp() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const pendingOtp = JSON.parse(window.sessionStorage.getItem(PENDING_OTP_STORAGE_KEY) || 'null');
+    return isEmail(pendingOtp?.email) && Number.isFinite(pendingOtp?.expiresAt) ? pendingOtp : null;
+  } catch {
+    return null;
+  }
+}
+
+function savePendingOtp(email, expiresAt = Date.now() + OTP_VALIDITY_SECONDS * 1000) {
+  if (typeof window === 'undefined' || !isEmail(email)) return null;
+  const pendingOtp = { email: normalizeEmail(email), expiresAt };
+  window.sessionStorage.setItem(PENDING_OTP_STORAGE_KEY, JSON.stringify(pendingOtp));
+  return pendingOtp;
+}
+
+function clearPendingOtp() {
+  if (typeof window !== 'undefined') window.sessionStorage.removeItem(PENDING_OTP_STORAGE_KEY);
+}
+
+function isUnverifiedAccountError(error) {
+  const message = String(error?.message || '').toLocaleLowerCase();
+  return message.includes('chưa xác thực') || message.includes('not verified') || message.includes('verify your email');
+}
 
 function otpErrorState(error) {
   const message = (error?.message || '').toLocaleLowerCase();
@@ -46,14 +81,17 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState('');
+  const [registeredEmail, setRegisteredEmail] = useState(() => getPendingOtp()?.email || '');
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationState, setVerificationState] = useState('idle');
-  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [otpExpiresAt, setOtpExpiresAt] = useState(() => getPendingOtp()?.expiresAt || null);
+  const [otpRemainingSeconds, setOtpRemainingSeconds] = useState(null);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState('');
   const isVerification = mode === 'verify-email';
   const isSignup = mode === 'signup';
   const validationErrors = isSignup ? validateSignup(form) : validateLogin(form);
   const fieldError = (name) => touched[name] && validationErrors[name];
+  const email = registeredEmail || verification.email;
 
   useEffect(() => {
     const close = (event) => event.key === 'Escape' && onClose();
@@ -61,11 +99,28 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
     return () => window.removeEventListener('keydown', close);
   }, [onClose]);
 
+  const rememberOtp = (email, expiresAt) => {
+    const pendingOtp = savePendingOtp(email, expiresAt);
+    if (!pendingOtp) return false;
+    setRegisteredEmail(pendingOtp.email);
+    setOtpExpiresAt(pendingOtp.expiresAt);
+    return true;
+  };
+
   useEffect(() => {
-    if (!cooldownSeconds) return undefined;
-    const timer = window.setInterval(() => setCooldownSeconds((seconds) => Math.max(0, seconds - 1)), 1000);
+    if (!isVerification || !email || !otpExpiresAt) {
+      setOtpRemainingSeconds(null);
+      return undefined;
+    }
+    const updateRemainingTime = () => {
+      const seconds = Math.max(0, Math.ceil((otpExpiresAt - Date.now()) / 1000));
+      setOtpRemainingSeconds(seconds);
+      if (seconds === 0) setVerificationState((current) => current === 'verified' ? current : 'expired');
+    };
+    updateRemainingTime();
+    const timer = window.setInterval(updateRemainingTime, 1000);
     return () => window.clearInterval(timer);
-  }, [Boolean(cooldownSeconds)]);
+  }, [isVerification, email, otpExpiresAt]);
 
   const update = (event) => {
     const { name, value } = event.target;
@@ -87,10 +142,9 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
         ? await registerAccount({ fullName: form.name.trim(), username: form.username.trim(), email: form.email.trim(), password: form.password })
         : await loginAccount({ usernameOrEmail: form.email.trim(), password: form.password });
       if (isSignup) {
-        setRegisteredEmail(form.email.trim());
+        rememberOtp(form.email.trim());
         setVerificationCode('');
         setVerificationState('idle');
-        setCooldownSeconds(0);
         onSubmit?.(null, 'verify-email');
         return;
       }
@@ -102,19 +156,28 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
       setSuccess('Welcome back.');
       window.setTimeout(onClose, 700);
     } catch (requestError) {
-      setError(requestError instanceof ApiError ? requestError.message : requestError.message || 'Something went wrong. Please try again.');
+      const message = requestError instanceof ApiError ? requestError.message : requestError.message || 'Something went wrong. Please try again.';
+      setError(message);
+      if (!isSignup && isUnverifiedAccountError(requestError)) {
+        const pendingOtp = getPendingOtp();
+        setPendingVerificationEmail(pendingOtp?.email || (isEmail(form.email) ? normalizeEmail(form.email) : ''));
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const email = registeredEmail || verification.email;
   const verifyOtp = async (otpCode) => {
     if (!email || otpCode.length !== 6) return;
+    if (otpRemainingSeconds === 0) {
+      setVerificationState('expired');
+      return;
+    }
     setVerificationState('verifying');
     try {
       const data = await verifyRegistrationOtp({ email, otpCode });
       localStorage.setItem('nutribot-auth-token', data.token);
+      clearPendingOtp();
       setVerificationState('verified');
       onAuthenticated?.(data, 'verify-email');
     } catch (requestError) {
@@ -122,13 +185,16 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
     }
   };
   const resendOtp = async () => {
-    if (!email || cooldownSeconds) return;
+    if (!isEmail(email)) {
+      setVerificationState('error');
+      return;
+    }
     setVerificationState('resending');
     try {
       await resendRegistrationOtp(email);
       setVerificationCode('');
       setVerificationState('resendSuccess');
-      setCooldownSeconds(OTP_RESEND_COOLDOWN_SECONDS);
+      rememberOtp(email);
     } catch (requestError) {
       setVerificationState(otpErrorState(requestError));
     }
@@ -136,15 +202,29 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
   const backToSignup = () => {
     setVerificationCode('');
     setVerificationState('idle');
-    setCooldownSeconds(0);
     verification.onBack?.();
     if (!verification.onBack) onSubmit?.(null, 'signup');
+  };
+
+  const openPendingVerification = () => {
+    const pendingOtp = getPendingOtp();
+    const emailToVerify = pendingVerificationEmail || pendingOtp?.email;
+    if (emailToVerify) rememberOtp(emailToVerify, pendingOtp?.expiresAt);
+    onSubmit?.(null, 'verify-email');
+  };
+
+  const updateVerificationEmail = (nextEmail) => {
+    setRegisteredEmail(nextEmail);
+    if (isEmail(nextEmail)) {
+      const pendingOtp = getPendingOtp();
+      rememberOtp(nextEmail, normalizeEmail(nextEmail) === pendingOtp?.email ? pendingOtp.expiresAt : undefined);
+    }
   };
 
   if (isVerification) return <div className={`modal-backdrop auth-backdrop ${backdropClassName}`.trim()} role="dialog" aria-modal="true" aria-labelledby="email-verification-title" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <div className="auth-modal auth-modal--verification">
       <button className="modal-close" type="button" onClick={onClose} aria-label="Close"><X size={19} /></button>
-      <EmailVerificationStep {...verification} email={email} code={verificationCode} onCodeChange={(code) => { setVerificationCode(code); setVerificationState('idle'); }} onVerify={verifyOtp} onResend={resendOtp} onBack={backToSignup} verificationState={verificationState} cooldownSeconds={cooldownSeconds} />
+      <EmailVerificationStep {...verification} email={email} code={verificationCode} onEmailChange={updateVerificationEmail} onCodeChange={(code) => { setVerificationCode(code); if (otpRemainingSeconds !== 0) setVerificationState('idle'); }} onVerify={verifyOtp} onResend={resendOtp} onBack={backToSignup} verificationState={verificationState} otpRemainingSeconds={otpRemainingSeconds} />
     </div>
   </div>;
 
@@ -175,6 +255,7 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
         </label>
         {isSignup && <label>Confirm password<span className="password-input"><input name="confirmPassword" type={showConfirmation ? 'text' : 'password'} autoComplete="new-password" value={form.confirmPassword} onChange={update} onBlur={() => touch('confirmPassword')} aria-invalid={Boolean(fieldError('confirmPassword'))} aria-describedby={fieldError('confirmPassword') ? 'confirm-password-error' : undefined} placeholder="Repeat your password" /><button type="button" onClick={() => setShowConfirmation((current) => !current)} aria-label={showConfirmation ? 'Hide password confirmation' : 'Show password confirmation'}>{showConfirmation ? <EyeOff size={18} /> : <Eye size={18} />}</button></span>{fieldError('confirmPassword') && <small id="confirm-password-error">{fieldError('confirmPassword')}</small>}</label>}
         <button className="auth-submit" type="submit" disabled={submitting || Boolean(success)}>{submitting ? <><LoaderCircle className="auth-spinner" size={17} />Please wait...</> : isSignup ? 'Create account' : 'Log in'}</button>
+        {!isSignup && isUnverifiedAccountError({ message: error }) && <button className="auth-verification-action" type="button" onClick={openPendingVerification}>Nhập mã OTP / Xác thực email</button>}
         <button className="auth-switch" type="button" onClick={() => onSubmit?.(null, isSignup ? 'login' : 'signup')}>{isSignup ? 'Already have an account? Log in' : 'New here? Create an account'}</button>
       </form>
     </div>
