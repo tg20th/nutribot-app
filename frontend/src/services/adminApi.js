@@ -99,8 +99,26 @@ const adminUserQuery = ({ keyword = '', status = '', page = 0, size = 10 } = {})
   if (status) params.set('status', status);
   return `/api/v1/admin/users?${params}`;
 };
+const publicContentTotal = async (path, signal) => {
+  const page = unwrapData(await apiRequest(path + '?page=0&size=1', { signal }), {});
+  return Number(page.totalElements ?? 0);
+};
+const getDashboard = async (_range, signal) => {
+  const [users, moderation, blogs, videos, categories] = await Promise.all([
+    apiRequest(adminUserQuery({ page: 0, size: 1 }), { signal }).then((payload) => unwrapData(payload, {})),
+    getModerationQueue({ page: 0, size: 1 }, signal),
+    publicContentTotal('/api/v1/blogs', signal),
+    publicContentTotal('/api/v1/videos', signal),
+    getCategories(signal),
+  ]);
+  return {
+    metrics: { totalUsers: Number(users.totalElements ?? 0), publishedContent: blogs + videos, pendingModeration: Number(moderation.totalElements ?? 0) },
+    popularCategories: categories.slice(0, 5).map((category, index) => ({ rank: index + 1, name: category.name, description: category.description || 'Nội dung dinh dưỡng', posts: Number(category.count ?? 0), growth: category.active ? 'Đang hoạt động' : 'Đã ẩn' })),
+    moderationFeed: [], weeklyContent: [], health: { status: 'Live data', version: 'API v1' },
+  };
+};
 export const adminApi = {
-  getDashboard: (range, signal) => apiRequest(`/api/admin/dashboard?range=${encodeURIComponent(range ?? '7d')}`, { signal }).then((payload) => unwrapData(payload, {})),
+  getDashboard,
   getUsers: (params, signal) => apiRequest(adminUserQuery(params), { signal }).then((payload) => mapAdminUserPage(unwrapData(payload, {}))), getUserById: one('/api/admin/users'), updateUserStatus: (id, value) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: value }) }).then((payload) => mapAdminUser(unwrapData(payload, {}))), lockUser: (id) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'BANNED' }) }),
   getModerationQueue, moderateContent,
   getCategories, createCategory, updateCategory, deleteCategory,
