@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ApiError } from '../services/apiClient';
 import { loginAccount, registerAccount } from '../services/authApi';
 import AuthToast from './AuthToast';
+import EmailVerificationStep from './auth/EmailVerificationStep';
 import '../styles/auth-popup.css';
 
 const emptyForm = { name: '', username: '', email: '', password: '', confirmPassword: '' };
@@ -28,7 +29,7 @@ function validateLogin(form) {
   return errors;
 }
 
-export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthenticated, backdropClassName = '' }) {
+export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthenticated, verification = {}, backdropClassName = '' }) {
   const [form, setForm] = useState(emptyForm);
   const [touched, setTouched] = useState({});
   const [error, setError] = useState('');
@@ -36,6 +37,7 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const isVerification = mode === 'verify-email';
   const isSignup = mode === 'signup';
   const validationErrors = isSignup ? validateSignup(form) : validateLogin(form);
   const fieldError = (name) => touched[name] && validationErrors[name];
@@ -75,6 +77,13 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
       setSubmitting(false);
     }
   };
+
+  if (isVerification) return <div className={`modal-backdrop auth-backdrop ${backdropClassName}`.trim()} role="dialog" aria-modal="true" aria-labelledby="email-verification-title" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div className="auth-modal auth-modal--verification">
+      <button className="modal-close" type="button" onClick={onClose} aria-label="Close"><X size={19} /></button>
+      <EmailVerificationStep {...verification} onBack={verification.onBack || (() => onSubmit?.(null, 'signup'))} />
+    </div>
+  </div>;
 
   return <>
     <AuthToast error={error} success={success} />
