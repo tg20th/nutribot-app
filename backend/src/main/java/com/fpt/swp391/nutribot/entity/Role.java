@@ -28,4 +28,12 @@ public class Role {
     @OneToMany(mappedBy = "role", fetch = FetchType.LAZY)
     @Builder.Default
     private Set<User> users = new HashSet<>();
+
+    public RoleName getRoleEnum() {
+        return RoleName.fromString(this.roleName);
+    }
+
+    public void setRoleEnum(RoleName roleEnum) {
+        this.roleName = roleEnum != null ? roleEnum.getAuthority() : null;
+    }
 }
