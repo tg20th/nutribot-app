@@ -30,6 +30,13 @@ class UserContext(BaseModel):
 
     bmi: float | None = Field(default=None, gt=0, le=100)
     allergies: list[str] = Field(default_factory=list, max_length=30)
+    health_goal: str | None = Field(default=None, min_length=1, max_length=100)
+    vegetarian_type: Literal["VEGAN", "LACTO", "OVO", "LACTO_OVO"] | None = None
+
+    @field_validator("vegetarian_type", mode="before")
+    @classmethod
+    def normalize_vegetarian_type(cls, value: object) -> object:
+        return value.strip().upper() if isinstance(value, str) else value
 
     @field_validator("allergies")
     @classmethod
@@ -88,6 +95,8 @@ class ChatResponse(BaseModel):
         normalized: list[str] = []
         seen: set[str] = set()
         for value in values:
+            if not isinstance(value, str):
+                raise ValueError("Recommendation must be text")
             clean_value = value.strip()
             key = clean_value.casefold()
             if clean_value and key not in seen:
