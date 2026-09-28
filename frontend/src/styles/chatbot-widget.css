@@ -458,6 +458,22 @@
   color: #fff;
 }
 
+.chatbot-widget__retry {
+  display: block;
+  margin-top: 8px;
+  padding: 0;
+  color: #315f45;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.chatbot-widget__retry:focus-visible {
+  outline: 3px solid rgba(24, 61, 45, 0.28);
+  outline-offset: 3px;
+}
+
 .chatbot-widget__typing {
   min-width: 34px;
   height: 18px;
