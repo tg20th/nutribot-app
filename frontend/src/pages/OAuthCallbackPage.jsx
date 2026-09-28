@@ -21,7 +21,8 @@ export default function OAuthCallbackPage() {
     if (token && username && role) {
       localStorage.setItem('nutribot-auth-token', token);
       localStorage.setItem('nutribot-user', JSON.stringify({ username, role }));
-      navigate('/home');
+      const destination = role === 'ROLE_ADMIN' || role === 'Admin' ? '/admin' : '/home';
+      navigate(destination);
     } else {
       navigate('/');
     }
