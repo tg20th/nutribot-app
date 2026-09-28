@@ -2,8 +2,11 @@ package com.fpt.swp391.nutribot.controller;
 
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
 import com.fpt.swp391.nutribot.dto.response.AvatarResponse;
+import com.fpt.swp391.nutribot.dto.request.EmailVerificationRequest;
 import com.fpt.swp391.nutribot.dto.request.ProfileUpdateRequest;
+import com.fpt.swp391.nutribot.dto.response.EmailVerificationResponse;
 import com.fpt.swp391.nutribot.dto.response.UserProfileResponse;
+import com.fpt.swp391.nutribot.service.EmailChangeService;
 import com.fpt.swp391.nutribot.service.UserProfileService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -26,6 +30,7 @@ import java.security.Principal;
 public class UserProfileController {
 
     private final UserProfileService userProfileService;
+    private final EmailChangeService emailChangeService;
 
     @GetMapping
     public ResponseEntity<ApiResponse<UserProfileResponse>> getProfile(Principal principal) {
@@ -39,6 +44,14 @@ public class UserProfileController {
             @Valid @RequestBody ProfileUpdateRequest request) {
         UserProfileResponse response = userProfileService.updateProfile(principal.getName(), request);
         return ResponseEntity.ok(ApiResponse.success("Profile updated successfully.", response));
+    }
+
+    @PostMapping("/email/verify")
+    public ResponseEntity<ApiResponse<EmailVerificationResponse>> verifyEmailChange(
+            Principal principal,
+            @Valid @RequestBody EmailVerificationRequest request) {
+        EmailVerificationResponse response = emailChangeService.verifyEmailChange(principal.getName(), request.getOtp());
+        return ResponseEntity.ok(ApiResponse.success("Email address verified successfully.", response));
     }
 
     @PutMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

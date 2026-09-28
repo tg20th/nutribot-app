@@ -25,7 +25,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import CommunityTopBar from '../components/community/CommunityTopBar';
-import { deleteMyAvatar, getMyProfile, updateMyAvatar, updateMyProfile } from '../services/profileApi';
+import AuthModal from '../components/AuthModal';
+import { deleteMyAvatar, getMyProfile, updateMyAvatar, updateMyProfile, verifyMyEmailChange } from '../services/profileApi';
 import { getCurrentUserFromToken } from '../utils/auth';
 import freshProduce from '../assets/fresh-produce.jpg';
 import '../styles/profile.css';
@@ -146,6 +147,10 @@ export default function ProfilePage() {
   const [hasLoadedProfile, setHasLoadedProfile] = useState(false);
   const [profileLoadAttempt, setProfileLoadAttempt] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [isEmailVerificationOpen, setIsEmailVerificationOpen] = useState(false);
+  const [emailVerificationTarget, setEmailVerificationTarget] = useState('');
+  const [serverPendingEmail, setServerPendingEmail] = useState('');
+  const [confirmedEmail, setConfirmedEmail] = useState('');
   const [notice, setNotice] = useState(null);
   const [activeGuide, setActiveGuide] = useState('identity');
   const [activeNote, setActiveNote] = useState(0);
@@ -162,10 +167,13 @@ export default function ProfilePage() {
     getMyProfile(controller.signal)
       .then((data) => {
         const mapped = toFormProfile(data, fallbackUser);
-        setProfile(mapped);
-        setSavedProfile(mapped);
+        const editableProfile = { ...mapped, email: data.pendingEmail || mapped.email };
+        setProfile(editableProfile);
+        setSavedProfile(editableProfile);
+        setConfirmedEmail(mapped.email);
+        setServerPendingEmail(data.pendingEmail || '');
         setHasLoadedProfile(true);
-        publishProfileUpdate(mapped);
+        publishProfileUpdate(editableProfile);
       })
       .catch((error) => {
         if (error?.name !== 'AbortError') {
@@ -238,10 +246,11 @@ export default function ProfilePage() {
   }, { scope: pageRef });
 
   const isDirty = JSON.stringify(profile) !== JSON.stringify(savedProfile) || Boolean(avatarFile) || avatarRemoved;
-  // savedProfile only changes after an accepted server response, so it remains
-  // the source of truth for the currently confirmed email address.
-  const currentEmail = savedProfile.email;
-  const pendingEmail = profile.email.trim() && profile.email.trim() !== currentEmail ? profile.email.trim() : '';
+  // confirmedEmail stays active until the pending address is verified.
+  const currentEmail = confirmedEmail;
+  const pendingEmail = serverPendingEmail;
+  const profileEmailMatchesPending = pendingEmail && profile.email.trim().toLowerCase() === pendingEmail.toLowerCase();
+  const hasUnsubmittedEmailChange = profile.email.trim() && profile.email.trim() !== currentEmail;
   const completion = [profile.fullName, profile.email, profile.dateOfBirth, profile.gender, profile.bio].filter(Boolean).length * 20;
   const visibleAvatar = avatarPreview || (!avatarRemoved ? profile.avatarUrl : '');
 
@@ -318,19 +327,56 @@ export default function ProfilePage() {
       if (avatarFile) avatarUpdate = await updateMyAvatar(avatarFile);
       else if (avatarRemoved) await deleteMyAvatar();
       const nextAvatarUrl = avatarRemoved ? '' : (avatarUpdate.avatarUrl ?? profile.avatarUrl);
-      const mapped = toFormProfile({ ...profile, ...updated, ...avatarUpdate, avatarUrl: nextAvatarUrl }, fallbackUser);
+      const mapped = toFormProfile({
+        ...profile,
+        ...updated,
+        ...avatarUpdate,
+        email: updated.pendingEmail || updated.email,
+        avatarUrl: nextAvatarUrl,
+      }, fallbackUser);
       setProfile(mapped);
       setSavedProfile(mapped);
+      setConfirmedEmail(updated.email || confirmedEmail);
+      setServerPendingEmail(updated.pendingEmail || '');
+      if (updated.pendingEmail) {
+        setEmailVerificationTarget(updated.pendingEmail);
+        setIsEmailVerificationOpen(true);
+      }
       setAvatarFile(null);
       setAvatarPreview('');
       setAvatarRemoved(false);
       publishProfileUpdate(mapped);
-      setNotice({ type: 'success', message: 'Your profile has been updated successfully.' });
+      setNotice(updated.pendingEmail
+        ? { type: 'info', message: `Profile saved. Your email change is pending verification. A code was sent to ${updated.pendingEmail}.` }
+        : { type: 'success', message: 'Your profile has been updated successfully.' });
     } catch (error) {
       setNotice({ type: 'error', message: error?.message || 'We could not save your changes. Please try again.' });
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleEmailVerification = async (otp) => {
+    const verified = await verifyMyEmailChange(otp);
+    const confirmedProfile = { ...savedProfile, email: verified.email };
+    setProfile(confirmedProfile);
+    setSavedProfile(confirmedProfile);
+    setConfirmedEmail(verified.email);
+    setServerPendingEmail('');
+    setNotice({ type: 'success', message: 'Your new email address has been verified.' });
+    return verified;
+  };
+
+  const resendEmailVerification = async () => {
+    const response = await updateMyProfile({
+      username: savedProfile.username,
+      fullName: savedProfile.fullName,
+      email: pendingEmail,
+      bio: savedProfile.bio || null,
+      dateOfBirth: savedProfile.dateOfBirth || null,
+      gender: savedProfile.gender || null,
+    });
+    setServerPendingEmail(response.pendingEmail || '');
   };
 
   return (
@@ -431,8 +477,10 @@ export default function ProfilePage() {
                   <label className="nb-profile-field nb-profile-field--wide">
                     <span>Email address</span>
                     <div><Mail size={17} /><input type="email" name="email" value={profile.email} onChange={updateField} placeholder="name@example.com" autoComplete="email" maxLength={255} aria-invalid={Boolean(errors.email)} aria-describedby={errors.email ? 'email-error' : 'email-help'} /></div>
-                    {errors.email ? <small id="email-error">{errors.email}</small> : <em id="email-help">{pendingEmail ? `Current email: ${currentEmail}` : 'Used for account access and important updates.'}</em>}
+                    {errors.email ? <small id="email-error">{errors.email}</small> : <em id="email-help">{pendingEmail || hasUnsubmittedEmailChange ? `Current email: ${currentEmail}` : 'Used for account access and important updates.'}</em>}
                   </label>
+
+                  {profileEmailMatchesPending && !isEmailVerificationOpen && <button type="button" className="nb-profile-button nb-profile-button--secondary nb-profile-field--wide" onClick={() => { setEmailVerificationTarget(pendingEmail); setIsEmailVerificationOpen(true); }}>Reopen email verification</button>}
 
                   <label className="nb-profile-field">
                     <span>Date of birth</span>
@@ -509,6 +557,20 @@ export default function ProfilePage() {
             <img src={visibleAvatar} alt="Profile photo enlarged" />
           </section>
         </div>
+      )}
+      {isEmailVerificationOpen && emailVerificationTarget && (
+        <AuthModal
+          mode="verify-email"
+          onClose={() => setIsEmailVerificationOpen(false)}
+          verification={{
+            email: emailVerificationTarget,
+            purpose: 'emailChange',
+            expirationSeconds: 30 * 60,
+            onVerify: handleEmailVerification,
+            onResend: resendEmailVerification,
+            onBack: () => setIsEmailVerificationOpen(false),
+          }}
+        />
       )}
       <ChatbotWidget />
     </div>

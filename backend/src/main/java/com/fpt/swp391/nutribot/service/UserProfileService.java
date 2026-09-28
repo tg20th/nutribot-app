@@ -8,13 +8,17 @@ import com.fpt.swp391.nutribot.entity.Ingredient;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.entity.UserProfile;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
+import com.fpt.swp391.nutribot.exception.ConflictException;
 import com.fpt.swp391.nutribot.exception.CloudinaryUploadException;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.UserProfileRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
@@ -44,6 +48,7 @@ public class UserProfileService {
     private final UserProfileRepository userProfileRepository;
     private final CloudinaryAvatarService cloudinaryAvatarService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final EmailChangeService emailChangeService;
 
     @Transactional(readOnly = true)
     public UserProfileResponse getProfile(String username) {
@@ -54,7 +59,7 @@ public class UserProfileService {
 
     @Transactional
     public UserProfileResponse updateProfile(String currentUsername, ProfileUpdateRequest request) {
-        User user = findUser(currentUsername);
+        User user = findUserForUpdate(currentUsername);
         String previousUsername = user.getUsername();
         String username = normalize(request.getUsername());
         String email = normalize(request.getEmail());
@@ -65,25 +70,29 @@ public class UserProfileService {
         if (email == null || email.length() > 255) {
             throw new BadRequestException("A valid email is required.");
         }
-        if (userRepository.existsByUsernameAndUserIdNot(username, user.getUserId())) {
-            throw new BadRequestException("Username is already in use.");
+        if (userRepository.existsByUsernameIgnoreCaseAndUserIdNot(username, user.getUserId())) {
+            throw new ConflictException("Username is already in use.");
         }
-        if (userRepository.existsByEmailAndUserIdNot(email, user.getUserId())) {
-            throw new BadRequestException("Email is already in use.");
-        }
+        emailChangeService.requestEmailChange(user, email);
 
         user.setUsername(username);
-        user.setEmail(email);
         user.setFullName(normalize(request.getFullName()));
         user.setBio(normalize(request.getBio()));
-        User savedUser = userRepository.save(user);
+        User savedUser;
+        try {
+            // The database unique constraints remain authoritative if another
+            // account claims this username after the pre-check above.
+            savedUser = userRepository.saveAndFlush(user);
+        } catch (DataIntegrityViolationException exception) {
+            throw new ConflictException("Username is already in use.");
+        }
 
         UserProfile profile = userProfileRepository.findById(user.getUserId())
                 .orElseGet(() -> UserProfile.builder().user(savedUser).build());
         profile.setUser(savedUser);
         profile.setDateOfBirth(request.getDateOfBirth());
-        profile.setGender(normalize(request.getGender()));
-        userProfileRepository.save(profile);
+        profile.setGender(normalizeGender(request.getGender()));
+        userProfileRepository.saveAndFlush(profile);
 
         String refreshedToken = previousUsername.equals(savedUser.getUsername())
                 ? null
@@ -93,17 +102,19 @@ public class UserProfileService {
 
     @Transactional
     public AvatarResponse updateAvatar(String username, MultipartFile file) {
-        User user = findUser(username);
         validateImage(file);
+        User identifiedUser = findUser(username);
 
         CloudinaryAvatarService.AvatarUploadResult uploadResult;
         try {
-            uploadResult = cloudinaryAvatarService.uploadAvatar(file, user.getUserId());
+            uploadResult = cloudinaryAvatarService.uploadAvatar(file, identifiedUser.getUserId());
         } catch (RuntimeException exception) {
             throw new CloudinaryUploadException(exception);
         }
 
         try {
+            User user = userRepository.findByIdForUpdate(identifiedUser.getUserId())
+                    .orElseThrow(() -> new BadRequestException("User profile was not found."));
             user.setAvatarUrl(uploadResult.secureUrl());
             User savedUser = userRepository.saveAndFlush(user);
             return new AvatarResponse(savedUser.getAvatarUrl());
@@ -117,16 +128,22 @@ public class UserProfileService {
         }
     }
 
+    @Transactional
     public AvatarResponse deleteAvatar(String username) {
-        User user = findUser(username);
+        User user = findUserForUpdate(username);
         String currentAvatarUrl = user.getAvatarUrl();
         user.setAvatarUrl(null);
         User savedUser = userRepository.saveAndFlush(user);
 
-        try {
-            cloudinaryAvatarService.deleteAvatarByUrl(currentAvatarUrl);
-        } catch (RuntimeException cleanupException) {
-            log.warn("Avatar URL was cleared for user {} but Cloudinary cleanup failed.", username, cleanupException);
+        if (currentAvatarUrl != null && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    cleanupDeletedAvatar(currentAvatarUrl, username);
+                }
+            });
+        } else if (currentAvatarUrl != null) {
+            cleanupDeletedAvatar(currentAvatarUrl, username);
         }
 
         return new AvatarResponse(savedUser.getAvatarUrl());
@@ -134,6 +151,11 @@ public class UserProfileService {
 
     private User findUser(String username) {
         return userRepository.findByUsername(username)
+                .orElseThrow(() -> new BadRequestException("User profile was not found."));
+    }
+
+    private User findUserForUpdate(String username) {
+        return userRepository.findByUsernameForUpdate(username)
                 .orElseThrow(() -> new BadRequestException("User profile was not found."));
     }
 
@@ -154,6 +176,7 @@ public class UserProfileService {
                 .userId(user.getUserId())
                 .username(user.getUsername())
                 .email(user.getEmail())
+                .pendingEmail(emailChangeService.getPendingEmail(user.getUserId()))
                 .fullName(user.getFullName())
                 .avatarUrl(user.getAvatarUrl())
                 .bio(user.getBio())
@@ -194,6 +217,25 @@ public class UserProfileService {
         if (value == null) return null;
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeGender(String value) {
+        String normalized = normalize(value);
+        if (normalized == null) return null;
+        return switch (normalized.toLowerCase(Locale.ROOT)) {
+            case "female" -> "Female";
+            case "male" -> "Male";
+            case "other" -> "Other";
+            default -> throw new BadRequestException("Gender must be Male, Female, Other, or blank.");
+        };
+    }
+
+    private void cleanupDeletedAvatar(String avatarUrl, String username) {
+        try {
+            cloudinaryAvatarService.deleteAvatarByUrl(avatarUrl);
+        } catch (RuntimeException cleanupException) {
+            log.warn("Avatar URL was cleared for user {} but Cloudinary cleanup failed.", username, cleanupException);
+        }
     }
 
     private void validateImage(MultipartFile file) {

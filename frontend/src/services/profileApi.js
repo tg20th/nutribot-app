@@ -10,6 +10,7 @@ export const updateMyAvatar = async (file) => {
   body.append('file', file);
   return unwrapData(await apiRequest('/api/v1/users/profile/avatar', { method: 'PUT', body }), {});
 };
+export const verifyMyEmailChange = async (otp) => unwrapData(await apiRequest('/api/v1/users/profile/email/verify', { method: 'POST', body: JSON.stringify({ otp }) }), {});
 export const uploadMyAvatar = updateMyAvatar;
 export const deleteMyAvatar = async () => unwrapData(await apiRequest('/api/v1/users/profile/avatar', { method: 'DELETE' }), {});
 export const getHealthProfile = async (signal) => unwrapData(await apiRequest('/api/v1/users/profile/health', { signal }), {});

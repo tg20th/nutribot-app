@@ -27,12 +27,6 @@ public class UserProfile {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "avatar_url", length = 500)
-    private String avatarUrl;
-
-    @Column(name = "bio", length = 500)
-    private String bio;
-
     @Column(name = "height_cm", precision = 5, scale = 2)
     private BigDecimal heightCm;
 

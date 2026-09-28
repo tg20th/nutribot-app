@@ -21,6 +21,7 @@ public class UserProfileResponse {
     private Integer userId;
     private String username;
     private String email;
+    private String pendingEmail;
     private String fullName;
     private String avatarUrl;
     private String bio;
