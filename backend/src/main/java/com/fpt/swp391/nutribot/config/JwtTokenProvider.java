@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import jakarta.annotation.PostConstruct;
 import javax.crypto.SecretKey;
 import java.util.Date;
 
@@ -20,8 +21,23 @@ public class JwtTokenProvider {
     @Value("${jwt.expiration}")
     private long jwtExpiration;
 
+    @PostConstruct
+    public void validateSecret() {
+        if (jwtSecret == null || jwtSecret.trim().isEmpty()) {
+            throw new IllegalStateException("JWT signing secret is missing. Configure jwt.secret / JWT_SECRET.");
+        }
+        try {
+            byte[] keyBytes = Decoders.BASE64.decode(jwtSecret.trim());
+            if (keyBytes.length < 64) {
+                throw new IllegalStateException("JWT signing secret must be at least 64 bytes (512 bits) for HS512 algorithm.");
+            }
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException("JWT signing secret is not a valid Base64 encoded string.", e);
+        }
+    }
+
     private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
+        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret.trim());
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
