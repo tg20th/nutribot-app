@@ -44,30 +44,38 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
 
     Long countByContentTypeAndStatus(String contentType, String status);
 
-    // Search queries
-    @Query("SELECT c FROM Content c WHERE c.status = :status AND " +
-           "(LOWER(c.title) LIKE :keyword OR LOWER(c.body) LIKE :keyword) " +
-           "ORDER BY c.createdAt DESC")
+    // Search queries with dynamic sorting and active author visibility
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE AND " +
+           "(LOWER(c.title) LIKE :keyword OR LOWER(c.body) LIKE :keyword)")
     Page<Content> searchByKeyword(@Param("keyword") String keyword, @Param("status") String status, Pageable pageable);
 
-    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.contentType = :contentType AND " +
-           "(LOWER(c.title) LIKE :keyword OR LOWER(c.body) LIKE :keyword) " +
-           "ORDER BY c.createdAt DESC")
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.contentType = :contentType AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE AND " +
+           "(LOWER(c.title) LIKE :keyword OR LOWER(c.body) LIKE :keyword)")
     Page<Content> searchByKeywordAndType(@Param("keyword") String keyword, @Param("contentType") String contentType,
                                           @Param("status") String status, Pageable pageable);
 
-    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.categoryId = :categoryId AND " +
-           "(LOWER(c.title) LIKE :keyword OR LOWER(c.body) LIKE :keyword) " +
-           "ORDER BY c.createdAt DESC")
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.categoryId = :categoryId AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE AND " +
+           "(LOWER(c.title) LIKE :keyword OR LOWER(c.body) LIKE :keyword)")
     Page<Content> searchByKeywordAndCategory(@Param("keyword") String keyword, @Param("categoryId") Integer categoryId,
                                              @Param("status") String status, Pageable pageable);
 
-    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.contentType = :contentType AND c.categoryId = :categoryId AND " +
-           "(LOWER(c.title) LIKE :keyword OR LOWER(c.body) LIKE :keyword) " +
-           "ORDER BY c.createdAt DESC")
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.contentType = :contentType AND c.categoryId = :categoryId AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE AND " +
+           "(LOWER(c.title) LIKE :keyword OR LOWER(c.body) LIKE :keyword)")
     Page<Content> searchByKeywordAndTypeAndCategory(@Param("keyword") String keyword, @Param("contentType") String contentType,
                                                      @Param("categoryId") Integer categoryId, @Param("status") String status,
                                                      Pageable pageable);
+
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.contentType = :contentType AND c.categoryId = :categoryId AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE")
+    Page<Content> findPublishedByTypeAndCategory(@Param("contentType") String contentType, @Param("categoryId") Integer categoryId, @Param("status") String status, Pageable pageable);
+
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.contentType = :contentType AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE")
+    Page<Content> findPublishedByType(@Param("contentType") String contentType, @Param("status") String status, Pageable pageable);
+
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.categoryId = :categoryId AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE")
+    Page<Content> findPublishedByCategory(@Param("categoryId") Integer categoryId, @Param("status") String status, Pageable pageable);
+
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE")
+    Page<Content> findPublishedAll(@Param("status") String status, Pageable pageable);
 
     Page<Content> findByStatus(String status, Pageable pageable);
 
