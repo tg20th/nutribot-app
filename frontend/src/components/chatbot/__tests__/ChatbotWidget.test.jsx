@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import ChatbotWidget from '../ChatbotWidget';
 
@@ -52,6 +52,7 @@ describe('ChatbotWidget', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     cleanup();
   });
 
@@ -115,6 +116,83 @@ describe('ChatbotWidget', () => {
 
     const sendButton = document.querySelector('button[type="submit"]');
     expect(sendButton).toBeInTheDocument();
+  });
+
+  it('rejects whitespace-only messages and applies the backend message limit', async () => {
+    const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    const input = screen.getByLabelText(/message nutribot/i);
+
+    expect(input).toHaveAttribute('maxLength', '2000');
+    fireEvent.change(input, { target: { value: '   ' } });
+    fireEvent.submit(input.closest('form'));
+    expect(requestNutritionAdvice).not.toHaveBeenCalled();
+  });
+
+  it('turns an incomplete successful response into an error instead of a fake assistant answer', async () => {
+    const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+    requestNutritionAdvice.mockResolvedValueOnce({});
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(screen.getByRole('button', { name: /build a balanced plate/i }));
+
+    await waitFor(() => expect(screen.getByText(/incomplete response/i)).toBeInTheDocument());
+    expect(screen.queryByText(/could not provide a response/i)).not.toBeInTheDocument();
+  });
+
+  it('times out a pending request, clears typing, and offers retry', async () => {
+    const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+    requestNutritionAdvice.mockImplementationOnce(() => new Promise(() => {}));
+    vi.useFakeTimers();
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(screen.getByRole('button', { name: /build a balanced plate/i }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(screen.getByText(/taking too long/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /retry/i })).toBeEnabled();
+    expect(document.querySelector('.chatbot-widget__typing')).not.toBeInTheDocument();
+  });
+
+  it('retries without adding another user message', async () => {
+    const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+    requestNutritionAdvice
+      .mockRejectedValueOnce(new Error('Network error'))
+      .mockResolvedValueOnce({ reply: 'Recovered answer', remainingTrialCount: 2 });
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    const input = screen.getByLabelText(/message nutribot/i);
+    fireEvent.change(input, { target: { value: 'Can I retry this?' } });
+    fireEvent.submit(input.closest('form'));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+    await waitFor(() => expect(screen.getByText('Recovered answer')).toBeInTheDocument());
+    expect(screen.getAllByText('Can I retry this?')).toHaveLength(1);
+    expect(requestNutritionAdvice).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not append an old response after a member switches sessions', async () => {
+    const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+    let resolveRequest;
+    requestNutritionAdvice.mockImplementationOnce(() => new Promise((resolve) => { resolveRequest = resolve; }));
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    const input = screen.getByLabelText(/message nutribot/i);
+    fireEvent.change(input, { target: { value: 'Old session request' } });
+    fireEvent.submit(input.closest('form'));
+    fireEvent.click(document.querySelector('.chatbot-widget__history-toggle'));
+    await waitFor(() => expect(screen.getByText('Test Session')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Test Session'));
+    await waitFor(() => expect(screen.getByText('Hi there!')).toBeInTheDocument());
+
+    resolveRequest({ reply: 'Old response should not appear' });
+    await Promise.resolve();
+    expect(screen.queryByText('Old response should not appear')).not.toBeInTheDocument();
   });
 
   it('history button exists', async () => {

@@ -22,6 +22,8 @@ import '../../styles/chatbot-widget.css';
 
 const GUEST_TRIAL_LIMIT = 3;
 const GUEST_SESSION_KEY = 'nutribot_guest_chat_session_id';
+const MAX_MESSAGE_LENGTH = 2_000;
+const REQUEST_TIMEOUT_MS = 30_000;
 
 const getGuestSessionId = () => {
   let sessionId = localStorage.getItem(GUEST_SESSION_KEY);
@@ -71,6 +73,9 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const inputRef = useRef(null);
   const launcherRef = useRef(null);
   const requestControllerRef = useRef(null);
+  const activeRequestRef = useRef(null);
+  const requestSequenceRef = useRef(0);
+  const conversationKeyRef = useRef(0);
   const sendingRef = useRef(false);
   const sessionIdRef = useRef(null);
 
@@ -117,12 +122,30 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     setHistoryOpen(true);
     await loadSessions();
   };
-  const startNewConversation = () => { sessionIdRef.current = null; setMessages(INITIAL_MESSAGES); setHistoryOpen(false); };
+  const abortActiveRequest = useCallback(() => {
+    conversationKeyRef.current += 1;
+    requestControllerRef.current?.abort();
+    requestControllerRef.current = null;
+    activeRequestRef.current = null;
+    sendingRef.current = false;
+    setIsLoading(false);
+  }, []);
+
+  const startNewConversation = () => {
+    abortActiveRequest();
+    sessionIdRef.current = null;
+    setMessages(INITIAL_MESSAGES);
+    setHistoryOpen(false);
+  };
   const selectSession = async (sessionId) => {
+    abortActiveRequest();
+    const conversationKey = conversationKeyRef.current;
     setHistoryLoading(true);
     setHistoryError('');
+    setMessages(INITIAL_MESSAGES);
     try {
       const persistedMessages = await getChatMessages(sessionId);
+      if (conversationKey !== conversationKeyRef.current) return;
       sessionIdRef.current = sessionId;
       setMessages(persistedMessages.length ? persistedMessages.map((item) => ({ id: item.messageId, sender: item.senderType === 'USER' ? 'user' : 'assistant', text: item.content, createdAt: item.createdAt })) : INITIAL_MESSAGES);
       setHistoryOpen(false);
@@ -248,28 +271,29 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     );
   }, { dependencies: [messages.length, isOpen], scope: panelRef });
 
-  const submitMessage = async (value = draft) => {
+  const submitMessage = async (value = draft, retryContext = null) => {
     const message = value.trim();
-    if (!message || isLoading || sendingRef.current) return;
+    if (!message || message.length > MAX_MESSAGE_LENGTH || isLoading || sendingRef.current) return;
     sendingRef.current = true;
 
-    const conversationHistory = messages
+    const conversationHistory = retryContext?.conversationHistory ?? messages
       .filter((item) => item.id !== 'welcome' && !item.pending && !item.error)
       .slice(-40)
-      .map((item) => ({
-        sender: item.sender === 'user' ? 'USER' : 'ASSISTANT',
-        content: item.text,
-      }));
-    const userMessage = {
-      id: `user-${Date.now()}`,
-      sender: 'user',
-      text: message,
-    };
-    const pendingId = `pending-${Date.now()}`;
+      .map((item) => ({ sender: item.sender === 'user' ? 'USER' : 'ASSISTANT', content: item.text }));
+    const guest = retryContext?.guest ?? isGuest;
+    const sessionId = retryContext?.sessionId ?? (guest ? getGuestSessionId() : sessionIdRef.current);
+    const conversationKey = retryContext?.conversationKey ?? conversationKeyRef.current;
+    if (conversationKey !== conversationKeyRef.current) {
+      sendingRef.current = false;
+      return;
+    }
 
+    const requestId = ++requestSequenceRef.current;
+    const userMessage = { id: `user-${Date.now()}`, sender: 'user', text: message };
+    const pendingId = `pending-${Date.now()}`;
     setMessages((current) => [
-      ...current,
-      userMessage,
+      ...current.filter((item) => item.id !== retryContext?.errorId),
+      ...(retryContext ? [] : [userMessage]),
       { id: pendingId, sender: 'assistant', text: '', pending: true },
     ]);
     setDraft('');
@@ -278,27 +302,44 @@ export default function ChatbotWidget({ onSend, onAuth }) {
 
     const controller = new AbortController();
     requestControllerRef.current = controller;
+    activeRequestRef.current = { id: requestId, conversationKey };
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = window.setTimeout(() => {
+        const timeoutError = new Error('NutriBot request timed out.');
+        timeoutError.code = 'CHATBOT_TIMEOUT';
+        controller.abort();
+        reject(timeoutError);
+      }, REQUEST_TIMEOUT_MS);
+    });
 
     try {
-      const guest = isGuest;
-      const response = await requestNutritionAdvice({
-        message,
-        sessionId: guest ? getGuestSessionId() : sessionIdRef.current,
-        conversationHistory: guest ? conversationHistory : [],
-        signal: controller.signal,
-      });
+      const response = await Promise.race([
+        requestNutritionAdvice({
+          message,
+          sessionId,
+          conversationHistory: guest ? conversationHistory : [],
+          signal: controller.signal,
+        }),
+        timeoutPromise,
+      ]);
+      if (activeRequestRef.current?.id !== requestId || conversationKey !== conversationKeyRef.current) return;
+      const assistantText = typeof (response.content || response.reply) === 'string'
+        ? (response.content || response.reply).trim()
+        : '';
+      if (!assistantText) {
+        const invalidResponseError = new Error('NutriBot returned an incomplete response.');
+        invalidResponseError.code = 'CHATBOT_INVALID_RESPONSE';
+        throw invalidResponseError;
+      }
       if (!guest && response.sessionId != null) sessionIdRef.current = response.sessionId;
       if (guest) syncGuestTrialCount(response.remainingTrialCount);
-      const assistantText = response.content || response.reply || 'NutriBot could not provide a response.';
       setMessages((current) => [
         ...current.filter((item) => item.id !== pendingId),
-        {
-          id: `assistant-${Date.now()}`,
-          sender: 'assistant',
-          text: assistantText,
-        },
+        { id: `assistant-${Date.now()}`, sender: 'assistant', text: assistantText },
       ]);
     } catch (error) {
+      if (activeRequestRef.current?.id !== requestId || conversationKey !== conversationKeyRef.current) return;
       if (error.name === 'AbortError') {
         setMessages((current) => current.filter((item) => item.id !== pendingId));
         return;
@@ -306,6 +347,10 @@ export default function ChatbotWidget({ onSend, onAuth }) {
       if (error.status === 429 && isGuest) syncGuestTrialCount(0);
       const messageText = error.status === 429
         ? 'You have used all 3 free questions with NutriBot.'
+        : error.code === 'CHATBOT_TIMEOUT'
+        ? 'NutriBot is taking too long to respond. Please try again.'
+        : error.code === 'CHATBOT_INVALID_RESPONSE'
+        ? 'NutriBot returned an incomplete response. Please try again.'
         : error.status === 503
         ? 'NutriBot is temporarily unavailable. Please try again shortly.'
         : 'NutriBot could not respond right now. Please try again.';
@@ -316,13 +361,23 @@ export default function ChatbotWidget({ onSend, onAuth }) {
           sender: 'assistant',
           text: messageText,
           error: true,
+          retry: { message, sessionId, guest, conversationHistory, conversationKey },
         },
       ]);
     } finally {
-      requestControllerRef.current = null;
-      sendingRef.current = false;
-      setIsLoading(false);
+      window.clearTimeout(timeoutId);
+      if (activeRequestRef.current?.id === requestId) {
+        requestControllerRef.current = null;
+        activeRequestRef.current = null;
+        sendingRef.current = false;
+        setIsLoading(false);
+      }
     }
+  };
+
+  const retryMessage = (errorMessage) => {
+    if (!errorMessage.retry) return;
+    submitMessage(errorMessage.retry.message, { ...errorMessage.retry, errorId: errorMessage.id });
   };
 
   return (
@@ -397,7 +452,14 @@ export default function ChatbotWidget({ onSend, onAuth }) {
                     <span className="chatbot-widget__typing" aria-label="NutriBot is thinking">
                       <i /><i /><i />
                     </span>
-                  ) : message.text}
+                  ) : <>
+                    {message.text}
+                    {message.error && message.retry && (
+                      <button type="button" className="chatbot-widget__retry" onClick={() => retryMessage(message)}>
+                        Retry
+                      </button>
+                    )}
+                  </>}
                 </div>
               ))}
             </div>
@@ -437,6 +499,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
               onChange={(event) => setDraft(event.target.value)}
               placeholder="Ask about food or nutrition..."
               autoComplete="off"
+              maxLength={MAX_MESSAGE_LENGTH}
               disabled={isLoading}
             />
             <button type="submit" disabled={!draft.trim() || isLoading} aria-label="Send message">
