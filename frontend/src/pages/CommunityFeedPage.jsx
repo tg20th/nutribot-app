@@ -38,6 +38,7 @@ export default function CommunityFeedPage() {
   const loadingNextPage = useRef(false);
   const [filter, setFilter] = useState('All');
   const [composerOpen, setComposerOpen] = useState(false);
+  const [composerType, setComposerType] = useState('blog');
   const [posts, setPosts] = useState([]); const [profile, setProfile] = useState({}); const [filters, setFilters] = useState([]); const [loading, setLoading] = useState(true); const [loadingMore, setLoadingMore] = useState(false); const [error, setError] = useState('');
 
   const loadNextPage = useCallback(async (signal, { initial = false } = {}) => {
@@ -99,7 +100,7 @@ export default function CommunityFeedPage() {
     return matchesFilter;
   }), [posts, filter]);
   const discoverPosts = useMemo(() => posts.filter((post) => post.image).slice(0, 2), [posts]);
-  const openComposer = () => { composerTrigger.current = document.activeElement; setComposerOpen(true); };
+  const openComposer = (type = 'blog') => { composerTrigger.current = document.activeElement; setComposerType(type); setComposerOpen(true); };
   const closeComposer = () => { setComposerOpen(false); requestAnimationFrame(() => composerTrigger.current?.focus()); };
 
   useGSAP(() => {
@@ -141,6 +142,6 @@ export default function CommunityFeedPage() {
       </div>
     </div>
     <ChatbotWidget/>
-    {composerOpen && <CreateBlogPage modal onClose={closeComposer}/>}
+    {composerOpen && <CreateBlogPage modal defaultType={composerType} onClose={closeComposer}/>}
   </div>;
 }

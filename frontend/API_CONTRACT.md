@@ -12,6 +12,9 @@ All successful resource responses use `{ "data": ... }`. Configure `VITE_API_BAS
 | GET | `/api/posts/{id}` | Community detail |
 | GET, POST | `/api/posts/{id}/comments` | Community detail/post cards |
 | POST, DELETE | `/api/posts/{id}/votes` | Post cards/detail |
+| POST | `/api/v1/author/contents/video` | Unified post form: upload MP4 to Cloudinary |
+| POST | `/api/v1/blogs/thumbnails` | Unified post form: upload cover image |
+| POST | `/api/v1/author/contents` | Unified post form: save `BLOG` or `VIDEO` detail data |
 | GET, PUT | `/api/v1/users/profile` | Personal profile/navigation |
 | PUT, DELETE | `/api/v1/users/profile/avatar` | Profile avatar upload/removal |
 | GET, PUT | `/api/v1/users/profile/health` | Health metrics, BMI, goals and allergies |

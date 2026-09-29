@@ -12,13 +12,13 @@ const CONTENT_TYPES = {
   blog: {
     key: 'blog', label: 'Blogs', single: 'blog', title: 'My content', listTitle: 'Your stories', emptyTitle: 'Your story starts here.',
     emptyText: "You haven't added any blogs yet. Start with a recipe, note, or nutrition story.", icon: BookOpen,
-    createPath: '/community/blogs/new', createText: 'Write blog', getList: getMyBlogs, getItem: getMyBlog, update: updateMyBlog, remove: deleteMyBlog,
+    createPath: '/community/posts/new', createText: 'Create post', getList: getMyBlogs, getItem: getMyBlog, update: updateMyBlog, remove: deleteMyBlog,
     fallbackLoad: "We couldn't load your blogs. Please try again.", fallbackDelete: "We couldn't delete this blog. It is still in your list; please try again.", savedNotice: 'Your blog has been updated.', deletedNotice: 'Your blog has been deleted.',
   },
   video: {
     key: 'video', label: 'Videos', single: 'video', title: 'My content', listTitle: 'Your videos', emptyTitle: 'Your first video starts here.',
     emptyText: "You haven't added any videos yet. Share a cooking clip, demo, or helpful nutrition video.", icon: Film,
-    createPath: '/community/videos/new', createText: 'Add video', getList: getMyVideos, getItem: getMyVideo, update: updateMyVideo, remove: deleteMyVideo,
+    createPath: '/community/posts/new', createText: 'Create post', getList: getMyVideos, getItem: getMyVideo, update: updateMyVideo, remove: deleteMyVideo,
     fallbackLoad: "We couldn't load your videos. Please try again.", fallbackDelete: "We couldn't delete this video. It is still in your list; please try again.", savedNotice: 'Your video has been updated.', deletedNotice: 'Your video has been deleted.',
   },
 };

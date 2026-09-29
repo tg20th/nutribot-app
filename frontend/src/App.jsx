@@ -20,7 +20,6 @@ import MemberRoute from './components/MemberRoute';
 import MyBlogsPage from './pages/MyBlogsPage';
 import MyVideosPage from './pages/MyVideosPage';
 import CreateBlogPage from './pages/CreateBlogPage';
-import CreateVideoPage from './pages/CreateVideoPage';
 import BlogListPage from './pages/BlogListPage';
 import BlogDetailPage from './pages/BlogDetailPage';
 import RestaurantRecommendationsPreviewPage from './pages/RestaurantRecommendationsPreviewPage';
@@ -50,8 +49,9 @@ export default function App() {
     <Route path="/community/my-blogs" element={<MemberRoute><MyBlogsPage /></MemberRoute>} />
     <Route path="/community/my-videos" element={<MemberRoute><MyVideosPage /></MemberRoute>} />
     <Route path="/community/search" element={<MemberRoute><SearchPage member /></MemberRoute>} />
-    <Route path="/community/blogs/new" element={<MemberRoute><CreateBlogPage /></MemberRoute>} />
-    <Route path="/community/videos/new" element={<MemberRoute><CreateVideoPage /></MemberRoute>} />
+    <Route path="/community/posts/new" element={<MemberRoute><CreateBlogPage /></MemberRoute>} />
+    <Route path="/community/blogs/new" element={<Navigate to="/community/posts/new" replace />} />
+    <Route path="/community/videos/new" element={<Navigate to="/community/posts/new" replace />} />
     <Route path="/community/posts/:postId" element={<MemberRoute><CommunityContentDetailPage /></MemberRoute>} />
     <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
       <Route index element={<AdminDashboard />} />

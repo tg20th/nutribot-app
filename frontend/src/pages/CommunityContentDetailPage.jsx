@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { ArrowLeft, Clock3, Play, UsersRound } from 'lucide-react';
+import { ArrowLeft, Clock3, UsersRound } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import RestaurantRecommendations from '../components/community/RestaurantRecommendations';
@@ -64,7 +64,7 @@ export default function CommunityContentDetailPage() {
         <Link className="detail-back detail-reveal" to={returnTo} state={searchReturnState}><ArrowLeft size={16}/>{isSearchReturn ? 'Back to search results' : 'Back to home'}</Link>
         <section className="detail-hero detail-reveal">
           <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1><p>{post.description}</p><div className="detail-author"><img src={post.avatar} alt=""/><div><b>{post.author}</b><small>{post.username} · {post.createdAt}</small></div></div></div>
-          <div className="detail-media"><img src={image} alt={post.title}/>{post.type === 'video' && <button className="detail-play" type="button" aria-label="Play video"><Play fill="currentColor" size={24}/></button>}<span className="detail-duration"><Clock3 size={13}/>{post.prepTime} prep</span></div>
+          <div className="detail-media">{post.type === 'video' && post.videoUrl ? <video controls poster={image ?? undefined} src={post.videoUrl}>Your browser cannot play this video.</video> : <img src={image} alt={post.title}/>}<span className="detail-duration"><Clock3 size={13}/>{post.prepTime} prep</span></div>
         </section>
         <section className="detail-nutrition detail-reveal" aria-label="Nutrition information">
           <div className="detail-nutrition-title"><span>Per serving</span><h2>Simple, balanced fuel.</h2><p>Every ingredient has a purpose. Use these numbers as a friendly guide, not a rulebook.</p></div>

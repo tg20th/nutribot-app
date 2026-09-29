@@ -68,6 +68,7 @@
 .community-composer-toolbar button[type="button"]{display:flex;align-items:center;gap:6px;background:transparent;color:var(--text-muted);font-size:12px;font-weight:600;padding:8px 10px;border-radius:10px}
 .community-composer-toolbar button[type="button"]:hover{background:var(--sage);color:var(--primary)}
 .community-composer-toolbar .button{margin-left:auto}
+.community-composer-note{display:flex;align-items:center;gap:5px;color:#728075;font-size:11px;white-space:nowrap}
 
 .community-filters{display:flex;gap:9px;overflow-x:auto;padding-bottom:2px}
 .community-filters button{flex:none;padding:9px 16px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text-muted);font-size:12px;font-weight:600}
@@ -269,6 +270,7 @@
 @media(max-width:800px){.content-detail-main{padding-top:25px}.detail-hero{grid-template-columns:1fr;padding-bottom:70px}.detail-media{min-height:340px;grid-row:1}.detail-hero-copy{grid-row:2}.detail-nutrition{grid-template-columns:1fr;gap:32px;padding:78px 0}.detail-content-grid{grid-template-columns:1fr}.detail-method{border-left:0;border-top:1px solid var(--border)}.detail-actions{padding-bottom:70px;overflow:auto}.detail-comments .detail-section-head h2{font-size:32px}}
 @media(max-width:800px){.restaurant-recommendations{padding:82px 0 60px}.restaurant-recommendations-head{align-items:start;flex-direction:column;gap:19px}.restaurant-recommendations-head>p{max-width:420px}.restaurant-recommendation-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:540px){.content-detail-main{padding-left:16px;padding-right:16px}.detail-hero{gap:28px}.detail-hero h1{font-size:45px}.detail-media{min-height:280px}.nutrition-grid{grid-template-columns:repeat(2,1fr)}.nutrition-grid>div{min-height:120px;border-bottom:1px solid #d0dbc9}.nutrition-grid>div:nth-child(2){border-right:0}.nutrition-grid>div:nth-child(3),.nutrition-grid>div:nth-child(4){border-bottom:0}.detail-ingredients,.detail-method{padding:42px 23px}.detail-section-head h2{font-size:34px}.detail-comment-form{align-items:flex-start;flex-wrap:wrap}.detail-comment-form input{min-width:calc(100% - 48px)}.detail-comment-form button{margin-left:45px}.detail-community-cta{align-items:flex-start;flex-wrap:wrap}.detail-community-cta a{margin-left:35px}}
+.detail-media video{display:block;width:100%;height:100%;object-fit:contain;background:#17251b}.detail-media:has(video):after{display:none}
 @media(max-width:540px){.restaurant-recommendations{padding-top:68px}.restaurant-recommendations-head h2{font-size:39px}.restaurant-recommendation-grid{grid-template-columns:1fr}.restaurant-recommendation-media{height:235px}}
 
 /* Weekly Meal Planner: compact chrome, the week's meals carry the page. */

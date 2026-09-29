@@ -2,6 +2,7 @@ import { apiRequest, unwrapData } from './apiClient';
 
 const authorBlogsPath = '/api/v1/author/blogs';
 const authorVideosPath = '/api/v1/author/videos';
+const authorContentsPath = '/api/v1/author/contents';
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 
 function validateAuthorPage(data, label) {
@@ -36,6 +37,29 @@ export async function uploadBlogThumbnail(file) {
     throw error;
   }
   return new URL(payload.data.thumbnailUrl, baseUrl || window.location.origin).href;
+}
+
+export async function uploadVideoFile(file) {
+  const body = new FormData();
+  body.append('file', file);
+  const token = localStorage.getItem('nutribot-auth-token');
+  const response = await fetch(`${baseUrl}${authorContentsPath}/video`, {
+    method: 'POST', body,
+    headers: { Accept: 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  const payload = await response.json();
+  if (!response.ok || !payload?.success) {
+    const error = new Error(payload?.message ?? 'Could not upload video');
+    error.status = response.status;
+    throw error;
+  }
+  return new URL(payload.data.mediaUrl, baseUrl || window.location.origin).href;
+}
+
+export async function createMyContent(values) {
+  const data = unwrapData(await apiRequest(authorContentsPath, { method: 'POST', body: JSON.stringify(values) }), {});
+  if (data.contentId == null) throw new Error('Invalid create content response');
+  return data;
 }
 
 export async function createMyBlog(values) {
