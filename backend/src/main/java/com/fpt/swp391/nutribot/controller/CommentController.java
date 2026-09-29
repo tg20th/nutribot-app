@@ -5,6 +5,7 @@ import com.fpt.swp391.nutribot.dto.response.ApiResponse;
 import com.fpt.swp391.nutribot.dto.response.CommentResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.service.CommentService;
+import com.fpt.swp391.nutribot.dto.request.CommentUpdateRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -34,6 +35,15 @@ public class CommentController {
             @Valid @RequestBody CommentCreateRequest request) {
         CommentResponse response = commentService.createComment(user.getUsername(), contentId, request);
         return ResponseEntity.ok(ApiResponse.success("Bình luận thành công", response));
+    }
+
+    @PutMapping("/api/v1/comments/{commentId}")
+    public ResponseEntity<ApiResponse<CommentResponse>> updateComment(
+            @AuthenticationPrincipal UserDetails user,
+            @PathVariable Integer commentId,
+            @Valid @RequestBody CommentUpdateRequest request) {
+        CommentResponse response = commentService.updateComment(user.getUsername(), commentId, request);
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật bình luận thành công", response));
     }
 
     @DeleteMapping("/api/v1/comments/{commentId}")
