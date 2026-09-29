@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ContentService {
 
     private final ContentRepository contentRepository;
+    private final com.fpt.swp391.nutribot.repository.VoteRepository voteRepository;
 
     private static final String BLOG_TYPE = "BLOG";
     private static final String VIDEO_TYPE = "VIDEO";
@@ -62,10 +63,17 @@ public class ContentService {
 
     @Transactional(readOnly = true)
     public PagedResponse<VideoListResponse> getPublishedVideos(int page, int size) {
+        return getPublishedVideos(page, size, null);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<VideoListResponse> getPublishedVideos(int page, int size, Integer categoryId) {
         int safePage = Math.max(0, page);
         int safeSize = Math.max(1, Math.min(50, size));
         Pageable pageable = PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.DESC, "createdAt", "contentId"));
-        Page<Content> contentPage = contentRepository.findPublishedByType(VIDEO_TYPE, PUBLISHED_STATUS, pageable);
+        Page<Content> contentPage = categoryId == null
+                ? contentRepository.findPublishedByType(VIDEO_TYPE, PUBLISHED_STATUS, pageable)
+                : contentRepository.findPublishedByTypeAndCategory(VIDEO_TYPE, categoryId, PUBLISHED_STATUS, pageable);
         Page<VideoListResponse> responsePage = contentPage.map(this::toVideoListResponse);
         return PagedResponse.of(responsePage);
     }
@@ -92,7 +100,33 @@ public class ContentService {
         return toVideoDetailResponse(content, null);
     }
 
+    @Transactional
+    public VideoDetailResponse getVideoByIdOrSlug(String slugOrId) {
+        if (slugOrId == null || slugOrId.isBlank()) {
+            throw new NotFoundException("Video không tồn tại");
+        }
+        if (slugOrId.matches("^\\d+$")) {
+            try {
+                return getVideoById(Integer.parseInt(slugOrId));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return getVideoBySlug(slugOrId);
+    }
+
     // ==================== MAPPERS ====================
+
+    private int getVoteCount(Integer contentId) {
+        if (voteRepository == null || contentId == null) {
+            return 0;
+        }
+        try {
+            Long count = voteRepository.countByContentId(contentId);
+            return count != null ? count.intValue() : 0;
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
 
     private ContentListResponse toBlogListResponse(Content content) {
         return ContentListResponse.builder()
@@ -101,9 +135,9 @@ public class ContentService {
                 .slug(content.getSlug())
                 .thumbnailUrl(content.getThumbnailUrl())
                 .categoryId(content.getCategoryId())
-                .authorName(content.getUser().getFullName())
+                .authorName(content.getUser() != null ? content.getUser().getFullName() : null)
                 .viewCount(content.getViewCount())
-                .voteCount(0)
+                .voteCount(getVoteCount(content.getContentId()))
                 .createdAt(content.getCreatedAt())
                 .build();
     }
@@ -115,10 +149,10 @@ public class ContentService {
                 .body(content.getBody())
                 .thumbnailUrl(content.getThumbnailUrl())
                 .categoryId(content.getCategoryId())
-                .authorId(content.getUser().getUserId())
-                .authorName(content.getUser().getFullName())
+                .authorId(content.getUser() != null ? content.getUser().getUserId() : null)
+                .authorName(content.getUser() != null ? content.getUser().getFullName() : null)
                 .viewCount(content.getViewCount())
-                .voteCount(0)
+                .voteCount(getVoteCount(content.getContentId()))
                 .userVoted(userVoted)
                 .createdAt(content.getCreatedAt())
                 .build();
@@ -133,9 +167,9 @@ public class ContentService {
                 .mediaUrl(content.getMediaUrl())
                 .durationSec(content.getDurationSec())
                 .categoryId(content.getCategoryId())
-                .authorName(content.getUser().getFullName())
+                .authorName(content.getUser() != null ? content.getUser().getFullName() : null)
                 .viewCount(content.getViewCount())
-                .voteCount(0)
+                .voteCount(getVoteCount(content.getContentId()))
                 .createdAt(content.getCreatedAt())
                 .build();
     }
@@ -149,10 +183,10 @@ public class ContentService {
                 .thumbnailUrl(content.getThumbnailUrl())
                 .durationSec(content.getDurationSec())
                 .categoryId(content.getCategoryId())
-                .authorId(content.getUser().getUserId())
-                .authorName(content.getUser().getFullName())
+                .authorId(content.getUser() != null ? content.getUser().getUserId() : null)
+                .authorName(content.getUser() != null ? content.getUser().getFullName() : null)
                 .viewCount(content.getViewCount())
-                .voteCount(0)
+                .voteCount(getVoteCount(content.getContentId()))
                 .userVoted(userVoted)
                 .createdAt(content.getCreatedAt())
                 .build();

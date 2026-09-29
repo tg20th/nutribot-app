@@ -19,14 +19,15 @@ public class VideoController {
     @GetMapping
     public ResponseEntity<ApiResponse<PagedResponse<VideoListResponse>>> getVideos(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        PagedResponse<VideoListResponse> response = contentService.getPublishedVideos(page, size);
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Integer categoryId) {
+        PagedResponse<VideoListResponse> response = contentService.getPublishedVideos(page, size, categoryId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    @GetMapping("/{slug}")
-    public ResponseEntity<ApiResponse<VideoDetailResponse>> getVideoBySlug(@PathVariable String slug) {
-        VideoDetailResponse response = contentService.getVideoBySlug(slug);
+    @GetMapping("/{slugOrId}")
+    public ResponseEntity<ApiResponse<VideoDetailResponse>> getVideoBySlugOrId(@PathVariable String slugOrId) {
+        VideoDetailResponse response = contentService.getVideoByIdOrSlug(slugOrId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 

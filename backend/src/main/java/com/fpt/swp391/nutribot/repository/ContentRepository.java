@@ -44,6 +44,11 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
             @Param("contentType") String contentType,
             @Param("status") String status);
 
+    @Query("SELECT c FROM Content c WHERE c.contentId = :contentId AND c.status = :status AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE")
+    Optional<Content> findPublishedById(
+            @Param("contentId") Integer contentId,
+            @Param("status") String status);
+
     Optional<Content> findByContentIdAndUserUserId(Integer contentId, Integer userId);
 
     Page<Content> findByUserUserId(Integer userId, Pageable pageable);
