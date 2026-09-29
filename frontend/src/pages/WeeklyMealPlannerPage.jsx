@@ -12,7 +12,7 @@ import DishDetailModal from '../components/community/DishDetailModal';
 import ImageWithFallback from '../components/ImageWithFallback';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import freshProduce from '../assets/fresh-produce.jpg';
-import { getMyProfile } from '../services/profileApi';
+import { getHealthProfile, getMyProfile } from '../services/profileApi';
 import { addWeeklyMenuItem, createWeeklyMenu, deleteWeeklyMenuItem, getCurrentWeeklyMenu, getWeeklyMenuDishes, saveAiGeneratedMenu, updateWeeklyMenu } from '../services/weeklyMealApi';
 import { generateMealPlan } from '../services/mealPlannerApi';
 import { createLocalMeal, MEAL_SLOTS, normalizeDishCatalog, normalizeWeeklyMenu, recalculateMenu, serializeMenu, shiftWeek, startOfWeek, toIsoDate } from '../utils/weeklyMenuModel';
@@ -20,6 +20,13 @@ import { createLocalMeal, MEAL_SLOTS, normalizeDishCatalog, normalizeWeeklyMenu,
 gsap.registerPlugin(ScrollTrigger);
 
 const storageKey = (startDate) => `nutribot-weekly-menu-${startDate}`;
+
+const isProfileIncompleteError = (error) => {
+  const payload = error?.payload?.data ?? error?.payload ?? {};
+  const code = payload?.code ?? payload?.errorCode ?? error?.code;
+  const fields = payload?.missingFields ?? payload?.missing_fields ?? [];
+  return code === 'PROFILE_INCOMPLETE' || (error?.status === 422 && Array.isArray(fields));
+};
 
 const readDraft = (startDate) => {
   try {
@@ -43,6 +50,10 @@ export default function WeeklyMealPlannerPage() {
   const [query, setQuery] = useState('');
   const [view, setView] = useState('daily');
   const [communityUser, setCommunityUser] = useState({});
+  const [plannerProfile, setPlannerProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [showProfileReadinessModal, setShowProfileReadinessModal] = useState(false);
+  const plannerRequest = useRef(0);
   const [weekStart, setWeekStart] = useState(() => toIsoDate(startOfWeek()));
   const [menu, setMenu] = useState(() => normalizeWeeklyMenu({}, toIsoDate(startOfWeek())));
   const [dishes, setDishes] = useState([]);
@@ -82,7 +93,7 @@ export default function WeeklyMealPlannerPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    getMyProfile(controller.signal).then(setCommunityUser).catch(() => {});
+    Promise.all([getMyProfile(controller.signal), getHealthProfile(controller.signal)]).then(([profile, health]) => { setCommunityUser(profile); setPlannerProfile({ ...profile, ...health }); }).catch(() => setPlannerProfile(null)).finally(() => { if (!controller.signal.aborted) setProfileLoading(false); });
     getWeeklyMenuDishes(controller.signal).then((items) => {
       setDishes(normalizeDishCatalog(items));
       setDishError(false);
@@ -119,6 +130,11 @@ export default function WeeklyMealPlannerPage() {
   }, { scope: page, dependencies: [aiPreview] });
 
   const plannerDays = menu.days ?? [];
+  const missingProfileFields = useMemo(() => {
+    if (!plannerProfile) return ['health profile'];
+    return [['height_cm', plannerProfile.heightCm ?? plannerProfile.height_cm], ['weight_kg', plannerProfile.weightKg ?? plannerProfile.weight_kg], ['date_of_birth', plannerProfile.dateOfBirth ?? plannerProfile.date_of_birth], ['gender', plannerProfile.gender], ['health_goal', plannerProfile.healthGoal ?? plannerProfile.health_goal], ['vegetarian_type', plannerProfile.vegetarianType ?? plannerProfile.vegetarian_type]].filter(([, value]) => value == null || value === '').map(([name]) => name);
+  }, [plannerProfile]);
+  const plannerReady = !profileLoading && !missingProfileFields.length;
   const heroMeal = plannerDays.flatMap((day) => day.meals).find(Boolean);
   const groceryItems = useMemo(() => plannerDays.flatMap((day) => day.meals.map((meal) => ({ ...meal, day: day.label }))), [plannerDays]);
 
@@ -229,23 +245,45 @@ export default function WeeklyMealPlannerPage() {
 
   const generateAiPlan = async (event) => {
     event.preventDefault();
+    if (!plannerReady) {
+      setShowAiGenerator(false);
+      setShowProfileReadinessModal(true);
+      return;
+    }
     const availableIngredients = aiIngredients.split(',').map((item) => item.trim()).filter(Boolean);
     const excludedAllergies = aiAllergies.split(',').map((item) => item.trim()).filter(Boolean);
     if (!availableIngredients.length) {
       setNotice({ type: 'offline', text: 'Add at least one ingredient before generating a plan.' });
       return;
     }
+    const requestId = ++plannerRequest.current;
     setGeneratingPlan(true);
     try {
-      const result = await generateMealPlan({ targetCalories: Number(aiCalories), healthGoal: aiGoal, availableIngredients, excludedAllergies });
-      if (!Array.isArray(result.weeklyPlan) || !result.weeklyPlan.length) throw new Error('The AI response did not include a weekly plan.');
+      const result = await generateMealPlan({ targetCalories: Number(aiCalories), healthGoal: plannerProfile.healthGoal ?? plannerProfile.health_goal, vegetarianType: plannerProfile.vegetarianType ?? plannerProfile.vegetarian_type, availableIngredients, excludedAllergies });
+      if (!Array.isArray(result.weeklyPlan) || result.weeklyPlan.length !== 7) throw new Error('The planner did not return a valid seven-day meal plan.');
+      if (requestId !== plannerRequest.current) return;
       setShowAiGenerator(false);
       setAiPreview(result);
     } catch (error) {
+      if (requestId !== plannerRequest.current) return;
+      if (isProfileIncompleteError(error)) {
+        setShowAiGenerator(false);
+        setShowProfileReadinessModal(true);
+        return;
+      }
       setNotice({ type: 'offline', text: error?.message || 'NutriBot could not generate a plan right now. Please try again.' });
     } finally {
-      setGeneratingPlan(false);
+      if (requestId === plannerRequest.current) setGeneratingPlan(false);
     }
+  };
+
+  const requestMealPlanGeneration = () => {
+    if (profileLoading) return;
+    if (!plannerReady) {
+      setShowProfileReadinessModal(true);
+      return;
+    }
+    setShowAiGenerator(true);
   };
 
   const persistAiPreview = async () => {
@@ -317,7 +355,7 @@ export default function WeeklyMealPlannerPage() {
               <h1>Plan a week that feels <span className="planner-inline-image" aria-hidden="true"/> good to keep.</h1>
               <p>Build breakfast, lunch, and dinner around your goals, then adjust the plan whenever real life changes.</p>
               <div className="planner-top-actions">
-                <button type="button" className="planner-btn-ai" onClick={() => setShowAiGenerator(true)}><Sparkles size={15}/> Generate with AI</button>
+                <button type="button" className="planner-btn-ai" onClick={requestMealPlanGeneration} disabled={profileLoading}><Sparkles size={15}/> Generate Meal Plan</button>
                 <button type="button" className="planner-btn-primary" onClick={() => loadWeek(weekStart)} disabled={loading}><RefreshCw size={15} className={loading ? 'is-spinning' : ''}/> Refresh this week</button>
                 <button type="button" className="planner-btn-ghost" onClick={() => setShowGrocery(true)}><ShoppingBasket size={15}/> Meal list <span>{groceryItems.length}</span></button>
               </div>
@@ -411,6 +449,13 @@ export default function WeeklyMealPlannerPage() {
         <header><div><span>Confirm removal</span><h2 id="meal-delete-title">Remove this meal?</h2></div><button type="button" className="meal-dialog-close" onClick={() => setPendingMealRemoval(null)} aria-label="Cancel removal"><X size={18}/></button></header>
         <p id="meal-delete-description">Remove <strong>{pendingMealRemoval.meal.name}</strong> from this weekly plan?</p>
         <footer><button type="button" className="planner-btn-ghost" onClick={() => setPendingMealRemoval(null)}>Cancel</button><button type="button" className="planner-btn-primary meal-delete-confirm" onClick={confirmMealRemoval}><Trash2 size={15}/> Remove meal</button></footer>
+      </section>
+    </div>}
+    {showProfileReadinessModal && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowProfileReadinessModal(false)}>
+      <section className="meal-dialog profile-readiness-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-readiness-title" aria-describedby="profile-readiness-description">
+        <header><h2 id="profile-readiness-title">Complete your health profile</h2><button type="button" className="meal-dialog-close" onClick={() => setShowProfileReadinessModal(false)} aria-label="Close profile reminder"><X size={18}/></button></header>
+        <div className="profile-readiness-content"><p id="profile-readiness-description">We need a few more details before creating your personalized weekly meal plan.</p></div>
+        <footer><button type="button" className="planner-btn-ghost" onClick={() => setShowProfileReadinessModal(false)}>Not now</button><button type="button" className="planner-btn-primary" onClick={() => { window.location.href = '/profile/health'; }}>Complete Profile</button></footer>
       </section>
     </div>}
     {showAiGenerator && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !generatingPlan && setShowAiGenerator(false)}>
