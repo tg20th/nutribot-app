@@ -2,7 +2,7 @@ import { Plus } from 'lucide-react';
 import { MEAL_SLOTS } from '../../utils/weeklyMenuModel';
 import ImageWithFallback from '../ImageWithFallback';
 
-export default function MealPlanMatrix({ className = '', days: plannerDays = [], onSelectMeal }) {
+export default function MealPlanMatrix({ className = '', days: plannerDays = [], onSelectMeal, onOpenDish }) {
   return <div className={`planner-matrix ${className}`.trim()}>
     <div className="matrix-labels">
       <div className="matrix-corner" aria-hidden="true"/>
@@ -21,7 +21,7 @@ export default function MealPlanMatrix({ className = '', days: plannerDays = [],
             {meals.length ? <>
               <span className="matrix-cell-count">{meals.length} {meals.length === 1 ? 'dish' : 'dishes'}</span>
               <span className="matrix-meal-stack">
-                {meals.slice(0, 3).map((meal) => <span key={meal.key}><ImageWithFallback className="matrix-meal-image" src={meal.image} alt=""/><b>{meal.name}</b></span>)}
+                {meals.slice(0, 3).map((meal) => <button type="button" key={meal.key} onClick={() => onOpenDish?.(meal)} aria-label={`View details for ${meal.name}`}><ImageWithFallback className="matrix-meal-image" src={meal.image} alt=""/><b>{meal.name}</b></button>)}
               </span>
               <small>{totalCalories.toLocaleString()} kcal · Add another</small>
             </> : <span className="matrix-cell-empty"><Plus size={15}/> Add a dish</span>}
