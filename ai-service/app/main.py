@@ -13,6 +13,8 @@ from app.exceptions import AIServiceError
 from app.planner import MealPlanRequest, MealPlanResponse
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.gemini_service import GeminiService
+from app.services.recommender import ContentRecommender
+from app.schemas.recommender import RecommendationRequest, RecommendationResponse
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,7 @@ def create_app(
     application.state.gemini_service = gemini_service or GeminiService(
         resolved_settings
     )
+    application.state.recommender = ContentRecommender()
 
     @application.exception_handler(RequestValidationError)
     async def validation_exception_handler(
@@ -125,6 +128,10 @@ def create_app(
         service: GeminiService = Depends(_get_gemini_service),
     ) -> MealPlanResponse:
         return await service.generate_meal_plan(meal_plan_request)
+
+    @application.post("/api/ai/content-recommendations", response_model=RecommendationResponse, tags=["Recommendations"])
+    async def content_recommendations(recommendation_request: RecommendationRequest) -> RecommendationResponse:
+        return application.state.recommender.recommend(recommendation_request)
 
     return application
 
