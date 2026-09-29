@@ -46,6 +46,18 @@ public class Content {
     @Column(name = "duration_sec")
     private Integer durationSec;
 
+    @Column(name = "prep_time_min") private Integer prepTimeMin;
+    @Column(name = "cook_time_min") private Integer cookTimeMin;
+    @Column(name = "servings") private Integer servings;
+    @Column(name = "calories") private Integer calories;
+    @Column(name = "protein_g") private Double proteinG;
+    @Column(name = "carbs_g") private Double carbsG;
+    @Column(name = "fat_g") private Double fatG;
+    @Column(name = "fiber_g") private Double fiberG;
+    @Column(name = "sodium_mg") private Double sodiumMg;
+    @Column(name = "ingredients_json", columnDefinition = "NVARCHAR(MAX)") private String ingredientsJson;
+    @Column(name = "steps_json", columnDefinition = "NVARCHAR(MAX)") private String stepsJson;
+
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
     private String status = "draft";

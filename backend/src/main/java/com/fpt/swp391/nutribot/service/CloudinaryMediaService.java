@@ -19,7 +19,9 @@ import java.util.UUID;
 public class CloudinaryMediaService {
 
     private static final String THUMBNAIL_FOLDER = "nutribot/thumbnails";
+    private static final String VIDEO_FOLDER = "nutribot/videos";
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+    private static final long MAX_VIDEO_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
     private static final List<String> ALLOWED_MIME_TYPES = List.of(
             "image/jpeg",
             "image/png",
@@ -85,7 +87,54 @@ public class CloudinaryMediaService {
         }
     }
 
+    /** Upload a native MP4 clip.  The resulting secure URL is persisted in contents.media_url. */
+    public MediaUploadResult uploadVideo(MultipartFile file, Integer userId) {
+        ensureConfigured();
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Vui lòng chọn tệp video MP4 để tải lên");
+        }
+        if (file.getSize() > MAX_VIDEO_FILE_SIZE) {
+            throw new BadRequestException("Dung lượng video không được vượt quá 100MB");
+        }
+        if (!"video/mp4".equalsIgnoreCase(file.getContentType())) {
+            throw new BadRequestException("Chỉ chấp nhận tệp video định dạng MP4");
+        }
+        if (userId == null) {
+            throw new BadRequestException("Thông tin người dùng không hợp lệ");
+        }
+
+        String publicId = "video_" + userId + "_" + UUID.randomUUID().toString().replace("-", "");
+        try {
+            Map<?, ?> result = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
+                    "resource_type", "video",
+                    "folder", VIDEO_FOLDER,
+                    "public_id", publicId,
+                    "overwrite", false
+            ));
+            Object secureUrl = result.get("secure_url");
+            Object uploadedPublicId = result.get("public_id");
+            if (!(secureUrl instanceof String url) || !(uploadedPublicId instanceof String id)) {
+                throw new IllegalStateException("Cloudinary không trả về URL video hợp lệ.");
+            }
+            return new MediaUploadResult(url, id);
+        } catch (IOException ex) {
+            log.error("Lỗi khi đọc tệp video: ", ex);
+            throw new BadRequestException("Không thể đọc tệp video tải lên");
+        } catch (Exception ex) {
+            log.error("Lỗi khi tải video lên Cloudinary: ", ex);
+            throw new BadRequestException("Tải video thất bại. Vui lòng thử lại sau.");
+        }
+    }
+
     public void deleteThumbnailByUrl(String secureUrl) {
+        deleteMediaByUrl(secureUrl, "image", THUMBNAIL_FOLDER);
+    }
+
+    public void deleteVideoByUrl(String secureUrl) {
+        deleteMediaByUrl(secureUrl, "video", VIDEO_FOLDER);
+    }
+
+    private void deleteMediaByUrl(String secureUrl, String resourceType, String folder) {
         if (secureUrl == null || secureUrl.isBlank()) {
             return;
         }
@@ -95,7 +144,7 @@ public class CloudinaryMediaService {
 
         try {
             URI uri = URI.create(secureUrl);
-            String expectedPrefix = "/" + cloudName + "/image/upload/";
+            String expectedPrefix = "/" + cloudName + "/" + resourceType + "/upload/";
             String path = uri.getPath();
             if (!"res.cloudinary.com".equalsIgnoreCase(uri.getHost()) || path == null || !path.startsWith(expectedPrefix)) {
                 return;
@@ -105,8 +154,8 @@ public class CloudinaryMediaService {
             if (assetPath.matches("v\\d+/.+")) {
                 assetPath = assetPath.substring(assetPath.indexOf('/') + 1);
             }
-            String thumbPrefix = THUMBNAIL_FOLDER + "/";
-            if (!assetPath.startsWith(thumbPrefix)) {
+            String mediaPrefix = folder + "/";
+            if (!assetPath.startsWith(mediaPrefix)) {
                 return;
             }
 
@@ -114,8 +163,8 @@ public class CloudinaryMediaService {
                     ? assetPath.lastIndexOf('.')
                     : assetPath.length());
 
-            cloudinary.uploader().destroy(publicId, ObjectUtils.asMap("resource_type", "image"));
-            log.info("Đã dọn dẹp ảnh thumbnail cũ trên Cloudinary: {}", publicId);
+            cloudinary.uploader().destroy(publicId, ObjectUtils.asMap("resource_type", resourceType));
+            log.info("Đã dọn dẹp media cũ trên Cloudinary: {}", publicId);
         } catch (Exception ex) {
             log.warn("Không thể xóa ảnh thumbnail trên Cloudinary (url: {}): {}", secureUrl, ex.getMessage());
         }

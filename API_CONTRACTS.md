@@ -265,6 +265,35 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
 }
 ```
 
+### 4.4. Đăng nội dung thống nhất (Blog hoặc Clip MP4, yêu cầu đăng nhập)
+- **Tải clip:** `POST /api/v1/author/contents/video` với `multipart/form-data`, trường `file` là MP4 tối đa 100MB. API trả `data.mediaUrl` là URL Cloudinary.
+- **Tải ảnh bìa:** `POST /api/v1/blogs/thumbnails` với `multipart/form-data`, trường `file` là JPG/PNG/WebP tối đa 5MB. API trả `data.thumbnailUrl`.
+- **Lưu bài đăng:** `POST /api/v1/author/contents`.
+- Ảnh bìa, `title`, `body`, `categoryId` luôn bắt buộc. Với clip, `contentType` là `VIDEO` và `mediaUrl` bắt buộc là URL từ bước tải MP4; với bài viết, `contentType` là `BLOG`.
+
+```json
+{
+  "contentType": "VIDEO",
+  "title": "Cách làm yến mạch qua đêm",
+  "body": "Các bước và lưu ý dinh dưỡng...",
+  "categoryId": 3,
+  "thumbnailUrl": "https://res.cloudinary.com/.../image/upload/nutribot/thumbnails/thumb.jpg",
+  "mediaUrl": "https://res.cloudinary.com/.../video/upload/nutribot/videos/video.mp4",
+  "durationSec": 180,
+  "prepTimeMin": 10,
+  "cookTimeMin": 15,
+  "servings": 2,
+  "calories": 420,
+  "proteinG": 24,
+  "carbsG": 38,
+  "fatG": 16,
+  "fiberG": 8,
+  "sodiumMg": 320,
+  "ingredients": ["150g đậu hũ", "1 cốc nấm"],
+  "steps": ["Sơ chế nguyên liệu", "Nấu đến khi chín"]
+}
+```
+
 ---
 
 ## 5. Thực đơn tuần (Weekly Menu - Thắng & Lan)

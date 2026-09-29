@@ -237,6 +237,17 @@ CREATE TABLE contents (
     media_url       NVARCHAR(500) NULL,                 -- VIDEO
     thumbnail_url   NVARCHAR(500) NULL,
     duration_sec    INT NULL,                           -- VIDEO
+    prep_time_min   INT NULL,
+    cook_time_min   INT NULL,
+    servings        INT NULL,
+    calories        INT NULL,
+    protein_g       DECIMAL(8,2) NULL,
+    carbs_g         DECIMAL(8,2) NULL,
+    fat_g           DECIMAL(8,2) NULL,
+    fiber_g         DECIMAL(8,2) NULL,
+    sodium_mg       DECIMAL(8,2) NULL,
+    ingredients_json NVARCHAR(MAX) NULL,
+    steps_json      NVARCHAR(MAX) NULL,
     status          NVARCHAR(20) NOT NULL CONSTRAINT DF_contents_status DEFAULT (N'draft'),
     view_count      INT NOT NULL CONSTRAINT DF_contents_view_count DEFAULT (0),
     created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_contents_created_at DEFAULT (SYSUTCDATETIME()),
@@ -247,7 +258,9 @@ CREATE TABLE contents (
     CONSTRAINT CK_contents_type CHECK (content_type IN (N'BLOG', N'VIDEO')),
     CONSTRAINT CK_contents_status CHECK (status IN (N'draft', N'under_review', N'published', N'flagged', N'rejected', N'archived')),
     CONSTRAINT CK_contents_view_count CHECK (view_count >= 0),
-    CONSTRAINT CK_contents_duration CHECK (duration_sec IS NULL OR duration_sec >= 0)
+    CONSTRAINT CK_contents_duration CHECK (duration_sec IS NULL OR duration_sec >= 0),
+    CONSTRAINT CK_contents_recipe_times CHECK ((prep_time_min IS NULL OR prep_time_min >= 0) AND (cook_time_min IS NULL OR cook_time_min >= 0)),
+    CONSTRAINT CK_contents_servings CHECK (servings IS NULL OR servings > 0)
 );
 GO
 

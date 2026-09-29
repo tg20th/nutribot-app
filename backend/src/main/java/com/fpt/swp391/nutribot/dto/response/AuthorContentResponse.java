@@ -3,6 +3,7 @@ package com.fpt.swp391.nutribot.dto.response;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -36,6 +37,17 @@ public class AuthorContentResponse {
 
     @JsonProperty("durationSec")
     private Integer durationSec;
+    private Integer prepTimeMin;
+    private Integer cookTimeMin;
+    private Integer servings;
+    private Integer calories;
+    private Double proteinG;
+    private Double carbsG;
+    private Double fatG;
+    private Double fiberG;
+    private Double sodiumMg;
+    private List<String> ingredients;
+    private List<String> steps;
 
     @JsonProperty("status")
     private String status;

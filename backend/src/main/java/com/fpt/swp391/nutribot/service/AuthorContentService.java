@@ -23,6 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.text.Normalizer;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -31,6 +33,8 @@ import java.util.regex.Pattern;
 @Service
 @RequiredArgsConstructor
 public class AuthorContentService {
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final ContentRepository contentRepository;
     private final UserRepository userRepository;
@@ -68,9 +72,8 @@ public class AuthorContentService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
 
-        if (request.getCategoryId() != null) {
-            validateCategory(request.getCategoryId());
-        }
+        validateCreateRequest(contentType, request);
+        validateCategory(request.getCategoryId());
 
         Content content = Content.builder()
                 .user(user)
@@ -82,6 +85,17 @@ public class AuthorContentService {
                 .mediaUrl(request.getMediaUrl())
                 .thumbnailUrl(request.getThumbnailUrl())
                 .durationSec(request.getDurationSec())
+                .prepTimeMin(request.getPrepTimeMin())
+                .cookTimeMin(request.getCookTimeMin())
+                .servings(request.getServings())
+                .calories(request.getCalories())
+                .proteinG(request.getProteinG())
+                .carbsG(request.getCarbsG())
+                .fatG(request.getFatG())
+                .fiberG(request.getFiberG())
+                .sodiumMg(request.getSodiumMg())
+                .ingredientsJson(writeList(request.getIngredients()))
+                .stepsJson(writeList(request.getSteps()))
                 .status(STATUS_DRAFT) // Bài viết mới tạo luôn là draft
                 .viewCount(0)
                 .build();
@@ -213,11 +227,37 @@ public class AuthorContentService {
         }
 
         String thumbnailUrl = content.getThumbnailUrl();
+        String mediaUrl = content.getMediaUrl();
         contentRepository.delete(content);
 
         // Dọn dẹp thumbnail an toàn (fault-tolerant)
         if (thumbnailUrl != null && !thumbnailUrl.isBlank()) {
             cloudinaryMediaService.deleteThumbnailByUrl(thumbnailUrl);
+        }
+        if (mediaUrl != null && !mediaUrl.isBlank()) {
+            cloudinaryMediaService.deleteVideoByUrl(mediaUrl);
+        }
+    }
+
+    private void validateCreateRequest(String contentType, ContentCreateRequest request) {
+        if (!"BLOG".equalsIgnoreCase(contentType) && !"VIDEO".equalsIgnoreCase(contentType)) {
+            throw new BadRequestException("Loại nội dung phải là BLOG hoặc VIDEO");
+        }
+        // Canonical unified form must provide every field rendered in the detail screen.
+        if (request.getContentType() != null) {
+            if (request.getCategoryId() == null) throw new BadRequestException("Vui lòng chọn danh mục");
+            if (request.getBody() == null || request.getBody().isBlank()) throw new BadRequestException("Nội dung mô tả không được để trống");
+            if (request.getThumbnailUrl() == null || request.getThumbnailUrl().isBlank()) throw new BadRequestException("Vui lòng tải ảnh bìa");
+            if (request.getPrepTimeMin() == null || request.getCookTimeMin() == null || request.getServings() == null
+                    || request.getCalories() == null || request.getProteinG() == null || request.getCarbsG() == null
+                    || request.getFatG() == null || request.getFiberG() == null || request.getSodiumMg() == null
+                    || request.getIngredients() == null || request.getIngredients().stream().noneMatch(value -> value != null && !value.isBlank())
+                    || request.getSteps() == null || request.getSteps().stream().noneMatch(value -> value != null && !value.isBlank())) {
+                throw new BadRequestException("Vui lòng nhập đầy đủ thông tin công thức hiển thị ở trang chi tiết");
+            }
+            if ("VIDEO".equalsIgnoreCase(contentType) && (request.getMediaUrl() == null || request.getMediaUrl().isBlank())) {
+                throw new BadRequestException("Vui lòng tải tệp video MP4");
+            }
         }
     }
 
@@ -272,10 +312,33 @@ public class AuthorContentService {
                 .mediaUrl(content.getMediaUrl())
                 .thumbnailUrl(content.getThumbnailUrl())
                 .durationSec(content.getDurationSec())
+                .prepTimeMin(content.getPrepTimeMin())
+                .cookTimeMin(content.getCookTimeMin())
+                .servings(content.getServings())
+                .calories(content.getCalories())
+                .proteinG(content.getProteinG())
+                .carbsG(content.getCarbsG())
+                .fatG(content.getFatG())
+                .fiberG(content.getFiberG())
+                .sodiumMg(content.getSodiumMg())
+                .ingredients(readList(content.getIngredientsJson()))
+                .steps(readList(content.getStepsJson()))
                 .status(content.getStatus())
                 .viewCount(content.getViewCount())
                 .createdAt(content.getCreatedAt())
                 .updatedAt(content.getUpdatedAt())
                 .build();
+    }
+
+    private String writeList(List<String> values) {
+        if (values == null) return null;
+        try { return JSON.writeValueAsString(values.stream().filter(value -> value != null && !value.isBlank()).map(String::trim).toList()); }
+        catch (Exception ex) { throw new BadRequestException("Danh sách công thức không hợp lệ"); }
+    }
+
+    private List<String> readList(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        try { return JSON.readValue(value, new TypeReference<List<String>>() {}); }
+        catch (Exception ex) { log.warn("Không thể đọc dữ liệu danh sách của bài viết"); return List.of(); }
     }
 }

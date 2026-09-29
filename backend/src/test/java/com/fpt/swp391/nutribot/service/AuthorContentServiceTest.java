@@ -314,9 +314,13 @@ class AuthorContentServiceTest {
     void generateSlug_handlesVietnameseDiacritics() {
         ContentCreateRequest request = ContentCreateRequest.builder()
                 .title("Cách Nấu Canh Rong Biển Đậu Hũ Thanh Đạm")
+                .body("Nội dung công thức đầy đủ")
+                .categoryId(10)
+                .thumbnailUrl("https://res.cloudinary.com/test-cloud/image/upload/nutribot/thumbnails/thumb.jpg")
                 .build();
 
         when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(categoryRepository.findById(10)).thenReturn(Optional.of(validCategory));
         when(contentRepository.existsBySlug(anyString())).thenReturn(false);
         when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
 

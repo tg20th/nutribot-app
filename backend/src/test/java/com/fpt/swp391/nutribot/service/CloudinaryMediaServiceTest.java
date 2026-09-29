@@ -72,6 +72,31 @@ class CloudinaryMediaServiceTest {
     }
 
     @Test
+    @DisplayName("Upload MP4 thành công với resource type video")
+    void uploadVideo_validMp4_success() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "meal-prep.mp4", "video/mp4", new byte[]{1, 2, 3, 4}
+        );
+        when(cloudinary.uploader()).thenReturn(uploader);
+        when(uploader.upload(any(byte[].class), anyMap())).thenReturn(Map.of(
+                "secure_url", "https://res.cloudinary.com/test-cloud/video/upload/nutribot/videos/video_1_abc.mp4",
+                "public_id", "nutribot/videos/video_1_abc"
+        ));
+
+        CloudinaryMediaService.MediaUploadResult result = mediaService.uploadVideo(file, 1);
+
+        assertEquals("https://res.cloudinary.com/test-cloud/video/upload/nutribot/videos/video_1_abc.mp4", result.secureUrl());
+        verify(uploader).upload(any(byte[].class), argThat(options -> "video".equals(options.get("resource_type"))));
+    }
+
+    @Test
+    @DisplayName("Từ chối video không phải MP4")
+    void uploadVideo_nonMp4_throwsBadRequest() {
+        MockMultipartFile file = new MockMultipartFile("file", "clip.mov", "video/quicktime", new byte[]{1});
+        assertThrows(BadRequestException.class, () -> mediaService.uploadVideo(file, 1));
+    }
+
+    @Test
     @DisplayName("Xóa thumbnail an toàn theo URL")
     void deleteThumbnailByUrl_validUrl_callsCloudinaryDestroy() throws Exception {
         when(cloudinary.uploader()).thenReturn(uploader);

@@ -11,10 +11,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class ContentService {
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final ContentRepository contentRepository;
 
@@ -115,6 +120,9 @@ public class ContentService {
                 .body(content.getBody())
                 .thumbnailUrl(content.getThumbnailUrl())
                 .categoryId(content.getCategoryId())
+                .prepTimeMin(content.getPrepTimeMin()).cookTimeMin(content.getCookTimeMin()).servings(content.getServings())
+                .calories(content.getCalories()).proteinG(content.getProteinG()).carbsG(content.getCarbsG()).fatG(content.getFatG())
+                .fiberG(content.getFiberG()).sodiumMg(content.getSodiumMg()).ingredients(readList(content.getIngredientsJson())).steps(readList(content.getStepsJson()))
                 .authorId(content.getUser().getUserId())
                 .authorName(content.getUser().getFullName())
                 .viewCount(content.getViewCount())
@@ -149,6 +157,9 @@ public class ContentService {
                 .thumbnailUrl(content.getThumbnailUrl())
                 .durationSec(content.getDurationSec())
                 .categoryId(content.getCategoryId())
+                .prepTimeMin(content.getPrepTimeMin()).cookTimeMin(content.getCookTimeMin()).servings(content.getServings())
+                .calories(content.getCalories()).proteinG(content.getProteinG()).carbsG(content.getCarbsG()).fatG(content.getFatG())
+                .fiberG(content.getFiberG()).sodiumMg(content.getSodiumMg()).ingredients(readList(content.getIngredientsJson())).steps(readList(content.getStepsJson()))
                 .authorId(content.getUser().getUserId())
                 .authorName(content.getUser().getFullName())
                 .viewCount(content.getViewCount())
@@ -156,5 +167,11 @@ public class ContentService {
                 .userVoted(userVoted)
                 .createdAt(content.getCreatedAt())
                 .build();
+    }
+
+    private List<String> readList(String value) {
+        if (value == null || value.isBlank()) return List.of();
+        try { return JSON.readValue(value, new TypeReference<List<String>>() {}); }
+        catch (Exception ex) { return List.of(); }
     }
 }
