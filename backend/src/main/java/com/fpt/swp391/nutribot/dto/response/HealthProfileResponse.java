@@ -12,6 +12,7 @@ public record HealthProfileResponse(
         BigDecimal bmi,
         String bmiCategory,
         String healthGoal,
+        String vegetarianType,
         List<Integer> allergyIngredientIds,
         List<String> allergies
 ) {

@@ -13,6 +13,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -105,6 +106,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(ProfileIncompleteException.class)
+    public ResponseEntity<ApiResponse<List<String>>> handleProfileIncomplete(ProfileIncompleteException ex) {
+        log.info("Profile incomplete: {}", ex.getMissingFields());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("PROFILE_INCOMPLETE", ex.getMessage(), ex.getMissingFields()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

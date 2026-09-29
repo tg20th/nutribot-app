@@ -25,5 +25,8 @@ public class HealthProfileUpdateRequest {
     @Pattern(regexp = "lose_weight|gain_muscle|maintain", message = "Mục tiêu sức khỏe không hợp lệ")
     private String healthGoal;
 
+    @Pattern(regexp = "VEGAN|LACTO|OVO|LACTO_OVO|", message = "Vegetarian type không hợp lệ")
+    private String vegetarianType;
+
     private List<Integer> allergyIngredientIds;
 }

@@ -4,28 +4,28 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "user_allergies",
-        uniqueConstraints = @UniqueConstraint(
-                name = "PK_user_allergies",
-                columnNames = {"user_id", "ingredient_id"}
-        ))
+@Table(name = "user_allergies")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@IdClass(UserAllergyId.class)
 public class UserAllergy {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "allergy_id")
-    private Integer allergyId;
+    @Column(name = "user_id")
+    private Integer userId;
+
+    @Id
+    @Column(name = "ingredient_id")
+    private Integer ingredientId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id", insertable = false, updatable = false)
     private UserProfile userProfile;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "ingredient_id", nullable = false)
+    @JoinColumn(name = "ingredient_id", insertable = false, updatable = false)
     private Ingredient ingredient;
 }
