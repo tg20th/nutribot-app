@@ -25,8 +25,20 @@ public class ContentListResponse {
     @JsonProperty("categoryId")
     private Integer categoryId;
 
+    @JsonProperty("authorId")
+    private Integer authorId;
+
+    @JsonProperty("authorUsername")
+    private String authorUsername;
+
     @JsonProperty("authorName")
     private String authorName;
+
+    @JsonProperty("authorAvatar")
+    private String authorAvatar;
+
+    @JsonProperty("avatarUrl")
+    private String avatarUrl;
 
     @JsonProperty("viewCount")
     private Integer viewCount;

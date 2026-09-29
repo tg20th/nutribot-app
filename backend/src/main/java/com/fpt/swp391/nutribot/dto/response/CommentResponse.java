@@ -26,6 +26,9 @@ public class CommentResponse {
     @JsonProperty("userAvatar")
     private String userAvatar;
 
+    @JsonProperty("avatarUrl")
+    private String avatarUrl;
+
     @JsonProperty("parentId")
     private Integer parentId;
 

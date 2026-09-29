@@ -341,6 +341,7 @@ public class AuthorContentService {
     }
 
     private AuthorContentResponse toAuthorResponse(Content content) {
+        String avatar = content.getUser() != null ? content.getUser().getAvatarUrl() : null;
         return AuthorContentResponse.builder()
                 .contentId(content.getContentId())
                 .contentType(content.getContentType())
@@ -352,6 +353,11 @@ public class AuthorContentService {
                 .thumbnailUrl(content.getThumbnailUrl())
                 .durationSec(content.getDurationSec())
                 .status(content.getStatus())
+                .authorId(content.getUser() != null ? content.getUser().getUserId() : null)
+                .authorUsername(content.getUser() != null ? content.getUser().getUsername() : null)
+                .authorName(content.getUser() != null ? content.getUser().getFullName() : null)
+                .authorAvatar(avatar)
+                .avatarUrl(avatar)
                 .viewCount(content.getViewCount())
                 .createdAt(content.getCreatedAt())
                 .updatedAt(content.getUpdatedAt())

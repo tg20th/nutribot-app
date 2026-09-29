@@ -16,8 +16,14 @@ export default function CommunityPostCard({ post, interactionApi = {}, loadPost,
 
   return <article className="community-post">
     <header className="community-post-header">
-      <ImageWithFallback src={post.avatar} alt=""/>
-      <div><b>{post.author}</b><small>{post.username} &middot; {post.createdAt}</small></div>
+      {post.avatar ? (
+        <ImageWithFallback src={post.avatar} alt={post.author || 'Author avatar'} />
+      ) : (
+        <span className="avatar-fallback" aria-hidden="true">
+          {(post.author || 'N').charAt(0).toUpperCase()}
+        </span>
+      )}
+      <div><b>{post.author}</b><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></div>
       <button className="community-icon-btn" aria-label="Post options"><MoreHorizontal size={18}/></button>
     </header>
 
