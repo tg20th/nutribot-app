@@ -326,4 +326,130 @@ class AuthorContentServiceTest {
         assertTrue(response.getSlug().startsWith("cach-nau-canh-rong-bien-dau-hu-thanh-dam-"));
         assertFalse(response.getSlug().contains("ă") || response.getSlug().contains("đ") || response.getSlug().contains("ủ"));
     }
+
+    // ==================== 4. VIDEO SPECIFIC INTEGRITY & WORKFLOW (NB-24 / BL-005, BL-013, BL-020) ====================
+
+    @Test
+    @DisplayName("14. Tạo Video với thời lượng <= 0 hoặc > 24h ném HTTP 400 BadRequest")
+    void createVideo_invalidDuration_throwsBadRequest() {
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+
+        // Duration <= 0
+        ContentCreateRequest req1 = ContentCreateRequest.builder()
+                .title("Video Món Chay")
+                .durationSec(0)
+                .build();
+        BadRequestException ex1 = assertThrows(BadRequestException.class, () ->
+                authorContentService.createContent("truong_author", "VIDEO", req1));
+        assertTrue(ex1.getMessage().contains("Thời lượng video phải lớn hơn 0"));
+
+        // Duration > 86400 (24h)
+        ContentCreateRequest req2 = ContentCreateRequest.builder()
+                .title("Video Món Chay")
+                .durationSec(86401)
+                .build();
+        BadRequestException ex2 = assertThrows(BadRequestException.class, () ->
+                authorContentService.createContent("truong_author", "VIDEO", req2));
+        assertTrue(ex2.getMessage().contains("không được vượt quá 24 giờ"));
+    }
+
+    @Test
+    @DisplayName("15. Tạo Video với mediaUrl không an toàn hoặc sai định dạng ném HTTP 400")
+    void createVideo_invalidMediaUrl_throwsBadRequest() {
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+
+        ContentCreateRequest request = ContentCreateRequest.builder()
+                .title("Video Món Chay")
+                .mediaUrl("javascript:alert('hack')")
+                .build();
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () ->
+                authorContentService.createContent("truong_author", "VIDEO", request));
+        assertTrue(ex.getMessage().contains("Đường dẫn media không hợp lệ"));
+    }
+
+    @Test
+    @DisplayName("16. Tạo Video hợp lệ lưu đúng contentType VIDEO và trạng thái DRAFT")
+    void createVideo_validInput_createsDraftVideo() {
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(categoryRepository.findById(10)).thenReturn(Optional.of(validCategory));
+        when(contentRepository.existsBySlug(anyString())).thenReturn(false);
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ContentCreateRequest request = ContentCreateRequest.builder()
+                .title("Hướng Dẫn Nấu Canh Đậu Hũ Rong Biển")
+                .categoryId(10)
+                .mediaUrl("https://example.com/videos/tofu-soup.mp4")
+                .thumbnailUrl("https://res.cloudinary.com/test-cloud/image/upload/nutribot/thumbnails/thumb_1_vid.jpg")
+                .durationSec(360)
+                .build();
+
+        AuthorContentResponse response = authorContentService.createContent("truong_author", "VIDEO", request);
+
+        assertNotNull(response);
+        assertEquals("VIDEO", response.getContentType());
+        assertEquals("draft", response.getStatus());
+        assertEquals(360, response.getDurationSec());
+        assertEquals("https://example.com/videos/tofu-soup.mp4", response.getMediaUrl());
+    }
+
+    @Test
+    @DisplayName("17. Thao tác trên Video của người khác bị chặn với HTTP 403 Forbidden")
+    void videoOperations_crossUser_throwsForbidden() {
+        Content sampleVideo = Content.builder()
+                .contentId(200)
+                .user(authorUser)
+                .contentType("VIDEO")
+                .status("draft")
+                .build();
+
+        when(userRepository.findByUsername("hacker_user")).thenReturn(Optional.of(otherUser));
+        when(contentRepository.findById(200)).thenReturn(Optional.of(sampleVideo));
+
+        ContentUpdateRequest updateReq = ContentUpdateRequest.builder().title("Hacked Title").build();
+
+        assertThrows(ForbiddenException.class, () ->
+                authorContentService.updateContent("hacker_user", 200, "VIDEO", updateReq));
+        assertThrows(ForbiddenException.class, () ->
+                authorContentService.deleteContent("hacker_user", 200, "VIDEO"));
+        assertThrows(ForbiddenException.class, () ->
+                authorContentService.submitContent("hacker_user", 200, "VIDEO"));
+        assertThrows(ForbiddenException.class, () ->
+                authorContentService.recallContent("hacker_user", 200, "VIDEO"));
+    }
+
+    @Test
+    @DisplayName("18. Truy cập Video nhưng contentId lại là BLOG -> Ném NotFoundException")
+    void getContentById_contentTypeMismatch_throwsNotFound() {
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent)); // sampleContent có contentType = "BLOG"
+
+        NotFoundException ex = assertThrows(NotFoundException.class, () ->
+                authorContentService.getContentById("truong_author", 100, "VIDEO"));
+
+        assertTrue(ex.getMessage().contains("Video không tồn tại"));
+    }
+
+    @Test
+    @DisplayName("19. Nộp Video và rút Video cập nhật trạng thái chuẩn xác")
+    void videoSubmitAndRecall_updatesStateCorrectly() {
+        Content video = Content.builder()
+                .contentId(200)
+                .user(authorUser)
+                .contentType("VIDEO")
+                .status("draft")
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(200)).thenReturn(Optional.of(video));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Submit
+        AuthorContentResponse submitRes = authorContentService.submitContent("truong_author", 200, "VIDEO");
+        assertEquals("under_review", submitRes.getStatus());
+
+        // Recall
+        AuthorContentResponse recallRes = authorContentService.recallContent("truong_author", 200, "VIDEO");
+        assertEquals("draft", recallRes.getStatus());
+    }
 }

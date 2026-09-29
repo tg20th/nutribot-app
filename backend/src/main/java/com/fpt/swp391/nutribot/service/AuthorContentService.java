@@ -72,6 +72,8 @@ public class AuthorContentService {
             validateCategory(request.getCategoryId());
         }
 
+        validateVideoFields(contentType, request.getMediaUrl(), request.getDurationSec());
+
         Content content = Content.builder()
                 .user(user)
                 .contentType(contentType)
@@ -82,7 +84,7 @@ public class AuthorContentService {
                 .mediaUrl(request.getMediaUrl())
                 .thumbnailUrl(request.getThumbnailUrl())
                 .durationSec(request.getDurationSec())
-                .status(STATUS_DRAFT) // Bài viết mới tạo luôn là draft
+                .status(STATUS_DRAFT) // Bài viết/video mới tạo luôn là draft
                 .viewCount(0)
                 .build();
 
@@ -92,11 +94,20 @@ public class AuthorContentService {
 
     @Transactional(readOnly = true)
     public AuthorContentResponse getContentById(String username, Integer contentId) {
+        return getContentById(username, contentId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public AuthorContentResponse getContentById(String username, Integer contentId, String expectedContentType) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
 
         Content content = contentRepository.findById(contentId)
-                .orElseThrow(() -> new NotFoundException("Bài viết không tồn tại"));
+                .orElseThrow(() -> new NotFoundException(getNotFoundMessage(expectedContentType)));
+
+        if (expectedContentType != null && !expectedContentType.equalsIgnoreCase(content.getContentType())) {
+            throw new NotFoundException(getNotFoundMessage(expectedContentType));
+        }
 
         if (!content.getUser().getUserId().equals(user.getUserId())) {
             throw new ForbiddenException("Bạn không có quyền xem nội dung này");
@@ -107,15 +118,26 @@ public class AuthorContentService {
 
     @Transactional
     public AuthorContentResponse updateContent(String username, Integer contentId, ContentUpdateRequest request) {
+        return updateContent(username, contentId, null, request);
+    }
+
+    @Transactional
+    public AuthorContentResponse updateContent(String username, Integer contentId, String expectedContentType, ContentUpdateRequest request) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
 
         Content content = contentRepository.findById(contentId)
-                .orElseThrow(() -> new NotFoundException("Bài viết không tồn tại"));
+                .orElseThrow(() -> new NotFoundException(getNotFoundMessage(expectedContentType)));
+
+        if (expectedContentType != null && !expectedContentType.equalsIgnoreCase(content.getContentType())) {
+            throw new NotFoundException(getNotFoundMessage(expectedContentType));
+        }
 
         if (!content.getUser().getUserId().equals(user.getUserId())) {
             throw new ForbiddenException("Bạn không có quyền chỉnh sửa nội dung này");
         }
+
+        validateVideoFields(content.getContentType(), request.getMediaUrl(), request.getDurationSec());
 
         if (request.getCategoryId() != null) {
             validateCategory(request.getCategoryId());
@@ -155,7 +177,7 @@ public class AuthorContentService {
             // Nếu không yêu cầu status cụ thể, nhưng bài đang là PUBLISHED hoặc REJECTED:
             // Tác giả sửa nội dung -> tự động hạ trạng thái về draft để kiểm duyệt lại
             if (STATUS_PUBLISHED.equalsIgnoreCase(content.getStatus()) || STATUS_REJECTED.equalsIgnoreCase(content.getStatus())) {
-                log.info("Bài viết {} đang ở trạng thái {}, tác giả cập nhật nội dung -> tự động hạ về DRAFT", contentId, content.getStatus());
+                log.info("Nội dung {} đang ở trạng thái {}, tác giả cập nhật -> tự động hạ về DRAFT", contentId, content.getStatus());
                 content.setStatus(STATUS_DRAFT);
             }
         }
@@ -166,47 +188,74 @@ public class AuthorContentService {
 
     @Transactional
     public AuthorContentResponse submitContent(String username, Integer contentId) {
+        return submitContent(username, contentId, null);
+    }
+
+    @Transactional
+    public AuthorContentResponse submitContent(String username, Integer contentId, String expectedContentType) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
 
         Content content = contentRepository.findById(contentId)
-                .orElseThrow(() -> new NotFoundException("Bài viết không tồn tại"));
+                .orElseThrow(() -> new NotFoundException(getNotFoundMessage(expectedContentType)));
+
+        if (expectedContentType != null && !expectedContentType.equalsIgnoreCase(content.getContentType())) {
+            throw new NotFoundException(getNotFoundMessage(expectedContentType));
+        }
 
         if (!content.getUser().getUserId().equals(user.getUserId())) {
-            throw new ForbiddenException("Bạn không có quyền thao tác trên bài viết này");
+            throw new ForbiddenException("Bạn không có quyền thao tác trên nội dung này");
         }
 
         content.setStatus(STATUS_UNDER_REVIEW);
         Content saved = contentRepository.save(content);
-        log.info("Tác giả {} đã nộp bài viết {} sang trạng thái {}", username, contentId, STATUS_UNDER_REVIEW);
+        log.info("Tác giả {} đã nộp nội dung {} sang trạng thái {}", username, contentId, STATUS_UNDER_REVIEW);
         return toAuthorResponse(saved);
     }
 
     @Transactional
     public AuthorContentResponse recallContent(String username, Integer contentId) {
+        return recallContent(username, contentId, null);
+    }
+
+    @Transactional
+    public AuthorContentResponse recallContent(String username, Integer contentId, String expectedContentType) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
 
         Content content = contentRepository.findById(contentId)
-                .orElseThrow(() -> new NotFoundException("Bài viết không tồn tại"));
+                .orElseThrow(() -> new NotFoundException(getNotFoundMessage(expectedContentType)));
+
+        if (expectedContentType != null && !expectedContentType.equalsIgnoreCase(content.getContentType())) {
+            throw new NotFoundException(getNotFoundMessage(expectedContentType));
+        }
 
         if (!content.getUser().getUserId().equals(user.getUserId())) {
-            throw new ForbiddenException("Bạn không có quyền thao tác trên bài viết này");
+            throw new ForbiddenException("Bạn không có quyền thao tác trên nội dung này");
         }
 
         content.setStatus(STATUS_DRAFT);
         Content saved = contentRepository.save(content);
-        log.info("Tác giả {} đã rút bài viết {} về trạng thái {}", username, contentId, STATUS_DRAFT);
+        log.info("Tác giả {} đã rút nội dung {} về trạng thái {}", username, contentId, STATUS_DRAFT);
         return toAuthorResponse(saved);
     }
 
     @Transactional
     public void deleteContent(String username, Integer contentId) {
+        deleteContent(username, contentId, null);
+    }
+
+    @Transactional
+    public void deleteContent(String username, Integer contentId, String expectedContentType) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
 
         Content content = contentRepository.findById(contentId)
-                .orElseThrow(() -> new NotFoundException("Bài viết không tồn tại"));
+                .orElseThrow(() -> new NotFoundException(getNotFoundMessage(expectedContentType)));
+
+        if (expectedContentType != null && !expectedContentType.equalsIgnoreCase(content.getContentType())) {
+            throw new NotFoundException(getNotFoundMessage(expectedContentType));
+        }
 
         if (!content.getUser().getUserId().equals(user.getUserId())) {
             throw new ForbiddenException("Bạn không có quyền xóa nội dung này");
@@ -221,6 +270,36 @@ public class AuthorContentService {
         }
     }
 
+    private void validateVideoFields(String contentType, String mediaUrl, Integer durationSec) {
+        if ("VIDEO".equalsIgnoreCase(contentType)) {
+            if (durationSec != null) {
+                if (durationSec <= 0) {
+                    throw new BadRequestException("Thời lượng video phải lớn hơn 0");
+                }
+                if (durationSec > 86400) {
+                    throw new BadRequestException("Thời lượng video không được vượt quá 24 giờ");
+                }
+            }
+            if (mediaUrl != null && !mediaUrl.isBlank()) {
+                validateMediaUrl(mediaUrl);
+            }
+        }
+    }
+
+    private void validateMediaUrl(String mediaUrl) {
+        String trimmed = mediaUrl.trim().toLowerCase();
+        if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+            throw new BadRequestException("Đường dẫn media không hợp lệ");
+        }
+    }
+
+    private String getNotFoundMessage(String expectedContentType) {
+        if ("VIDEO".equalsIgnoreCase(expectedContentType)) {
+            return "Video không tồn tại";
+        }
+        return "Bài viết không tồn tại";
+    }
+
     private void validateCategory(Integer categoryId) {
         Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new BadRequestException("Danh mục không tồn tại"));
@@ -230,7 +309,7 @@ public class AuthorContentService {
         }
 
         if (category.getCategoryType() == null || !category.getCategoryType().equalsIgnoreCase("RECIPE")) {
-            throw new BadRequestException("Danh mục không hợp lệ hoặc không hỗ trợ bài viết blog");
+            throw new BadRequestException("Danh mục không hợp lệ hoặc không hỗ trợ nội dung bài viết/video");
         }
     }
 

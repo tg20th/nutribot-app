@@ -21,7 +21,12 @@ public class BlogThumbnailController {
     private final CloudinaryMediaService cloudinaryMediaService;
     private final UserRepository userRepository;
 
-    @PostMapping({"/api/v1/blogs/thumbnails", "/api/v1/author/blogs/thumbnail"})
+    @PostMapping({
+            "/api/v1/blogs/thumbnails",
+            "/api/v1/author/blogs/thumbnail",
+            "/api/v1/videos/thumbnails",
+            "/api/v1/author/videos/thumbnail"
+    })
     public ResponseEntity<ApiResponse<Map<String, String>>> uploadThumbnail(
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestParam("file") MultipartFile file) {
