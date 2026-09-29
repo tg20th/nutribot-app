@@ -107,7 +107,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     setHistoryLoading(true);
     setHistoryError('');
     try { setSessions(await getChatSessions()); }
-    catch (error) { setHistoryError(error.message || 'Không thể tải lịch sử trò chuyện.'); }
+    catch { setHistoryError('Unable to load chat history. Please try again.'); }
     finally { setHistoryLoading(false); }
   }, []);
 
@@ -149,7 +149,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
       sessionIdRef.current = sessionId;
       setMessages(persistedMessages.length ? persistedMessages.map((item) => ({ id: item.messageId, sender: item.senderType === 'USER' ? 'user' : 'assistant', text: item.content, createdAt: item.createdAt })) : INITIAL_MESSAGES);
       setHistoryOpen(false);
-    } catch (error) { setHistoryError(error.message || 'Không thể tải nội dung cuộc trò chuyện.'); }
+    } catch { setHistoryError('Unable to load this conversation. Please try again.'); }
     finally { setHistoryLoading(false); }
   };
 
@@ -402,7 +402,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
               </span>
             </div>
             <div className="chatbot-widget__header-actions">
-              {!isGuest && <button type="button" className="chatbot-widget__history-toggle" onClick={openHistory} aria-label="Mở lịch sử trò chuyện"><History size={18} /></button>}
+              {!isGuest && <button type="button" className="chatbot-widget__history-toggle" onClick={openHistory} aria-label="Open chat history"><History size={18} /></button>}
             <button
               type="button"
               className="chatbot-widget__minimize"
@@ -415,17 +415,17 @@ export default function ChatbotWidget({ onSend, onAuth }) {
           </header>
 
           {historyOpen && (
-            <aside className="chatbot-widget__history" aria-label="Lịch sử trò chuyện">
+            <aside className="chatbot-widget__history" aria-label="Chat history">
               <div className="chatbot-widget__history-head">
-                <div><span>Hội thoại của bạn</span><h2>Quay lại điều đang dang dở.</h2></div>
-                <button type="button" onClick={startNewConversation}><Plus size={16} /> Cuộc trò chuyện mới</button>
+                <div><span>Your conversations</span><h2>Pick up where you left off.</h2></div>
+                <button type="button" onClick={startNewConversation}><Plus size={16} /> New conversation</button>
               </div>
-              <label className="chatbot-widget__history-search"><Search size={15} /><input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Tìm trong lịch sử" /></label>
+              <label className="chatbot-widget__history-search"><Search size={15} /><input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search conversations" aria-label="Search conversations" /></label>
               <div className="chatbot-widget__history-list">
-                {historyLoading && <p className="chatbot-widget__history-status">Đang tải lịch sử...</p>}
+                {historyLoading && <p className="chatbot-widget__history-status">Loading conversations...</p>}
                 {!historyLoading && historyError && <p className="chatbot-widget__history-status is-error">{historyError}</p>}
-                {!historyLoading && !historyError && !sessions.filter((item) => `${item.title} ${item.preview}`.toLowerCase().includes(historyQuery.toLowerCase())).length && <p className="chatbot-widget__history-status">Chưa có cuộc trò chuyện nào được lưu.</p>}
-                {!historyLoading && sessions.filter((item) => `${item.title} ${item.preview}`.toLowerCase().includes(historyQuery.toLowerCase())).map((session) => <button type="button" key={session.sessionId} className="chatbot-widget__history-item" onClick={() => selectSession(session.sessionId)}><span>{session.title}</span><small>{session.preview || 'Chưa có tin nhắn'}<i><Clock3 size={12} /> {new Date(session.updatedAt).toLocaleDateString('vi-VN')}</i></small></button>)}
+                {!historyLoading && !historyError && !sessions.filter((item) => `${item.title} ${item.preview}`.toLowerCase().includes(historyQuery.toLowerCase())).length && <p className="chatbot-widget__history-status">No conversations yet.</p>}
+                {!historyLoading && sessions.filter((item) => `${item.title} ${item.preview}`.toLowerCase().includes(historyQuery.toLowerCase())).map((session) => <button type="button" key={session.sessionId} className="chatbot-widget__history-item" onClick={() => selectSession(session.sessionId)}><span>{session.title || 'New conversation'}</span><small>{session.preview || 'No messages yet'}<i><Clock3 size={12} /> {new Date(session.updatedAt).toLocaleDateString('en-US')}</i></small></button>)}
               </div>
             </aside>
           )}
