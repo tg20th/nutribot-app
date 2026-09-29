@@ -73,6 +73,7 @@ public class HealthProfileService {
         profile.setHeightCm(request.getHeightCm());
         profile.setWeightKg(request.getWeightKg());
         profile.setHealthGoal(request.getHealthGoal());
+        profile.setVegetarianType(normalizeVegetarianType(request.getVegetarianType()));
 
         profile.getAllergies().clear();
         for (Ingredient ingredient : ingredients) {
@@ -103,6 +104,14 @@ public class HealthProfileService {
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy người dùng"));
     }
 
+    private String normalizeVegetarianType(String value) {
+        if (value == null || value.isBlank()) return null;
+        return switch (value.toUpperCase()) {
+            case "VEGAN", "LACTO", "OVO", "LACTO_OVO" -> value.toUpperCase();
+            default -> null;
+        };
+    }
+
     private HealthProfileResponse toResponse(UserProfile profile) {
         BigDecimal bmi = profile == null ? null : calculateBmi(profile.getHeightCm(), profile.getWeightKg());
         List<Ingredient> allergyIngredients = profile == null
@@ -118,6 +127,7 @@ public class HealthProfileService {
                 .bmi(bmi)
                 .bmiCategory(categorizeBmi(bmi))
                 .healthGoal(profile == null ? null : profile.getHealthGoal())
+                .vegetarianType(profile == null ? null : profile.getVegetarianType())
                 .allergyIngredientIds(allergyIngredients.stream().map(Ingredient::getIngredientId).toList())
                 .allergies(allergyIngredients.stream().map(Ingredient::getName).toList())
                 .build();
