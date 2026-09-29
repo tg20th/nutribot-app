@@ -8,11 +8,14 @@ import com.fpt.swp391.nutribot.service.AdminUserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/admin/users")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('ADMIN')")
 public class AdminUserController {
 
     private final AdminUserService adminUserService;
@@ -30,8 +33,10 @@ public class AdminUserController {
     @PutMapping("/{userId}/status")
     public ResponseEntity<ApiResponse<AdminUserResponse>> updateUserStatus(
             @PathVariable Integer userId,
-            @Valid @RequestBody AdminUserStatusRequest request) {
-        AdminUserResponse result = adminUserService.updateUserStatus(userId, request);
+            @Valid @RequestBody AdminUserStatusRequest request,
+            Authentication authentication) {
+        String currentAdminUsername = authentication != null ? authentication.getName() : null;
+        AdminUserResponse result = adminUserService.updateUserStatus(userId, request, currentAdminUsername);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái người dùng thành công", result));
     }
 }
