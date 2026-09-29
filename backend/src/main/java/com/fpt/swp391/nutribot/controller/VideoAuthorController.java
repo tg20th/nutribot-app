@@ -41,7 +41,7 @@ public class VideoAuthorController {
     public ResponseEntity<ApiResponse<AuthorContentResponse>> getVideoById(
             @AuthenticationPrincipal UserDetails user,
             @PathVariable Integer id) {
-        AuthorContentResponse response = authorContentService.getContentById(user.getUsername(), id);
+        AuthorContentResponse response = authorContentService.getContentById(user.getUsername(), id, "VIDEO");
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -50,7 +50,7 @@ public class VideoAuthorController {
             @AuthenticationPrincipal UserDetails user,
             @PathVariable Integer id,
             @Valid @RequestBody ContentUpdateRequest request) {
-        AuthorContentResponse response = authorContentService.updateContent(user.getUsername(), id, request);
+        AuthorContentResponse response = authorContentService.updateContent(user.getUsername(), id, "VIDEO", request);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật video thành công", response));
     }
 
@@ -58,7 +58,23 @@ public class VideoAuthorController {
     public ResponseEntity<ApiResponse<Void>> deleteVideo(
             @AuthenticationPrincipal UserDetails user,
             @PathVariable Integer id) {
-        authorContentService.deleteContent(user.getUsername(), id);
+        authorContentService.deleteContent(user.getUsername(), id, "VIDEO");
         return ResponseEntity.ok(ApiResponse.success("Xóa video thành công", null));
+    }
+
+    @PostMapping("/{id}/submit")
+    public ResponseEntity<ApiResponse<AuthorContentResponse>> submitVideo(
+            @AuthenticationPrincipal UserDetails user,
+            @PathVariable Integer id) {
+        AuthorContentResponse response = authorContentService.submitContent(user.getUsername(), id, "VIDEO");
+        return ResponseEntity.ok(ApiResponse.success("Nộp video chờ duyệt thành công", response));
+    }
+
+    @PostMapping("/{id}/recall")
+    public ResponseEntity<ApiResponse<AuthorContentResponse>> recallVideo(
+            @AuthenticationPrincipal UserDetails user,
+            @PathVariable Integer id) {
+        AuthorContentResponse response = authorContentService.recallContent(user.getUsername(), id, "VIDEO");
+        return ResponseEntity.ok(ApiResponse.success("Rút video về bản nháp thành công", response));
     }
 }

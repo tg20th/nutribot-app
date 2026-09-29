@@ -8,6 +8,7 @@ import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ForbiddenException;
+import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.CommentRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
@@ -30,11 +31,12 @@ public class CommentService {
     private final UserRepository userRepository;
 
     private static final String ACTIVE_STATUS = "active";
+    private static final String PUBLISHED_STATUS = "published";
 
     @Transactional(readOnly = true)
     public PagedResponse<CommentResponse> getCommentsByContentId(Integer contentId, int page, int size) {
-        Content content = contentRepository.findById(contentId)
-                .orElseThrow(() -> new BadRequestException("Nội dung không tồn tại"));
+        Content content = contentRepository.findPublishedById(contentId, PUBLISHED_STATUS)
+                .orElseThrow(() -> new NotFoundException("Nội dung không tồn tại"));
 
         Pageable pageable = PageRequest.of(page, size);
         Page<Comment> commentsPage = commentRepository.findByContentIdAndParentIdIsNullAndStatus(contentId, ACTIVE_STATUS, pageable);
@@ -59,8 +61,8 @@ public class CommentService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
 
-        Content content = contentRepository.findById(contentId)
-                .orElseThrow(() -> new BadRequestException("Nội dung không tồn tại"));
+        Content content = contentRepository.findPublishedById(contentId, PUBLISHED_STATUS)
+                .orElseThrow(() -> new NotFoundException("Nội dung không tồn tại"));
 
         if (request.getParentId() != null) {
             Comment parent = commentRepository.findById(request.getParentId())
