@@ -8,6 +8,7 @@ import CommunitySideNav from '../components/community/CommunitySideNav';
 import MealEditorDialog from '../components/community/MealEditorDialog';
 import MealPlanAssistant from '../components/community/MealPlanAssistant';
 import MealPlanMatrix from '../components/community/MealPlanMatrix';
+import DishDetailModal from '../components/community/DishDetailModal';
 import ImageWithFallback from '../components/ImageWithFallback';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import freshProduce from '../assets/fresh-produce.jpg';
@@ -47,6 +48,7 @@ export default function WeeklyMealPlannerPage() {
   const [dishes, setDishes] = useState([]);
   const [dishError, setDishError] = useState(false);
   const [editor, setEditor] = useState(null);
+  const [detailMeal, setDetailMeal] = useState(null);
   const [pendingMealRemoval, setPendingMealRemoval] = useState(null);
   const [showGrocery, setShowGrocery] = useState(false);
   const [showAiGenerator, setShowAiGenerator] = useState(false);
@@ -366,8 +368,10 @@ export default function WeeklyMealPlannerPage() {
                     <div className="planner-slot-heading"><span>{slot}</span><small>{slotMeals.length} {slotMeals.length === 1 ? 'dish' : 'dishes'}</small></div>
                     <div className="planner-slot-list">
                       {slotMeals.map((meal) => <div className="planner-meal" key={meal.key}>
+                        <button type="button" className="planner-meal-detail" onClick={() => setDetailMeal(meal)} aria-label={`View details for ${meal.name}`}>
                         <ImageWithFallback src={meal.image} alt="" fallbackSrc={freshProduce}/>
                         <div><span>{meal.swapped ? 'Replaced' : 'Dish'}</span><b>{meal.name}</b><small>{meal.kcal} kcal · {meal.protein}g protein · {meal.servings} serving{meal.servings === 1 ? '' : 's'}</small></div>
+                        </button>
                         <div className="planner-meal-actions">
                           <button type="button" onClick={() => openEditor(day, slot, meal)} aria-label={`Replace ${meal.name}`}><Repeat2 size={13}/></button>
                           <button type="button" onClick={() => setPendingMealRemoval({ dayIndex, meal })} aria-label={`Delete ${meal.name}`}><Trash2 size={13}/></button>
@@ -379,7 +383,7 @@ export default function WeeklyMealPlannerPage() {
                 })}
               </div>
             </article>)}
-          </div> : <MealPlanMatrix days={plannerDays} onSelectMeal={openEditor}/>}
+          </div> : <MealPlanMatrix days={plannerDays} onSelectMeal={openEditor} onOpenDish={setDetailMeal}/>}
 
           <footer className="planner-footer">
             <div><span>Ready when you are</span><b>Make this week yours.</b></div>
@@ -394,6 +398,7 @@ export default function WeeklyMealPlannerPage() {
     </div>
 
     {editor && <MealEditorDialog editor={editor} dishes={dishes} onClose={() => setEditor(null)} onSubmit={submitMeal}/>}
+    {detailMeal && <DishDetailModal meal={detailMeal} onClose={() => setDetailMeal(null)}/>}
     {showGrocery && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowGrocery(false)}>
       <section className="meal-dialog grocery-dialog" role="dialog" aria-modal="true" aria-labelledby="meal-list-title">
         <header><div><span>{menu.week.range}</span><h2 id="meal-list-title">Meals this week</h2></div><button type="button" className="meal-dialog-close" onClick={() => setShowGrocery(false)} aria-label="Close meal list"><X size={18}/></button></header>
