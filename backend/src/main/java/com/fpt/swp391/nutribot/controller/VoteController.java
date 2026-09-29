@@ -4,6 +4,8 @@ import com.fpt.swp391.nutribot.dto.response.ApiResponse;
 import com.fpt.swp391.nutribot.dto.response.VoteResponse;
 import com.fpt.swp391.nutribot.service.VoteService;
 import lombok.RequiredArgsConstructor;
+import com.fpt.swp391.nutribot.dto.request.VoteToggleRequest;
+import com.fpt.swp391.nutribot.exception.BadRequestException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -20,6 +22,22 @@ public class VoteController {
             @AuthenticationPrincipal UserDetails user,
             @PathVariable Integer contentId) {
         VoteResponse response = voteService.toggleVote(user.getUsername(), contentId);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    @PostMapping("/api/v1/votes/toggle")
+    public ResponseEntity<ApiResponse<VoteResponse>> toggleVoteDirect(
+            @AuthenticationPrincipal UserDetails user,
+            @RequestParam(value = "contentId", required = false) Integer queryContentId,
+            @RequestBody(required = false) VoteToggleRequest request) {
+        Integer targetContentId = queryContentId;
+        if (targetContentId == null && request != null) {
+            targetContentId = request.getContentId();
+        }
+        if (targetContentId == null) {
+            throw new BadRequestException("ID nội dung không được để trống");
+        }
+        VoteResponse response = voteService.toggleVote(user.getUsername(), targetContentId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
