@@ -65,7 +65,7 @@ BEGIN
 
     UPDATE u
     SET status = CASE
-                    WHEN i.status IN (N'BANNED', N'PENDING_VERIFY') THEN i.status
+                    WHEN i.status IN (N'BANNED', N'SUSPENDED', N'PENDING_VERIFY') THEN i.status
                     WHEN i.strike_count >= 3 THEN N'SUSPENDED'
                     WHEN i.strike_count BETWEEN 1 AND 2 THEN N'WARN'
                     ELSE N'ACTIVE'
