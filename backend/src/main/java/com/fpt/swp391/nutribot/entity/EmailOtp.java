@@ -22,8 +22,19 @@ public class EmailOtp {
     @Column(name = "email", nullable = false, length = 255)
     private String email;
 
-    @Column(name = "otp_code", nullable = false, length = 6)
-    private String otpCode;
+    @Column(name = "otp_hash", nullable = false, length = 100)
+    private String otpHash;
+
+    @Column(name = "purpose", nullable = false, length = 30)
+    @Builder.Default
+    private String purpose = "REGISTRATION";
+
+    @Column(name = "user_id")
+    private Integer userId;
+
+    @Column(name = "failed_attempts", nullable = false)
+    @Builder.Default
+    private Integer failedAttempts = 0;
 
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiresAt;

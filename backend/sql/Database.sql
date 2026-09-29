@@ -80,12 +80,25 @@ GO
 CREATE TABLE email_otps (
     otp_id         INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
     email          NVARCHAR(255) NOT NULL,
-    otp_code       NVARCHAR(6) NOT NULL,
+    otp_hash       NVARCHAR(100) NOT NULL,
+    purpose        NVARCHAR(30) NOT NULL CONSTRAINT DF_email_otps_purpose DEFAULT (N'REGISTRATION'),
+    user_id        INT NULL,
+    failed_attempts TINYINT NOT NULL CONSTRAINT DF_email_otps_failed_attempts DEFAULT (0),
     expires_at     DATETIME2(3) NOT NULL,
     is_used        BIT NOT NULL CONSTRAINT DF_email_otps_is_used DEFAULT (0),
     created_at     DATETIME2(3) NOT NULL CONSTRAINT DF_email_otps_created_at DEFAULT (SYSUTCDATETIME()),
-    CONSTRAINT CK_email_otps_otp_code CHECK (LEN(otp_code) = 6 AND otp_code NOT LIKE '%[^0-9]%')
+    CONSTRAINT CK_email_otps_payload CHECK (
+        (purpose = N'REGISTRATION' AND user_id IS NULL)
+        OR (purpose = N'EMAIL_CHANGE' AND user_id IS NOT NULL)
+    ),
+    CONSTRAINT FK_email_otps_users FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
+CREATE UNIQUE NONCLUSTERED INDEX UX_email_otps_active_change_email ON email_otps(email)
+    WHERE purpose = N'EMAIL_CHANGE' AND is_used = 0;
+CREATE UNIQUE NONCLUSTERED INDEX UX_email_otps_active_change_user ON email_otps(user_id)
+    WHERE purpose = N'EMAIL_CHANGE' AND is_used = 0;
+CREATE NONCLUSTERED INDEX IX_email_otps_reg_active ON email_otps(email, expires_at)
+    WHERE purpose = N'REGISTRATION' AND is_used = 0;
 GO
 
 CREATE TABLE user_profiles (
@@ -421,7 +434,6 @@ GO
 -- INDEXES
 ------------------------------------------------
 CREATE NONCLUSTERED INDEX IX_users_role_id              ON users(role_id);
-CREATE NONCLUSTERED INDEX IX_email_otps_email           ON email_otps(email, expires_at, is_used) WHERE is_used = 0;
 CREATE NONCLUSTERED INDEX IX_contents_user_id           ON contents(user_id);
 CREATE NONCLUSTERED INDEX IX_contents_status            ON contents(status) INCLUDE (title, content_type, created_at);
 CREATE NONCLUSTERED INDEX IX_contents_type_status       ON contents(content_type, status);
