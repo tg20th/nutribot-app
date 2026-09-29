@@ -46,6 +46,7 @@ class ContentServiceTest {
                 .userId(userId)
                 .username("user_" + userId)
                 .fullName(name)
+                .avatarUrl("https://img.test/avatar_" + userId + ".jpg")
                 .status(AccountStatus.ACTIVE)
                 .build();
     }
@@ -290,5 +291,33 @@ class ContentServiceTest {
         VideoDetailResponse res2 = contentService.getVideoByIdOrSlug("nau-chao-nam");
         assertNotNull(res2);
         assertEquals("nau-chao-nam", video.getSlug());
+    }
+
+    @Test
+    @DisplayName("Load bài viết/video công khai -> Trả về đầy đủ authorAvatar, avatarUrl, authorUsername và authorId của tác giả")
+    void getBlogAndVideo_LoadsAuthorAvatarAndMetadata() {
+        Content blog = createSampleBlog(10, "Món ngon mỗi ngày", "mon-ngon-moi-ngay", 50);
+        when(contentRepository.findPublishedByIdAndType(10, "BLOG", "published"))
+                .thenReturn(Optional.of(blog));
+
+        ContentDetailResponse blogDetail = contentService.getBlogById(10);
+        assertNotNull(blogDetail);
+        assertEquals(1, blogDetail.getAuthorId());
+        assertEquals("user_1", blogDetail.getAuthorUsername());
+        assertEquals("Nguyễn Văn Tác Giả", blogDetail.getAuthorName());
+        assertEquals("https://img.test/avatar_1.jpg", blogDetail.getAuthorAvatar());
+        assertEquals("https://img.test/avatar_1.jpg", blogDetail.getAvatarUrl());
+
+        Content video = createSampleVideo(20, "Video nấu ăn", "video-nau-an", 80);
+        when(contentRepository.findPublishedByIdAndType(20, "VIDEO", "published"))
+                .thenReturn(Optional.of(video));
+
+        VideoDetailResponse videoDetail = contentService.getVideoById(20);
+        assertNotNull(videoDetail);
+        assertEquals(2, videoDetail.getAuthorId());
+        assertEquals("user_2", videoDetail.getAuthorUsername());
+        assertEquals("Trần Video Master", videoDetail.getAuthorName());
+        assertEquals("https://img.test/avatar_2.jpg", videoDetail.getAuthorAvatar());
+        assertEquals("https://img.test/avatar_2.jpg", videoDetail.getAvatarUrl());
     }
 }
