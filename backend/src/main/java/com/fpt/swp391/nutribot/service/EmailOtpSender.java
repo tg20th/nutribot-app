@@ -6,5 +6,7 @@ package com.fpt.swp391.nutribot.service;
  */
 public interface EmailOtpSender {
 
-    void sendEmailChangeOtp(String recipient, String otp);
+    void sendRegistrationOtp(String recipient, String otp, int expirationMinutes);
+
+    void sendEmailChangeOtp(String recipient, String otp, int expirationMinutes);
 }
