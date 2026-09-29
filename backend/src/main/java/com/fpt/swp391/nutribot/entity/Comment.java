@@ -29,9 +29,9 @@ public class Comment {
     @Column(name = "body", nullable = false, columnDefinition = "TEXT")
     private String body;
 
-    @Column(name = "status")
+    @Column(name = "status", nullable = false)
     @Builder.Default
-    private String status = "active";
+    private String status = "published";
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -51,6 +51,9 @@ public class Comment {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
+        if (status == null || status.isBlank()) {
+            status = "published";
+        }
     }
 
     @PreUpdate
