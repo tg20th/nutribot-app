@@ -13,8 +13,10 @@ public class AdminUserResponse {
     private String username;
     private String email;
     private String fullName;
+    private String avatarUrl;
     private String roleName;
     private String status;
     private Integer strikeCount;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 }
