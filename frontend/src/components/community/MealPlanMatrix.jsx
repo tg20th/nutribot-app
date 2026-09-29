@@ -17,7 +17,7 @@ export default function MealPlanMatrix({ className = '', days: plannerDays = [],
         {MEAL_SLOTS.map((slot) => plannerDays.map((day) => {
           const meals = day.meals.filter((item) => item.slot === slot);
           const totalCalories = meals.reduce((sum, meal) => sum + meal.kcal, 0);
-          return <button type="button" className={`matrix-cell${meals.length ? '' : ' is-empty'}`} key={`${day.isoDate}-${slot}`} onClick={() => onSelectMeal?.(day, slot)} title={`Add another ${slot.toLowerCase()} dish for ${day.label}`}>
+          return <button type="button" className={`matrix-cell${meals.length ? '' : ' is-empty'}`} key={`${day.isoDate}-${slot}`} onClick={() => onSelectMeal?.(day, slot, meals[0] ?? null)} title={`${meals.length ? 'Edit' : 'Add'} ${slot.toLowerCase()} for ${day.label}`}>
             {meals.length ? <>
               <span className="matrix-cell-count">{meals.length} {meals.length === 1 ? 'dish' : 'dishes'}</span>
               <span className="matrix-meal-stack">
