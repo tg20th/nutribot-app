@@ -15,6 +15,8 @@ from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.gemini_service import GeminiService
 from app.services.recommender import ContentRecommender
 from app.schemas.recommender import RecommendationRequest, RecommendationResponse
+from app.schemas.moderation import ModerationRequest, ModerationResponse
+from app.services.content_moderation_service import ContentModerationService
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +134,9 @@ def create_app(
     @application.post("/api/ai/content-recommendations", response_model=RecommendationResponse, tags=["Recommendations"])
     async def content_recommendations(recommendation_request: RecommendationRequest) -> RecommendationResponse:
         return application.state.recommender.recommend(recommendation_request)
+    @application.post("/api/ai/moderate-content",response_model=ModerationResponse,tags=["Moderation"])
+    async def moderate_content(request: ModerationRequest) -> ModerationResponse:
+        return await ContentModerationService(application.state.gemini_service).moderate(request)
 
     return application
 
