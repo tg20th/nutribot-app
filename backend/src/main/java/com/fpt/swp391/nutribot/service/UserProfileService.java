@@ -7,6 +7,7 @@ import com.fpt.swp391.nutribot.config.JwtTokenProvider;
 import com.fpt.swp391.nutribot.entity.Ingredient;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.entity.UserProfile;
+import com.fpt.swp391.nutribot.entity.UserAllergy;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ConflictException;
 import com.fpt.swp391.nutribot.exception.CloudinaryUploadException;
@@ -168,7 +169,7 @@ public class UserProfileService {
         BigDecimal weight = profile == null ? null : profile.getWeightKg();
         BigDecimal bmi = calculateBmi(height, weight);
         List<String> allergies = profile == null ? List.of() : profile.getAllergies().stream()
-                .map(Ingredient::getName)
+                .map(ua -> ua.getIngredient().getName())
                 .sorted(String.CASE_INSENSITIVE_ORDER)
                 .toList();
 

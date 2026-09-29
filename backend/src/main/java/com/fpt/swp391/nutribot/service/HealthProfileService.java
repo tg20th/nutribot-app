@@ -6,6 +6,7 @@ import com.fpt.swp391.nutribot.dto.response.IngredientOptionResponse;
 import com.fpt.swp391.nutribot.entity.Ingredient;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.entity.UserProfile;
+import com.fpt.swp391.nutribot.entity.UserAllergy;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.IngredientRepository;
@@ -72,7 +73,11 @@ public class HealthProfileService {
         profile.setHeightCm(request.getHeightCm());
         profile.setWeightKg(request.getWeightKg());
         profile.setHealthGoal(request.getHealthGoal());
-        profile.setAllergies(new HashSet<>(ingredients));
+
+        profile.getAllergies().clear();
+        for (Ingredient ingredient : ingredients) {
+            profile.getAllergies().add(UserAllergy.builder().userProfile(profile).ingredient(ingredient).build());
+        }
 
         return toResponse(userProfileRepository.save(profile));
     }
@@ -100,9 +105,12 @@ public class HealthProfileService {
 
     private HealthProfileResponse toResponse(UserProfile profile) {
         BigDecimal bmi = profile == null ? null : calculateBmi(profile.getHeightCm(), profile.getWeightKg());
-        List<Ingredient> allergies = profile == null
+        List<Ingredient> allergyIngredients = profile == null
                 ? List.of()
-                : profile.getAllergies().stream().sorted((left, right) -> left.getName().compareToIgnoreCase(right.getName())).toList();
+                : profile.getAllergies().stream()
+                        .map(UserAllergy::getIngredient)
+                        .sorted((left, right) -> left.getName().compareToIgnoreCase(right.getName()))
+                        .toList();
 
         return HealthProfileResponse.builder()
                 .heightCm(profile == null ? null : profile.getHeightCm())
@@ -110,8 +118,8 @@ public class HealthProfileService {
                 .bmi(bmi)
                 .bmiCategory(categorizeBmi(bmi))
                 .healthGoal(profile == null ? null : profile.getHealthGoal())
-                .allergyIngredientIds(allergies.stream().map(Ingredient::getIngredientId).toList())
-                .allergies(allergies.stream().map(Ingredient::getName).toList())
+                .allergyIngredientIds(allergyIngredients.stream().map(Ingredient::getIngredientId).toList())
+                .allergies(allergyIngredients.stream().map(Ingredient::getName).toList())
                 .build();
     }
 }
