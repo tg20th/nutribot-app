@@ -31,12 +31,14 @@ import static org.mockito.Mockito.*;
 class ContentServiceTest {
 
     private ContentRepository contentRepository;
+    private com.fpt.swp391.nutribot.repository.VoteRepository voteRepository;
     private ContentService contentService;
 
     @BeforeEach
     void setUp() {
         contentRepository = mock(ContentRepository.class);
-        contentService = new ContentService(contentRepository);
+        voteRepository = mock(com.fpt.swp391.nutribot.repository.VoteRepository.class);
+        contentService = new ContentService(contentRepository, voteRepository);
     }
 
     private User createActiveAuthor(int userId, String name) {
@@ -242,17 +244,51 @@ class ContentServiceTest {
     }
 
     @Test
-    @DisplayName("Lấy danh sách Video công khai -> Sử dụng findPublishedByType và sort deterministic")
-    void getPublishedVideos_UsesActiveAuthorAndDeterministicSort() {
-        Content video = createSampleVideo(301, "Video 301", "video-301", 100);
+    @DisplayName("Lấy danh sách Video công khai có categoryId -> Sử dụng findPublishedByTypeAndCategory")
+    void getPublishedVideos_WithCategory_UsesActiveAuthorAndCategory() {
+        Content video = createSampleVideo(302, "Video 302", "video-302", 50);
         Page<Content> mockPage = new PageImpl<>(List.of(video));
-        when(contentRepository.findPublishedByType(eq("VIDEO"), eq("published"), any(Pageable.class)))
+        when(contentRepository.findPublishedByTypeAndCategory(eq("VIDEO"), eq(4), eq("published"), any(Pageable.class)))
                 .thenReturn(mockPage);
 
-        PagedResponse<VideoListResponse> response = contentService.getPublishedVideos(0, 10);
+        PagedResponse<VideoListResponse> response = contentService.getPublishedVideos(0, 10, 4);
 
         assertNotNull(response);
         assertEquals(1, response.getContent().size());
-        verify(contentRepository).findPublishedByType(eq("VIDEO"), eq("published"), any(Pageable.class));
+        verify(contentRepository).findPublishedByTypeAndCategory(eq("VIDEO"), eq(4), eq("published"), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("Lấy chi tiết Video kèm số vote thực tế từ VoteRepository")
+    void getVideoById_IncludesVoteCountFromVoteRepository() {
+        Content video = createSampleVideo(201, "Hướng dẫn nấu cháo nấm", "nau-chao-nam", 30);
+        when(contentRepository.findPublishedByIdAndType(201, "VIDEO", "published"))
+                .thenReturn(Optional.of(video));
+        when(voteRepository.countByContentId(201)).thenReturn(15L);
+
+        VideoDetailResponse response = contentService.getVideoById(201);
+
+        assertNotNull(response);
+        assertEquals(15, response.getVoteCount());
+    }
+
+    @Test
+    @DisplayName("Tra cứu Video qua slugOrId -> Tự động nhận diện ID số nguyên hoặc slug")
+    void getVideoByIdOrSlug_ResolvesBothIdAndSlug() {
+        Content video = createSampleVideo(201, "Hướng dẫn nấu cháo nấm", "nau-chao-nam", 30);
+        when(contentRepository.findPublishedByIdAndType(201, "VIDEO", "published"))
+                .thenReturn(Optional.of(video));
+        when(contentRepository.findPublishedBySlugAndType("nau-chao-nam", "VIDEO", "published"))
+                .thenReturn(Optional.of(video));
+
+        // Gọi qua số nguyên dạng chuỗi
+        VideoDetailResponse res1 = contentService.getVideoByIdOrSlug("201");
+        assertNotNull(res1);
+        assertEquals(201, res1.getContentId());
+
+        // Gọi qua slug
+        VideoDetailResponse res2 = contentService.getVideoByIdOrSlug("nau-chao-nam");
+        assertNotNull(res2);
+        assertEquals("nau-chao-nam", video.getSlug());
     }
 }

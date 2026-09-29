@@ -5,6 +5,7 @@ import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.entity.Vote;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
+import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.VoteRepository;
@@ -20,13 +21,15 @@ public class VoteService {
     private final ContentRepository contentRepository;
     private final UserRepository userRepository;
 
+    private static final String PUBLISHED_STATUS = "published";
+
     @Transactional
     public VoteResponse toggleVote(String username, Integer contentId) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
 
-        Content content = contentRepository.findById(contentId)
-                .orElseThrow(() -> new BadRequestException("Nội dung không tồn tại"));
+        Content content = contentRepository.findPublishedById(contentId, PUBLISHED_STATUS)
+                .orElseThrow(() -> new NotFoundException("Nội dung không tồn tại"));
 
         boolean isVoted;
         if (voteRepository.existsByUserIdAndContentId(user.getUserId(), contentId)) {
@@ -53,6 +56,9 @@ public class VoteService {
 
     @Transactional(readOnly = true)
     public VoteResponse getVoteStatus(String username, Integer contentId) {
+        Content content = contentRepository.findPublishedById(contentId, PUBLISHED_STATUS)
+                .orElseThrow(() -> new NotFoundException("Nội dung không tồn tại"));
+
         boolean isVoted = false;
         if (username != null) {
             User user = userRepository.findByUsername(username).orElse(null);
