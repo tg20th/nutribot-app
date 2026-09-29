@@ -53,7 +53,7 @@ export default function WeeklyMealPlannerPage() {
   const [aiIngredients, setAiIngredients] = useState('đậu hũ, nấm rơm, cà chua, rau cải');
   const [aiAllergies, setAiAllergies] = useState('');
   const [aiGoal, setAiGoal] = useState('maintain_weight');
-  const [aiCalories, setAiCalories] = useState(1800);
+  const [aiCalories, setAiCalories] = useState('');
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [aiPreview, setAiPreview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -120,7 +120,10 @@ export default function WeeklyMealPlannerPage() {
   const heroMeal = plannerDays.flatMap((day) => day.meals).find(Boolean);
   const groceryItems = useMemo(() => plannerDays.flatMap((day) => day.meals.map((meal) => ({ ...meal, day: day.label }))), [plannerDays]);
 
-  const openEditor = (day, slot, meal = null) => setEditor({ day, dayIndex: plannerDays.findIndex((item) => item.isoDate === day.isoDate), slot, meal });
+  const openEditor = (day, slot, meal = null) => {
+    const existingMeal = meal ?? day.meals.find((item) => item.slot === slot) ?? null;
+    setEditor({ day, dayIndex: plannerDays.findIndex((item) => item.isoDate === day.isoDate), slot, meal: existingMeal });
+  };
 
   const ensureMenu = async () => {
     if (menu.menuId) return menu.menuId;
@@ -137,6 +140,7 @@ export default function WeeklyMealPlannerPage() {
     const dayIndex = editor.dayIndex;
     setMenu((current) => recalculateMenu({
       ...current,
+      nutritionSummary: null,
       days: current.days.map((day, index) => {
         if (index !== dayIndex) return day;
         if (!previousMeal) return { ...day, meals: [...day.meals, replacement] };
@@ -147,24 +151,39 @@ export default function WeeklyMealPlannerPage() {
     setNotice({ type: 'saving', text: 'Saving your meal...' });
     try {
       const menuId = await ensureMenu();
-      const added = await addWeeklyMenuItem(menuId, { dayOfWeek: dayIndex + 1, mealType: editor.slot.toLowerCase(), dishId: dish.dishId, servings, notes });
-      if (previousMeal?.itemId) await deleteWeeklyMenuItem(menuId, previousMeal.itemId);
-      const itemId = added.itemId ?? added.id ?? null;
-      setMenu((current) => ({ ...current, days: current.days.map((day, index) => index === dayIndex ? { ...day, meals: day.meals.map((meal) => meal.key === replacement.key ? { ...meal, itemId, key: String(itemId ?? meal.key) } : meal) } : day) }));
-      setNotice({ type: 'success', text: `${dish.name} was added to ${editor.day.label}.` });
+      if (previousMeal) {
+        const nextMenu = recalculateMenu({
+          ...menu,
+          nutritionSummary: null,
+          days: menu.days.map((day, index) => index !== dayIndex ? day : {
+            ...day,
+            meals: day.meals.map((meal) => meal.key === previousMeal.key ? replacement : meal)
+          })
+        });
+        const savedMenu = await updateWeeklyMenu(menuId, {
+          ...menuPayload(nextMenu),
+          meals: nextMenu.days.flatMap((day) => day.meals.map((item) => ({ dayOfWeek: day.dayOfWeek, mealType: item.slot.toLowerCase(), dishId: item.dishId, servings: item.servings, notes: item.notes })))
+        });
+        setMenu(normalizeWeeklyMenu(savedMenu, weekStart));
+      } else {
+        await addWeeklyMenuItem(menuId, { dayOfWeek: dayIndex + 1, mealType: editor.slot.toLowerCase(), dishId: dish.dishId, servings, notes });
+        await loadWeek(weekStart);
+      }
+      setNotice({ type: 'success', text: `${dish.name} was saved to ${editor.day.label}.` });
     } catch {
       setNotice({ type: 'offline', text: 'The backend could not save this change. It is stored in your local draft.' });
     }
   };
 
   const removeMeal = async (dayIndex, meal) => {
-    setMenu((current) => recalculateMenu({ ...current, days: current.days.map((day, index) => index === dayIndex ? { ...day, meals: day.meals.filter((item) => item.key !== meal.key) } : day) }));
+    setMenu((current) => recalculateMenu({ ...current, nutritionSummary: null, days: current.days.map((day, index) => index === dayIndex ? { ...day, meals: day.meals.filter((item) => item.key !== meal.key) } : day) }));
     if (!menu.menuId || !meal.itemId) {
       setNotice({ type: 'success', text: `${meal.name} was removed from your local draft.` });
       return;
     }
     try {
       await deleteWeeklyMenuItem(menu.menuId, meal.itemId);
+      await loadWeek(weekStart);
       setNotice({ type: 'success', text: `${meal.name} was removed.` });
     } catch {
       setNotice({ type: 'offline', text: 'The backend could not delete this meal. The local draft was updated.' });
@@ -182,11 +201,12 @@ export default function WeeklyMealPlannerPage() {
     setSaving(true);
     try {
       const id = menu.menuId ?? await ensureMenu();
-      await updateWeeklyMenu(id, { ...menuPayload(menu), meals: plannerDays.flatMap((day) => day.meals.map((meal) => ({ dayOfWeek: day.dayOfWeek, mealType: meal.slot.toLowerCase(), dishId: meal.dishId, servings: meal.servings, notes: meal.notes }))) });
+      const savedMenu = await updateWeeklyMenu(id, { ...menuPayload(menu), meals: plannerDays.flatMap((day) => day.meals.map((meal) => ({ dayOfWeek: day.dayOfWeek, mealType: meal.slot.toLowerCase(), dishId: meal.dishId, servings: meal.servings, notes: meal.notes }))) });
+      setMenu(normalizeWeeklyMenu(savedMenu, weekStart));
       setNotice({ type: 'success', text: 'Your weekly plan is saved.' });
     } catch {
       localStorage.setItem(storageKey(weekStart), JSON.stringify(serializeMenu(menu)));
-      setNotice({ type: 'offline', text: 'The backend is unavailable. Your plan is saved locally on this device.' });
+      setNotice({ type: 'offline', text: 'The backend is unavailable. Your changes remain an unsaved local draft.' });
     } finally {
       setSaving(false);
     }
@@ -251,6 +271,7 @@ export default function WeeklyMealPlannerPage() {
     const aiSlots = [['Breakfast', 'breakfast'], ['Lunch', 'lunch'], ['Dinner', 'dinner']];
     setMenu((current) => recalculateMenu({
         ...current,
+        nutritionSummary: null,
         targetCalories: Number(aiPreview.estimatedDailyCalories ?? aiCalories),
         days: current.days.map((day, dayIndex) => {
           const generatedDay = aiPreview.weeklyPlan[dayIndex] ?? {};
@@ -313,7 +334,7 @@ export default function WeeklyMealPlannerPage() {
             </div>
             <div className="planner-week-avg">
               <span>Daily rhythm</span>
-              <p><b>{(menu.week.avgCalories ?? 0).toLocaleString()}</b> kcal <i/> <b>{menu.week.avgProtein ?? 0}g</b> protein</p>
+              <p>{menu.week.avgCalories != null && menu.week.avgProtein != null ? <><b>{menu.week.avgCalories.toLocaleString()}</b> kcal <i/> <b>{menu.week.avgProtein}g</b> protein</> : 'Nutrition summary unavailable'}</p>
             </div>
             <div className="planner-view-toggle" aria-label="Planner view">
               <button type="button" className={view === 'daily' ? 'is-active' : ''} onClick={() => setView('daily')}>Daily</button>
@@ -368,7 +389,7 @@ export default function WeeklyMealPlannerPage() {
             </div>
           </footer>
         </main>
-        <MealPlanAssistant days={plannerDays} profile={communityUser}/>
+        <MealPlanAssistant nutritionSummary={menu.nutritionSummary}/>
       </div>
     </div>
 

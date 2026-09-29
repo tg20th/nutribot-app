@@ -38,7 +38,7 @@ const slotTitle = (value = '') => {
 
 const formatDayDate = (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
-const createDays = (weekStart, calorieGoal = 1800, proteinGoal = 90) => {
+const createDays = (weekStart, calorieGoal = null) => {
   const start = parseDate(weekStart);
   const today = toIsoDate(new Date());
   return Array.from({ length: 7 }, (_, index) => {
@@ -51,10 +51,10 @@ const createDays = (weekStart, calorieGoal = 1800, proteinGoal = 90) => {
       date: formatDayDate(date),
       isoDate,
       status: isoDate === today ? 'Today' : '',
-      calorieGoal,
-      proteinGoal,
-      calorieActual: 0,
-      proteinActual: 0,
+      calorieGoal: calorieGoal ?? 'Unknown',
+      proteinGoal: 'Unknown',
+      calorieActual: 'Unknown',
+      proteinActual: 'Unknown',
       meals: []
     };
   });
@@ -96,35 +96,82 @@ const normalizeMeal = (item, meal, index) => {
 export const recalculateMenu = (menu) => {
   const days = menu.days.map((day) => ({
     ...day,
-    calorieActual: day.meals.reduce((sum, meal) => sum + Number(meal.kcal || 0), 0),
-    proteinActual: day.meals.reduce((sum, meal) => sum + Number(meal.protein || 0), 0)
+    // Nutrition summary belongs to the canonical backend service.  Individual
+    // dish values are still displayed in the editor, but an absent nutrient is
+    // never converted to a zero weekly/day total here.
+    calorieActual: 'Unknown',
+    proteinActual: 'Unknown'
   }));
-  const calorieTotal = days.reduce((sum, day) => sum + day.calorieActual, 0);
-  const proteinTotal = days.reduce((sum, day) => sum + day.proteinActual, 0);
   return {
     ...menu,
     days,
     groceryList: { itemCount: days.reduce((sum, day) => sum + day.meals.length, 0) },
     week: {
       ...menu.week,
-      avgCalories: Math.round(calorieTotal / 7),
-      avgProtein: Math.round(proteinTotal / 7)
+      avgCalories: null,
+      avgProtein: null
+    }
+  };
+};
+
+const numberOrNull = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const nutritionValue = (source, keys) => {
+  if (!source) return null;
+  for (const key of keys) {
+    const value = numberOrNull(source[key]);
+    if (value !== null) return value;
+  }
+  return null;
+};
+
+// Accept the canonical summary field names agreed by NB-10/NB-42 without
+// inventing a nutrition value when the backend has not supplied one.
+const normalizeNutritionSummary = (raw) => {
+  const summary = raw?.nutritionSummary;
+  if (!summary) return null;
+  const actual = summary.actual ?? {};
+  const target = summary.target ?? {};
+  const percentage = summary.percentage ?? {};
+  return {
+    status: summary.status ?? null,
+    missingFields: Array.isArray(summary.missingFields) ? summary.missingFields : [],
+    actual: {
+      calories: nutritionValue(actual, ['calories']),
+      proteinG: nutritionValue(actual, ['proteinG', 'protein_g']),
+      carbsG: nutritionValue(actual, ['carbsG', 'carbs_g']),
+      healthyFatsG: nutritionValue(actual, ['healthyFatsG', 'healthy_fats_g', 'fatG', 'fat_g'])
+    },
+    target: {
+      calories: nutritionValue(target, ['calories']),
+      proteinG: nutritionValue(target, ['proteinG', 'protein_g']),
+      carbsG: nutritionValue(target, ['carbsG', 'carbs_g']),
+      healthyFatsG: nutritionValue(target, ['healthyFatsG', 'healthy_fats_g', 'fatG', 'fat_g'])
+    },
+    percentage: {
+      calories: nutritionValue(percentage, ['calories']),
+      proteinG: nutritionValue(percentage, ['proteinG', 'protein', 'protein_g']),
+      carbsG: nutritionValue(percentage, ['carbsG', 'carbs', 'carbs_g']),
+      healthyFatsG: nutritionValue(percentage, ['healthyFatsG', 'healthyFats', 'fatG', 'fat', 'healthy_fats_g'])
     }
   };
 };
 
 export const normalizeWeeklyMenu = (raw = {}, requestedStart) => {
   const startDate = toIsoDate(raw.startDate ?? raw.week?.startDate ?? requestedStart ?? startOfWeek());
-  const targetCalories = Number(raw.targetCalories ?? raw.week?.targetCalories ?? 1800);
-  const proteinGoal = Number(raw.targetProtein ?? raw.week?.targetProtein ?? 90);
-  const days = createDays(startDate, targetCalories, proteinGoal);
+  const targetCalories = numberOrNull(raw.targetCalories ?? raw.week?.targetCalories);
+  const days = createDays(startDate, targetCalories);
 
   if (Array.isArray(raw.days)) {
     raw.days.slice(0, 7).forEach((source, index) => {
       const target = days[index];
       if (!target) return;
       target.calorieGoal = Number(source.calorieGoal ?? target.calorieGoal);
-      target.proteinGoal = Number(source.proteinGoal ?? target.proteinGoal);
+      target.proteinGoal = numberOrNull(source.proteinGoal) ?? target.proteinGoal;
       target.status = source.status ?? target.status;
       target.meals = (source.meals ?? []).map((meal, mealIndex) => normalizeMeal(meal, meal, mealIndex));
     });
@@ -145,6 +192,7 @@ export const normalizeWeeklyMenu = (raw = {}, requestedStart) => {
     startDate,
     endDate: toIsoDate(raw.endDate ?? end),
     targetCalories,
+    nutritionSummary: normalizeNutritionSummary(raw),
     days,
     groceryList: raw.groceryList ?? {},
     week: { ...(raw.week ?? {}), range: raw.week?.range ?? `${startLabel} - ${endLabel}` }
