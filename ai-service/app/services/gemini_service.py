@@ -25,6 +25,18 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiService:
+    @property
+    def model_name(self): return self._settings.gemini_model
+
+    async def moderate_content(self, request):
+        """Return structured moderation fields; no persistence or raw provider response leaks."""
+        from app.schemas.moderation import ModelModeration
+        client=self._get_client()
+        prompt=f"Classify NutriBot vegetarian/nutrition Blog/Video. Return decision APPROVE/REJECT/NEEDS_REVIEW, reason, confidence 0..1, categories. Content: {request.model_dump_json()}"
+        config=types.GenerateContentConfig(response_mime_type="application/json",response_schema=ModelModeration,temperature=0)
+        response=await self._generate_with_fallback(client,prompt,config)
+        parsed=getattr(response,"parsed",None)
+        return (parsed if isinstance(parsed,ModelModeration) else ModelModeration.model_validate(parsed if parsed is not None else getattr(response,"text",None))).model_dump()
     def __init__(self, settings: Settings, client: Any | None = None) -> None:
         self._settings = settings
         self._client = client
