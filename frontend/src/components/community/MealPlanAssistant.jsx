@@ -1,51 +1,42 @@
-import { MessageCircle, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 
-const sum = (list, key) => list.reduce((total, item) => total + Number(item[key] || 0), 0);
+const METRICS = [
+  { key: 'calories', label: 'Calories', unit: 'kcal' },
+  { key: 'proteinG', label: 'Protein', unit: 'g' },
+  { key: 'carbsG', label: 'Carbs', unit: 'g' },
+  { key: 'healthyFatsG', label: 'Healthy fats', unit: 'g' }
+];
 
-export default function MealPlanAssistant({ days: plannerDays = [], profile: communityUser = {} }) {
-  if (!plannerDays.length) return null;
-  const lowestProteinDay = plannerDays.reduce((worst, day) => {
-    const ratio = day.proteinGoal ? day.proteinActual / day.proteinGoal : 0;
-    const worstRatio = worst.proteinGoal ? worst.proteinActual / worst.proteinGoal : 0;
-    return ratio < worstRatio ? day : worst;
-  }, plannerDays[0]);
-  const swappedEntry = (() => {
-    for (const day of plannerDays) {
-      const meal = day.meals.find((item) => item.swapped);
-      if (meal) return { day, meal };
-    }
-    return null;
-  })();
-  const calorieGoal = sum(plannerDays, 'calorieGoal');
-  const proteinGoal = sum(plannerDays, 'proteinGoal');
-  const caloriePct = calorieGoal ? Math.round((sum(plannerDays, 'calorieActual') / calorieGoal) * 100) : 0;
-  const proteinPct = proteinGoal ? Math.round((sum(plannerDays, 'proteinActual') / proteinGoal) * 100) : 0;
-  const alignment = caloriePct >= 95 && caloriePct <= 105 ? 'On track' : caloriePct > 105 ? 'Slightly over target' : 'Slightly under target';
+const isFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(value);
+const formatValue = (value, unit) => `${Number.isInteger(value) ? value : value.toFixed(1)} ${unit}`;
+
+export default function MealPlanAssistant({ nutritionSummary }) {
+  const unavailable = !nutritionSummary || nutritionSummary.status === 'PROFILE_INCOMPLETE';
+  const missingFields = nutritionSummary?.missingFields ?? [];
 
   return <aside className="community-right-rail planner-assistant">
     <div className="community-widget assistant-widget">
       <span className="assistant-title"><Sparkles size={15}/> Meal Plan Assistant</span>
 
-      <div className="assistant-metric">
-        <div className="assistant-metric-row"><span>Calories</span><b>{caloriePct}%</b></div>
-        <div className="community-progress"><div style={{ width: `${Math.min(caloriePct, 100)}%` }}/></div>
-      </div>
-      <div className="assistant-metric">
-        <div className="assistant-metric-row"><span>Protein</span><b>{proteinPct}%</b></div>
-        <div className="community-progress"><div style={{ width: `${Math.min(proteinPct, 100)}%` }}/></div>
-      </div>
+      {METRICS.map(({ key, label, unit }) => {
+        const actual = nutritionSummary?.actual?.[key];
+        const target = nutritionSummary?.target?.[key];
+        const percentage = nutritionSummary?.percentage?.[key];
+        const available = !unavailable && isFiniteNumber(actual) && isFiniteNumber(target)
+          && target > 0 && isFiniteNumber(percentage);
+        return <div className="assistant-metric" key={key}>
+          <div className="assistant-metric-row"><span>{label}</span><b>{available ? `${percentage}%` : 'Unavailable'}</b></div>
+          {available
+            ? <><div className="community-progress" aria-label={`${label}: ${percentage}%`}><div style={{ width: `${Math.min(percentage, 100)}%` }}/></div><small>{formatValue(actual, unit)} / {formatValue(target, unit)}</small></>
+            : <small>Nutrition data is unavailable.</small>}
+        </div>;
+      })}
 
-      <p className="assistant-alignment">{alignment} for {(communityUser.goal ?? 'wellness').toLowerCase()}.</p>
-
-      <ul className="assistant-notes">
-        <li>{lowestProteinDay.label}&apos;s protein sits lowest this week. A scoop of tempeh or edamame at dinner would close the gap.</li>
-        {swappedEntry && <li>{swappedEntry.day.label}&apos;s {swappedEntry.meal.slot.toLowerCase()} was swapped to {swappedEntry.meal.name}, already reflected above.</li>}
-        <li>Use the empty meal slots to keep this plan practical instead of overfilling the week.</li>
-      </ul>
-
-      <button type="button" className="assistant-ask" onClick={() => window.dispatchEvent(new Event('open-nutribot-chat'))}>
-        <MessageCircle size={14}/> Ask NutriBot to adjust this plan
-      </button>
+      <p className="assistant-alignment">
+        {unavailable
+          ? `Complete your Health Profile${missingFields.length ? ` (${missingFields.join(', ')})` : ''} to receive personalized nutrition targets.`
+          : 'Nutrition progress is based on your saved weekly menu.'}
+      </p>
     </div>
   </aside>;
 }
