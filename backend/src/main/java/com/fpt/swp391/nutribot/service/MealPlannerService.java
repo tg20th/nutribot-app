@@ -9,6 +9,7 @@ import com.fpt.swp391.nutribot.entity.Ingredient;
 import com.fpt.swp391.nutribot.entity.Dish;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.entity.UserProfile;
+import com.fpt.swp391.nutribot.entity.UserAllergy;
 import com.fpt.swp391.nutribot.exception.AIServiceUnavailableException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.UserProfileRepository;
@@ -61,7 +62,7 @@ public class MealPlannerService {
 
         Set<String> exclusions = new LinkedHashSet<>();
         if (profile != null) {
-            profile.getAllergies().stream().map(Ingredient::getName).forEach(exclusions::add);
+            profile.getAllergies().stream().map(ua -> ua.getIngredient().getName()).forEach(exclusions::add);
         }
         if (request.getExcludedAllergies() != null) {
             request.getExcludedAllergies().stream().map(String::trim).filter(value -> !value.isBlank()).forEach(exclusions::add);
