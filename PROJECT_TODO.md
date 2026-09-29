@@ -57,8 +57,8 @@
   - *File đã tạo/cập nhật:* `controller/SearchController.java`, `service/SearchService.java`, `repository/ContentRepository.java`, `service/SearchServiceTest.java`, `frontend/src/services/searchApi.js`, `frontend/src/pages/SearchPage.jsx`.
   - *Blocked by:* `#17` ✅, `#22` ✅ (đã xong).
 - [x] **#27 [BE] API CRUD Bình luận (Comment Engine)** ✅
-  - *Mô tả:* Entity Comment, API `GET/POST/DELETE /api/v1/comments`, hỗ trợ bình luận lồng nhau.
-  - *File cần tạo:* `entity/Comment.java`, `repository/CommentRepository.java`, `controller/CommentController.java`.
+  - *Mô tả:* API CRUD Bình luận `GET/POST/PUT/DELETE /api/v1/comments`, chuẩn hóa status canonical `published/hidden/rejected` khắc phục lỗi xung đột constraint CSDL (BL-002), kiểm soát quyền sở hữu tác giả chống IDOR (BL-005), transaction recheck nội dung công khai (BL-011) và soft-delete bảo toàn replies (BL-024).
+  - *File đã tạo/cập nhật:* `entity/Comment.java`, `repository/CommentRepository.java`, `service/CommentService.java`, `controller/CommentController.java`, `dto/request/CommentCreateRequest.java`, `dto/request/CommentUpdateRequest.java`, `dto/response/CommentResponse.java`, `controller/CommentControllerTest.java`, `service/CommentServiceTest.java`.
 - [x] **#28 [BE] API Like/Vote & Chống Trùng lặp** ✅
   - *Mô tả:* API Like/Vote `POST /api/v1/contents/{contentId}/vote` và `POST /api/v1/votes/toggle`, cơ chế chống trùng lặp, khóa bi quan chống race condition, đồng bộ schema CSDL `vote_value` (BL-001, BL-024) và đếm canonical voteCount (BL-021).
   - *File đã tạo/cập nhật:* `entity/Vote.java`, `repository/VoteRepository.java`, `service/VoteService.java`, `controller/VoteController.java`, `dto/request/VoteToggleRequest.java`, `config/SecurityConfig.java`, `exception/GlobalExceptionHandler.java`, `controller/VoteControllerTest.java`, `service/VoteServiceTest.java`.
