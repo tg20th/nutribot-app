@@ -9,6 +9,8 @@ import {
   CalendarDays,
   Check,
   ChevronDown,
+  Eye,
+  EyeOff,
   Leaf,
   LoaderCircle,
   LockKeyhole,
@@ -78,7 +80,6 @@ const PROFILE_GUIDE = [
   },
 ];
 
-const INTRO_WORDS = 'Keep your account details accurate so every NutriBot experience starts with the right context.'.split(' ');
 const PROFILE_NOTES = [
   'A clear photo and short bio help your NutriBot space feel recognizably yours.',
   'Your account details stay separate from health metrics, so you always know what you are editing.',
@@ -136,6 +137,27 @@ const validateProfile = (profile) => {
   return errors;
 };
 
+const EMPTY_PASSWORD_FORM = {
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: '',
+};
+
+const validatePasswordChange = (passwords) => {
+  const errors = {};
+  if (!passwords.currentPassword) errors.currentPassword = 'Please enter your current password.';
+  if (!passwords.newPassword) {
+    errors.newPassword = 'Please enter a new password.';
+  } else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(passwords.newPassword)) {
+    errors.newPassword = 'Use 8+ characters with uppercase, lowercase, number, and special character (@$!%*?&).';
+  } else if (passwords.newPassword === passwords.currentPassword) {
+    errors.newPassword = 'Your new password must be different from your current password.';
+  }
+  if (!passwords.confirmPassword) errors.confirmPassword = 'Please confirm your new password.';
+  else if (passwords.confirmPassword !== passwords.newPassword) errors.confirmPassword = 'Passwords do not match.';
+  return errors;
+};
+
 export default function ProfilePage() {
   const pageRef = useRef(null);
   const avatarInputRef = useRef(null);
@@ -148,6 +170,7 @@ export default function ProfilePage() {
   const [profileLoadAttempt, setProfileLoadAttempt] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [isEmailVerificationOpen, setIsEmailVerificationOpen] = useState(false);
+  const [hasDismissedEmailVerification, setHasDismissedEmailVerification] = useState(false);
   const [emailVerificationTarget, setEmailVerificationTarget] = useState('');
   const [serverPendingEmail, setServerPendingEmail] = useState('');
   const [confirmedEmail, setConfirmedEmail] = useState('');
@@ -159,6 +182,10 @@ export default function ProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState('');
   const [isAvatarViewerOpen, setIsAvatarViewerOpen] = useState(false);
   const [avatarRemoved, setAvatarRemoved] = useState(false);
+  const [passwordForm, setPasswordForm] = useState(EMPTY_PASSWORD_FORM);
+  const [passwordErrors, setPasswordErrors] = useState({});
+  const [passwordVisibility, setPasswordVisibility] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -340,6 +367,7 @@ export default function ProfilePage() {
       setServerPendingEmail(updated.pendingEmail || '');
       if (updated.pendingEmail) {
         setEmailVerificationTarget(updated.pendingEmail);
+        setHasDismissedEmailVerification(false);
         setIsEmailVerificationOpen(true);
       }
       setAvatarFile(null);
@@ -379,6 +407,32 @@ export default function ProfilePage() {
     setServerPendingEmail(response.pendingEmail || '');
   };
 
+  const updatePasswordField = (event) => {
+    const { name, value } = event.target;
+    setPasswordForm((current) => ({ ...current, [name]: value }));
+    setPasswordErrors((current) => ({ ...current, [name]: undefined }));
+    if (notice?.type === 'info') setNotice(null);
+  };
+
+  const handlePasswordSubmit = (event) => {
+    event.preventDefault();
+    const nextErrors = validatePasswordChange(passwordForm);
+    if (Object.keys(nextErrors).length) {
+      setPasswordErrors(nextErrors);
+      setNotice({ type: 'error', message: 'Please review the password requirements below.' });
+      return;
+    }
+    // A password-change API is not available yet. Do not simulate a successful change.
+    setNotice({ type: 'info', message: 'Password changes are not available yet. Your password has not been changed.' });
+  };
+
+  const openPasswordDialog = () => {
+    setPasswordForm(EMPTY_PASSWORD_FORM);
+    setPasswordErrors({});
+    setPasswordVisibility({ currentPassword: false, newPassword: false, confirmPassword: false });
+    setIsPasswordDialogOpen(true);
+  };
+
   return (
     <div className="community-page nb-profile-page" ref={pageRef}>
       <CommunityTopBar query={headerQuery} onQueryChange={setHeaderQuery} activePath="/profile" />
@@ -410,10 +464,6 @@ export default function ProfilePage() {
             </button>
             <input ref={avatarInputRef} className="nb-profile-avatar-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarChange} tabIndex={-1} />
           </section>
-
-          <p className="nb-profile-intro" aria-label={INTRO_WORDS.join(' ')}>
-            {INTRO_WORDS.map((word, index) => <span className="nb-profile-intro__word" key={`${word}-${index}`}>{word} </span>)}
-          </p>
 
           {notice && (
             <div className={`nb-profile-notice nb-profile-notice--${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>
@@ -480,7 +530,17 @@ export default function ProfilePage() {
                     {errors.email ? <small id="email-error">{errors.email}</small> : <em id="email-help">{pendingEmail || hasUnsubmittedEmailChange ? `Current email: ${currentEmail}` : 'Used for account access and important updates.'}</em>}
                   </label>
 
-                  {profileEmailMatchesPending && !isEmailVerificationOpen && <button type="button" className="nb-profile-button nb-profile-button--secondary nb-profile-field--wide" onClick={() => { setEmailVerificationTarget(pendingEmail); setIsEmailVerificationOpen(true); }}>Reopen email verification</button>}
+                  {profileEmailMatchesPending && hasDismissedEmailVerification && !isEmailVerificationOpen && <button type="button" className="nb-profile-button nb-profile-button--secondary nb-profile-field--wide" onClick={() => { setEmailVerificationTarget(pendingEmail); setHasDismissedEmailVerification(false); setIsEmailVerificationOpen(true); }}>Reopen email verification</button>}
+
+                  <label className="nb-profile-field nb-profile-field--wide">
+                    <span>Password</span>
+                    <div className="is-readonly nb-profile-password-summary">
+                      <LockKeyhole size={17} />
+                      <input value="••••••••••••" readOnly aria-readonly="true" aria-label="Password is hidden" />
+                      <button type="button" onClick={openPasswordDialog}>Change password</button>
+                    </div>
+                    <em>Your password is hidden for your security.</em>
+                  </label>
 
                   <label className="nb-profile-field">
                     <span>Date of birth</span>
@@ -561,16 +621,41 @@ export default function ProfilePage() {
       {isEmailVerificationOpen && emailVerificationTarget && (
         <AuthModal
           mode="verify-email"
-          onClose={() => setIsEmailVerificationOpen(false)}
+          onClose={() => { setHasDismissedEmailVerification(true); setIsEmailVerificationOpen(false); }}
           verification={{
             email: emailVerificationTarget,
             purpose: 'emailChange',
             expirationSeconds: 30 * 60,
             onVerify: handleEmailVerification,
             onResend: resendEmailVerification,
-            onBack: () => setIsEmailVerificationOpen(false),
+            onBack: () => { setHasDismissedEmailVerification(true); setIsEmailVerificationOpen(false); },
           }}
         />
+      )}
+      {isPasswordDialogOpen && (
+        <div className="nb-password-dialog-backdrop" role="presentation" onClick={() => setIsPasswordDialogOpen(false)}>
+          <form className="nb-password-dialog" role="dialog" aria-modal="true" aria-labelledby="change-password-title" onSubmit={handlePasswordSubmit} onClick={(event) => event.stopPropagation()} noValidate>
+            <header>
+              <div><p>Account security</p><h2 id="change-password-title">Change password</h2></div>
+              <button type="button" onClick={() => setIsPasswordDialogOpen(false)} aria-label="Close change password"><X size={20} /></button>
+            </header>
+            <div className="nb-password-dialog__fields">
+              {[
+                ['currentPassword', 'Current password', 'current-password'],
+                ['newPassword', 'New password', 'new-password'],
+                ['confirmPassword', 'Confirm new password', 'new-password'],
+              ].map(([name, label, autoComplete]) => (
+                <label className="nb-profile-field" key={name}>
+                  <span>{label}</span>
+                  <div className="nb-password-input"><LockKeyhole size={17} /><input name={name} type={passwordVisibility[name] ? 'text' : 'password'} value={passwordForm[name]} onChange={updatePasswordField} autoComplete={autoComplete} aria-invalid={Boolean(passwordErrors[name])} aria-describedby={passwordErrors[name] ? `${name}-error` : undefined} /><button type="button" onClick={() => setPasswordVisibility((current) => ({ ...current, [name]: !current[name] }))} aria-label={passwordVisibility[name] ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}>{passwordVisibility[name] ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>
+                  {passwordErrors[name] && <small id={`${name}-error`}>{passwordErrors[name]}</small>}
+                </label>
+              ))}
+              <p className="nb-password-hint">Use at least 8 characters, including uppercase, lowercase, a number, and one of @$!%*?&.</p>
+            </div>
+            <footer><button type="button" className="nb-profile-button nb-profile-button--secondary" onClick={() => setIsPasswordDialogOpen(false)}>Cancel</button><button type="submit" className="nb-profile-button nb-profile-button--primary">Change password</button></footer>
+          </form>
+        </div>
       )}
       <ChatbotWidget />
     </div>
