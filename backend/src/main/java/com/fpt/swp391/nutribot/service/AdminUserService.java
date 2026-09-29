@@ -8,61 +8,74 @@ import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.UserRepository;
+import com.fpt.swp391.nutribot.repository.specification.UserSpecifications;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AdminUserService {
 
+    private static final int MAX_PAGE_SIZE = 50;
+    private static final int DEFAULT_PAGE_SIZE = 10;
+
     private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
-    public PagedResponse<AdminUserResponse> getAllUsers(String keyword, String status, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<User> allUsers = userRepository.findAll(pageable);
+    public PagedResponse<AdminUserResponse> getAllUsers(String keyword, String statusStr, int page, int size) {
+        int boundedPage = Math.max(page, 0);
+        int boundedSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
 
-        List<User> filtered = allUsers.getContent();
-
-        if (keyword != null && !keyword.isBlank()) {
-            String kw = keyword.toLowerCase();
-            filtered = filtered.stream()
-                    .filter(u -> (u.getUsername() != null && u.getUsername().toLowerCase().contains(kw))
-                            || (u.getEmail() != null && u.getEmail().toLowerCase().contains(kw))
-                            || (u.getFullName() != null && u.getFullName().toLowerCase().contains(kw)))
-                    .toList();
+        AccountStatus statusFilter = null;
+        if (statusStr != null && !statusStr.isBlank()) {
+            try {
+                statusFilter = AccountStatus.fromString(statusStr);
+            } catch (IllegalArgumentException e) {
+                log.warn("Trạng thái lọc không hợp lệ: {}", statusStr);
+            }
         }
 
-        if (status != null && !status.isBlank()) {
-            final String s = status.trim().toUpperCase();
-            filtered = filtered.stream()
-                    .filter(u -> u.getStatus() != null && u.getStatus().name().equalsIgnoreCase(s))
-                    .toList();
-        }
+        Pageable pageable = PageRequest.of(boundedPage, boundedSize, Sort.by(Sort.Direction.DESC, "createdAt", "userId"));
+        Specification<User> spec = UserSpecifications.withFilter(keyword, statusFilter);
+        Page<User> userPage = userRepository.findAll(spec, pageable);
 
-        List<AdminUserResponse> responses = filtered.stream().map(this::toResponse).toList();
+        var responses = userPage.getContent().stream()
+                .map(this::toResponse)
+                .toList();
+
         return PagedResponse.<AdminUserResponse>builder()
                 .content(responses)
-                .page(page)
-                .size(size)
-                .totalElements(allUsers.getTotalElements())
-                .totalPages(allUsers.getTotalPages())
-                .first(page == 0)
-                .last(responses.isEmpty() || page >= allUsers.getTotalPages() - 1)
+                .page(userPage.getNumber())
+                .size(userPage.getSize())
+                .totalElements(userPage.getTotalElements())
+                .totalPages(userPage.getTotalPages())
+                .first(userPage.isFirst())
+                .last(userPage.isLast())
                 .build();
     }
 
     @Transactional
     public AdminUserResponse updateUserStatus(Integer userId, AdminUserStatusRequest request) {
-        User user = userRepository.findById(userId)
+        return updateUserStatus(userId, request, null);
+    }
+
+    @Transactional
+    public AdminUserResponse updateUserStatus(Integer userId, AdminUserStatusRequest request, String currentAdminUsername) {
+        User user = userRepository.findByIdForUpdate(userId)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy người dùng với ID: " + userId));
+
+        // 1. Chống tự ban chính mình (BL-022)
+        if (currentAdminUsername != null && user.getUsername().equalsIgnoreCase(currentAdminUsername.trim())) {
+            throw new BadRequestException("Bạn không thể tự thay đổi trạng thái tài khoản của chính mình");
+        }
 
         AccountStatus newStatus;
         try {
@@ -71,9 +84,42 @@ public class AdminUserService {
             throw new BadRequestException("Trạng thái tài khoản không hợp lệ: " + request.getStatus());
         }
 
+        AccountStatus oldStatus = user.getStatus();
+
+        // 2. Chống thay đổi trạng thái PENDING_VERIFY lên thẳng ACTIVE nếu chưa xác thực OTP (BL-015)
+        if (oldStatus == AccountStatus.PENDING_VERIFY && newStatus == AccountStatus.ACTIVE) {
+            throw new BadRequestException("Không thể kích hoạt tài khoản chưa qua xác thực email OTP");
+        }
+
+        // 3. Bảo vệ Last Active Admin (BL-022)
+        if (isUserAdmin(user) && (newStatus == AccountStatus.BANNED || newStatus == AccountStatus.SUSPENDED)) {
+            long activeAdminCount = userRepository.countActiveAdmins(AccountStatus.ACTIVE);
+            if (activeAdminCount <= 1) {
+                throw new BadRequestException("Không thể khóa tài khoản Quản trị viên duy nhất còn lại trong hệ thống");
+            }
+        }
+
+        // 4. Nếu mở khóa từ SUSPENDED hoặc BANNED về ACTIVE, reset strikeCount về 0
+        if ((oldStatus == AccountStatus.SUSPENDED || oldStatus == AccountStatus.BANNED) && newStatus == AccountStatus.ACTIVE) {
+            user.setStrikeCount(0);
+        }
+
+        // 5. Áp dụng State Transition & Audit log (BL-015, BL-031)
         user.setStatus(newStatus);
         User saved = userRepository.save(user);
+
+        log.info("AUDIT: Admin [{}] đã thay đổi trạng thái user [{}] (ID: {}) từ [{}] -> [{}]. Lý do: {}",
+                currentAdminUsername, user.getUsername(), user.getUserId(), oldStatus, newStatus, request.getReason());
+
         return toResponse(saved);
+    }
+
+    private boolean isUserAdmin(User user) {
+        if (user.getRole() == null || user.getRole().getRoleName() == null) {
+            return false;
+        }
+        String r = user.getRole().getRoleName().trim().toUpperCase();
+        return r.equals("ADMIN") || r.equals("ROLE_ADMIN");
     }
 
     private AdminUserResponse toResponse(User user) {
@@ -82,10 +128,12 @@ public class AdminUserService {
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .fullName(user.getFullName())
+                .avatarUrl(user.getAvatarUrl())
                 .roleName(user.getRole() != null ? user.getRole().getRoleName() : null)
                 .status(user.getStatus() != null ? user.getStatus().name() : null)
                 .strikeCount(user.getStrikeCount())
                 .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
                 .build();
     }
 }
