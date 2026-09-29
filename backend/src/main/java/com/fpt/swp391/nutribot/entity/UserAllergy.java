@@ -18,13 +18,12 @@ public class UserAllergy {
     private Integer userId;
 
     @Id
+    @Column(name = "ingredient_id")
+    private Integer ingredientId;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", insertable = false, updatable = false)
     private UserProfile userProfile;
-
-    @Id
-    @Column(name = "ingredient_id")
-    private Integer ingredientId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "ingredient_id", insertable = false, updatable = false)

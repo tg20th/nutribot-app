@@ -77,7 +77,13 @@ public class HealthProfileService {
 
         profile.getAllergies().clear();
         for (Ingredient ingredient : ingredients) {
-            profile.getAllergies().add(UserAllergy.builder().userProfile(profile).ingredient(ingredient).build());
+            UserAllergy allergy = UserAllergy.builder()
+                    .userProfile(profile)
+                    .ingredient(ingredient)
+                    .build();
+            allergy.setUserId(profile.getUser().getUserId());
+            allergy.setIngredientId(ingredient.getIngredientId());
+            profile.getAllergies().add(allergy);
         }
 
         return toResponse(userProfileRepository.save(profile));
