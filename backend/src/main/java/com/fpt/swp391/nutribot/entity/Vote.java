@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "votes", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"user_id", "content_id"})
+    @UniqueConstraint(name = "UQ_votes_user_content", columnNames = {"user_id", "content_id"})
 })
 @Data
 @Builder
@@ -25,9 +25,9 @@ public class Vote {
     @Column(name = "content_id", nullable = false)
     private Integer contentId;
 
-    @Column(name = "vote_type")
+    @Column(name = "vote_value", nullable = false)
     @Builder.Default
-    private String voteType = "like";
+    private Short voteValue = 1;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -43,5 +43,8 @@ public class Vote {
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
+        if (voteValue == null) {
+            voteValue = 1;
+        }
     }
 }
