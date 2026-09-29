@@ -193,6 +193,7 @@ public class CommentService {
                 .userId(comment.getUserId())
                 .userName(userName)
                 .userAvatar(userAvatar)
+                .avatarUrl(userAvatar)
                 .parentId(comment.getParentId())
                 .body(comment.getBody())
                 .createdAt(comment.getCreatedAt())

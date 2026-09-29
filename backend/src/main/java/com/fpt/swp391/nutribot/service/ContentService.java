@@ -129,13 +129,18 @@ public class ContentService {
     }
 
     private ContentListResponse toBlogListResponse(Content content) {
+        String avatar = content.getUser() != null ? content.getUser().getAvatarUrl() : null;
         return ContentListResponse.builder()
                 .contentId(content.getContentId())
                 .title(content.getTitle())
                 .slug(content.getSlug())
                 .thumbnailUrl(content.getThumbnailUrl())
                 .categoryId(content.getCategoryId())
+                .authorId(content.getUser() != null ? content.getUser().getUserId() : null)
+                .authorUsername(content.getUser() != null ? content.getUser().getUsername() : null)
                 .authorName(content.getUser() != null ? content.getUser().getFullName() : null)
+                .authorAvatar(avatar)
+                .avatarUrl(avatar)
                 .viewCount(content.getViewCount())
                 .voteCount(getVoteCount(content.getContentId()))
                 .createdAt(content.getCreatedAt())
@@ -143,6 +148,7 @@ public class ContentService {
     }
 
     private ContentDetailResponse toBlogDetailResponse(Content content, Boolean userVoted) {
+        String avatar = content.getUser() != null ? content.getUser().getAvatarUrl() : null;
         return ContentDetailResponse.builder()
                 .contentId(content.getContentId())
                 .title(content.getTitle())
@@ -150,7 +156,10 @@ public class ContentService {
                 .thumbnailUrl(content.getThumbnailUrl())
                 .categoryId(content.getCategoryId())
                 .authorId(content.getUser() != null ? content.getUser().getUserId() : null)
+                .authorUsername(content.getUser() != null ? content.getUser().getUsername() : null)
                 .authorName(content.getUser() != null ? content.getUser().getFullName() : null)
+                .authorAvatar(avatar)
+                .avatarUrl(avatar)
                 .viewCount(content.getViewCount())
                 .voteCount(getVoteCount(content.getContentId()))
                 .userVoted(userVoted)
@@ -159,6 +168,7 @@ public class ContentService {
     }
 
     private VideoListResponse toVideoListResponse(Content content) {
+        String avatar = content.getUser() != null ? content.getUser().getAvatarUrl() : null;
         return VideoListResponse.builder()
                 .contentId(content.getContentId())
                 .title(content.getTitle())
@@ -167,7 +177,11 @@ public class ContentService {
                 .mediaUrl(content.getMediaUrl())
                 .durationSec(content.getDurationSec())
                 .categoryId(content.getCategoryId())
+                .authorId(content.getUser() != null ? content.getUser().getUserId() : null)
+                .authorUsername(content.getUser() != null ? content.getUser().getUsername() : null)
                 .authorName(content.getUser() != null ? content.getUser().getFullName() : null)
+                .authorAvatar(avatar)
+                .avatarUrl(avatar)
                 .viewCount(content.getViewCount())
                 .voteCount(getVoteCount(content.getContentId()))
                 .createdAt(content.getCreatedAt())
@@ -175,6 +189,7 @@ public class ContentService {
     }
 
     private VideoDetailResponse toVideoDetailResponse(Content content, Boolean userVoted) {
+        String avatar = content.getUser() != null ? content.getUser().getAvatarUrl() : null;
         return VideoDetailResponse.builder()
                 .contentId(content.getContentId())
                 .title(content.getTitle())
@@ -184,7 +199,10 @@ public class ContentService {
                 .durationSec(content.getDurationSec())
                 .categoryId(content.getCategoryId())
                 .authorId(content.getUser() != null ? content.getUser().getUserId() : null)
+                .authorUsername(content.getUser() != null ? content.getUser().getUsername() : null)
                 .authorName(content.getUser() != null ? content.getUser().getFullName() : null)
+                .authorAvatar(avatar)
+                .avatarUrl(avatar)
                 .viewCount(content.getViewCount())
                 .voteCount(getVoteCount(content.getContentId()))
                 .userVoted(userVoted)

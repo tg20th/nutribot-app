@@ -55,13 +55,18 @@ public class HomeService {
     }
 
     private ContentListResponse toContentListResponse(Content content) {
+        String avatar = content.getUser() != null ? content.getUser().getAvatarUrl() : null;
         return ContentListResponse.builder()
                 .contentId(content.getContentId())
                 .title(content.getTitle())
                 .slug(content.getSlug())
                 .thumbnailUrl(content.getThumbnailUrl())
                 .categoryId(content.getCategoryId())
+                .authorId(content.getUser() != null ? content.getUser().getUserId() : null)
+                .authorUsername(content.getUser() != null ? content.getUser().getUsername() : null)
                 .authorName(content.getUser() != null ? content.getUser().getFullName() : null)
+                .authorAvatar(avatar)
+                .avatarUrl(avatar)
                 .viewCount(content.getViewCount())
                 .voteCount(0)
                 .createdAt(content.getCreatedAt())
