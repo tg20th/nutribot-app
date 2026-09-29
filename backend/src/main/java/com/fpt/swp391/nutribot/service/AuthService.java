@@ -54,8 +54,7 @@ public class AuthService {
 
         userRepository.save(user);
 
-        // Gửi OTP email
-        otpService.generateAndSendOtp(request.getEmail());
+        otpService.generateAndSendRegistrationOtp(request.getEmail());
 
         return AuthResponse.builder()
                 .token(null)
@@ -81,7 +80,7 @@ public class AuthService {
         }
 
         // Verify OTP
-        otpService.verifyOtp(email, otpCode);
+        otpService.verifyRegistrationOtp(email, otpCode);
 
         // Kích hoạt tài khoản
         user.setStatus(AccountStatus.ACTIVE);
@@ -115,7 +114,7 @@ public class AuthService {
             throw new BadRequestException("Tài khoản đang ở trạng thái không hợp lệ");
         }
 
-        otpService.generateAndSendOtp(email);
+        otpService.generateAndSendRegistrationOtp(email);
     }
 
     @Transactional(readOnly = true)

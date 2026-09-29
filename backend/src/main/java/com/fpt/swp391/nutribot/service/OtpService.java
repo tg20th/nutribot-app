@@ -5,11 +5,14 @@ import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.repository.EmailOtpRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.Locale;
 import java.util.Random;
 
 @Service
@@ -17,84 +20,124 @@ import java.util.Random;
 @Slf4j
 public class OtpService {
 
+    public static final String PURPOSE_REGISTRATION = "REGISTRATION";
+    public static final String PURPOSE_EMAIL_CHANGE = "EMAIL_CHANGE";
+
     private static final int OTP_LENGTH = 6;
     private static final int OTP_VALID_MINUTES = 5;
-    private static final int MAX_RESEND_PER_15MIN = 3;
+    private static final int EMAIL_CHANGE_VALID_MINUTES = 30;
 
     private final EmailOtpRepository emailOtpRepository;
-    private final EmailService emailService;
+    private final PasswordEncoder passwordEncoder;
+    private final ObjectProvider<EmailOtpSender> emailOtpSenderProvider;
 
     /**
-     * Tạo OTP mới và gửi email.
-     * Xóa các OTP cũ của email đó trước khi tạo mới.
+     * Tạo OTP mới và gửi email cho REGISTRATION.
      */
     @Transactional
-    public void generateAndSendOtp(String email) {
-        // Xóa OTP cũ của email này
+    public void generateAndSendRegistrationOtp(String email) {
         emailOtpRepository.deleteExpiredOrUsed(LocalDateTime.now());
 
-        // Tạo mã OTP 6 số ngẫu nhiên
-        String otpCode = generateOtpCode();
+        String otp = generateOtp();
 
-        // Lưu vào DB
-        EmailOtp otp = EmailOtp.builder()
-                .email(email)
-                .otpCode(otpCode)
+        EmailOtp emailOtp = EmailOtp.builder()
+                .email(email.toLowerCase(Locale.ROOT))
+                .otpHash(passwordEncoder.encode(otp))
+                .purpose(PURPOSE_REGISTRATION)
                 .expiresAt(LocalDateTime.now().plusMinutes(OTP_VALID_MINUTES))
                 .build();
-        emailOtpRepository.save(otp);
+        emailOtpRepository.save(emailOtp);
 
-        // Gửi email
-        sendOtpEmail(email, otpCode);
+        sendOtpViaSender(email, otp, PURPOSE_REGISTRATION, OTP_VALID_MINUTES);
     }
 
     /**
-     * Verify OTP: đúng → đánh dấu đã dùng → xóa.
-     * Sai hoặc hết hạn → ném exception.
+     * Tạo OTP mới và gửi email cho EMAIL_CHANGE.
      */
     @Transactional
-    public void verifyOtp(String email, String otpCode) {
-        EmailOtp otp = emailOtpRepository
-                .findByEmailAndOtpCodeAndIsUsedFalseAndExpiresAtAfterOrderByCreatedAtDesc(
-                        email, otpCode, LocalDateTime.now())
+    public void generateAndSendEmailChangeOtp(String email, Integer userId) {
+        LocalDateTime now = LocalDateTime.now();
+        emailOtpRepository.deleteExpiredEmailChanges(now);
+
+        String otp = generateOtp();
+
+        EmailOtp emailOtp = EmailOtp.builder()
+                .email(email.toLowerCase(Locale.ROOT))
+                .otpHash(passwordEncoder.encode(otp))
+                .purpose(PURPOSE_EMAIL_CHANGE)
+                .userId(userId)
+                .expiresAt(now.plusMinutes(EMAIL_CHANGE_VALID_MINUTES))
+                .build();
+        emailOtpRepository.save(emailOtp);
+
+        sendOtpViaSender(email, otp, PURPOSE_EMAIL_CHANGE, EMAIL_CHANGE_VALID_MINUTES);
+    }
+
+    /**
+     * Verify OTP cho REGISTRATION: đúng → đánh dấu đã dùng.
+     */
+    @Transactional
+    public void verifyRegistrationOtp(String email, String otp) {
+        EmailOtp emailOtp = emailOtpRepository
+                .findAllByEmailIgnoreCaseAndPurposeAndIsUsedFalseAndExpiresAtAfterOrderByCreatedAtDesc(
+                        email, PURPOSE_REGISTRATION, LocalDateTime.now())
+                .stream()
+                .filter(candidate -> passwordEncoder.matches(otp, candidate.getOtpHash()))
+                .findFirst()
                 .orElseThrow(() -> new BadRequestException("Mã OTP không hợp lệ hoặc đã hết hạn"));
 
-        // Đánh dấu đã dùng
-        otp.setIsUsed(true);
-        emailOtpRepository.save(otp);
+        emailOtp.setIsUsed(true);
+        emailOtpRepository.save(emailOtp);
     }
 
     /**
-     * Tạo mã OTP 6 chữ số ngẫu nhiên.
+     * Verify OTP cho EMAIL_CHANGE: đúng → trả về record để xử lý tiếp.
      */
-    private String generateOtpCode() {
-        Random random = new Random();
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < OTP_LENGTH; i++) {
-            sb.append(random.nextInt(10));
-        }
-        return sb.toString();
+    @Transactional(readOnly = true)
+    public EmailOtp verifyEmailChangeOtp(Integer userId, String otp) {
+        return emailOtpRepository
+                .findFirstByUserIdAndPurposeAndIsUsedFalseOrderByCreatedAtDesc(userId, PURPOSE_EMAIL_CHANGE)
+                .filter(emailOtp -> !emailOtp.getExpiresAt().isBefore(LocalDateTime.now()))
+                .filter(emailOtp -> passwordEncoder.matches(otp, emailOtp.getOtpHash()))
+                .orElseThrow(() -> new BadRequestException("Mã OTP không hợp lệ hoặc đã hết hạn"));
     }
 
     /**
-     * Gửi email chứa mã OTP.
-     * Dev: log ra console.
-     * Prod: cấu hình SMTP trong application.properties.
+     * Mark OTP as used (dùng cho EMAIL_CHANGE sau khi verify thành công).
      */
+    @Transactional
+    public void markOtpAsUsed(EmailOtp emailOtp) {
+        emailOtp.setIsUsed(true);
+        emailOtpRepository.save(emailOtp);
+    }
+
+    /**
+     * Xóa OTP (dùng cho EMAIL_CHANGE sau khi thay đổi email thành công).
+     */
+    @Transactional
+    public void deleteOtp(EmailOtp emailOtp) {
+        emailOtpRepository.delete(emailOtp);
+    }
+
+    private String generateOtp() {
+        return String.format(Locale.ROOT, "%06d", new Random().nextInt(1_000_000));
+    }
+
     @Async
-    public void sendOtpEmail(String email, String otpCode) {
-        String subject = "Mã xác thực NutriBot";
-        String body = """
-                Xin chào,
-
-                Mã xác thực của bạn là: %s
-
-                Mã này có hiệu lực trong %d phút. Vui lòng không chia sẻ mã này với ai.
-
-                Trân trọng,
-                NutriBot Team
-                """.formatted(otpCode, OTP_VALID_MINUTES);
-
-        emailService.sendEmail(email, subject, body);
+    private void sendOtpViaSender(String email, String otp, String purpose, int expirationMinutes) {
+        EmailOtpSender sender = emailOtpSenderProvider.getIfAvailable();
+        if (sender == null) {
+            log.warn("EmailOtpSender not configured, OTP for {} purpose not sent", purpose);
+            return;
+        }
+        try {
+            if (PURPOSE_REGISTRATION.equals(purpose)) {
+                sender.sendRegistrationOtp(email, otp, expirationMinutes);
+            } else {
+                sender.sendEmailChangeOtp(email, otp, expirationMinutes);
+            }
+        } catch (RuntimeException e) {
+            log.error("Failed to send OTP email to {} for purpose {}", email, purpose, e);
+        }
     }
 }

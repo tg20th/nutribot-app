@@ -1,6 +1,6 @@
 package com.fpt.swp391.nutribot.service;
 
-import com.fpt.swp391.nutribot.repository.EmailChangeRequestRepository;
+import com.fpt.swp391.nutribot.repository.EmailOtpRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -12,11 +12,11 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class EmailChangeRequestExpiryJob {
 
-    private final EmailChangeRequestRepository emailChangeRequestRepository;
+    private final EmailOtpRepository emailOtpRepository;
 
     @Scheduled(fixedDelayString = "${app.email-change.cleanup-interval-ms:60000}")
     @Transactional
     public void deleteExpiredRequests() {
-        emailChangeRequestRepository.deleteByExpiresAtLessThanEqual(LocalDateTime.now());
+        emailOtpRepository.deleteExpiredEmailChanges(LocalDateTime.now());
     }
 }
