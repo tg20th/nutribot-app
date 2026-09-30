@@ -3,6 +3,7 @@ package com.fpt.swp391.nutribot.config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
+import com.fpt.swp391.nutribot.filter.GuestRateLimitFilter;
 import com.fpt.swp391.nutribot.service.AuthService;
 import com.fpt.swp391.nutribot.service.TokenBlacklistService;
 import jakarta.servlet.FilterChain;
@@ -29,14 +30,16 @@ class SecurityAuthorizationAndLogoutTest {
     private AuthService authService;
     private TokenBlacklistService tokenBlacklistService;
     private JwtAuthenticationFilter jwtFilter;
+    private GuestRateLimitFilter guestRateLimitFilter;
     private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
         jwtTokenProvider = mock(JwtTokenProvider.class);
         authService = mock(AuthService.class);
-        tokenBlacklistService = new TokenBlacklistService(); // Dùng instance thật để kiểm thử logic blacklist
+        tokenBlacklistService = new TokenBlacklistService();
         jwtFilter = new JwtAuthenticationFilter(jwtTokenProvider, authService, tokenBlacklistService);
+        guestRateLimitFilter = mock(GuestRateLimitFilter.class);
         objectMapper = new ObjectMapper();
         objectMapper.findAndRegisterModules();
         SecurityContextHolder.clearContext();
@@ -64,7 +67,7 @@ class SecurityAuthorizationAndLogoutTest {
     @Test
     @DisplayName("Acceptance Criteria 1: AuthenticationEntryPoint trả về 401 JSON chuẩn ApiResponse không rò rỉ stack trace")
     void authenticationEntryPoint_Returns401WithStandardApiResponse() throws Exception {
-        SecurityConfig config = new SecurityConfig(jwtFilter, authService, tokenBlacklistService, jwtTokenProvider, "");
+        SecurityConfig config = new SecurityConfig(jwtFilter, authService, tokenBlacklistService, jwtTokenProvider, guestRateLimitFilter, "");
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/users/profile");
         MockHttpServletResponse response = new MockHttpServletResponse();

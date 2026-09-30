@@ -10,6 +10,7 @@ import com.fpt.swp391.nutribot.service.ChatHistoryService;
 import com.fpt.swp391.nutribot.service.ChatbotGatewayService;
 import com.fpt.swp391.nutribot.service.ChatbotGatewayService.ConversationTurn;
 import com.fpt.swp391.nutribot.service.HealthProfileService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ public class ChatbotController {
 
     @PostMapping("/query")
     public ResponseEntity<ApiResponse<ChatbotQueryResponse>> query(
+            HttpServletRequest httpRequest,
             Authentication authentication,
             @Valid @RequestBody ChatbotQueryRequest request) {
         boolean guest = isGuest(authentication);
@@ -63,17 +65,13 @@ public class ChatbotController {
 
         String aiSessionId = guest ? request.sessionId() : memberSessionId.toString();
         ChatbotGatewayService.ChatbotReply reply;
-        try {
-            reply = chatbotGatewayService.getReply(
-                    aiSessionId,
-                    request.message(),
-                    guest,
-                    userContext,
-                    history);
-        } catch (ChatbotGatewayService.GuestQuotaExceededException exception) {
-            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .body(ApiResponse.error(exception.getMessage()));
-        }
+        reply = chatbotGatewayService.getReply(
+                httpRequest,
+                aiSessionId,
+                request.message(),
+                guest,
+                userContext,
+                history);
 
         String assistantContent = toStoredAssistantContent(reply);
         LocalDateTime createdAt = null;
