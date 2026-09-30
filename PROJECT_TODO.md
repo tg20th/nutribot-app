@@ -155,7 +155,8 @@
   - *Mô tả:* API `GET /api/v1/admin/contents`, `PUT /api/v1/admin/contents/{id}/status` (duyệt, ẩn, xóa bài vi phạm).
   - *File cần tạo:* `controller/AdminContentController.java`.
 - [x] **#40 [BE] Admin API: Quản lý & Xóa Bình luận Vi phạm** ✅
-  - *Mô tả:* API `GET /api/v1/admin/comments`, `DELETE /api/v1/admin/comments/{id}`.
+  - *Mô tả:* API `GET /api/v1/admin/comments` (lọc DB bằng JPA Specification, phân trang bounded), `DELETE /api/v1/admin/comments/{id}` (soft-delete sang status hidden bảo toàn cây reply model và tránh lỗi khóa ngoại FK), `PUT /api/v1/admin/comments/{id}/status` (chuyển đổi trạng thái kiểm duyệt với khóa bi quan PESSIMISTIC_WRITE), triệt tiêu lỗi N+1 Query bằng batch fetching.
+  - *File đã tạo/cập nhật:* `controller/AdminCommentController.java`, `service/AdminCommentService.java`, `repository/specification/CommentSpecifications.java`, `dto/request/AdminCommentStatusRequest.java`, `repository/CommentRepository.java`, `service/AdminCommentServiceTest.java`, `controller/AdminCommentControllerTest.java`.
 - [ ] **#57 [BE] API Gợi ý Nhà hàng theo Món ăn**
   - *Mô tả:* API `GET /api/v1/restaurants/recommend?dishId=...` kết nối logic gợi ý của Lan để trả về danh sách nhà hàng tương ứng.
 - [ ] **#59 [BE] API Gợi ý Bài viết / Video Liên quan**
