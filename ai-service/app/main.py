@@ -10,13 +10,14 @@ from fastapi.responses import JSONResponse
 
 from app.config import Settings
 from app.exceptions import AIServiceError
-from app.planner import MealPlanRequest, MealPlanResponse
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.gemini_service import GeminiService
 from app.services.recommender import ContentRecommender
 from app.schemas.recommender import RecommendationRequest, RecommendationResponse
 from app.schemas.moderation import ModerationRequest, ModerationResponse
 from app.services.content_moderation_service import ContentModerationService
+from app.schemas.deterministic_planner import DeterministicPlannerRequest
+from app.services.meal_planner_service import MealPlannerService
 
 logger = logging.getLogger(__name__)
 
@@ -119,17 +120,12 @@ def create_app(
     ) -> ChatResponse:
         return await service.chat(chat_request)
 
-    @application.post(
-        "/api/ai/generate-meal-plan",
-        response_model=MealPlanResponse,
-        tags=["Meal Planner"],
-        summary="Generate a seven-day vegan meal-plan preview",
-    )
-    async def generate_meal_plan(
-        meal_plan_request: MealPlanRequest,
-        service: GeminiService = Depends(_get_gemini_service),
-    ) -> MealPlanResponse:
-        return await service.generate_meal_plan(meal_plan_request)
+    @application.post("/api/ai/generate-meal-plan", tags=["Meal Planner"])
+    async def generate_deterministic_meal_plan(
+        request: DeterministicPlannerRequest,
+    ) -> dict[str, Any]:
+        """Canonical deterministic V1 endpoint; intentionally no Gemini dependency."""
+        return MealPlannerService().generate_weekly_plan(request)
 
     @application.post("/api/ai/content-recommendations", response_model=RecommendationResponse, tags=["Recommendations"])
     async def content_recommendations(recommendation_request: RecommendationRequest) -> RecommendationResponse:
