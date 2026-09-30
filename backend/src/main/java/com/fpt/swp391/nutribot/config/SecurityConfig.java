@@ -3,6 +3,7 @@ package com.fpt.swp391.nutribot.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
+import com.fpt.swp391.nutribot.filter.GuestRateLimitFilter;
 import com.fpt.swp391.nutribot.service.AuthService;
 import com.fpt.swp391.nutribot.service.TokenBlacklistService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -42,16 +43,19 @@ public class SecurityConfig {
     private final AuthService authService;
     private final TokenBlacklistService tokenBlacklistService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final GuestRateLimitFilter guestRateLimitFilter;
 
     public SecurityConfig(@Lazy JwtAuthenticationFilter jwtAuthenticationFilter,
                           @Lazy AuthService authService,
                           TokenBlacklistService tokenBlacklistService,
                           JwtTokenProvider jwtTokenProvider,
+                          @Lazy GuestRateLimitFilter guestRateLimitFilter,
                           @Value("${spring.security.oauth2.client.registration.google.client-id:}") String googleClientId) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authService = authService;
         this.tokenBlacklistService = tokenBlacklistService;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.guestRateLimitFilter = guestRateLimitFilter;
         this.oauth2Enabled = StringUtils.hasText(googleClientId);
     }
 
@@ -61,6 +65,7 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
+                .addFilterBefore(guestRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
