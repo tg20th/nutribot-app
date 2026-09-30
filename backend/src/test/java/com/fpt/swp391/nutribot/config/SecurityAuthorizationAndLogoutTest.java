@@ -64,7 +64,7 @@ class SecurityAuthorizationAndLogoutTest {
     @Test
     @DisplayName("Acceptance Criteria 1: AuthenticationEntryPoint trả về 401 JSON chuẩn ApiResponse không rò rỉ stack trace")
     void authenticationEntryPoint_Returns401WithStandardApiResponse() throws Exception {
-        SecurityConfig config = new SecurityConfig(jwtFilter, authService, tokenBlacklistService, jwtTokenProvider);
+        SecurityConfig config = new SecurityConfig(jwtFilter, authService, tokenBlacklistService, jwtTokenProvider, "");
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/users/profile");
         MockHttpServletResponse response = new MockHttpServletResponse();
