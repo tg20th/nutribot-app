@@ -15,5 +15,6 @@ public class ChatMessage {
     @Column(name = "sender_type", nullable = false, length = 20) private String senderType;
     @Column(nullable = false, columnDefinition = "NVARCHAR(MAX)") private String content;
     @Column(name = "created_at", nullable = false, updatable = false) private LocalDateTime createdAt;
+    @Column(name = "idempotency_key", length = 100) private String idempotencyKey;
     @PrePersist void onCreate() { createdAt = LocalDateTime.now(); }
 }
