@@ -6,6 +6,7 @@ import com.fpt.swp391.nutribot.entity.*;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
+@Slf4j
 @Service @RequiredArgsConstructor
 public class ChatHistoryService {
     private final ChatSessionRepository sessionRepository;
@@ -36,15 +38,20 @@ public class ChatHistoryService {
 
     @Transactional(readOnly = true) public List<ChatMessageResponse> getMessages(String username, Integer sessionId) {
         ChatSession session = ownedSession(username, sessionId);
-        return messageRepository.findBySessionSessionIdOrderByCreatedAtAsc(session.getSessionId()).stream().map(this::toMessage).toList();
+        log.debug("[NB-49] getMessages: sessionId={}, found={}", sessionId, session.getSessionId());
+        List<ChatMessage> msgs = messageRepository.findBySessionSessionIdOrderByCreatedAtAsc(session.getSessionId());
+        log.debug("[NB-49] getMessages: found {} messages for sessionId={}", msgs.size(), sessionId);
+        return msgs.stream().map(this::toMessage).toList();
     }
 
     @Transactional(readOnly = true) public PagedResponse<ChatMessageResponse> getMessagesPaged(String username, Integer sessionId, int page, int size) {
         ChatSession session = ownedSession(username, sessionId);
+        log.debug("[NB-49] getMessagesPaged: sessionId={}, page={}, size={}", sessionId, page, size);
         int safePage = Math.max(0, page);
         int safeSize = Math.max(1, Math.min(100, size));
         Pageable pageable = PageRequest.of(safePage, safeSize);
         Page<ChatMessage> msgPage = messageRepository.findBySessionSessionIdOrderByCreatedAtAsc(session.getSessionId(), pageable);
+        log.debug("[NB-49] getMessagesPaged: found {} total messages, page content={}", msgPage.getTotalElements(), msgPage.getContent().size());
         List<ChatMessageResponse> content = msgPage.getContent().stream().map(this::toMessage).toList();
         return PagedResponse.<ChatMessageResponse>builder()
                 .content(content)
