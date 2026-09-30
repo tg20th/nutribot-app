@@ -26,6 +26,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import org.springframework.beans.factory.annotation.Value;
 import java.net.URLEncoder;
 import java.time.Instant;
 import java.util.Arrays;
@@ -45,12 +46,16 @@ public class SecurityConfig {
     public SecurityConfig(@Lazy JwtAuthenticationFilter jwtAuthenticationFilter,
                           @Lazy AuthService authService,
                           TokenBlacklistService tokenBlacklistService,
-                          JwtTokenProvider jwtTokenProvider) {
+                          JwtTokenProvider jwtTokenProvider,
+                          @Value("${spring.security.oauth2.client.registration.google.client-id:}") String googleClientId) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authService = authService;
         this.tokenBlacklistService = tokenBlacklistService;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.oauth2Enabled = StringUtils.hasText(googleClientId);
     }
+
+    private final boolean oauth2Enabled;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -93,9 +98,6 @@ public class SecurityConfig {
                         // Member/Authenticated endpoints (Deny-by-default)
                         .anyRequest().authenticated()
                 )
-                .oauth2Login(oauth2 -> oauth2
-                        .successHandler(oauth2SuccessHandler())
-                )
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
@@ -135,6 +137,10 @@ public class SecurityConfig {
                             response.getWriter().write(writeJsonResponse(apiResponse));
                         })
                 );
+
+        if (oauth2Enabled) {
+            http.oauth2Login(oauth2 -> oauth2.successHandler(oauth2SuccessHandler()));
+        }
 
         return http.build();
     }
