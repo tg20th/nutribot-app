@@ -151,25 +151,54 @@ def test_missing_api_key_returns_service_unavailable_without_breaking_health():
 
 
 def test_generate_meal_plan_matches_internal_contract():
-    service = StubMealPlannerService()
-    app = create_app(settings=Settings(gemini_api_key="test-key"), gemini_service=service)
+    app = create_app(
+        settings=Settings(gemini_api_key="test-key"),
+        gemini_service=StubGeminiService(),
+    )
+    canonical_dishes = [
+        {
+            "dishId": dish_id,
+            "name": f"Canonical vegan dish {dish_id}",
+            "servingSize": 1,
+            "servingUnit": "portion",
+            "calories": 600,
+            "proteinG": 30,
+            "carbsG": 75,
+            "healthyFatsG": 20,
+            "vegetarianType": "VEGAN",
+            "isActive": True,
+            "ingredients": [
+                {"ingredientId": dish_id, "name": f"Ingredient {dish_id}"}
+            ],
+        }
+        for dish_id in range(1, 15)
+    ]
     response = TestClient(app).post(
         "/api/ai/generate-meal-plan",
         json={
-            "target_calories": 1800,
-            "health_goal": "maintain_weight",
-            "available_ingredients": ["Đậu hũ", "Nấm"],
-            "excluded_allergies": ["Đậu phộng"],
-            "available_dishes": [
-                {"dish_id": 1, "name": "Oatmeal", "calories": 350},
-                {"dish_id": 2, "name": "Tofu mushrooms", "calories": 500},
-                {"dish_id": 3, "name": "Vegetable soup", "calories": 250},
-            ],
-            "bmi": 20.2,
+            "vegetarianType": "VEGAN",
+            "allergyIngredientIds": [],
+            "nutritionTarget": {
+                "calories": 1800,
+                "proteinG": 90,
+                "carbsG": 225,
+                "fatG": 60,
+                "estimated": False,
+            },
+            "canonicalDishes": canonical_dishes,
         },
     )
 
     assert response.status_code == 200
-    assert response.json()["estimatedDailyCalories"] == 1750
-    assert len(response.json()["weeklyPlan"]) == 7
-    assert service.meal_plan_request.excluded_allergies == ["Đậu phộng"]
+    payload = response.json()
+    assert payload["status"] in {"OPTIMAL", "FEASIBLE"}
+    assert [day["day"] for day in payload["days"]] == [
+        "MONDAY",
+        "TUESDAY",
+        "WEDNESDAY",
+        "THURSDAY",
+        "FRIDAY",
+        "SATURDAY",
+        "SUNDAY",
+    ]
+    assert all(len(day["meals"]) == 3 for day in payload["days"])
