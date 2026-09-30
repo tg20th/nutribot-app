@@ -1,11 +1,15 @@
 package com.fpt.swp391.nutribot.service;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fpt.swp391.nutribot.config.CorrelationIdFilter;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
+import com.fpt.swp391.nutribot.filter.GuestRateLimitFilter;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -20,23 +24,31 @@ import java.time.Instant;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
 public class ChatbotGatewayService {
 
-    private static final int GUEST_TRIAL_LIMIT = 3;
     private static final int MAX_MESSAGE_LENGTH = 2_000;
     private static final int MAX_SESSION_ID_LENGTH = 100;
-    private static final Duration GUEST_QUOTA_TTL = Duration.ofHours(24);
     private static final JsonMapper JSON_MAPPER = JsonMapper.shared();
 
+    private static final int CB_FAILURE_THRESHOLD = 3;
+    private static final Duration CB_WINDOW = Duration.ofSeconds(30);
+    private static final Duration CB_COOLDOWN = Duration.ofSeconds(30);
+
     private final RestClient aiClient;
-    private final ConcurrentHashMap<String, GuestQuota> guestQuotas = new ConcurrentHashMap<>();
+    private final GuestRateLimitFilter rateLimitFilter;
+
+    private volatile CircuitState circuitState = CircuitState.CLOSED;
+    private int failureCount;
+    private Instant failureWindowStart;
+    private Instant lastFailureAt;
+    private final Object cbLock = new Object();
 
     public ChatbotGatewayService(
-            @Value("${ai.service.base-url:http://localhost:8000}") String aiServiceBaseUrl) {
+            @Value("${ai-service.base-url:http://localhost:8000}") String aiServiceBaseUrl,
+            GuestRateLimitFilter rateLimitFilter) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(3));
         requestFactory.setReadTimeout(Duration.ofSeconds(35));
@@ -45,9 +57,11 @@ public class ChatbotGatewayService {
                 .baseUrl(aiServiceBaseUrl.replaceAll("/$", ""))
                 .requestFactory(requestFactory)
                 .build();
+        this.rateLimitFilter = rateLimitFilter;
     }
 
     public ChatbotReply getReply(
+            HttpServletRequest httpRequest,
             String sessionId,
             String message,
             boolean guest,
@@ -55,7 +69,21 @@ public class ChatbotGatewayService {
             List<ConversationTurn> conversationHistory) {
         validateRequest(sessionId, message);
 
-        GuestQuota quota = guest ? reserveGuestTurn(sessionId) : null;
+        String correlationId = MDC.get(CorrelationIdFilter.MDC_KEY);
+        String quotaKey = guest ? (String) httpRequest.getAttribute("guestQuotaKey") : null;
+        log.info("[{}] Gateway: sessionId={}, msgLen={}, guest={}, contextKeys={}",
+                correlationId,
+                sessionId.length() > 8 ? sessionId.substring(0, 8) + "..." : sessionId,
+                message.length(),
+                guest,
+                userContext == null ? 0 : userContext.size());
+
+        if (!canAttemptAiCall()) {
+            if (quotaKey != null) rateLimitFilter.releaseReservedTurn(quotaKey);
+            log.warn("[{}] Gateway: circuit OPEN, returning fallback immediately", correlationId);
+            return fallback(quotaKey, guest, correlationId);
+        }
+
         try {
             Map<String, Object> aiRequest = new LinkedHashMap<>();
             aiRequest.put("message", message.trim());
@@ -75,19 +103,79 @@ public class ChatbotGatewayService {
                 throw new RestClientException("AI service returned an empty reply.");
             }
 
-            if (quota != null) quota.consumeReservedTurn();
-            Integer remaining = guest ? quota.remaining() : null;
+            recordAiSuccess();
+            if (quotaKey != null) rateLimitFilter.consumeReservedTurn(quotaKey);
+            Integer remaining = guest ? rateLimitFilter.remainingForKey(quotaKey) : null;
+            log.info("[{}] Gateway: AI success, replyLen={}", correlationId, response.reply().length());
             return new ChatbotReply(response.reply(), safeRecommendations(response.recommendations()), remaining, false);
         } catch (RestClientException exception) {
-            if (quota != null) quota.releaseReservedTurn();
-            log.warn("AI service request failed; returning the temporary fallback response.", exception);
-            Integer remaining = guest ? quota.remaining() : null;
-            return new ChatbotReply(
-                    "NutriBot is temporarily unavailable. Please try again shortly.",
-                    List.of(),
-                    remaining,
-                    true);
+            recordAiFailure();
+            if (quotaKey != null) rateLimitFilter.releaseReservedTurn(quotaKey);
+            log.warn("[{}] Gateway: AI call failed, returning fallback: {}", correlationId, exception.getMessage());
+            return fallback(quotaKey, guest, correlationId);
         }
+    }
+
+    private boolean canAttemptAiCall() {
+        Instant now = Instant.now();
+        synchronized (cbLock) {
+            if (circuitState == CircuitState.CLOSED) {
+                if (failureWindowStart != null && failureWindowStart.plus(CB_WINDOW).isBefore(now)) {
+                    failureCount = 0;
+                    failureWindowStart = now;
+                }
+                return true;
+            }
+            if (circuitState == CircuitState.OPEN) {
+                if (lastFailureAt != null && lastFailureAt.plus(CB_COOLDOWN).isBefore(now)) {
+                    circuitState = CircuitState.HALF_OPEN;
+                    log.info("Circuit transitioned OPEN -> HALF_OPEN");
+                    return true;
+                }
+                return false;
+            }
+            return true;
+        }
+    }
+
+    private void recordAiFailure() {
+        synchronized (cbLock) {
+            lastFailureAt = Instant.now();
+            if (circuitState == CircuitState.HALF_OPEN) {
+                circuitState = CircuitState.OPEN;
+                log.info("Circuit transitioned HALF_OPEN -> OPEN (probe failed)");
+                return;
+            }
+            if (failureWindowStart == null || failureWindowStart.plus(CB_WINDOW).isBefore(lastFailureAt)) {
+                failureCount = 1;
+                failureWindowStart = lastFailureAt;
+            } else {
+                failureCount++;
+            }
+            if (failureCount >= CB_FAILURE_THRESHOLD) {
+                circuitState = CircuitState.OPEN;
+                log.info("Circuit transitioned CLOSED -> OPEN ({} failures in {}s)", failureCount, CB_WINDOW.getSeconds());
+            }
+        }
+    }
+
+    private void recordAiSuccess() {
+        synchronized (cbLock) {
+            if (circuitState == CircuitState.HALF_OPEN) {
+                circuitState = CircuitState.CLOSED;
+                failureCount = 0;
+                log.info("Circuit transitioned HALF_OPEN -> CLOSED (probe succeeded)");
+            }
+        }
+    }
+
+    private ChatbotReply fallback(String quotaKey, boolean guest, String correlationId) {
+        Integer remaining = guest && quotaKey != null ? rateLimitFilter.remainingForKey(quotaKey) : null;
+        return new ChatbotReply(
+                "NutriBot is temporarily unavailable. Please try again shortly.",
+                List.of(),
+                remaining,
+                true);
     }
 
     private void validateRequest(String sessionId, String message) {
@@ -97,29 +185,6 @@ public class ChatbotGatewayService {
         if (message == null || message.isBlank() || message.length() > MAX_MESSAGE_LENGTH) {
             throw new BadRequestException("Message must contain between 1 and 2000 characters.");
         }
-    }
-
-    private GuestQuota reserveGuestTurn(String guestId) {
-        purgeExpiredQuotas();
-        GuestQuota quota = guestQuotas.computeIfAbsent(guestId, ignored -> new GuestQuota());
-        synchronized (quota) {
-            quota.lastAccess = Instant.now();
-            if (quota.consumed + quota.reserved >= GUEST_TRIAL_LIMIT) {
-                throw new GuestQuotaExceededException("Guest users can ask up to three questions.");
-            }
-            quota.reserved++;
-            return quota;
-        }
-    }
-
-    private void purgeExpiredQuotas() {
-        Instant expiredBefore = Instant.now().minus(GUEST_QUOTA_TTL);
-        guestQuotas.entrySet().removeIf(entry -> {
-            GuestQuota quota = entry.getValue();
-            synchronized (quota) {
-                return quota.reserved == 0 && quota.lastAccess.isBefore(expiredBefore);
-            }
-        });
     }
 
     private List<String> safeRecommendations(List<String> recommendations) {
@@ -147,32 +212,7 @@ public class ChatbotGatewayService {
             Integer remainingTrialCount,
             boolean fallback) { }
 
-    public static class GuestQuotaExceededException extends RuntimeException {
-        public GuestQuotaExceededException(String message) {
-            super(message);
-        }
-    }
-
     public record AiChatResponse(String reply, List<String> recommendations) { }
 
-    private static final class GuestQuota {
-        private int consumed;
-        private int reserved;
-        private Instant lastAccess = Instant.now();
-
-        private synchronized int remaining() {
-            return GUEST_TRIAL_LIMIT - consumed - reserved;
-        }
-
-        private synchronized void releaseReservedTurn() {
-            if (reserved > 0) reserved--;
-        }
-
-        private synchronized void consumeReservedTurn() {
-            if (reserved > 0) {
-                reserved--;
-                consumed++;
-            }
-        }
-    }
+    private enum CircuitState { CLOSED, OPEN, HALF_OPEN }
 }

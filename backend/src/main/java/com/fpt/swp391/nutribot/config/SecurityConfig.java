@@ -3,6 +3,7 @@ package com.fpt.swp391.nutribot.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
+import com.fpt.swp391.nutribot.filter.GuestRateLimitFilter;
 import com.fpt.swp391.nutribot.service.AuthService;
 import com.fpt.swp391.nutribot.service.TokenBlacklistService;
 import jakarta.servlet.http.HttpServletResponse;
@@ -26,6 +27,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import org.springframework.beans.factory.annotation.Value;
 import java.net.URLEncoder;
 import java.time.Instant;
 import java.util.Arrays;
@@ -41,21 +43,29 @@ public class SecurityConfig {
     private final AuthService authService;
     private final TokenBlacklistService tokenBlacklistService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final GuestRateLimitFilter guestRateLimitFilter;
 
     public SecurityConfig(@Lazy JwtAuthenticationFilter jwtAuthenticationFilter,
                           @Lazy AuthService authService,
                           TokenBlacklistService tokenBlacklistService,
-                          JwtTokenProvider jwtTokenProvider) {
+                          JwtTokenProvider jwtTokenProvider,
+                          @Lazy GuestRateLimitFilter guestRateLimitFilter,
+                          @Value("${spring.security.oauth2.client.registration.google.client-id:}") String googleClientId) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authService = authService;
         this.tokenBlacklistService = tokenBlacklistService;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.guestRateLimitFilter = guestRateLimitFilter;
+        this.oauth2Enabled = StringUtils.hasText(googleClientId);
     }
+
+    private final boolean oauth2Enabled;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
+                .addFilterBefore(guestRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
@@ -92,9 +102,6 @@ public class SecurityConfig {
 
                         // Member/Authenticated endpoints (Deny-by-default)
                         .anyRequest().authenticated()
-                )
-                .oauth2Login(oauth2 -> oauth2
-                        .successHandler(oauth2SuccessHandler())
                 )
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) -> {
@@ -135,6 +142,10 @@ public class SecurityConfig {
                             response.getWriter().write(writeJsonResponse(apiResponse));
                         })
                 );
+
+        if (oauth2Enabled) {
+            http.oauth2Login(oauth2 -> oauth2.successHandler(oauth2SuccessHandler()));
+        }
 
         return http.build();
     }

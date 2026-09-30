@@ -42,6 +42,9 @@ public class UserProfile {
     @Column(name = "health_goal", length = 50)
     private String healthGoal;
 
+    @Column(name = "vegetarian_type", length = 20)
+    private String vegetarianType;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 

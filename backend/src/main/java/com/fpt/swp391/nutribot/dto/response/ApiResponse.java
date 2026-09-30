@@ -13,6 +13,7 @@ public class ApiResponse<T> {
 
     private boolean success;
     private String message;
+    private String code;
     private T data;
     private Instant timestamp;
 
@@ -34,6 +35,16 @@ public class ApiResponse<T> {
                 .success(false)
                 .message(message)
                 .data(null)
+                .timestamp(Instant.now())
+                .build();
+    }
+
+    public static <T> ApiResponse<T> error(String code, String message, T data) {
+        return ApiResponse.<T>builder()
+                .success(false)
+                .code(code)
+                .message(message)
+                .data(data)
                 .timestamp(Instant.now())
                 .build();
     }
