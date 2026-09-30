@@ -5,11 +5,13 @@ import com.fpt.swp391.nutribot.dto.response.*;
 import com.fpt.swp391.nutribot.service.ChatHistoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
+@Slf4j
 @RestController @RequestMapping("/api/v1/chatbot") @RequiredArgsConstructor
 public class ChatHistoryController {
     private final ChatHistoryService chatHistoryService;
@@ -36,7 +38,10 @@ public class ChatHistoryController {
             @PathVariable Integer sessionId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size) {
-        return ResponseEntity.ok(ApiResponse.success(chatHistoryService.getMessagesPaged(auth.getName(), sessionId, page, size)));
+        log.info("[NB-49] GET messages: username={}, sessionId={}, page={}, size={}", auth.getName(), sessionId, page, size);
+        PagedResponse<ChatMessageResponse> result = chatHistoryService.getMessagesPaged(auth.getName(), sessionId, page, size);
+        log.info("[NB-49] GET messages result: totalElements={}, contentSize={}", result.getTotalElements(), result.getContent().size());
+        return ResponseEntity.ok(ApiResponse.success(result));
     }
 
     @PostMapping("/sessions/{sessionId}/messages")
