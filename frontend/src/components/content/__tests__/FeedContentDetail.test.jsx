@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render as renderView, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render as renderView, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import CommunityPostCard from '../../community/CommunityPostCard';
 vi.mock('../../community/RestaurantRecommendations', () => ({ default: () => <section>Restaurant recommendations</section> }));
@@ -31,7 +31,7 @@ it.each(['blog', 'video'])('opens %s at the top, opens comments at the bottom, a
   trigger.focus();
   fireEvent.click(trigger);
   expect(await within(screen.getByRole('dialog')).findByText('Full story')).toBeInTheDocument();
-  expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled());
   expect(screen.getByRole('region', { name: 'Comments' })).toHaveFocus();
   fireEvent.click(screen.getByRole('button', { name: `Back to ${type}` }));
   expect(trigger).toHaveFocus();
