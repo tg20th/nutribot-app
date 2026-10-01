@@ -5,7 +5,9 @@ import com.fpt.swp391.nutribot.dto.response.ApiResponse;
 import com.fpt.swp391.nutribot.dto.response.ChatMessageResponse;
 import com.fpt.swp391.nutribot.dto.response.ChatSessionResponse;
 import com.fpt.swp391.nutribot.dto.response.HealthProfileResponse;
+import com.fpt.swp391.nutribot.entity.ChatMessage;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
+import com.fpt.swp391.nutribot.repository.ChatMessageRepository;
 import com.fpt.swp391.nutribot.service.ChatHistoryService;
 import com.fpt.swp391.nutribot.service.ChatbotGatewayService;
 import com.fpt.swp391.nutribot.service.ChatbotGatewayService.ConversationTurn;
@@ -38,6 +40,7 @@ public class ChatbotController {
     private final ChatbotGatewayService chatbotGatewayService;
     private final ChatHistoryService chatHistoryService;
     private final HealthProfileService healthProfileService;
+    private final ChatMessageRepository chatMessageRepository;
 
     @PostMapping("/query")
     public ResponseEntity<ApiResponse<ChatbotQueryResponse>> query(
@@ -58,9 +61,20 @@ public class ChatbotController {
         if (!guest) {
             String username = authentication.getName();
             memberSessionId = findOrCreateMemberSession(username, request.sessionId());
+
+            if (request.idempotencyKey() != null && !request.idempotencyKey().isBlank()) {
+                var existing = chatMessageRepository.findByIdempotencyKey(request.idempotencyKey());
+                if (existing.isPresent()) {
+                    ChatMessage m = existing.get();
+                    return ResponseEntity.ok(ApiResponse.success("Success",
+                            new ChatbotQueryResponse(memberSessionId, m.getSenderType(), m.getContent(), m.getCreatedAt(),
+                                    m.getContent(), List.of(), null, false)));
+                }
+            }
+
             history = loadMemberHistory(username, memberSessionId);
             userContext = loadMemberHealthContext(username);
-            saveMessage(username, memberSessionId, "USER", request.message());
+            saveMessage(username, memberSessionId, "USER", request.message(), request.idempotencyKey());
         }
 
         String aiSessionId = guest ? request.sessionId() : memberSessionId.toString();
@@ -77,7 +91,7 @@ public class ChatbotController {
         LocalDateTime createdAt = null;
         if (!guest) {
             ChatMessageResponse savedReply = saveMessage(
-                    username(authentication), memberSessionId, "ASSISTANT", assistantContent);
+                    username(authentication), memberSessionId, "ASSISTANT", assistantContent, null);
             createdAt = savedReply.getCreatedAt();
         }
 
@@ -123,10 +137,11 @@ public class ChatbotController {
         return context;
     }
 
-    private ChatMessageResponse saveMessage(String username, Integer sessionId, String senderType, String content) {
+    private ChatMessageResponse saveMessage(String username, Integer sessionId, String senderType, String content, String idempotencyKey) {
         ChatMessageCreateRequest request = new ChatMessageCreateRequest();
         request.setSenderType(senderType);
         request.setContent(content);
+        request.setIdempotencyKey(idempotencyKey);
         return chatHistoryService.addMessage(username, sessionId, request);
     }
 
@@ -150,7 +165,8 @@ public class ChatbotController {
             @jakarta.validation.constraints.NotBlank(message = "Message is required.")
             @Size(max = 2_000, message = "Message cannot exceed 2000 characters.") String message,
             @Size(max = MAX_AI_HISTORY, message = "Conversation history cannot exceed 50 messages.")
-            List<@Valid ConversationTurn> conversationHistory) { }
+            List<@Valid ConversationTurn> conversationHistory,
+            @Size(max = 100, message = "Idempotency key cannot exceed 100 characters.") String idempotencyKey) { }
 
     public record ChatbotQueryResponse(
             Integer sessionId,
