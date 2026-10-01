@@ -1,11 +1,12 @@
 import { Map, Star } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getRestaurants } from '../../services/restaurantApi';
 import ImageWithFallback from '../ImageWithFallback';
 
 function TrendingEateries({ eateries }) {
   return <div className="community-widget">
-    <div className="community-widget-head"><b>Trending Eateries</b><a href="#map"><Map size={14}/>View Map</a></div>
+    <div className="community-widget-head"><b>Trending Eateries</b><Link to="/restaurants/map"><Map size={14}/>View Map</Link></div>
     <ul className="community-eateries">
       {eateries.map((e) => <li key={e.id}>
         <ImageWithFallback src={e.image} alt="" />
@@ -27,7 +28,6 @@ export default function CommunityRightRail() {
   useEffect(() => { getRestaurants().then((items) => { setTrendingEateries(items); setTrendingHashtags([...new Set(items.flatMap((x) => x.hashtags ?? []))]); }).catch(() => {}); }, []);
   return <aside className="community-right-rail">
     <TrendingEateries eateries={trendingEateries}/>
-    <TrendingHashtags hashtags={trendingHashtags}/>
     <p className="community-rail-footer">About &middot; Community Guidelines &middot; Privacy</p>
   </aside>;
 }
