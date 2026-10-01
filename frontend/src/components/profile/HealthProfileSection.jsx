@@ -176,6 +176,7 @@ export default function HealthProfileSection() {
         heightCm: Number(health.heightCm),
         weightKg: Number(health.weightKg),
         healthGoal: health.healthGoal,
+        vegetarianType: health.vegetarianType || null,
         allergyIngredientIds: health.allergyIngredientIds,
       });
       saveVegetarianType(health.vegetarianType);
