@@ -28,6 +28,7 @@ import NB26ReviewPage from './pages/NB26ReviewPage';
 import NB07EmailChangeVerificationPreviewPage from './pages/NB07EmailChangeVerificationPreviewPage';
 import NB01EmailVerificationPreviewPage from './pages/NB01EmailVerificationPreviewPage';
 import ChatHistoryPage from './pages/ChatHistoryPage';
+import RestaurantMapPage from './pages/RestaurantMapPage';
 
 export default function App() {
   return <Routes>
@@ -68,6 +69,8 @@ export default function App() {
       <Route path="content/videos/:id" element={<ContentDetailPage kind="Video" />} />
       <Route path="comments" element={<CommentManagementPage />} />
     </Route>
+    <Route path="/restaurants" element={<RestaurantMapPage />} />
+    <Route path="/restaurants/map" element={<RestaurantMapPage />} />
     <Route path="/search" element={<SearchPage />} />
     {import.meta.env.DEV && <Route path="/dev/nb-56" element={<RestaurantRecommendationsPreviewPage />} />}
     <Route path="*" element={<HomePage />} />
