@@ -18,7 +18,6 @@ import { ContentDetailPage, ContentManagementPage } from './pages/admin/ContentP
 import OAuthCallbackPage from './pages/OAuthCallbackPage';
 import MemberRoute from './components/MemberRoute';
 import MyBlogsPage from './pages/MyBlogsPage';
-import MyVideosPage from './pages/MyVideosPage';
 import CreateBlogPage from './pages/CreateBlogPage';
 import CreateVideoPage from './pages/CreateVideoPage';
 import BlogListPage from './pages/BlogListPage';
@@ -50,10 +49,11 @@ export default function App() {
     <Route path="/profile/health" element={<MemberRoute><HealthProfilePage /></MemberRoute>} />
     <Route path="/community/profile" element={<Navigate to="/profile" replace />} />
     <Route path="/community/my-blogs" element={<MemberRoute><MyBlogsPage /></MemberRoute>} />
-    <Route path="/community/my-videos" element={<MemberRoute><MyVideosPage /></MemberRoute>} />
+    <Route path="/community/my-videos" element={<Navigate to="/community/my-blogs" replace />} />
     <Route path="/community/search" element={<MemberRoute><SearchPage member /></MemberRoute>} />
     <Route path="/community/blogs/new" element={<MemberRoute><CreateBlogPage /></MemberRoute>} />
     <Route path="/community/videos/new" element={<MemberRoute><CreateVideoPage /></MemberRoute>} />
+    <Route path="/community/my-content/:type/:id/edit" element={<MemberRoute><CreateBlogPage /></MemberRoute>} />
     <Route path="/chat-history" element={<MemberRoute><ChatHistoryPage /></MemberRoute>} />
     <Route path="/community/posts/:postId" element={<MemberRoute><CommunityContentDetailPage /></MemberRoute>} />
     <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
