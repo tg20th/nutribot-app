@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import * as maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import trackasiagl from 'trackasia-gl';
+import 'trackasia-gl/dist/trackasia-gl.css';
 import {
   AlertTriangle,
   Compass,
@@ -63,7 +63,7 @@ export default function RestaurantMapPage() {
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    const map = new maplibregl.Map({
+    const map = new trackasiagl.Map({
       container: mapContainerRef.current,
       style: TRACKASIA_STYLE_URL,
       center: [center.lng, center.lat],
@@ -73,7 +73,7 @@ export default function RestaurantMapPage() {
       attributionControl: true
     });
 
-    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-right');
+    map.addControl(new trackasiagl.NavigationControl({ visualizePitch: true }), 'top-right');
     mapRef.current = map;
 
     return () => {
@@ -162,7 +162,7 @@ export default function RestaurantMapPage() {
         </div>
       `;
 
-      const popup = new maplibregl.Popup({
+      const popup = new trackasiagl.Popup({
         offset: 28,
         closeButton: true,
         closeOnClick: false
@@ -174,7 +174,7 @@ export default function RestaurantMapPage() {
         activePopupRef.current = popup;
       });
 
-      const marker = new maplibregl.Marker({ element: el })
+      const marker = new trackasiagl.Marker({ element: el })
         .setLngLat([restaurant.lng, restaurant.lat])
         .setPopup(popup)
         .addTo(map);
@@ -203,7 +203,7 @@ export default function RestaurantMapPage() {
         <div class="user-gps-pulse"></div>
         <div class="user-gps-dot"></div>
       `;
-      userMarkerRef.current = new maplibregl.Marker({ element: el })
+      userMarkerRef.current = new trackasiagl.Marker({ element: el })
         .setLngLat([userLocation.lng, userLocation.lat])
         .addTo(map);
     } else {
@@ -301,15 +301,14 @@ export default function RestaurantMapPage() {
       <CommunityTopBar hideSearch activePath="/restaurants/map" />
       <div className="community-shell">
         <CommunitySideNav activePath="/restaurants/map" />
-        <span className="community-sidenav-spacer" aria-hidden="true" />
         
         <main className="map-workspace">
           <aside className="map-sidebar">
             <div className="map-sidebar-header">
               <div className="map-sidebar-title">
-                <h2>Quán Ăn Xung Quanh</h2>
+                <h2>Nearby Restaurants</h2>
                 <span className="results-count-badge">
-                  {filteredRestaurants.length} địa điểm
+                  {filteredRestaurants.length} places
                 </span>
               </div>
               
@@ -319,21 +318,22 @@ export default function RestaurantMapPage() {
                   className={`locate-me-btn ${userLocation ? 'is-active' : ''}`}
                   onClick={handleRequestLocation}
                   disabled={isLocating}
-                  title="Định vị vị trí GPS của bạn"
+                  title="Locate your GPS position"
                 >
                   <Crosshair size={16} className={isLocating ? 'animate-spin' : ''} />
-                  <span>{isLocating ? 'Đang định vị...' : 'Vị trí của bạn'}</span>
+                  <span>{isLocating ? 'Locating...' : 'Your Location'}</span>
                 </button>
                 
                 <select 
                   className="city-select" 
-                  value={center.city === 'Vị trí của bạn' ? 'Vị trí của bạn' : center.city}
+                  value={center.city === 'Vị trí của bạn' || center.city === 'Your Location' ? 'Your Location' : center.city}
                   onChange={(e) => {
                     const city = CITIES.find(c => c.name === e.target.value);
                     if (city) handleCityChange(city);
                   }}
                 >
-                  <option value="Vị trí của bạn" disabled hidden>Vị trí của bạn</option>
+                  <option value="Your Location" disabled hidden>Your Location</option>
+                  <option value="Vị trí của bạn" disabled hidden style={{display: 'none'}}>Vị trí của bạn</option>
                   {CITIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
                 </select>
               </div>
@@ -344,7 +344,7 @@ export default function RestaurantMapPage() {
                 <Search size={16} className="search-icon" />
                 <input
                   type="text"
-                  placeholder="Tìm tên quán, địa chỉ, món chay..."
+                  placeholder="Search by name, address, dish..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -380,13 +380,13 @@ export default function RestaurantMapPage() {
               ) : filteredRestaurants.length === 0 ? (
                 <div className="drawer-empty-state">
                   <MapPin size={32} />
-                  <p>Không tìm thấy quán chay nào trong bán kính {selectedRadius} km.</p>
+                  <p>No vegetarian restaurants found within a {selectedRadius} km radius.</p>
                   <button
                     type="button"
                     className="radius-chip is-active"
                     onClick={() => setSelectedRadius(20)}
                   >
-                    Mở rộng bán kính lên 20 km
+                    Expand radius to 20 km
                   </button>
                 </div>
               ) : (
@@ -417,7 +417,7 @@ export default function RestaurantMapPage() {
                           <span>
                             {restaurant.distanceKm != null
                               ? `~${restaurant.distanceKm} km`
-                              : 'Khu vực lân cận'}
+                              : 'Nearby area'}
                           </span>
                         </div>
 
@@ -428,9 +428,9 @@ export default function RestaurantMapPage() {
                             rel="noopener noreferrer"
                             className="card-directions-btn"
                             onClick={(e) => e.stopPropagation()}
-                            title="Mở chỉ đường trên Google Maps"
+                            title="Open directions on Google Maps"
                           >
-                            Chỉ đường <ExternalLink size={12} />
+                            Directions <ExternalLink size={12} />
                           </a>
                         </div>
                       </div>

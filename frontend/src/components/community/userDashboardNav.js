@@ -7,6 +7,6 @@ export const userDashboardNav = [
   { label: 'Weekly Meal Planner', icon: CalendarDays, to: '/community/planner' },
   { label: 'Health profile', icon: Activity, to: '/profile/health' },
   { label: 'Chat history', icon: History, to: '/chat-history' },
-  { label: 'Nearby Vegan Map', icon: MapPin },
+  { label: 'Nearby Vegan Map', icon: MapPin, to: '/restaurants/map' },
   { label: 'Analytics', icon: BarChart3 },
 ];

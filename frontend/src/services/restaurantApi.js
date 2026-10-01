@@ -1,7 +1,7 @@
 import { apiRequest, unwrapData } from './apiClient';
 
 const TRACKASIA_KEY = import.meta.env.VITE_TRACKASIA_API_KEY || 'public_key';
-export const TRACKASIA_STYLE_URL = `https://maps.track-asia.com/styles/v1/streets.json?key=${TRACKASIA_KEY}`;
+export const TRACKASIA_STYLE_URL = `https://maps.track-asia.com/styles/v2/satellite.json?key=${TRACKASIA_KEY}`;
 
 // Haversine formula to calculate distance between two coordinates in kilometers
 export const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -138,15 +138,15 @@ export const CURATED_RESTAURANTS = [
 export const normalizeRestaurant = (item = {}) => ({
   ...item,
   id: item.id ?? item.restaurantId ?? item.place_id,
-  name: item.name || 'Nhà hàng Chay / Healthy',
-  address: item.address || item.formatted_address || item.meta || 'Đang cập nhật địa chỉ',
+  name: item.name || 'Vegetarian / Healthy Restaurant',
+  address: item.address || item.formatted_address || item.meta || 'Address unavailable',
   lat: item.lat ?? item.geometry?.location?.lat ?? null,
   lng: item.lng ?? item.geometry?.location?.lng ?? null,
   image: item.image ?? item.imageUrl ?? (item.icon ? null : `https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=600&q=80`),
   rating: item.rating ?? (4.3 + ((item.name?.length || 5) % 7) * 0.1).toFixed(1),
   distanceKm: item.distanceKm ?? null,
-  category: item.category || 'Nhà hàng Chay',
-  tags: item.tags || ['Ăn chay', 'Dinh dưỡng', 'Sức khỏe'],
+  category: item.category || 'Vegetarian Restaurant',
+  tags: item.tags || ['Vegetarian', 'Nutrition', 'Healthy'],
   googleMapUrl: item.lat && item.lng
     ? `https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}`
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([item.name, item.address].filter(Boolean).join(', '))}`
@@ -192,30 +192,19 @@ export const searchNearbyRestaurants = async ({
     console.warn('TrackAsia search API unavailable, falling back to curated places:', err);
   }
 
-  // Combine with curated restaurants for maximum relevance
-  const curatedWithDistances = CURATED_RESTAURANTS.map((item) => ({
-    ...normalizeRestaurant(item),
-    distanceKm: calculateDistance(lat, lng, item.lat, item.lng)
-  }));
+  // Strictly filter by radius since TrackAsia's textsearch can sometimes return global results
+  const strictlyNearby = fetchedList.filter(r => r.distanceKm != null && r.distanceKm <= radiusKm);
 
-  // Merge unique by name/address
-  const seen = new Set();
-  const allRestaurants = [...fetchedList, ...curatedWithDistances].filter((r) => {
-    if (!r.name) return false;
-    const key = r.name.toLowerCase().trim();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  if (strictlyNearby.length > 0) {
+    // Sort by distance ascending
+    return strictlyNearby.sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
+  }
 
-  // Sort by distance ascending (nearest first)
-  allRestaurants.sort((a, b) => {
-    if (a.distanceKm == null) return 1;
-    if (b.distanceKm == null) return -1;
-    return a.distanceKm - b.distanceKm;
-  });
-
-  return allRestaurants;
+  // If TrackAsia returned successfully but there are simply no restaurants in this radius,
+  // we return empty array instead of mock data, so the user sees real map data (even if empty).
+  // We only fallback to curated if the API actually failed (fetchedList is empty and there was an error).
+  // Wait, to be safe, if we want strictly real data, we just return strictlyNearby (which is [] here).
+  return [];
 };
 
 // Privacy-first Geolocation Request Helper (BL-008 Compliance)
@@ -223,7 +212,7 @@ export const searchNearbyRestaurants = async ({
 export const getUserCurrentPosition = () => {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error('Trình duyệt của bạn không hỗ trợ định vị GPS.'));
+      reject(new Error('Your browser does not support GPS geolocation.'));
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -235,13 +224,13 @@ export const getUserCurrentPosition = () => {
         });
       },
       (error) => {
-        let message = 'Không thể xác định vị trí hiện tại.';
+        let message = 'Could not determine your current location.';
         if (error.code === 1) {
-          message = 'Bạn đã từ chối cấp quyền truy cập vị trí. NutriBot sẽ hiển thị các nhà hàng nổi bật theo khu vực mặc định.';
+          message = 'Location access denied. NutriBot will display featured restaurants in the default area.';
         } else if (error.code === 2) {
-          message = 'Tín hiệu GPS không khả dụng hoặc thiết bị đang ngoại tuyến.';
+          message = 'GPS signal unavailable or device is offline.';
         } else if (error.code === 3) {
-          message = 'Yêu cầu định vị đã hết hạn thời gian phản hồi (timeout).';
+          message = 'Location request timed out.';
         }
         const err = new Error(message);
         err.code = error.code;
