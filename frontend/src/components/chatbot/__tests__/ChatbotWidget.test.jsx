@@ -238,7 +238,7 @@ describe('ChatbotWidget', () => {
       fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
       fireEvent.click(screen.getByRole('button', { name: /build a balanced plate/i }));
       await waitFor(() => {
-        expect(document.querySelector('.chatbot-widget__trial-badge')).toHaveTextContent('2/3 questions left');
+        expect(document.querySelector('.chatbot-widget__trial-badge')).toHaveTextContent('2 of 3 questions left');
       });
     });
 
@@ -264,6 +264,22 @@ describe('ChatbotWidget', () => {
       await waitFor(() => {
         expect(screen.getByRole('dialog', { name: /your free trial has ended/i })).toBeInTheDocument();
       });
+    });
+
+    it('closes the exhausted guest chatbot before opening the login flow', async () => {
+      const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+      const onAuth = vi.fn();
+      requestNutritionAdvice.mockResolvedValueOnce({ reply: 'Last free answer', remainingTrialCount: 0 });
+      renderWithRouter(<ChatbotWidget onAuth={onAuth} />);
+      fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+      fireEvent.click(screen.getByRole('button', { name: /build a balanced plate/i }));
+      await waitFor(() => expect(screen.getByRole('dialog', { name: /your free trial has ended/i })).toBeInTheDocument());
+
+      fireEvent.click(screen.getByRole('button', { name: /log in/i }));
+
+      expect(onAuth).toHaveBeenCalledWith('login');
+      expect(document.getElementById('nutribot-chat-panel')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /open nutribot chat/i })).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('does not fabricate a quota when the API omits trial metadata', async () => {

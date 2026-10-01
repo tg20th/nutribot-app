@@ -96,6 +96,8 @@ export default function ChatbotWidget({ onSend, onAuth }) {
 
   const openAuth = (mode) => {
     setShowLimitModal(false);
+    setIsOpen(false);
+    setIsMounted(false);
     if (onAuth) {
       onAuth(mode);
       return;
@@ -507,9 +509,9 @@ export default function ChatbotWidget({ onSend, onAuth }) {
             </button>
           </form>
           {showTrialBadge && (
-            <div className="chatbot-widget__trial-badge" aria-live="polite">
-              <AlertCircle size={14} />
-              <span>{guestTrialsLeft}/{GUEST_TRIAL_LIMIT} questions left</span>
+            <div className={`chatbot-widget__trial-badge${guestTrialsLeft === 1 ? ' is-warning' : ''}`} aria-live="polite">
+              <AlertCircle size={13} aria-hidden="true" />
+              <span><strong>{guestTrialsLeft} of {GUEST_TRIAL_LIMIT}</strong> questions left</span>
             </div>
           )}
           <p className="chatbot-widget__notice">

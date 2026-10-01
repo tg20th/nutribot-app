@@ -148,19 +148,41 @@
 @keyframes chatbot-history-in { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: translateX(0); } }
 @media (max-width: 520px) { .chatbot-widget__history { padding: 20px; } .chatbot-widget__history-head h2 { font-size: 23px; } .chatbot-widget__history-head button { font-size: 0; padding: 10px; } .chatbot-widget__history-head button svg { margin: 0; } }
 
-/* Trial Badge */
+/* NB-50 guest quota */
 .chatbot-widget__trial-badge {
-  display: flex;
+  width: fit-content;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 7px 12px;
-  border-top: 1px solid rgba(24, 61, 45, 0.12);
-  background: rgba(215, 244, 91, 0.9);
-  color: #173529;
-  font-size: 10px;
-  font-weight: 700;
-  text-align: center;
+  gap: 6px;
+  margin: 6px 18px 0;
+  padding: 4px 8px;
+  border: 1px solid rgba(53, 98, 70, 0.18);
+  border-radius: 999px;
+  background: #f2f7f1;
+  color: #476551;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.chatbot-widget__trial-badge svg {
+  color: #668b70;
+}
+
+.chatbot-widget__trial-badge strong {
+  color: #254b34;
+  font-weight: 800;
+}
+
+.chatbot-widget__trial-badge.is-warning {
+  border-color: rgba(174, 112, 43, 0.24);
+  background: #fff7ea;
+  color: #8a622d;
+}
+
+.chatbot-widget__trial-badge.is-warning svg,
+.chatbot-widget__trial-badge.is-warning strong {
+  color: #9a6728;
 }
 
 /* Limit Modal */
