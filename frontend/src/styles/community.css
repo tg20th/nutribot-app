@@ -71,7 +71,7 @@
 
 .community-filters{display:flex;gap:9px;overflow-x:auto;padding-bottom:2px}
 .community-filters button{flex:none;padding:9px 16px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--text-muted);font-size:12px;font-weight:600}
-.community-filters button.is-active{background:var(--primary);color:#fffefa;border-color:var(--primary)}
+.community-filters button.is-active{background:var(--primary);color:#fff!important;border-color:var(--primary)}
 
 .community-post{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px 20px 20px}
 .community-post-header{display:flex;align-items:center;gap:11px}
