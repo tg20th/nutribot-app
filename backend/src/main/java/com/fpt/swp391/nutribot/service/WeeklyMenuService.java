@@ -6,17 +6,23 @@ import com.fpt.swp391.nutribot.dto.request.WeeklyMenuItemCreateRequest;
 import com.fpt.swp391.nutribot.dto.request.WeeklyMenuUpdateRequest;
 import com.fpt.swp391.nutribot.dto.response.WeeklyMenuResponse;
 import com.fpt.swp391.nutribot.dto.response.DishOptionResponse;
+import com.fpt.swp391.nutribot.dto.response.NutritionMetrics;
+import com.fpt.swp391.nutribot.dto.response.NutritionSummary;
+import com.fpt.swp391.nutribot.dto.response.NutritionTargetResponse;
+import com.fpt.swp391.nutribot.dto.response.WeeklyNutritionSummary;
 import com.fpt.swp391.nutribot.dto.response.MealPlanDayResponse;
 import com.fpt.swp391.nutribot.dto.response.MealPlanDishResponse;
 import com.fpt.swp391.nutribot.entity.DailyMenu;
 import com.fpt.swp391.nutribot.entity.Dish;
 import com.fpt.swp391.nutribot.entity.User;
+import com.fpt.swp391.nutribot.entity.UserProfile;
 import com.fpt.swp391.nutribot.entity.WeeklyMenu;
 import com.fpt.swp391.nutribot.entity.WeeklyMenuItem;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.DailyMenuRepository;
 import com.fpt.swp391.nutribot.repository.DishRepository;
+import com.fpt.swp391.nutribot.repository.UserProfileRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.WeeklyMenuItemRepository;
 import com.fpt.swp391.nutribot.repository.WeeklyMenuRepository;
@@ -44,19 +50,26 @@ import java.util.stream.Collectors;
 public class WeeklyMenuService {
 
     private final UserRepository userRepository;
+    private final UserProfileRepository userProfileRepository;
     private final WeeklyMenuRepository weeklyMenuRepository;
     private final DailyMenuRepository dailyMenuRepository;
     private final WeeklyMenuItemRepository weeklyMenuItemRepository;
     private final DishRepository dishRepository;
+    private final NutritionTargetService nutritionTargetService;
 
     @Transactional(readOnly = true)
     public List<DishOptionResponse> getDishCatalog() {
-        return dishRepository.findAllByActiveTrueAndCaloriesIsNotNullOrderByNameAsc().stream()
+        return dishRepository.findAllByActiveTrueAndCaloriesIsNotNullAndProteinGIsNotNullOrderByNameAsc().stream()
                 .map(dish -> DishOptionResponse.builder()
                         .dishId(dish.getDishId())
                         .name(dish.getName())
                         .calories(dish.getCalories())
                         .proteinG(dish.getProteinG())
+                        .carbsG(dish.getCarbsG())
+                        .healthyFatsG(dish.getHealthyFatsG())
+                        .servingSize(dish.getServingSize())
+                        .servingUnit(dish.getServingUnit())
+                        .vegetarianType(dish.getVegetarianType())
                         .imageUrl(dish.getImageUrl())
                         .build())
                 .toList();
@@ -80,7 +93,8 @@ public class WeeklyMenuService {
                 .status("initialized")
                 .build();
         menu = weeklyMenuRepository.save(menu);
-        return toWeeklyMenuResponse(menu);
+        UserProfile profile = userProfileRepository.findById(user.getUserId()).orElse(null);
+        return toWeeklyMenuResponse(menu, profile, username);
     }
 
     @Transactional
@@ -177,7 +191,8 @@ public class WeeklyMenuService {
                         .build());
             }
         }
-        return toWeeklyMenuResponse(menu);
+        UserProfile profile = userProfileRepository.findById(user.getUserId()).orElse(null);
+        return toWeeklyMenuResponse(menu, profile, username);
     }
 
     @Transactional
@@ -200,7 +215,7 @@ public class WeeklyMenuService {
             throw new BadRequestException("Danh sách món ăn có món không tồn tại hoặc không hoạt động");
         }
 
-        Set<String> uniqueItems = new HashSet<>();
+        Set<String> slots = new HashSet<>();
         Map<String, String> normalizedMealTypes = new HashMap<>();
         for (WeeklyMenuItemCreateRequest item : requestedItems) {
             String mealType = item.getMealType().trim().toLowerCase(Locale.ROOT);
@@ -211,9 +226,8 @@ public class WeeklyMenuService {
                 throw new BadRequestException("Không thể lưu món ăn chưa có dữ liệu calo");
             }
             String slotKey = item.getDayOfWeek() + ":" + mealType;
-            String itemKey = slotKey + ":" + item.getDishId();
-            if (!uniqueItems.add(itemKey)) {
-                throw new BadRequestException("Món ăn bị lặp trong cùng một bữa");
+            if (!slots.add(slotKey)) {
+                throw new BadRequestException("Có nhiều hơn một món trong cùng một bữa: " + slotKey);
             }
             normalizedMealTypes.put(slotKey, mealType);
         }
@@ -249,7 +263,8 @@ public class WeeklyMenuService {
                     .notes(item.getNotes())
                     .build());
         }
-        return toWeeklyMenuResponse(menu);
+        UserProfile profile = userProfileRepository.findById(user.getUserId()).orElse(null);
+        return toWeeklyMenuResponse(menu, profile, username);
     }
 
     @Transactional
@@ -281,6 +296,12 @@ public class WeeklyMenuService {
                         .build()));
         if (weeklyMenuItemRepository.existsByDailyMenuMealIdAndDishDishId(meal.getMealId(), dish.getDishId())) {
             throw new BadRequestException("Món ăn đã có trong bữa này");
+        }
+        // Upsert: replace existing item in this slot with the new dish
+        List<WeeklyMenuItem> existingItems = weeklyMenuItemRepository.findByDailyMenuMealId(meal.getMealId());
+        if (!existingItems.isEmpty()) {
+            weeklyMenuItemRepository.deleteAll(existingItems);
+            weeklyMenuItemRepository.flush();
         }
 
         WeeklyMenuItem item = weeklyMenuItemRepository.save(WeeklyMenuItem.builder()
@@ -315,14 +336,16 @@ public class WeeklyMenuService {
                 .findFirstByUserUserIdAndStartDateOrderByUpdatedAtDesc(user.getUserId(), startDate)
                 .orElse(null);
 
+        UserProfile profile = userProfileRepository.findById(user.getUserId()).orElse(null);
+
         if (menu == null) {
-            return emptyMenu(startDate);
+            return emptyMenu(startDate, profile, username);
         }
 
-        return toWeeklyMenuResponse(menu);
+        return toWeeklyMenuResponse(menu, profile, username);
     }
 
-    private WeeklyMenuResponse toWeeklyMenuResponse(WeeklyMenu menu) {
+    private WeeklyMenuResponse toWeeklyMenuResponse(WeeklyMenu menu, UserProfile profile, String username) {
         List<DailyMenu> dailyMenus = dailyMenuRepository
                 .findByWeeklyMenuMenuIdOrderByDayOfWeekAscMealTypeAsc(menu.getMenuId());
         Map<Integer, List<WeeklyMenuItem>> itemsByMeal = new HashMap<>();
@@ -360,6 +383,8 @@ public class WeeklyMenuService {
                     .build());
         }
 
+        WeeklyNutritionSummary nutritionSummary = buildNutritionSummary(dailyMenus, itemsByMeal, menu, username);
+
         return WeeklyMenuResponse.builder()
                 .menuId(menu.getMenuId())
                 .startDate(menu.getStartDate())
@@ -369,6 +394,138 @@ public class WeeklyMenuService {
                 .meals(meals)
                 .dailyTotals(dailyCalories)
                 .totalCalories(weeklyTotal)
+                .nutritionSummary(nutritionSummary)
+                .build();
+    }
+
+    private WeeklyNutritionSummary buildNutritionSummary(
+            List<DailyMenu> dailyMenus,
+            Map<Integer, List<WeeklyMenuItem>> itemsByMeal,
+            WeeklyMenu menu,
+            String username) {
+
+        List<String> profileMissingFields = (username != null)
+                ? nutritionTargetService.getMissingFields(username)
+                : List.of();
+
+        long weeklyCalories = 0L;
+        BigDecimal weeklyProteinG = BigDecimal.ZERO;
+        boolean hasProtein = false;
+        BigDecimal weeklyCarbsG = BigDecimal.ZERO;
+        boolean hasCarbs = false;
+        BigDecimal weeklyFatsG = BigDecimal.ZERO;
+        boolean hasFats = false;
+
+        for (DailyMenu meal : dailyMenus) {
+            List<WeeklyMenuItem> items = itemsByMeal.getOrDefault(meal.getMealId(), List.of());
+            for (WeeklyMenuItem item : items) {
+                BigDecimal servings = item.getServings() == null ? BigDecimal.ONE : item.getServings();
+
+                Integer cal = item.getDish().getCalories();
+                if (cal != null) {
+                    weeklyCalories += Math.round((long) cal * servings.doubleValue());
+                }
+
+                BigDecimal protein = item.getDish().getProteinG();
+                if (protein != null) {
+                    weeklyProteinG = weeklyProteinG.add(protein.multiply(servings));
+                    hasProtein = true;
+                }
+
+                BigDecimal carbs = item.getDish().getCarbsG();
+                if (carbs != null) {
+                    weeklyCarbsG = weeklyCarbsG.add(carbs.multiply(servings));
+                    hasCarbs = true;
+                }
+
+                BigDecimal fats = item.getDish().getHealthyFatsG();
+                if (fats != null) {
+                    weeklyFatsG = weeklyFatsG.add(fats.multiply(servings));
+                    hasFats = true;
+                }
+            }
+        }
+
+        NutritionMetrics actual = NutritionMetrics.builder()
+                .calories(weeklyCalories)
+                .proteinG(hasProtein ? weeklyProteinG.setScale(1, RoundingMode.HALF_UP) : null)
+                .carbsG(hasCarbs ? weeklyCarbsG.setScale(1, RoundingMode.HALF_UP) : null)
+                .healthyFatsG(hasFats ? weeklyFatsG.setScale(1, RoundingMode.HALF_UP) : null)
+                .build();
+
+        // Status based on dishes
+        String status;
+        List<String> missingFields;
+        if (weeklyCalories == 0) {
+            status = "EMPTY_MENU";
+            missingFields = List.of("No meals in menu");
+        } else if (hasProtein && hasCarbs && hasFats) {
+            status = "AVAILABLE";
+            missingFields = List.of();
+        } else {
+            status = "PARTIAL";
+            List<String> m = new ArrayList<>();
+            if (!hasProtein) m.add("proteinG");
+            if (!hasCarbs) m.add("carbsG");
+            if (!hasFats) m.add("healthyFatsG");
+            missingFields = m;
+        }
+
+        // Target + Percentage from NutritionTargetService (NB-10)
+        NutritionMetrics target = null;
+        NutritionMetrics percentage = null;
+
+        if (profileMissingFields.isEmpty() && menu != null) {
+            NutritionTargetResponse nutTarget = nutritionTargetService.calculateTarget(username);
+            long weeklyTargetCal = (long) nutTarget.calories() * 7L;
+            target = NutritionMetrics.builder()
+                    .calories(weeklyTargetCal)
+                    .proteinG(BigDecimal.valueOf(nutTarget.proteinG()))
+                    .carbsG(BigDecimal.valueOf(nutTarget.carbsG()))
+                    .healthyFatsG(BigDecimal.valueOf(nutTarget.healthyFatsG()))
+                    .build();
+
+            if (weeklyCalories > 0 && weeklyTargetCal > 0) {
+                Long pctCal = Math.round(weeklyCalories * 100.0 / weeklyTargetCal);
+                BigDecimal pctProtein = hasProtein && nutTarget.proteinG() > 0
+                        ? BigDecimal.valueOf(weeklyProteinG.doubleValue() * 100.0 / nutTarget.proteinG()).setScale(1, RoundingMode.HALF_UP) : null;
+                BigDecimal pctCarbs = hasCarbs && nutTarget.carbsG() > 0
+                        ? BigDecimal.valueOf(weeklyCarbsG.doubleValue() * 100.0 / nutTarget.carbsG()).setScale(1, RoundingMode.HALF_UP) : null;
+                BigDecimal pctFats = hasFats && nutTarget.healthyFatsG() > 0
+                        ? BigDecimal.valueOf(weeklyFatsG.doubleValue() * 100.0 / nutTarget.healthyFatsG()).setScale(1, RoundingMode.HALF_UP) : null;
+                percentage = NutritionMetrics.builder()
+                        .calories(pctCal)
+                        .proteinG(pctProtein)
+                        .carbsG(pctCarbs)
+                        .healthyFatsG(pctFats)
+                        .build();
+            } else {
+                percentage = NutritionMetrics.builder()
+                        .calories(null)
+                        .proteinG(null)
+                        .carbsG(null)
+                        .healthyFatsG(null)
+                        .build();
+            }
+        }
+
+        // PROFILE_INCOMPLETE overrides dish-based status
+        List<String> allMissing = new ArrayList<>(missingFields);
+        if (!profileMissingFields.isEmpty()) {
+            status = "PROFILE_INCOMPLETE";
+            allMissing.addAll(profileMissingFields);
+        }
+
+        NutritionSummary summary = NutritionSummary.builder()
+                .actual(actual)
+                .target(target)
+                .percentage(percentage)
+                .build();
+
+        return WeeklyNutritionSummary.builder()
+                .status(status)
+                .summary(summary)
+                .missingFields(allMissing.isEmpty() ? List.of() : allMissing)
                 .build();
     }
 
@@ -384,20 +541,34 @@ public class WeeklyMenuService {
             dailyTotals[dayIndex] += totalCalories;
         }
 
+        BigDecimal carbsG = item.getDish().getCarbsG();
+        BigDecimal healthyFatsG = item.getDish().getHealthyFatsG();
+
+        BigDecimal totalCarbsG = (carbsG != null)
+                ? carbsG.multiply(servings).setScale(1, RoundingMode.HALF_UP)
+                : null;
+        BigDecimal totalHealthyFatsG = (healthyFatsG != null)
+                ? healthyFatsG.multiply(servings).setScale(1, RoundingMode.HALF_UP)
+                : null;
+
         return WeeklyMenuResponse.ItemResponse.builder()
                 .itemId(item.getItemId())
                 .dishId(item.getDish().getDishId())
                 .dishName(item.getDish().getName())
                 .calories(baseCalories)
                 .proteinG(item.getDish().getProteinG())
+                .carbsG(carbsG)
+                .healthyFatsG(healthyFatsG)
                 .imageUrl(item.getDish().getImageUrl())
                 .servings(servings)
                 .notes(item.getNotes())
                 .totalCalories(totalCalories)
+                .totalCarbsG(totalCarbsG)
+                .totalHealthyFatsG(totalHealthyFatsG)
                 .build();
     }
 
-    private WeeklyMenuResponse emptyMenu(LocalDate startDate) {
+    private WeeklyMenuResponse emptyMenu(LocalDate startDate, UserProfile profile, String username) {
         List<WeeklyMenuResponse.DailyCaloriesResponse> dailyCalories = new ArrayList<>(7);
         for (int day = 1; day <= 7; day++) {
             dailyCalories.add(WeeklyMenuResponse.DailyCaloriesResponse.builder()
@@ -405,12 +576,14 @@ public class WeeklyMenuService {
                     .totalCalories(0)
                     .build());
         }
+        WeeklyNutritionSummary nutritionSummary = buildNutritionSummary(List.of(), Map.of(), null, username);
         return WeeklyMenuResponse.builder()
                 .startDate(startDate)
                 .endDate(startDate.plusDays(6))
                 .meals(List.of())
                 .dailyTotals(dailyCalories)
                 .totalCalories(0)
+                .nutritionSummary(nutritionSummary)
                 .build();
     }
 

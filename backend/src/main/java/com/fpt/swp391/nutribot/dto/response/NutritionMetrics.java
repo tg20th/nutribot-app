@@ -11,16 +11,9 @@ import java.math.BigDecimal;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class DishOptionResponse {
-
-    private Integer dishId;
-    private String name;
-    private Integer calories;
+public class NutritionMetrics {
+    private Long calories;
     private BigDecimal proteinG;
     private BigDecimal carbsG;
     private BigDecimal healthyFatsG;
-    private BigDecimal servingSize;
-    private String servingUnit;
-    private String vegetarianType;
-    private String imageUrl;
 }
