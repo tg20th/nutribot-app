@@ -260,7 +260,7 @@ export default function CreateBlogPage({ modal = false, onClose } = {}) {
   </div>;
 
   return <div className="community-page create-blog-page">
-    <CommunityTopBar hideSearch/>
+    <CommunityTopBar/>
     <div className="community-shell">
       <CommunitySideNav/><span className="community-sidenav-spacer" aria-hidden="true"/>
       {editor}

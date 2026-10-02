@@ -4,8 +4,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ArrowRight, BookOpen, Eye, LoaderCircle, Play, Search, SlidersHorizontal, Sparkles, Video, X } from 'lucide-react';
-import CommunitySideNav from '../components/community/CommunitySideNav';
-import CommunityTopBar from '../components/community/CommunityTopBar';
+import MemberPageLayout from '../layouts/MemberPageLayout';
 import Header from '../components/Header';
 import ImageWithFallback from '../components/ImageWithFallback';
 import AuthModal from '../components/AuthModal';
@@ -310,5 +309,5 @@ export default function SearchPage({ member = false }) {
   const navigate = useNavigate();
   const [authMode, setAuthMode] = useState(null);
   if (!member) return <div className="search-page search-page--public"><Header onAuth={setAuthMode} /><SearchExperience isMember={false} onAuth={setAuthMode} />{authMode && <AuthModal mode={authMode} onClose={() => setAuthMode(null)} onSubmit={(_, mode) => setAuthMode(mode)} onAuthenticated={(data) => navigate(isAdminRole(data?.role) ? '/admin' : '/home')} onGoogle={() => window.location.assign(googleAuthUrl())} />}</div>;
-  return <div className="community-page search-page search-page--member"><CommunityTopBar hideSearch activePath="/community/search" /><div className="community-shell"><CommunitySideNav activePath="/community/search" /><span className="community-sidenav-spacer" aria-hidden="true" /><SearchExperience isMember /></div></div>;
+  return <MemberPageLayout className="search-page search-page--member" activePath="/community/search"><SearchExperience isMember /></MemberPageLayout>;
 }

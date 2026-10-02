@@ -298,7 +298,7 @@ export default function RestaurantMapPage() {
 
   return (
     <div className="community-page restaurant-map-page">
-      <CommunityTopBar hideSearch activePath="/restaurants/map" />
+      <CommunityTopBar activePath="/restaurants/map" />
       <div className="community-shell">
         <CommunitySideNav activePath="/restaurants/map" />
         
