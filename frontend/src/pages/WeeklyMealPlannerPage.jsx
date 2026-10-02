@@ -3,8 +3,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Plus, RefreshCw, Repeat2, Save, ShoppingBasket, Sparkles, Trash2, WifiOff, X } from 'lucide-react';
-import CommunityTopBar from '../components/community/CommunityTopBar';
-import CommunitySideNav from '../components/community/CommunitySideNav';
+import MemberPageLayout from '../layouts/MemberPageLayout';
 import MealEditorDialog from '../components/community/MealEditorDialog';
 import MealPlanAssistant from '../components/community/MealPlanAssistant';
 import MealPlanMatrix from '../components/community/MealPlanMatrix';
@@ -349,12 +348,8 @@ export default function WeeklyMealPlannerPage() {
     setNotice({ type: 'success', text: aiPreview.suggestedMenuTitle ? `AI plan applied: ${aiPreview.suggestedMenuTitle}` : 'Your AI weekly plan is ready to review.' });
   };
 
-  return <div className="community-page planner-page" ref={page}>
-    <CommunityTopBar query={query} onQueryChange={setQuery}/>
-    <div className="community-shell">
-      <CommunitySideNav/>
-      <span className="community-sidenav-spacer" aria-hidden="true"/>
-      <div className="community-layout">
+  return <><MemberPageLayout className="planner-page">
+      <div className="community-layout" ref={page}>
         <main className="community-feed planner-main">
           <header className="planner-hero">
             <div className="planner-hero-copy">
@@ -443,7 +438,7 @@ export default function WeeklyMealPlannerPage() {
         </main>
         <MealPlanAssistant nutritionSummary={menu.nutritionSummary}/>
       </div>
-    </div>
+  </MemberPageLayout>
 
     {editor && <MealEditorDialog editor={editor} dishes={dishes} onClose={() => setEditor(null)} onSubmit={submitMeal}/>}
     {detailMeal && <DishDetailModal meal={detailMeal} onClose={() => setDetailMeal(null)}/>}
@@ -484,5 +479,5 @@ export default function WeeklyMealPlannerPage() {
       <MenuPreviewModal preview={aiPreview} dishes={dishes} isSaving={savingAiPreview} saveError={aiSaveError} onClose={() => setAiPreview(null)} onSave={persistAiPreview} onUse={applyAiPreview} onReplace={replacePreviewMeal}/>
     )}
     <ChatbotWidget/>
-  </div>;
+  </>;
 }

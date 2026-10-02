@@ -269,7 +269,7 @@ export default function MyBlogsPage() {
   }
 
   return <div className="community-page my-blogs-page">
-    <CommunityTopBar hideSearch/><div className="community-shell"><CommunitySideNav/><span className="community-sidenav-spacer" aria-hidden="true"/>
+    <CommunityTopBar/><div className="community-shell"><CommunitySideNav/><span className="community-sidenav-spacer" aria-hidden="true"/>
       <main className="my-blogs-main">
         <Link className="my-blogs-back" to="/home"><ArrowLeft size={15}/> Back to the community</Link>
         <header className="my-blogs-header">

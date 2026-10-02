@@ -3,8 +3,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ArrowUpRight, Play, Sparkles } from 'lucide-react';
-import CommunityTopBar from '../components/community/CommunityTopBar';
-import CommunitySideNav from '../components/community/CommunitySideNav';
+import MemberPageLayout from '../layouts/MemberPageLayout';
 import CommunityComposer from '../components/community/CommunityComposer';
 import CommunityFilters from '../components/community/CommunityFilters';
 import CommunityPostCard from '../components/community/CommunityPostCard';
@@ -112,12 +111,9 @@ export default function CommunityFeedPage() {
     });
   }, { scope: page });
 
-  return <div className="community-page" ref={page}>
-    <CommunityTopBar/>
-    <div className="community-shell">
-      <CommunitySideNav/>
-      <span className="community-sidenav-spacer" aria-hidden="true"/>
-      <div className="community-layout">
+  return <>
+    <MemberPageLayout>
+      <div className="community-layout" ref={page}>
         <main className="community-feed">
           <section className="feed-intro" aria-labelledby="feed-title">
             <div className="feed-intro-copy"><p>YOUR DAILY TABLE</p><h1 id="feed-title">Good food, <span className="feed-inline-image"/> shared well.</h1><span>Recipes, practical videos, and small ideas worth bringing to your next meal.</span></div>
@@ -139,8 +135,8 @@ export default function CommunityFeedPage() {
         </main>
         <CommunityRightRail/>
       </div>
-    </div>
+    </MemberPageLayout>
     <ChatbotWidget/>
     {composerOpen && <CreateBlogPage modal onClose={closeComposer}/>}
-  </div>;
+  </>;
 }

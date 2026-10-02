@@ -93,7 +93,7 @@ export default function ChatHistoryPage() {
   const selectedSession = useMemo(() => sessions.find((item) => item.sessionId === selectedId) ?? null, [sessions, selectedId]);
 
   return <div className="community-page chat-history-page">
-    <CommunityTopBar hideSearch activePath="/chat-history" />
+    <CommunityTopBar activePath="/chat-history" />
     <div className="community-shell">
       <CommunitySideNav activePath="/chat-history" />
       <span className="community-sidenav-spacer" aria-hidden="true" />
