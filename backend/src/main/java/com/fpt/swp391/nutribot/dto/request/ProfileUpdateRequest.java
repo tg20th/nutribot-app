@@ -41,6 +41,6 @@ public class ProfileUpdateRequest {
     private LocalDate dateOfBirth;
 
     @Size(max = 20, message = "Gender must not exceed 20 characters.")
-    @Pattern(regexp = "(?i)^\\s*(male|female|other)?\\s*$", message = "Gender must be Male, Female, Other, or blank.")
+    @Pattern(regexp = "(?i)^\\s*(male|female)?\\s*$", message = "Gender must be Male or Female.")
     private String gender;
 }
