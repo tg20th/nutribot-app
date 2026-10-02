@@ -6,7 +6,6 @@ import { CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Plus, Refre
 import MemberPageLayout from '../layouts/MemberPageLayout';
 import MealEditorDialog from '../components/community/MealEditorDialog';
 import MealPlanAssistant from '../components/community/MealPlanAssistant';
-import MealPlanMatrix from '../components/community/MealPlanMatrix';
 import DishDetailModal from '../components/community/DishDetailModal';
 import MenuPreviewModal from '../components/menu/MenuPreviewModal';
 import ImageWithFallback from '../components/ImageWithFallback';
@@ -48,7 +47,6 @@ const menuPayload = (menu) => ({
 export default function WeeklyMealPlannerPage() {
   const page = useRef(null);
   const [query, setQuery] = useState('');
-  const [view, setView] = useState('daily');
   const [communityUser, setCommunityUser] = useState({});
   const [plannerProfile, setPlannerProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -123,7 +121,7 @@ export default function WeeklyMealPlannerPage() {
       .from('.planner-overview > *', { y: 14, opacity: 0, duration: .45, stagger: .07 }, '-=.3');
     gsap.to('.planner-scrub-word', { opacity: 1, stagger: .08, ease: 'none', scrollTrigger: { trigger: '.planner-content-heading', start: 'top 85%', end: 'bottom 52%', scrub: true } });
     gsap.utils.toArray('.planner-day').forEach((card) => gsap.fromTo(card, { scale: .97, opacity: .4 }, { scale: 1, opacity: 1, ease: 'power2.out', scrollTrigger: { trigger: card, start: 'top 92%', end: 'top 60%', scrub: true } }));
-  }, { scope: page, dependencies: [weekStart, view] });
+  }, { scope: page, dependencies: [weekStart] });
 
   useGSAP(() => {
     if (!aiPreview || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
@@ -140,8 +138,9 @@ export default function WeeklyMealPlannerPage() {
   const groceryItems = useMemo(() => plannerDays.flatMap((day) => day.meals.map((meal) => ({ ...meal, day: day.label }))), [plannerDays]);
 
   const openEditor = (day, slot, meal = null) => {
-    const existingMeal = meal ?? day.meals.find((item) => item.slot === slot) ?? null;
-    setEditor({ day, dayIndex: plannerDays.findIndex((item) => item.isoDate === day.isoDate), slot, meal: existingMeal });
+    // meal = null → ADD mode (no existing dish to replace)
+    // meal = some dish → REPLACE mode (replace that specific dish)
+    setEditor({ day, dayIndex: plannerDays.findIndex((item) => item.isoDate === day.isoDate), slot, meal });
   };
 
   const ensureMenu = async () => {
@@ -153,42 +152,70 @@ export default function WeeklyMealPlannerPage() {
     return id;
   };
 
-  const submitMeal = async ({ dish, servings, notes }) => {
-    const replacement = createLocalMeal(dish, editor.slot, servings, notes, Boolean(editor.meal));
-    const previousMeal = editor.meal;
+  const submitMeal = async ({ dish, servings, notes, isAddMode }) => {
     const dayIndex = editor.dayIndex;
+    const slot = editor.slot;
+
+    // Create new local meal entry
+    const newMeal = createLocalMeal(dish, slot, servings, notes, false);
+
+    // Update local state
     setMenu((current) => recalculateMenu({
       ...current,
       nutritionSummary: null,
       days: current.days.map((day, index) => {
         if (index !== dayIndex) return day;
-        if (!previousMeal) return { ...day, meals: [...day.meals, replacement] };
-        return { ...day, meals: day.meals.map((meal) => meal.key === previousMeal.key ? replacement : meal) };
+        if (isAddMode) {
+          // ADD mode: append new dish to existing meals
+          return { ...day, meals: [...day.meals, newMeal] };
+        } else {
+          // REPLACE mode: replace specific existing dish
+          return {
+            ...day,
+            meals: day.meals.map((meal) => meal.key === editor.meal.key ? newMeal : meal)
+          };
+        }
       })
     }));
+
     setEditor(null);
     setNotice({ type: 'saving', text: 'Saving your meal...' });
+
     try {
       const menuId = await ensureMenu();
-      if (previousMeal) {
+      if (isAddMode) {
+        // ADD mode: use addWeeklyMenuItem API to append
+        await addWeeklyMenuItem(menuId, {
+          dayOfWeek: dayIndex + 1,
+          mealType: slot.toLowerCase(),
+          dishId: dish.dishId,
+          servings,
+          notes
+        });
+        await loadWeek(weekStart);
+      } else {
+        // REPLACE mode: update via updateWeeklyMenu (sends full menu)
         const nextMenu = recalculateMenu({
           ...menu,
           nutritionSummary: null,
           days: menu.days.map((day, index) => index !== dayIndex ? day : {
             ...day,
-            meals: day.meals.map((meal) => meal.key === previousMeal.key ? replacement : meal)
+            meals: day.meals.map((meal) => meal.key === editor.meal.key ? newMeal : meal)
           })
         });
         const savedMenu = await updateWeeklyMenu(menuId, {
           ...menuPayload(nextMenu),
-          meals: nextMenu.days.flatMap((day) => day.meals.map((item) => ({ dayOfWeek: day.dayOfWeek, mealType: item.slot.toLowerCase(), dishId: item.dishId, servings: item.servings, notes: item.notes })))
+          meals: nextMenu.days.flatMap((day) => day.meals.map((item) => ({
+            dayOfWeek: day.dayOfWeek,
+            mealType: item.slot.toLowerCase(),
+            dishId: item.dishId,
+            servings: item.servings,
+            notes: item.notes
+          })))
         });
         setMenu(normalizeWeeklyMenu(savedMenu, weekStart));
-      } else {
-        await addWeeklyMenuItem(menuId, { dayOfWeek: dayIndex + 1, mealType: editor.slot.toLowerCase(), dishId: dish.dishId, servings, notes });
-        await loadWeek(weekStart);
       }
-      setNotice({ type: 'success', text: `${dish.name} was saved to ${editor.day.label}.` });
+      setNotice({ type: 'success', text: `${isAddMode ? 'Added' : 'Replaced'} ${dish.name} in ${editor.day.label}.` });
     } catch {
       setNotice({ type: 'offline', text: 'The backend could not save this change. It is stored in your local draft.' });
     }
@@ -381,10 +408,6 @@ export default function WeeklyMealPlannerPage() {
               <span>Daily rhythm</span>
               <p>{menu.week.avgCalories != null && menu.week.avgProtein != null ? <><b>{menu.week.avgCalories.toLocaleString()}</b> kcal <i/> <b>{menu.week.avgProtein}g</b> protein</> : 'Nutrition summary unavailable'}</p>
             </div>
-            <div className="planner-view-toggle" aria-label="Planner view">
-              <button type="button" className={view === 'daily' ? 'is-active' : ''} onClick={() => setView('daily')}>Daily</button>
-              <button type="button" className={view === 'matrix' ? 'is-active' : ''} onClick={() => setView('matrix')}>Matrix</button>
-            </div>
           </section>
 
           {notice && <div className={`planner-notice is-${notice.type}`} role="status">
@@ -398,7 +421,7 @@ export default function WeeklyMealPlannerPage() {
             <p>{['Add,', 'swap,', 'and shape this week your way.'].map((word) => <span className="planner-scrub-word" key={word}>{word} </span>)}</p>
           </div>
 
-          {loading ? <div className="planner-loading"><Loader2 className="is-spinning"/><span>Loading your week...</span></div> : view === 'daily' ? <div className="planner-days">
+          {loading ? <div className="planner-loading"><Loader2 className="is-spinning"/><span>Loading your week...</span></div> : <div className="planner-days">
             {plannerDays.map((day, dayIndex) => <article className={`planner-day${day.status === 'Today' ? ' is-today' : ''}`} key={day.isoDate}>
               <header>
                 <div className="planner-day-label"><b>{day.label}</b><span>{day.date}</span>{day.status === 'Today' && <em className="planner-badge">Today</em>}</div>
@@ -426,7 +449,7 @@ export default function WeeklyMealPlannerPage() {
                 })}
               </div>
             </article>)}
-          </div> : <MealPlanMatrix days={plannerDays} onSelectMeal={openEditor} onOpenDish={setDetailMeal}/>}
+          </div>}
 
           <footer className="planner-footer">
             <div><span>Ready when you are</span><b>Make this week yours.</b></div>
@@ -459,8 +482,16 @@ export default function WeeklyMealPlannerPage() {
     {showProfileReadinessModal && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowProfileReadinessModal(false)}>
       <section className="meal-dialog profile-readiness-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-readiness-title" aria-describedby="profile-readiness-description">
         <header><h2 id="profile-readiness-title">Complete your health profile</h2><button type="button" className="meal-dialog-close" onClick={() => setShowProfileReadinessModal(false)} aria-label="Close profile reminder"><X size={18}/></button></header>
-        <div className="profile-readiness-content"><p id="profile-readiness-description">We need a few more details before creating your personalized weekly meal plan.</p></div>
-        <footer><button type="button" className="planner-btn-ghost" onClick={() => setShowProfileReadinessModal(false)}>Not now</button><button type="button" className="planner-btn-primary" onClick={() => { window.location.href = '/profile/health'; }}>Complete Profile</button></footer>
+        <div className="profile-readiness-content">
+          <p id="profile-readiness-description">We need a few more details before NutriBot can create your personalized weekly meal plan.</p>
+          {missingProfileFields.length > 0 && (
+            <div className="profile-readiness-fields">
+              <span>Missing information</span>
+              <ul>{missingProfileFields.map((field) => <li key={field}>{field.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</li>)}</ul>
+            </div>
+          )}
+        </div>
+        <footer><button type="button" className="profile-readiness-secondary" onClick={() => setShowProfileReadinessModal(false)}>Not now</button><button type="button" className="profile-readiness-primary" onClick={() => { window.location.href = '/profile/health'; }}>Complete Profile</button></footer>
       </section>
     </div>}
     {showAiGenerator && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !generatingPlan && setShowAiGenerator(false)}>
