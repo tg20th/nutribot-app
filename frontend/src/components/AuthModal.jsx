@@ -150,7 +150,10 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
         onSubmit?.(null, 'verify-email');
         return;
       }
-      if (data.token) localStorage.setItem('nutribot-auth-token', data.token);
+      if (data.token) {
+        localStorage.setItem('nutribot-auth-token', data.token);
+        window.dispatchEvent(new Event('nutribot-auth-changed'));
+      }
       if (data.username && data.role) {
         localStorage.setItem('nutribot-user', JSON.stringify({ username: data.username, role: data.role }));
       }
@@ -185,6 +188,7 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
       }
       const data = await verifyRegistrationOtp({ email, otpCode });
       localStorage.setItem('nutribot-auth-token', data.token);
+      window.dispatchEvent(new Event('nutribot-auth-changed'));
       clearPendingOtp();
       setVerificationState('verified');
       onAuthenticated?.(data, 'verify-email');
