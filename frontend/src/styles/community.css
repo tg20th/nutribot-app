@@ -119,7 +119,7 @@
 .community-comment-form input{flex:1;height:38px;background:var(--sage);border-radius:999px;padding:0 15px;font-size:12px;border:0;outline:0}
 .community-comment-form button{width:34px;height:34px;border-radius:50%;background:var(--primary);color:#fffefa;display:grid;place-items:center;flex:none}
 
-.community-right-rail{position:sticky;top:92px;display:flex;flex-direction:column;gap:16px}
+.community-right-rail{position:static;display:flex;flex-direction:column;gap:16px}
 .community-widget{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px}
 .community-widget-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .community-widget-head b{font-size:13px}
