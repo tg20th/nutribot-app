@@ -1,4 +1,11 @@
 /**
+ * Check whether the current user is authenticated (has a valid auth token).
+ */
+export function isAuthenticated() {
+  return Boolean(localStorage.getItem('nutribot-auth-token'));
+}
+
+/**
  * Decode JWT token to get payload (without verification)
  * Used for extracting username from stored auth token
  */
