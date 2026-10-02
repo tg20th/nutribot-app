@@ -51,6 +51,7 @@ export default function App() {
     <Route path="/community/profile" element={<Navigate to="/profile" replace />} />
     <Route path="/community/my-blogs" element={<MemberRoute><MyBlogsPage /></MemberRoute>} />
     <Route path="/community/my-videos" element={<Navigate to="/community/my-blogs" replace />} />
+    <Route path="/search" element={<SearchPage />} />
     <Route path="/community/search" element={<MemberRoute><SearchPage member /></MemberRoute>} />
     <Route path="/community/blogs/new" element={<MemberRoute><CreateBlogPage /></MemberRoute>} />
     <Route path="/community/videos/new" element={<MemberRoute><CreateVideoPage /></MemberRoute>} />
@@ -72,7 +73,6 @@ export default function App() {
     </Route>
     <Route path="/restaurants" element={<MemberRoute><RestaurantMapPage /></MemberRoute>} />
     <Route path="/restaurants/map" element={<MemberRoute><RestaurantMapPage /></MemberRoute>} />
-    <Route path="/search" element={<MemberRoute><SearchPage member /></MemberRoute>} />
     {import.meta.env.DEV && <Route path="/dev/nb-56" element={<RestaurantRecommendationsPreviewPage />} />}
     <Route path="*" element={<HomePage />} />
   </Routes>;
