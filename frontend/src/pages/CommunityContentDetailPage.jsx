@@ -16,7 +16,8 @@ export default function CommunityContentDetailPage() {
   const location = useLocation();
   const requestedReturnTo = location.state?.returnTo;
   const searchReturnState = location.state?.restoreSearch ? { restoreSearch: true } : undefined;
-  const returnTo = typeof requestedReturnTo === 'string' && requestedReturnTo.startsWith('/community/search') ? requestedReturnTo : '/home';
+  const isMyContentReturn = requestedReturnTo === '/community/my-blogs';
+  const returnTo = isMyContentReturn || (typeof requestedReturnTo === 'string' && requestedReturnTo.startsWith('/community/search')) ? requestedReturnTo : '/home';
   const isSearchReturn = returnTo.startsWith('/community/search');
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -61,7 +62,7 @@ export default function CommunityContentDetailPage() {
       <CommunitySideNav activePath={isSearchReturn ? '/community/search' : '/home'}/>
       <span className="community-sidenav-spacer" aria-hidden="true"/>
       <main className="content-detail-main">
-        <Link className="detail-back detail-reveal" to={returnTo} state={searchReturnState}><ArrowLeft size={16}/>{isSearchReturn ? 'Back to search results' : 'Back to home'}</Link>
+        <Link className="detail-back detail-reveal" to={returnTo} state={searchReturnState}><ArrowLeft size={16}/>{isMyContentReturn ? 'Back to my content' : isSearchReturn ? 'Back to search results' : 'Back to home'}</Link>
         <section className="detail-hero detail-reveal">
           <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1><p>{post.description}</p><div className="detail-author">{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}<div><b>{post.author}</b><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></div></div></div>
           <div className="detail-media"><img src={image} alt={post.title}/>{post.type === 'video' && <button className="detail-play" type="button" aria-label="Play video"><Play fill="currentColor" size={24}/></button>}<span className="detail-duration"><Clock3 size={13}/>{post.prepTime} prep</span></div>

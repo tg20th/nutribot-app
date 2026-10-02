@@ -92,7 +92,9 @@ const validate = (health) => {
 export default function HealthProfileSection() {
   const [health, setHealth] = useState(EMPTY_HEALTH);
   const [savedHealth, setSavedHealth] = useState(EMPTY_HEALTH);
-  const [savedBmi, setSavedBmi] = useState(null);
+  const [savedBmi, setSavedBmi] = useState(
+    calculateBmi(EMPTY_HEALTH.heightCm, EMPTY_HEALTH.weightKg),
+  );
   const [ingredients, setIngredients] = useState([]);
   const [query, setQuery] = useState('');
   const [errors, setErrors] = useState({});
@@ -107,7 +109,7 @@ export default function HealthProfileSection() {
         const mapped = toFormHealth(profile);
         setHealth(mapped);
         setSavedHealth(mapped);
-        setSavedBmi(profile.bmi ?? null);
+        setSavedBmi(profile.bmi ?? calculateBmi(mapped.heightCm, mapped.weightKg));
         setIngredients(Array.isArray(ingredientOptions) ? ingredientOptions : []);
       })
       .catch((error) => {

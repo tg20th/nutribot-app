@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ArrowUpRight, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, Film, LoaderCircle, Pencil, Trash2, X } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
@@ -206,10 +206,10 @@ function DeleteContentDialog({ item, config, onClose, onDeleted }) {
   </ContentDialog>;
 }
 
-export default function MyBlogsPage({ defaultType = 'blog' } = {}) {
-  const [type, setType] = useState(defaultType === 'video' ? 'video' : 'blog');
-  const config = CONTENT_TYPES[type];
-  const Icon = config.icon;
+export default function MyBlogsPage() {
+  const location = useLocation();
+  const config = CONTENT_TYPES.blog;
+  const Icon = FileText;
   const [page, setPage] = useState(0);
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState({ content: [], totalElements: 0, totalPages: 0 });
@@ -220,16 +220,28 @@ export default function MyBlogsPage({ defaultType = 'blog' } = {}) {
   const headingRef = useRef(null);
 
   useEffect(() => {
-    setType(defaultType === 'video' ? 'video' : 'blog');
-    setPage(0);
-  }, [defaultType]);
+    if (location.state?.edited) setNotice('Your post has been updated.');
+    else if (location.state?.created) setNotice(location.state.submitted ? 'Your post has been submitted for review.' : 'Your draft has been saved.');
+  }, [location.state]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timeout = window.setTimeout(() => setNotice(''), 4000);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    config.getList(page, PAGE_SIZE, controller.signal).then((data) => {
+    Promise.all([getMyBlogs(page, PAGE_SIZE, controller.signal), getMyVideos(page, PAGE_SIZE, controller.signal)]).then(([blogs, videos]) => {
       if (controller.signal.aborted) return;
+      const data = {
+        content: [...blogs.content.map((item) => ({ ...item, contentType: 'blog' })), ...videos.content.map((item) => ({ ...item, contentType: 'video' }))]
+          .sort((left, right) => new Date(right.updatedAt ?? right.createdAt ?? 0) - new Date(left.updatedAt ?? left.createdAt ?? 0)),
+        totalElements: blogs.totalElements + videos.totalElements,
+        totalPages: Math.max(blogs.totalPages, videos.totalPages),
+      };
       const lastPage = Math.max(0, data.totalPages - 1);
       if (page > lastPage) { setPage(lastPage); return; }
       setResult(data);
@@ -240,7 +252,7 @@ export default function MyBlogsPage({ defaultType = 'blog' } = {}) {
       setLoading(false);
     });
     return () => controller.abort();
-  }, [config, page, revision]);
+  }, [page, revision]);
 
   function refresh(message) {
     setDialog(null);
@@ -256,46 +268,35 @@ export default function MyBlogsPage({ defaultType = 'blog' } = {}) {
     headingRef.current?.focus();
   }
 
-  function changeType(nextType) {
-    if (nextType === type) return;
-    setType(nextType);
-    setPage(0);
-    setNotice('');
-    setDialog(null);
-  }
-
   return <div className="community-page my-blogs-page">
     <CommunityTopBar/><div className="community-shell"><CommunitySideNav/><span className="community-sidenav-spacer" aria-hidden="true"/>
       <main className="my-blogs-main">
         <Link className="my-blogs-back" to="/home"><ArrowLeft size={15}/> Back to the community</Link>
         <header className="my-blogs-header">
-          <div><p className="my-blogs-eyebrow">YOUR PERSONAL CONTENT</p><h1>{config.title}<span>.</span></h1><p>Manage your blogs and videos in one place. Drafts, published posts, and reviews stay together.</p></div>
+          <div><p className="my-blogs-eyebrow">YOUR PERSONAL CONTENT</p><h1>My content<span>.</span></h1><p>Manage your blogs and videos together. Drafts, published posts, and reviews stay in one library.</p></div>
           <span className="my-blogs-header-mark" aria-hidden="true"><Icon size={38} strokeWidth={1.3}/></span>
         </header>
-        <nav className="my-blogs-tabs" aria-label="Content type">
-          {Object.values(CONTENT_TYPES).map((item) => <button key={item.key} type="button" className={type === item.key ? 'is-active' : ''} onClick={() => changeType(item.key)}>{item.key === 'video' ? <Film size={16}/> : <BookOpen size={16}/>} {item.label}</button>)}
-        </nav>
         <section className="my-blogs-collection" aria-labelledby="my-blogs-list-title" aria-busy={loading}>
-          <div className="my-blogs-list-heading"><h2 id="my-blogs-list-title" ref={headingRef} tabIndex={-1}>{config.listTitle} {!loading && !error && <span>{result.totalElements}</span>}</h2><Link className="my-blog-button" to={config.createPath}>{config.createText}</Link></div>
+          <div className="my-blogs-list-heading"><h2 id="my-blogs-list-title" ref={headingRef} tabIndex={-1}>Your posts {!loading && !error && <span>{result.totalElements}</span>}</h2><Link className="my-blog-button" to="/community/blogs/new">Create post</Link></div>
           {notice && <div className="my-blogs-alert" role="status"><CheckCircle2 size={18}/><span>{notice}</span><button className="my-blog-icon-button" aria-label="Dismiss notification" onClick={() => setNotice('')}><X size={16}/></button></div>}
-          {loading ? <div className="my-blogs-state" role="status"><LoaderCircle className="my-blogs-spinner" size={28}/><h3>Gathering your {config.label.toLowerCase()}...</h3><p>Your personal content will be ready in a moment.</p></div>
-            : error ? <div className="my-blogs-state"><RequestError error={error} type={config.single} fallback={config.fallbackLoad}/><button className="my-blog-button" onClick={() => setRevision((value) => value + 1)}>Try again</button></div>
-              : !result.content.length ? <div className="my-blogs-state"><span className="my-blogs-empty-icon"><Icon size={32}/></span><p className="my-blogs-eyebrow">A FRESH PAGE</p><h3>{config.emptyTitle}</h3><p>{config.emptyText}</p><Link className="my-blog-button" to={config.createPath}>{config.createText} <ArrowUpRight size={16}/></Link></div>
-                : <div className="my-blogs-list">{result.content.map((item) => <article className="my-blog-card" key={item.contentId}>
-                  <Thumbnail src={item.thumbnailUrl} type={type}/><div className="my-blog-card-body">
-                    <div className="my-blog-meta"><span className={`my-blog-status my-blog-status--${statuses[item.status] ? item.status : 'unknown'}`}>{statuses[item.status] ?? 'Unknown status'}</span><span>Updated {formattedDate(item.updatedAt ?? item.createdAt)}</span>{type === 'video' && item.durationSec ? <span>{Math.round(item.durationSec / 60)} min</span> : null}</div>
-                    <h3>{item.status === 'published' ? <Link to={`/community/posts/${item.contentId}`}>{item.title}</Link> : item.title}</h3>
-                    <p className="my-blog-excerpt">{excerpt(item.body) || (type === 'video' ? 'No description yet.' : 'No story text yet.')}</p>
+          {loading ? <div className="my-blogs-state" role="status"><LoaderCircle className="my-blogs-spinner" size={28}/><h3>Gathering your content...</h3><p>Your blogs and videos will be ready in a moment.</p></div>
+            : error ? <div className="my-blogs-state"><RequestError error={error} type="content" fallback="We couldn't load your content. Please try again."/><button className="my-blog-button" onClick={() => setRevision((value) => value + 1)}>Try again</button></div>
+              : !result.content.length ? <div className="my-blogs-state"><span className="my-blogs-empty-icon"><Icon size={32}/></span><p className="my-blogs-eyebrow">A FRESH PAGE</p><h3>Your first post starts here.</h3><p>Share a recipe, note, story, or helpful video with the community.</p><Link className="my-blog-button" to="/community/blogs/new">Create post <ArrowUpRight size={16}/></Link></div>
+                : <div className="my-blogs-list">{result.content.map((item) => { const itemConfig = CONTENT_TYPES[item.contentType]; return <article className="my-blog-card" key={`${item.contentType}-${item.contentId}`}>
+                  <Thumbnail src={item.thumbnailUrl} type={item.contentType}/><div className="my-blog-card-body">
+                    <div className="my-blog-meta"><span className="my-blog-content-type">{item.contentType === 'video' ? <><Film size={13}/> Video</> : <><BookOpen size={13}/> Blog</>}</span><span className={`my-blog-status my-blog-status--${statuses[item.status] ? item.status : 'unknown'}`}>{statuses[item.status] ?? 'Unknown status'}</span><span>Updated {formattedDate(item.updatedAt ?? item.createdAt)}</span>{item.contentType === 'video' && item.durationSec ? <span>{Math.round(item.durationSec / 60)} min</span> : null}</div>
+                    <h3>{item.status === 'published' ? <Link to={`/community/posts/${item.contentId}`} state={{ returnTo: '/community/my-blogs' }}>{item.title}</Link> : item.title}</h3>
+                    <p className="my-blog-excerpt">{excerpt(item.body) || (item.contentType === 'video' ? 'No description yet.' : 'No story text yet.')}</p>
                     <div className="my-blog-card-footer"><span className="my-blog-views"><Eye size={15}/>{(item.viewCount ?? 0).toLocaleString()} views</span><div className="my-blog-card-actions">
-                      <button type="button" onClick={() => { setNotice(''); setDialog({ type: 'edit', item }); }} aria-label={`Edit ${item.title}`}><Pencil size={15}/> Edit</button>
-                      <button type="button" className="my-blog-delete-button" onClick={() => { setNotice(''); setDialog({ type: 'delete', item }); }} aria-label={`Delete ${item.title}`}><Trash2 size={15}/> Delete</button>
+                      <Link to={`/community/my-content/${item.contentType}/${item.contentId}/edit`} aria-label={`Edit ${item.title}`}><Pencil size={15}/> Edit</Link>
+                      <button type="button" className="my-blog-delete-button" onClick={() => { setNotice(''); setDialog({ type: 'delete', item, config: itemConfig }); }} aria-label={`Delete ${item.title}`}><Trash2 size={15}/> Delete</button>
                     </div></div>
                   </div>
-                </article>)}</div>}
+                </article>; })}</div>}
           {!loading && !error && result.totalElements > 0 && <nav className="my-blogs-pagination" aria-label={`${config.label} pagination`}><span>Showing {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, result.totalElements)} of {result.totalElements}</span>{result.totalPages > 1 && <div><button type="button" disabled={page === 0} onClick={() => changePage(page - 1)} aria-label="Previous page"><ChevronLeft size={17}/></button><span>Page {page + 1} of {result.totalPages}</span><button type="button" disabled={page >= result.totalPages - 1} onClick={() => changePage(page + 1)} aria-label="Next page"><ChevronRight size={17}/></button></div>}</nav>}
         </section>
         <p className="my-blogs-footer-note"><FileText size={14}/> One library for everything you share with the community.</p>
       </main>
     </div><ChatbotWidget/>
-    {dialog?.type === 'edit' && <EditContentDialog item={dialog.item} config={config} onClose={() => setDialog(null)} onSaved={() => refresh(config.savedNotice)}/>} {dialog?.type === 'delete' && <DeleteContentDialog item={dialog.item} config={config} onClose={() => setDialog(null)} onDeleted={() => refresh(config.deletedNotice)}/>} </div>;
+    {dialog?.type === 'delete' && <DeleteContentDialog item={dialog.item} config={dialog.config} onClose={() => setDialog(null)} onDeleted={() => refresh(dialog.config.deletedNotice)}/>} </div>;
 }

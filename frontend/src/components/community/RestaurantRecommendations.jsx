@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ArrowUpRight, MapPin, Navigation, Star, Utensils } from 'lucide-react';
-import { getRestaurants } from '../../services/restaurantApi';
+import { searchNearbyRestaurants, CURATED_RESTAURANTS, normalizeRestaurant } from '../../services/restaurantApi';
 import '../../styles/restaurant-recommendations.css';
 
 const restaurantImage = (restaurant) => restaurant.image || `https://picsum.photos/seed/nutribot-restaurant-${encodeURIComponent(restaurant.id ?? restaurant.name)}/900/620`;
@@ -20,11 +20,33 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
     }
     const controller = new AbortController();
     setStatus('loading');
-    getRestaurants(controller.signal)
-      .then((items) => { if (!controller.signal.aborted) { setRestaurants(items.slice(0, 3)); setStatus('ready'); } })
-      .catch(() => { if (!controller.signal.aborted) setStatus('error'); });
+
+    const cleanDish = (dishName || '').trim();
+    const keywords = cleanDish
+      ? [`${cleanDish} chay`, cleanDish, 'quán chay']
+      : ['quán chay', 'cơm chay', 'nhà hàng chay'];
+
+    searchNearbyRestaurants({
+      keywords,
+      radiusKm: 20,
+      signal: controller.signal
+    })
+      .then((items) => {
+        if (!controller.signal.aborted) {
+          const list = items && items.length > 0 ? items : CURATED_RESTAURANTS.map(normalizeRestaurant);
+          setRestaurants(list.slice(0, 3));
+          setStatus('ready');
+        }
+      })
+      .catch((err) => {
+        if (!controller.signal.aborted) {
+          setRestaurants(CURATED_RESTAURANTS.map(normalizeRestaurant).slice(0, 3));
+          setStatus('ready');
+        }
+      });
+
     return () => controller.abort();
-  }, [previewRestaurants]);
+  }, [previewRestaurants, dishName]);
 
   useGSAP(() => {
     if (status !== 'ready' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
@@ -32,6 +54,10 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
   }, { scope: section, dependencies: [status] });
 
   const openMap = (restaurant) => {
+    if (restaurant.googleMapUrl) {
+      window.open(restaurant.googleMapUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
     const place = [restaurant.name, restaurant.address].filter(Boolean).join(', ');
     window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`, '_blank', 'noopener,noreferrer');
   };
