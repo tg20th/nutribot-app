@@ -101,4 +101,27 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
     @Modifying
     @Query("UPDATE Content c SET c.viewCount = c.viewCount + 1 WHERE c.contentId = :contentId")
     void incrementViewCount(@Param("contentId") Integer contentId);
+
+    // NB-59: Lấy nội dung liên quan (cùng type + category, trừ bài hiện tại)
+    @Query("SELECT c FROM Content c WHERE c.contentType = :contentType AND c.status = :status " +
+           "AND c.categoryId = :categoryId AND c.contentId <> :excludeId " +
+           "AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE " +
+           "ORDER BY c.viewCount DESC, c.createdAt DESC, c.contentId DESC")
+    List<Content> findRelatedByTypeAndCategory(
+            @Param("contentType") String contentType,
+            @Param("categoryId") Integer categoryId,
+            @Param("excludeId") Integer excludeId,
+            @Param("status") String status,
+            Pageable pageable);
+
+    // NB-59: Fallback – cùng type nhưng khác category (khi không đủ bài cùng category)
+    @Query("SELECT c FROM Content c WHERE c.contentType = :contentType AND c.status = :status " +
+           "AND c.contentId <> :excludeId " +
+           "AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE " +
+           "ORDER BY c.viewCount DESC, c.createdAt DESC, c.contentId DESC")
+    List<Content> findRelatedByType(
+            @Param("contentType") String contentType,
+            @Param("excludeId") Integer excludeId,
+            @Param("status") String status,
+            Pageable pageable);
 }

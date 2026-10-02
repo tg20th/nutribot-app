@@ -12,6 +12,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
+
 @Service
 @RequiredArgsConstructor
 public class ContentService {
@@ -114,7 +117,51 @@ public class ContentService {
         return getVideoBySlug(slugOrId);
     }
 
-    // ==================== MAPPERS ====================
+    // ==================== NB-59: RELATED CONTENT ====================
+
+    @Transactional(readOnly = true)
+    public List<ContentListResponse> getRelatedContents(Integer contentId, int limit) {
+        int safeLimit = Math.max(1, Math.min(20, limit));
+
+        // Tìm bài gốc (bất kỳ type)
+        Content base = contentRepository.findPublishedById(contentId, PUBLISHED_STATUS)
+                .orElseThrow(() -> new NotFoundException("Nội dung không tồn tại"));
+
+        String type = base.getContentType();
+        Integer categoryId = base.getCategoryId();
+
+        Pageable pageable = PageRequest.of(0, safeLimit);
+
+        // 1. Ưu tiên cùng category + cùng type
+        List<Content> related = new java.util.ArrayList<>();
+        if (categoryId != null) {
+            related = contentRepository.findRelatedByTypeAndCategory(type, categoryId, contentId, PUBLISHED_STATUS, pageable);
+        }
+
+        // 2. Fallback: nếu chưa đủ limit thì bổ sung bài cùng type khác category
+        if (related.size() < safeLimit) {
+            int remaining = safeLimit - related.size();
+            java.util.Set<Integer> existingIds = related.stream()
+                    .map(Content::getContentId)
+                    .collect(java.util.stream.Collectors.toSet());
+            existingIds.add(contentId);
+
+            List<Content> fallback = contentRepository.findRelatedByType(
+                    type, contentId, PUBLISHED_STATUS, PageRequest.of(0, safeLimit * 2));
+
+            for (Content c : fallback) {
+                if (!existingIds.contains(c.getContentId())) {
+                    related.add(c);
+                    existingIds.add(c.getContentId());
+                    if (related.size() >= safeLimit) break;
+                }
+            }
+        }
+
+        return related.stream().map(this::toBlogListResponse).collect(java.util.stream.Collectors.toList());
+    }
+
+
 
     private int getVoteCount(Integer contentId) {
         if (voteRepository == null || contentId == null) {
