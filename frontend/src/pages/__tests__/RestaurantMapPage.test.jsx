@@ -3,7 +3,45 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom';
 import RestaurantMapPage from '../RestaurantMapPage';
 
-// Mock maplibre-gl constructors with proper classes
+// Mock @goongmaps/goong-js constructors with proper classes
+vi.mock('@goongmaps/goong-js', () => {
+  class MockMap {
+    addControl() {}
+    remove() {}
+    flyTo() {}
+  }
+
+  class MockNavigationControl {}
+
+  class MockMarker {
+    setLngLat() { return this; }
+    setPopup() { return this; }
+    addTo() { return this; }
+    remove() {}
+    getLngLat() { return { lng: 106.6872, lat: 10.7684 }; }
+    togglePopup() {}
+    getPopup() { return {}; }
+  }
+
+  class MockPopup {
+    setHTML() { return this; }
+  }
+
+  return {
+    default: {
+      Map: MockMap,
+      NavigationControl: MockNavigationControl,
+      Marker: MockMarker,
+      Popup: MockPopup,
+      accessToken: ''
+    },
+    Map: MockMap,
+    NavigationControl: MockNavigationControl,
+    Marker: MockMarker,
+    Popup: MockPopup
+  };
+});
+
 vi.mock('maplibre-gl', () => {
   class MockMap {
     addControl() {}
@@ -28,6 +66,12 @@ vi.mock('maplibre-gl', () => {
   }
 
   return {
+    default: {
+      Map: MockMap,
+      NavigationControl: MockNavigationControl,
+      Marker: MockMarker,
+      Popup: MockPopup
+    },
     Map: MockMap,
     NavigationControl: MockNavigationControl,
     Marker: MockMarker,
@@ -56,8 +100,8 @@ describe('RestaurantMapPage (NB-46 & BL-008 Privacy Compliance)', () => {
 
     // Initial mount should NOT invoke geolocation
     expect(getCurrentPosition).not.toHaveBeenCalled();
-    expect(screen.getByText('Quán Ăn Xung Quanh')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Vị trí của bạn/i })).toBeInTheDocument();
+    expect(screen.getByText('Nearby Restaurants')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Your Location/i })).toBeInTheDocument();
   });
 
   it('requests geolocation ONLY when the user clicks the locate button', async () => {
@@ -72,12 +116,12 @@ describe('RestaurantMapPage (NB-46 & BL-008 Privacy Compliance)', () => {
       </MemoryRouter>
     );
 
-    const locateBtn = screen.getByRole('button', { name: /Vị trí của bạn/i });
+    const locateBtn = screen.getByRole('button', { name: /Your Location/i });
     fireEvent.click(locateBtn);
 
     expect(getCurrentPosition).toHaveBeenCalledTimes(1);
     await waitFor(() => {
-      expect(screen.getByText('Vị trí của bạn')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Your Location/i })).toBeInTheDocument();
     });
   });
 
@@ -93,11 +137,11 @@ describe('RestaurantMapPage (NB-46 & BL-008 Privacy Compliance)', () => {
       </MemoryRouter>
     );
 
-    const locateBtn = screen.getByRole('button', { name: /Vị trí của bạn/i });
+    const locateBtn = screen.getByRole('button', { name: /Your Location/i });
     fireEvent.click(locateBtn);
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Bạn đã từ chối cấp quyền truy cập vị trí');
+      expect(screen.getByRole('alert')).toHaveTextContent(/Location access denied/i);
     });
   });
 

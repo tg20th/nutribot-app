@@ -1,0 +1,137 @@
+====================================================================================================
+           BẢNG SO SÁNH & PHÂN TÍCH 2 PHƯƠNG ÁN TRIỂN KHAI TASK NB-38
+                  (ADMIN CONTENT MODERATION API & CONTENT LIFECYCLE)
+                          Dự án: NutriBot - SWP391 Nhóm 7
+====================================================================================================
+
+I. BỐI CẢNH & MỤC TIÊU CỦA TASK NB-38
+----------------------------------------------------------------------------------------------------
+1. Mục tiêu:
+   - Xây dựng API duyệt nội dung Blog & Video cho Quản trị viên (ROLE_ADMIN).
+   - Quản lý hàng đợi bài chờ duyệt (Review Queue).
+   - Thực hiện thao tác Duyệt (APPROVE -> published), Từ chối (REJECT -> rejected), hoặc Ẩn (HIDE).
+   - Kiểm soát xung đột tương tranh (Concurrency Control) khi nhiều Admin thao tác cùng lúc.
+   - Xử lý phạt vi phạm (Atomic & Idempotent Strike) liên kết với tài khoản tác giả (NB-36).
+
+2. Vấn đề thực tế đang tồn tại trong mã nguồn hiện tại:
+   - Schema Database.sql chỉ chấp nhận các trạng thái: draft, under_review, published, flagged, rejected, archived.
+   - Khi tác giả gửi bài (submitContent), trạng thái lưu vào DB là 'under_review'.
+   - Code cũ lại tìm 'pending', khiến bài viết gửi lên không bao giờ xuất hiện trong hàng đợi duyệt.
+   - Bảng contents hiện tại chưa có các cột: reviewer_id, moderated_at, rejection_reason hay version.
+
+
+====================================================================================================
+II. CHI TIẾT 2 PHƯƠNG ÁN KỸ THUẬT
+====================================================================================================
+
+----------------------------------------------------------------------------------------------------
+PHƯƠNG ÁN 1: KHÓA BI QUAN (PESSIMISTIC WRITE LOCK) & GIỮ NGUYÊN DATABASE SCHEMA
+----------------------------------------------------------------------------------------------------
+* Cơ chế hoạt động:
+  - Hàng đợi (Queue): Viết truy vấn JPA trực tiếp tại ContentRepository lọc:
+    status IN ('under_review', 'flagged') và contentType, phân trang Pageable chuẩn tầng CSDL.
+  - Concurrency: Khi Admin bấm duyệt/từ chối, dùng query có khóa bi quan:
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    SELECT c FROM Content c WHERE c.contentId = :contentId
+    Hàng dữ liệu sẽ bị khóa tạm thời trong transaction. Admin thứ hai thao tác cùng lúc sẽ phải chờ.
+    Sau khi Admin 1 xong, Admin 2 đọc lại thấy status không còn là 'under_review' thì hệ thống
+    ném lỗi HTTP 409 Conflict ("Nội dung đã được xử lý bởi admin khác").
+  - Xử phạt (Strike): Kiểm tra điều kiện bài còn ở 'under_review' mới cộng strike, ngăn chặn
+    phạt trùng lặp (idempotent) khi retry.
+  - Lưu vết: Ghi log Audit chi tiết trên server (Admin username, action, contentId, reason, strike).
+
+* Ưu điểm:
+  [+] Tuyệt đối an toàn cho cả nhóm: Không thay đổi cấu trúc bảng, không cần chạy migration.
+  [+] Không làm gãy mã nguồn hay môi trường phát triển của các bạn khác (Thắng, Lan, Khánh).
+  [+] Pipeline CI/CD GitHub Actions không bị lỗi do thiếu cột CSDL.
+  [+] Ngăn chặn triệt để hiện tượng Race Condition (không thể xử lý đè dữ liệu).
+  [+] Giải quyết ngay lập tức lỗi hàng đợi rỗng.
+
+* Nhược điểm & Hạn chế:
+  [-] Không lưu trữ vĩnh viễn lý do từ chối vào CSDL: Tác giả khi vào xem bài viết bị từ chối
+      chưa thể đọc được lý do vì sao bị từ chối qua API (chỉ xem được trong log server).
+  [-] Chưa có sẵn bảng để dựng màn hình "Lịch sử duyệt bài" chi tiết.
+  [-] Chi phí giữ lock CSDL: Transaction giữ khóa dòng bản ghi cho đến khi commit, phù hợp với
+      số lượng admin vừa phải, không tối ưu nếu hệ thống có hàng ngàn admin cùng duyệt đồng thời.
+
+
+----------------------------------------------------------------------------------------------------
+PHƯƠNG ÁN 2: KHÓA LẠC QUAN (OPTIMISTIC LOCK) & BỔ SUNG CỘT CSDL (SCHEMA MIGRATION)
+----------------------------------------------------------------------------------------------------
+* Cơ chế hoạt động:
+  - Tạo script migration bổ sung các cột mới vào bảng 'contents':
+    + version (INT DEFAULT 0): Phục vụ @Version của Hibernate.
+    + reviewer_id (INT NULL): Lưu ID của Admin duyệt bài.
+    + moderated_at (DATETIME2 NULL): Thời điểm thực hiện duyệt.
+    + rejection_reason (NVARCHAR(500) NULL): Lý do từ chối bài viết.
+  - Concurrency: Dùng annotation @Version trên Entity Content. Không giữ khóa CSDL.
+    Khi 2 Admin cùng submit, Hibernate tự động so sánh cột version khi commit.
+    Admin submit sau sẽ bị văng ngoại lệ OptimisticLockException -> trả về HTTP 409 Conflict.
+  - Tác giả có thể đọc trực tiếp trường rejection_reason từ bảng contents.
+
+* Ưu điểm:
+  [+] Lưu vết trực tiếp lý do từ chối và Admin duyệt vào bảng contents.
+  [+] Frontend có thể hiển thị lý do từ chối cho tác giả xem ngay trên màn hình "Blog của tôi".
+  [+] Khóa lạc quan không giữ khóa hàng CSDL, thông lượng đọc cao hơn.
+
+* Nhược điểm & Rủi ro:
+  [-] RỦI RO LỚN ĐẾN MÔI TRƯỜNG NHÓM: Bắt buộc cả 4 thành viên phải chạy lại script cập nhật CSDL
+      trên máy local. Nếu ai quên chạy sẽ bị lỗi crash backend ngay lập tức.
+  [-] Nguy cơ gãy CI/CD Pipeline: Nếu file seed dữ liệu trên GitHub Actions không khớp, toàn bộ
+      bài test tích hợp của dự án sẽ bị FAILED.
+  [-] Lãng phí tài nguyên xử lý: Cả 2 Admin đều chạy hết logic nghiệp vụ, đến giây cuối commit
+      mới phát hiện xung đột và rollback (tốn CPU/RAM).
+  [-] Thiết kế CSDL bị ghi đè lịch sử (Schema Smear): Cột rejection_reason nằm trực tiếp trên
+      bảng contents chỉ lưu được 1 lý do gần nhất. Nếu bài bị từ chối nhiều lần, các lý do
+      lần trước sẽ bị mất hoàn toàn. Để lưu lịch sử chuẩn, cần một bảng riêng (moderation_logs).
+
+
+====================================================================================================
+III. BẢNG SO SÁNH TỔNG HỢP (TRADE-OFF MATRIX)
+====================================================================================================
+
++-------------------------------------+-----------------------------+-----------------------------+
+| Tiêu chí so sánh                    | Phương án 1 (Pessimistic)   | Phương án 2 (Optimistic)    |
++-------------------------------------+-----------------------------+-----------------------------+
+| Tác động CSDL nhóm                  | KHÔNG ảnh hưởng (Rất an toàn)| CẦN MIGRATION (Rủi ro cao) |
+| Nguy cơ gãy CI/CD                   | 0%                          | Cao nếu chưa sync script    |
+| Giải quyết lỗi hàng đợi rỗng        | CÓ (Lọc under_review tại DB)| CÓ                          |
+| Chống xử lý đè (Race Condition)     | Cực mạnh (Chặn từ đầu)      | Bị động (Bắt lỗi khi commit)|
+| Tác giả xem được lý do từ chối      | CHƯA (Chỉ có trong log)     | ĐƯỢC (Đọc từ DB)            |
+| Độ phức tạp triển khai              | Thấp, tập trung trong code  | Trung bình (Cần sửa DB + DTO|
+| Mở rộng lịch sử kiểm duyệt lâu dài  | Cần bảng riêng ở Phase sau  | Bị đè lịch sử các lần duyệt |
++-------------------------------------+-----------------------------+-----------------------------+
+
+
+====================================================================================================
+IV. ĐỀ XUẤT HƯỚNG ĐI TỐI ƯU (HYBRID ROADMAP)
+====================================================================================================
+
+1. Giai đoạn 1 (Hiện tại - Sprint 2):
+   - Triển khai theo PHƯƠNG ÁN 1:
+     + Khắc phục triệt để lỗi hàng đợi rỗng (đồng bộ từ khóa under_review).
+     + Áp dụng Pessimistic Lock và Idempotent Strike để đảm bảo hệ thống chạy chuẩn xác.
+     + Giữ nguyên CSDL để đảm bảo tiến độ chung của nhóm và giữ CI/CD luôn xanh.
+
+2. Giai đoạn 2 (Khi có yêu cầu hiển thị lý do cho tác giả):
+   - Không nên thêm cột thẳng vào bảng contents như Phương án 2.
+   - Tạo hẳn một bảng riêng độc lập: 'content_moderation_logs' (log_id, content_id, admin_id,
+     action, reason, created_at).
+   - Thiết kế này chuẩn kiến trúc chuyên nghiệp, lưu được toàn bộ lịch sử nộp/từ chối nhiều lần
+     mà không làm ảnh hưởng cấu trúc bảng contents ban đầu.
+
+
+====================================================================================================
+V. CÁC NỘI DUNG CẦN THỐNG NHẤT VỚI NHÓM NGÀY MAI
+====================================================================================================
+
+1. Thống nhất từ khóa trạng thái:
+   - Backend và Frontend cần chốt dùng đúng từ khóa canonical 'under_review' (thay cho 'pending').
+
+2. Quyết định về CSDL:
+   - Nhóm có muốn giữ nguyên CSDL hiện tại để code ổn định (chọn PA1), hay cả nhóm sẵn sàng
+     dừng lại để đồng bộ chạy file migration cập nhật database chung (chọn PA2)?
+
+====================================================================================================
+Tạo ngày: 30/09/2026 - Dự án NutriBot (Nhóm 7)
+====================================================================================================

@@ -204,10 +204,10 @@
   - *Mô tả:* Hàng đợi các bài viết Blog/Video chờ duyệt, xem nội dung chi tiết, nút Duyệt / Từ chối / Ẩn bài.
 - [ ] **#39 [FE] Màn hình Admin: Quản lý Bình luận (`/admin/comments`)**
   - *Mô tả:* Danh sách bình luận bị báo cáo xấu và thao tác xóa bình luận.
-- [ ] **#44 [FE] Màn hình Danh sách Nhà hàng Chay/Healthy (`/restaurants`)**
-  - *Mô tả:* Thẻ thông tin nhà hàng, lọc theo khu vực/quận huyện, hình ảnh và địa chỉ.
-- [ ] **#46 [FE] Màn hình Bản đồ Nhà hàng GPS (`/restaurants/map`)**
-  - *Mô tả:* Nút xin quyền vị trí GPS của người dùng, hiển thị bản đồ và cắm mốc các quán ăn gần nhất trong bán kính 5km.
+- [x] **#44 [FE] Màn hình Danh sách Nhà hàng Chay/Healthy (`/restaurants`)** ✅
+  - *Mô tả:* Thẻ thông tin nhà hàng thật từ Goong Maps, lọc theo bán kính, tìm kiếm món ăn, hình ảnh và địa chỉ.
+- [x] **#46 [FE] Màn hình Bản đồ Nhà hàng GPS (`/restaurants/map`)** ✅
+  - *Mô tả:* Nút xin quyền vị trí GPS của người dùng, hiển thị bản đồ Goong Maps và cắm mốc các quán ăn gần nhất, bộ chọn 34 tỉnh thành sau sáp nhập.
 
 ---
 
@@ -244,7 +244,7 @@
 ---
 
 ### 📋 KHÁNH (BA & React FE - 2 tasks)
-- [ ] **#56 [FE] Component Thẻ Gợi ý Nhà hàng**
-  - *Mô tả:* Hiển thị dưới trang chi tiết món ăn/công thức: "Bạn có thể thưởng thức món này tại các nhà hàng sau".
+- [x] **#56 [FE] Component Thẻ Gợi ý Nhà hàng** ✅
+  - *Mô tả:* Hiển thị dưới trang chi tiết món ăn/công thức: "Bạn có thể thưởng thức món này tại các nhà hàng sau". Tự động tìm kiếm nhà hàng theo món ăn qua Goong Maps.
 - [ ] **#58 [FE] Component Khối Nội dung Liên quan**
   - *Mô tả:* Hiển thị các bài viết và video gợi ý liên quan ở cuối trang bài viết.

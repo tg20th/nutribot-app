@@ -1,7 +1,8 @@
 import { apiRequest, unwrapData } from './apiClient';
 
-const TRACKASIA_KEY = import.meta.env.VITE_TRACKASIA_API_KEY || 'public_key';
-export const TRACKASIA_STYLE_URL = `https://maps.track-asia.com/styles/v2/satellite.json?key=${TRACKASIA_KEY}`;
+const GOONG_MAPTILES_KEY = import.meta.env.VITE_GOONG_MAPTILES_KEY || 'public_key';
+const GOONG_API_KEY = import.meta.env.VITE_GOONG_API_KEY || 'public_key';
+export const MAP_STYLE_URL = `https://tiles.goong.io/assets/goong_map_web.json?api_key=${GOONG_MAPTILES_KEY}`;
 
 // Haversine formula to calculate distance between two coordinates in kilometers
 export const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -152,47 +153,83 @@ export const normalizeRestaurant = (item = {}) => ({
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([item.name, item.address].filter(Boolean).join(', '))}`
 });
 
-// Search restaurants using TrackAsia v2 Places Textsearch API with automatic fallback
 export const searchNearbyRestaurants = async ({
   lat = 10.7769,
   lng = 106.7009,
   radiusKm = 10,
-  keyword = 'quán chay',
+  keywords = ['quán chay', 'cơm chay', 'nhà hàng chay', 'lẩu chay', 'buffet chay', 'vegan'],
   signal
 } = {}) => {
   const radiusMeters = Math.min(Math.max(radiusKm * 1000, 1000), 50000);
-  const trackAsiaUrl = `https://maps.track-asia.com/api/v2/place/textsearch/json?query=${encodeURIComponent(
-    keyword
-  )}&location=${lat},${lng}&radius=${radiusMeters}&key=${TRACKASIA_KEY}`;
-
-  let fetchedList = [];
+  
+  let allPredictions = [];
   try {
-    const response = await fetch(trackAsiaUrl, { signal });
-    if (response.ok) {
-      const data = await response.json();
-      if (Array.isArray(data.results) && data.results.length > 0) {
-        fetchedList = data.results.map((place) => {
-          const pLat = place.geometry?.location?.lat;
-          const pLng = place.geometry?.location?.lng;
-          const dist = calculateDistance(lat, lng, pLat, pLng);
-          return normalizeRestaurant({
-            ...place,
-            id: place.place_id,
-            name: place.name,
-            address: place.formatted_address,
-            lat: pLat,
-            lng: pLng,
-            distanceKm: dist
-          });
-        });
+    const autocompletePromises = keywords.map(async (kw) => {
+      const url = `https://rsapi.goong.io/Place/AutoComplete?api_key=${GOONG_API_KEY}&location=${lat},${lng}&radius=${radiusMeters}&input=${encodeURIComponent(kw)}`;
+      const response = await fetch(url, { signal });
+      if (response.ok) {
+        const data = await response.json();
+        return data.predictions || [];
       }
-    }
+      return [];
+    });
+    const resultsArray = await Promise.all(autocompletePromises);
+    allPredictions = resultsArray.flat();
   } catch (err) {
     if (err.name === 'AbortError') throw err;
-    console.warn('TrackAsia search API unavailable, falling back to curated places:', err);
+    console.warn('Goong autocomplete API failed', err);
   }
 
-  // Strictly filter by radius since TrackAsia's textsearch can sometimes return global results
+  // Deduplicate by place_id
+  const uniquePredictionsMap = new Map();
+  allPredictions.forEach(place => {
+    if (place && place.place_id && !uniquePredictionsMap.has(place.place_id)) {
+      uniquePredictionsMap.set(place.place_id, place);
+    }
+  });
+  const uniquePredictions = Array.from(uniquePredictionsMap.values());
+
+  let fetchedList = [];
+  if (uniquePredictions.length > 0) {
+    try {
+      // Limit to top 20 to avoid rate limit issues
+      const topPredictions = uniquePredictions.slice(0, 20);
+        const detailPromises = topPredictions.map(async (place) => {
+          try {
+            const detailUrl = `https://rsapi.goong.io/Place/Detail?place_id=${place.place_id}&api_key=${GOONG_API_KEY}`;
+            const detailRes = await fetch(detailUrl, { signal });
+            if (detailRes.ok) {
+              const detailData = await detailRes.json();
+              const location = detailData.result?.geometry?.location;
+              if (location) {
+                const pLat = location.lat;
+                const pLng = location.lng;
+                const dist = calculateDistance(lat, lng, pLat, pLng);
+                return normalizeRestaurant({
+                  ...detailData.result,
+                  id: place.place_id,
+                  name: detailData.result.name || place.description,
+                  address: detailData.result.formatted_address || place.description,
+                  lat: pLat,
+                  lng: pLng,
+                  distanceKm: dist
+                });
+              }
+            }
+          } catch (e) {
+            console.warn('Failed to fetch place detail', e);
+          }
+          return null;
+        });
+
+        const details = await Promise.all(detailPromises);
+        fetchedList = details.filter(Boolean);
+    } catch (err) {
+      if (err.name !== 'AbortError') console.warn('Failed to fetch details:', err);
+    }
+  }
+
+  // Strictly filter by radius since autocomplete can sometimes return global results
   const strictlyNearby = fetchedList.filter(r => r.distanceKm != null && r.distanceKm <= radiusKm);
 
   if (strictlyNearby.length > 0) {
@@ -200,11 +237,14 @@ export const searchNearbyRestaurants = async ({
     return strictlyNearby.sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
   }
 
-  // If TrackAsia returned successfully but there are simply no restaurants in this radius,
-  // we return empty array instead of mock data, so the user sees real map data (even if empty).
-  // We only fallback to curated if the API actually failed (fetchedList is empty and there was an error).
-  // Wait, to be safe, if we want strictly real data, we just return strictlyNearby (which is [] here).
-  return [];
+  // Fallback to curated list if Goong API returns no strictly nearby restaurants
+  const curatedWithDistances = CURATED_RESTAURANTS.map((item) => ({
+    ...normalizeRestaurant(item),
+    distanceKm: calculateDistance(lat, lng, item.lat, item.lng)
+  }));
+  
+  const strictlyNearbyCurated = curatedWithDistances.filter(r => r.distanceKm != null && r.distanceKm <= radiusKm);
+  return strictlyNearbyCurated.sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity));
 };
 
 // Privacy-first Geolocation Request Helper (BL-008 Compliance)

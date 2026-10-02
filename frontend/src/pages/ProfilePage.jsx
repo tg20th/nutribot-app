@@ -88,8 +88,13 @@ const PROFILE_NOTES = [
 ];
 
 const publishProfileUpdate = (profile) => {
-  if (profile.avatarUrl) sessionStorage.setItem('nutribot-profile-avatar', profile.avatarUrl);
-  else sessionStorage.removeItem('nutribot-profile-avatar');
+  if (profile.avatarUrl) {
+    sessionStorage.setItem('nutribot-profile-avatar', profile.avatarUrl);
+    localStorage.setItem('nutribot-profile-avatar', profile.avatarUrl);
+  } else {
+    sessionStorage.removeItem('nutribot-profile-avatar');
+    localStorage.removeItem('nutribot-profile-avatar');
+  }
   window.dispatchEvent(new CustomEvent('nutribot-profile-updated', { detail: profile }));
 };
 
@@ -162,7 +167,7 @@ const validatePasswordChange = (passwords) => {
 export default function ProfilePage() {
   const pageRef = useRef(null);
   const avatarInputRef = useRef(null);
-  const fallbackUser = useMemo(() => getCurrentUserFromToken() ?? {}, []);
+  const fallbackUser = useMemo(() => getCurrentUserFromToken() ?? { username: '', email: '' }, []);
   const [profile, setProfile] = useState(() => toFormProfile(EMPTY_PROFILE, fallbackUser));
   const [savedProfile, setSavedProfile] = useState(() => toFormProfile(EMPTY_PROFILE, fallbackUser));
   const [errors, setErrors] = useState({});

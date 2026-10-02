@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import trackasiagl from 'trackasia-gl';
-import 'trackasia-gl/dist/trackasia-gl.css';
+import goongjs from '@goongmaps/goong-js';
+import '@goongmaps/goong-js/dist/goong-js.css';
 import {
   AlertTriangle,
   Compass,
@@ -18,11 +18,12 @@ import {
   Sparkles
 } from 'lucide-react';
 import {
-  TRACKASIA_STYLE_URL,
+  MAP_STYLE_URL,
   getUserCurrentPosition,
   searchNearbyRestaurants,
   calculateDistance
 } from '../services/restaurantApi';
+import { VIETNAM_PROVINCES } from '../utils/vietnamProvinces';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import '../styles/restaurant-map.css';
@@ -34,11 +35,7 @@ const DEFAULT_CENTER = {
   city: 'TP. Hồ Chí Minh'
 };
 
-const CITIES = [
-  { name: 'TP. Hồ Chí Minh', lat: 10.7769, lng: 106.7009 },
-  { name: 'Hà Nội', lat: 21.0285, lng: 105.8542 },
-  { name: 'Đà Nẵng', lat: 16.0544, lng: 108.2022 }
-];
+
 
 export default function RestaurantMapPage() {
   const mapContainerRef = useRef(null);
@@ -63,9 +60,10 @@ export default function RestaurantMapPage() {
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    const map = new trackasiagl.Map({
+    goongjs.accessToken = import.meta.env.VITE_GOONG_MAPTILES_KEY || 'public_key';
+    const map = new goongjs.Map({
       container: mapContainerRef.current,
-      style: TRACKASIA_STYLE_URL,
+      style: MAP_STYLE_URL,
       center: [center.lng, center.lat],
       zoom: 13,
       pitch: 35,
@@ -73,7 +71,7 @@ export default function RestaurantMapPage() {
       attributionControl: true
     });
 
-    map.addControl(new trackasiagl.NavigationControl({ visualizePitch: true }), 'top-right');
+    map.addControl(new goongjs.NavigationControl({ visualizePitch: true }), 'top-right');
     mapRef.current = map;
 
     return () => {
@@ -91,7 +89,6 @@ export default function RestaurantMapPage() {
       lat: center.lat,
       lng: center.lng,
       radiusKm: selectedRadius,
-      keyword: 'quán chay',
       signal: controller.signal
     })
       .then((items) => {
@@ -162,7 +159,7 @@ export default function RestaurantMapPage() {
         </div>
       `;
 
-      const popup = new trackasiagl.Popup({
+      const popup = new goongjs.Popup({
         offset: 28,
         closeButton: true,
         closeOnClick: false
@@ -174,7 +171,7 @@ export default function RestaurantMapPage() {
         activePopupRef.current = popup;
       });
 
-      const marker = new trackasiagl.Marker({ element: el })
+      const marker = new goongjs.Marker({ element: el })
         .setLngLat([restaurant.lng, restaurant.lat])
         .setPopup(popup)
         .addTo(map);
@@ -203,7 +200,7 @@ export default function RestaurantMapPage() {
         <div class="user-gps-pulse"></div>
         <div class="user-gps-dot"></div>
       `;
-      userMarkerRef.current = new trackasiagl.Marker({ element: el })
+      userMarkerRef.current = new goongjs.Marker({ element: el })
         .setLngLat([userLocation.lng, userLocation.lat])
         .addTo(map);
     } else {
@@ -328,13 +325,17 @@ export default function RestaurantMapPage() {
                   className="city-select" 
                   value={center.city === 'Vị trí của bạn' || center.city === 'Your Location' ? 'Your Location' : center.city}
                   onChange={(e) => {
-                    const city = CITIES.find(c => c.name === e.target.value);
+                    const city = VIETNAM_PROVINCES.find(c => c.name === e.target.value);
                     if (city) handleCityChange(city);
                   }}
                 >
                   <option value="Your Location" disabled hidden>Your Location</option>
                   <option value="Vị trí của bạn" disabled hidden style={{display: 'none'}}>Vị trí của bạn</option>
-                  {CITIES.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                  {VIETNAM_PROVINCES.map(c => (
+                    <option key={c.name} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
