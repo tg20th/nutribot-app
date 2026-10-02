@@ -12,6 +12,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@goongmaps/goong-js": "^1.0.9",
     "@gsap/react": "^2.1.2",
     "@vitejs/plugin-react": "latest",
     "gsap": "^3.15.0",
@@ -20,7 +21,6 @@
     "react": "latest",
     "react-dom": "latest",
     "react-router-dom": "latest",
-    "trackasia-gl": "^2.0.1",
     "vite": "latest"
   },
   "devDependencies": {
