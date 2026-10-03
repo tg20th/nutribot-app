@@ -119,8 +119,8 @@ class AuthLoginAndJwtSecurityTest {
         }
 
         @Test
-        @DisplayName("Tài khoản SUSPENDED hoặc BANNED phải bị chặn cấp JWT token")
-        void suspendedOrBannedUser_isDeniedLogin() {
+        @DisplayName("Tài khoản BANNED phải bị chặn cấp JWT token")
+        void bannedUser_isDeniedLogin() {
             activeUser.setStatus(AccountStatus.BANNED);
             when(userRepository.findByNormalizedUsernameOrEmail("testuser")).thenReturn(Optional.of(activeUser));
             when(passwordEncoder.matches("Password@123", activeUser.getPasswordHash())).thenReturn(true);
@@ -129,7 +129,7 @@ class AuthLoginAndJwtSecurityTest {
                     authService.login(new LoginRequest("testuser", "Password@123"))
             );
 
-            assertTrue(ex.getMessage().contains("khóa") || ex.getMessage().contains("tạm ngưng"));
+            assertTrue(ex.getMessage().contains("khóa"));
             verify(jwtTokenProvider, never()).generateToken(anyString(), anyString());
         }
 
