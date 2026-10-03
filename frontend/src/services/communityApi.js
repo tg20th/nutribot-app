@@ -64,6 +64,38 @@ export async function getPostsPage({ blogPage, videoPage, signal }) {
   };
 }
 
+export const personalizedPostKey = (post = {}) => {
+  const id = post.contentId ?? post.id;
+  const type = post.contentType ?? post.type;
+  return id == null || !type ? null : `${String(type).toUpperCase()}:${id}`;
+};
+
+export const appendUniquePersonalizedPosts = (existingPosts, nextPosts) => {
+  const seen = new Set(existingPosts.map(personalizedPostKey).filter(Boolean));
+  return [...existingPosts, ...nextPosts.filter((post) => {
+    const key = personalizedPostKey(post);
+    if (!key || !seen.has(key)) {
+      if (key) seen.add(key);
+      return true;
+    }
+    return false;
+  })];
+};
+
+export async function getPersonalizedPostsPage({ cursor, signal, limit = 20 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set('cursor', cursor);
+  const data = unwrapData(await apiRequest(`/api/v1/feed/home?${params}`, { signal }), {});
+  const items = Array.isArray(data?.items) ? data.items : [];
+  return {
+    posts: items.map((item) => normalizePost(item, item?.contentType)),
+    nextCursor: typeof data?.nextCursor === 'string' && data.nextCursor ? data.nextCursor : null,
+    hasMore: Boolean(data?.nextCursor),
+    total: typeof data?.total === 'number' ? data.total : null,
+    fallback: Boolean(data?.fallback)
+  };
+}
+
 export async function getPosts(signal) {
   const result = await getPostsPage({ blogPage: 0, videoPage: 0, signal });
   return result.posts;

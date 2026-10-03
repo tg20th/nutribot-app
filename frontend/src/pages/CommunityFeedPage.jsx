@@ -10,7 +10,7 @@ import CommunityPostCard from '../components/community/CommunityPostCard';
 import CommunityRightRail from '../components/community/CommunityRightRail';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CreateBlogPage from './CreateBlogPage';
-import { getCommunityFilters, getPostsPage } from '../services/communityApi';
+import { appendUniquePersonalizedPosts, getCommunityFilters, getPersonalizedPostsPage } from '../services/communityApi';
 import { getMyProfile } from '../services/profileApi';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -19,46 +19,30 @@ function postKey(post) {
   return `${post.type ?? 'POST'}:${post.id ?? post.slug ?? post.title}`;
 }
 
-function mergeUniquePosts(existingPosts, nextPosts) {
-  const seen = new Set(existingPosts.map(postKey));
-  return [...existingPosts, ...nextPosts.filter((post) => {
-    const key = postKey(post);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  })];
-}
-
 export default function CommunityFeedPage() {
   const page = useRef(null);
   const composerTrigger = useRef(null);
   const loadMoreTrigger = useRef(null);
-  const pagination = useRef({ blogPage: 0, videoPage: 0, blogLast: false, videoLast: false });
+  const pagination = useRef({ cursor: null, hasMore: true });
   const loadingNextPage = useRef(false);
   const [filter, setFilter] = useState('All');
   const [composerOpen, setComposerOpen] = useState(false);
   const [posts, setPosts] = useState([]); const [profile, setProfile] = useState({}); const [filters, setFilters] = useState([]); const [loading, setLoading] = useState(true); const [loadingMore, setLoadingMore] = useState(false); const [error, setError] = useState('');
 
   const loadNextPage = useCallback(async (signal, { initial = false } = {}) => {
-    if (loadingNextPage.current || (!initial && pagination.current.blogLast && pagination.current.videoLast)) return;
+    if (loadingNextPage.current || (!initial && !pagination.current.hasMore)) return;
 
     loadingNextPage.current = true;
     if (!initial) setLoadingMore(true);
     const current = pagination.current;
     try {
-      const result = await getPostsPage({
-        blogPage: current.blogLast ? null : current.blogPage,
-        videoPage: current.videoLast ? null : current.videoPage,
-        signal
-      });
+      const result = await getPersonalizedPostsPage({ cursor: initial ? null : current.cursor, signal });
       if (signal?.aborted) return;
       pagination.current = {
-        blogPage: result.blogLast ? current.blogPage : current.blogPage + 1,
-        videoPage: result.videoLast ? current.videoPage : current.videoPage + 1,
-        blogLast: result.blogLast,
-        videoLast: result.videoLast
+        cursor: result.nextCursor,
+        hasMore: result.hasMore
       };
-      setPosts((existing) => initial ? mergeUniquePosts([], result.posts) : mergeUniquePosts(existing, result.posts));
+      setPosts((existing) => initial ? appendUniquePersonalizedPosts([], result.posts) : appendUniquePersonalizedPosts(existing, result.posts));
       setError('');
     } catch (failure) {
       if (!signal?.aborted) setError(initial ? 'Unable to load the community feed.' : failure.message || 'Unable to load more community posts.');
@@ -84,7 +68,7 @@ export default function CommunityFeedPage() {
 
   useEffect(() => {
     const trigger = loadMoreTrigger.current;
-    if (!trigger || loading || (pagination.current.blogLast && pagination.current.videoLast)) return;
+    if (!trigger || loading || !pagination.current.hasMore) return;
     const controller = new AbortController();
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) loadNextPage(controller.signal);
