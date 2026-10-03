@@ -16,6 +16,12 @@ public enum AccountStatus {
             return null;
         }
         String clean = status.trim().toUpperCase();
+
+        // Backward compatibility: map SUSPENDED -> BANNED
+        if ("SUSPENDED".equals(clean)) {
+            return BANNED;
+        }
+
         for (AccountStatus s : values()) {
             if (s.name().equals(clean)) {
                 return s;
