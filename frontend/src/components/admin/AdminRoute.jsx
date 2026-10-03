@@ -6,5 +6,7 @@ export default function AdminRoute({ children }) {
   const role = user?.role;
   const isAdmin = isAdminRole(role);
 
-  return isAdmin ? children : <Navigate to="/" replace state={{ from: useLocation().pathname }} />;
+  return isAdmin
+    ? children
+    : <Navigate to="/home" replace state={{ from: useLocation().pathname }} />;
 }
