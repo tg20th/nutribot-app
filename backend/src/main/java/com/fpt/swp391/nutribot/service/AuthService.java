@@ -134,10 +134,8 @@ public class AuthService {
                     throw new BadRequestException("Tài khoản chưa xác thực email. Vui lòng kiểm tra hộp thư.");
                 case WARN:
                     throw new BadRequestException("Tài khoản đang bị cảnh báo. Vui lòng liên hệ hỗ trợ.");
-                case SUSPENDED:
-                    throw new BadRequestException("Tài khoản đã bị tạm ngừng. Liên hệ admin để được hỗ trợ.");
                 case BANNED:
-                    throw new BadRequestException("Tài khoản đã bị cấm. Không thể đăng nhập.");
+                    throw new BadRequestException("Tài khoản đã bị khóa. Không thể đăng nhập.");
                 default:
                     throw new BadRequestException("Tài khoản không hợp lệ.");
             }
