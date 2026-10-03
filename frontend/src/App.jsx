@@ -1,4 +1,7 @@
-import { Navigate, Routes, Route } from 'react-router-dom';
+import { Navigate, Routes, Route, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import AuthToast from './components/AuthToast';
+import { getAuthFailureMessage } from './services/loginErrorState';
 import HomePage from './pages/HomePage';
 import CommunityFeedPage from './pages/CommunityFeedPage';
 import CommunityContentDetailPage from './pages/CommunityContentDetailPage';
@@ -29,8 +32,24 @@ import NB01EmailVerificationPreviewPage from './pages/NB01EmailVerificationPrevi
 import ChatHistoryPage from './pages/ChatHistoryPage';
 import RestaurantMapPage from './pages/RestaurantMapPage';
 
+function AuthFailureHandler() {
+  const navigate = useNavigate();
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    const handleFailure = (event) => {
+      setMessage(getAuthFailureMessage(event.detail?.state));
+      navigate('/', { replace: true });
+    };
+    window.addEventListener('nutribot-auth-failure', handleFailure);
+    return () => window.removeEventListener('nutribot-auth-failure', handleFailure);
+  }, [navigate]);
+
+  return <AuthToast error={message} success="" />;
+}
+
 export default function App() {
-  return <Routes>
+  return <><AuthFailureHandler /><Routes>
     {import.meta.env.DEV && <Route path="/review/nb-26" element={<NB26ReviewPage />} />}
     {import.meta.env.DEV && <Route path="/dev/nb-07-email-change-verification" element={<NB07EmailChangeVerificationPreviewPage />} />}
     {import.meta.env.DEV && <Route path="/dev/nb-01-email-verification" element={<NB01EmailVerificationPreviewPage />} />}
@@ -75,5 +94,5 @@ export default function App() {
     <Route path="/restaurants/map" element={<MemberRoute><RestaurantMapPage /></MemberRoute>} />
     {import.meta.env.DEV && <Route path="/dev/nb-56" element={<RestaurantRecommendationsPreviewPage />} />}
     <Route path="*" element={<HomePage />} />
-  </Routes>;
+  </Routes></>;
 }

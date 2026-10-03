@@ -1,3 +1,5 @@
+import { getApiAuthFailureState } from './loginErrorState';
+
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 
 export class ApiError extends Error {
@@ -12,7 +14,16 @@ export async function apiRequest(path, options = {}) {
   if (response.status === 204) return null;
   const contentType = response.headers.get('content-type') ?? '';
   const payload = contentType.includes('application/json') ? await response.json() : await response.text();
-  if (!response.ok) throw new ApiError(payload?.message || `Request failed (${response.status})`, response.status, payload);
+  if (!response.ok) {
+    const authFailureState = getApiAuthFailureState(response.status, Boolean(authToken));
+    if (authFailureState && typeof window !== 'undefined') {
+      localStorage.removeItem('nutribot-auth-token');
+      localStorage.removeItem('nutribot-user');
+      window.dispatchEvent(new CustomEvent('nutribot-auth-changed'));
+      window.dispatchEvent(new CustomEvent('nutribot-auth-failure', { detail: { state: authFailureState } }));
+    }
+    throw new ApiError(payload?.message || `Request failed (${response.status})`, response.status, payload);
+  }
   return payload;
 }
 export const unwrapData = (payload, fallback = []) => Array.isArray(payload) ? payload : payload?.data ?? payload?.items ?? payload?.results ?? fallback;

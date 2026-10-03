@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { getOAuthErrorState } from '../services/loginErrorState';
 import { isAdminRole } from '../utils/auth';
 
 export default function OAuthCallbackPage() {
@@ -12,10 +13,12 @@ export default function OAuthCallbackPage() {
     const role = searchParams.get('role');
     const error = searchParams.get('error');
 
-    if (error) {
-      console.error('OAuth error:', error);
+    if (getOAuthErrorState({ error, token, username, role })) {
       localStorage.removeItem('nutribot-auth-token');
-      navigate('/?error=google_auth_failed');
+      localStorage.removeItem('nutribot-user');
+      window.dispatchEvent(new Event('nutribot-auth-changed'));
+      window.dispatchEvent(new CustomEvent('nutribot-auth-failure', { detail: { state: 'OAUTH_FAILED' } }));
+      navigate('/', { replace: true });
       return;
     }
 
@@ -25,8 +28,6 @@ export default function OAuthCallbackPage() {
       window.dispatchEvent(new Event('nutribot-auth-changed'));
       const destination = isAdminRole(role) ? '/admin' : '/home';
       navigate(destination);
-    } else {
-      navigate('/');
     }
   }, [searchParams, navigate]);
 
