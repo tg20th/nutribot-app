@@ -10,12 +10,15 @@ import org.springframework.stereotype.Repository;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface VoteRepository extends JpaRepository<Vote, Integer> {
 
     Optional<Vote> findByUserIdAndContentId(Integer userId, Integer contentId);
+
+    List<Vote> findByUserId(Integer userId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT v FROM Vote v WHERE v.userId = :userId AND v.contentId = :contentId")

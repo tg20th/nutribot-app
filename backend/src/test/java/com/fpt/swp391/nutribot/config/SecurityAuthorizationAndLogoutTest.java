@@ -115,14 +115,14 @@ class SecurityAuthorizationAndLogoutTest {
     }
 
     @Test
-    @DisplayName("Acceptance Criteria 2: Token hợp lệ nhưng tài khoản vừa bị SUSPENDED/BANNED -> Request tiếp theo bị từ chối xác thực")
-    void validToken_AccountSuspendedOrBanned_ClearsSecurityContext() throws Exception {
+    @DisplayName("Acceptance Criteria 2: Token hợp lệ nhưng tài khoản vừa bị BANNED -> Request tiếp theo bị từ chối xác thực")
+    void validToken_AccountBanned_ClearsSecurityContext() throws Exception {
         String token = "valid.jwt.token";
         String username = "banned_user";
 
         when(jwtTokenProvider.validateToken(token)).thenReturn(true);
         when(jwtTokenProvider.getUsernameFromToken(token)).thenReturn(username);
-        // AuthService trả về Optional.empty() do trạng thái tài khoản là BANNED/SUSPENDED (BL-026)
+        // AuthService trả về Optional.empty() do trạng thái tài khoản là BANNED (BL-026)
         when(authService.getRoleNameByUsername(username)).thenReturn(Optional.empty());
 
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/users/profile");

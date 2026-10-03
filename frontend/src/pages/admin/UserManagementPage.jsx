@@ -80,7 +80,7 @@ export default function UserManagementPage() {
     </div>
     <div className="admin-toolbar members-admin-toolbar">
       <SearchBox value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search name, email, or username..." />
-      <label>Status<select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="BANNED">Banned</option><option value="SUSPENDED">Suspended</option><option value="DELETED">Deleted</option></select></label>
+      <label>Status<select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="BANNED">Banned</option><option value="DELETED">Deleted</option></select></label>
     </div>
     <section className="admin-panel table-panel members-table-panel">
       {error ? <ErrorState onRetry={reload} /> : loading ? <LoadingState /> : items.length ? <table className="admin-table"><thead><tr><th>Member</th><th>User ID</th><th>Status</th><th>Role</th><th>Joined</th><th aria-label="Actions" /></tr></thead><tbody>{items.map((user) => {
