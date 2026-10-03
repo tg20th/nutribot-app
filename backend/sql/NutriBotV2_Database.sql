@@ -441,11 +441,12 @@ CREATE TABLE chat_sessions (
 GO
 
 CREATE TABLE chat_messages (
-    message_id      INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-    session_id      INT NOT NULL,
-    sender_type     NVARCHAR(20) NOT NULL,
-    content         NVARCHAR(MAX) NOT NULL,
-    created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_chat_messages_created_at DEFAULT (SYSUTCDATETIME()),
+    message_id          INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    session_id          INT NOT NULL,
+    sender_type         NVARCHAR(20) NOT NULL,
+    content             NVARCHAR(MAX) NOT NULL,
+    created_at          DATETIME2(3) NOT NULL CONSTRAINT DF_chat_messages_created_at DEFAULT (SYSUTCDATETIME()),
+    idempotency_key     NVARCHAR(100) NULL,
     CONSTRAINT FK_chat_messages_sessions FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id) ON DELETE CASCADE,
     CONSTRAINT CK_chat_messages_sender CHECK (sender_type IN (N'USER', N'ASSISTANT', N'SYSTEM'))
 );
