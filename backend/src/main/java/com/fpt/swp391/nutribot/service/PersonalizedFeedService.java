@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fpt.swp391.nutribot.dto.request.RecommendationRequestDto;
 import com.fpt.swp391.nutribot.dto.response.PersonalizedFeedResponse;
 import com.fpt.swp391.nutribot.dto.response.RecommendationResponseDto;
-import com.fpt.swp391.nutribot.dto.response.VoteResponse;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.entity.UserProfile;
@@ -18,14 +17,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClient;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -45,7 +41,7 @@ public class PersonalizedFeedService {
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
     private final VoteRepository voteRepository;
-    private final RestTemplate restTemplate;
+    private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
     @Value("${ai-service.base-url:http://localhost:8000}")
@@ -182,10 +178,12 @@ public class PersonalizedFeedService {
     private RecommendationResponseDto callAiService(RecommendationRequestDto request) {
         try {
             String requestBody = objectMapper.writeValueAsString(request);
-            String responseBody = restTemplate.postForObject(
-                    aiServiceBaseUrl + "/api/ai/content-recommendations",
-                    requestBody,
-                    String.class);
+            String responseBody = restClient.post()
+                    .uri(aiServiceBaseUrl + "/api/ai/content-recommendations")
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .body(requestBody)
+                    .retrieve()
+                    .body(String.class);
 
             return objectMapper.readValue(responseBody, RecommendationResponseDto.class);
         } catch (Exception e) {
