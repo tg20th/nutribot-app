@@ -19,11 +19,18 @@ import java.util.UUID;
 public class CloudinaryMediaService {
 
     private static final String THUMBNAIL_FOLDER = "nutribot/thumbnails";
+    private static final String VIDEO_FOLDER = "nutribot/videos";
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+    private static final long MAX_VIDEO_SIZE = 200 * 1024 * 1024; // 200 MB
     private static final List<String> ALLOWED_MIME_TYPES = List.of(
             "image/jpeg",
             "image/png",
             "image/webp"
+    );
+    private static final List<String> ALLOWED_VIDEO_MIME_TYPES = List.of(
+            "video/mp4",
+            "video/webm",
+            "video/quicktime"
     );
 
     private final Cloudinary cloudinary;
@@ -82,6 +89,49 @@ public class CloudinaryMediaService {
         } catch (Exception ex) {
             log.error("Lỗi khi tải ảnh lên Cloudinary: ", ex);
             throw new BadRequestException("Tải ảnh thu nhỏ thất bại. Vui lòng thử lại sau.");
+        }
+    }
+
+    public MediaUploadResult uploadVideo(MultipartFile file, Integer userId) {
+        ensureConfigured();
+
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException("Vui lòng chọn video để tải lên");
+        }
+        if (file.getSize() > MAX_VIDEO_SIZE) {
+            throw new BadRequestException("Dung lượng video không được vượt quá 200MB");
+        }
+
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_VIDEO_MIME_TYPES.contains(contentType.toLowerCase())) {
+            throw new BadRequestException("Chỉ chấp nhận định dạng video MP4, WebM hoặc MOV");
+        }
+
+        if (userId == null) {
+            throw new BadRequestException("Thông tin người dùng không hợp lệ");
+        }
+
+        String publicId = "vid_" + userId + "_" + UUID.randomUUID().toString().replace("-", "");
+        try {
+            Map<?, ?> result = cloudinary.uploader().uploadLarge(file.getBytes(), ObjectUtils.asMap(
+                    "resource_type", "video",
+                    "folder", VIDEO_FOLDER,
+                    "public_id", publicId,
+                    "overwrite", false
+            ));
+
+            Object secureUrl = result.get("secure_url");
+            Object uploadedPublicId = result.get("public_id");
+            if (!(secureUrl instanceof String url) || !(uploadedPublicId instanceof String id)) {
+                throw new IllegalStateException("Cloudinary không trả về URL video hợp lệ.");
+            }
+            return new MediaUploadResult(url, id);
+        } catch (IOException ex) {
+            log.error("Lỗi khi đọc file video: ", ex);
+            throw new BadRequestException("Không thể đọc tệp video tải lên");
+        } catch (Exception ex) {
+            log.error("Lỗi khi tải video lên Cloudinary: ", ex);
+            throw new BadRequestException("Tải video thất bại. Vui lòng thử lại sau.");
         }
     }
 
