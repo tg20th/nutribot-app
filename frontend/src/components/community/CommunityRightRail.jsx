@@ -1,7 +1,6 @@
 import { Map, Star } from 'lucide-react';
-import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getRestaurants } from '../../services/restaurantApi';
+import { CURATED_RESTAURANTS, normalizeRestaurant } from '../../services/restaurantApi';
 import ImageWithFallback from '../ImageWithFallback';
 
 function TrendingEateries({ eateries }) {
@@ -16,16 +15,8 @@ function TrendingEateries({ eateries }) {
   </div>;
 }
 
-function TrendingHashtags({ hashtags }) {
-  return <div className="community-widget">
-    <div className="community-widget-head"><b>Trending in the Community</b></div>
-    <ul className="community-hashtags">{hashtags.map((tag) => <li key={tag}><a href="#tag">{tag}</a></li>)}</ul>
-  </div>;
-}
-
 export default function CommunityRightRail() {
-  const [trendingEateries, setTrendingEateries] = useState([]); const [trendingHashtags, setTrendingHashtags] = useState([]);
-  useEffect(() => { getRestaurants().then((items) => { setTrendingEateries(items); setTrendingHashtags([...new Set(items.flatMap((x) => x.hashtags ?? []))]); }).catch(() => {}); }, []);
+  const trendingEateries = CURATED_RESTAURANTS.slice(0, 5).map(normalizeRestaurant);
   return <aside className="community-right-rail">
     <TrendingEateries eateries={trendingEateries}/>
     <p className="community-rail-footer">About &middot; Community Guidelines &middot; Privacy</p>
