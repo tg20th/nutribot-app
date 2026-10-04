@@ -13,6 +13,7 @@ import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.UserProfileRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.VoteRepository;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class PersonalizedFeedService {
 
     private static final String BLOG_TYPE = "BLOG";
@@ -39,24 +41,14 @@ public class PersonalizedFeedService {
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
     private final VoteRepository voteRepository;
-    private final ObjectMapper objectMapper;
     private final RestClient restClient;
+    private final ObjectMapper objectMapper;
 
     @Value("${ai-service.base-url:http://localhost:8000}")
     private String aiServiceBaseUrl;
 
-    public PersonalizedFeedService(ContentRepository contentRepository,
-                                   UserRepository userRepository,
-                                   UserProfileRepository userProfileRepository,
-                                   VoteRepository voteRepository,
-                                   ObjectMapper objectMapper) {
-        this.contentRepository = contentRepository;
-        this.userRepository = userRepository;
-        this.userProfileRepository = userProfileRepository;
-        this.voteRepository = voteRepository;
-        this.objectMapper = objectMapper;
-        this.restClient = RestClient.create();
-    }
+    @Value("${ai-service.timeout-seconds:35}")
+    private int aiServiceTimeoutSeconds;
 
     @Transactional(readOnly = true)
     public PersonalizedFeedResponse getPersonalizedFeed(String username, Integer limit, String cursor) {
