@@ -12,7 +12,8 @@ import '../styles/create-blog.css';
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const CONTENT_TYPES = { BLOG: 'blog', VIDEO: 'video' };
-const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 200 * 1024 * 1024;
+const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
 const emptyRecipeDetails = {
   prepMinutes: '', cookMinutes: '', servings: '', calories: '', proteinG: '', carbsG: '', fatG: '', fiberG: '', sodiumMg: '', ingredients: '', steps: '',
@@ -23,10 +24,9 @@ const numericDetailLabels = [
   ['proteinG', 'Protein', 'g'], ['carbsG', 'Carbohydrates', 'g'], ['fatG', 'Fat', 'g'], ['fiberG', 'Fiber', 'g'], ['sodiumMg', 'Sodium', 'mg'],
 ];
 
-function makeDetailBody(body, details) {
-  const facts = numericDetailLabels
-    .filter(([key]) => String(details[key]).trim())
-    .map(([key, label, unit]) => `- ${label}: ${String(details[key]).trim()}${unit ? ` ${unit}` : ''}`);
+function makeContentBody(body, details) {
+  const facts = numericDetailLabels.filter(([key]) => String(details[key]).trim())
+    .map(([key, label, unit]) => `${label}: ${String(details[key]).trim()}${unit ? ` ${unit}` : ''}`);
   const ingredients = details.ingredients.split('\n').map((item) => item.trim()).filter(Boolean);
   const steps = details.steps.split('\n').map((item) => item.trim()).filter(Boolean);
   const isHtml = /<[a-z][\s\S]*>/i.test(body);
@@ -34,15 +34,53 @@ function makeDetailBody(body, details) {
   const list = (items) => `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
   const sections = [body];
   if (isHtml) {
-    if (facts.length) sections.push(`<h2>Recipe details</h2>${list(facts.map((item) => item.replace(/^- /, '')))}`);
-    if (ingredients.length) sections.push(`<h2>Ingredients</h2>${list(ingredients)}`);
-    if (steps.length) sections.push(`<h2>Steps</h2>${list(steps.map((item, index) => `Step ${index + 1}: ${item}`))}`);
+    if (facts.length) sections.push(`<h2>Recipe details</h2>${list(facts)}`);
+    sections.push(`<h2>Ingredients</h2>${list(ingredients)}`);
+    sections.push(`<h2>Steps</h2>${list(steps.map((item, index) => `Step ${index + 1}: ${item}`))}`);
   } else {
-    if (facts.length) sections.push(`## Recipe details\n${facts.join('\n')}`);
-    if (ingredients.length) sections.push(`## Ingredients\n${ingredients.map((item) => `- ${item}`).join('\n')}`);
-    if (steps.length) sections.push(`## Steps\n${steps.map((item, index) => `- Step ${index + 1}: ${item}`).join('\n')}`);
+    if (facts.length) sections.push(`## Recipe details\n${facts.map((item) => `- ${item}`).join('\n')}`);
+    sections.push(`## Ingredients\n${ingredients.map((item) => `- ${item}`).join('\n')}`);
+    sections.push(`## Steps\n${steps.map((item, index) => `- Step ${index + 1}: ${item}`).join('\n')}`);
   }
   return sections.join('\n\n');
+}
+
+function parseRecipeDetails(body = '') {
+  const details = { ...emptyRecipeDetails };
+  const setFacts = (facts) => facts.forEach((fact) => {
+    const [key, label] = numericDetailLabels.find(([, detailLabel]) => fact.startsWith(`${detailLabel}:`)) ?? [];
+    if (key) details[key] = fact.replace(`${label}:`, '').trim().replace(/\s*(min|kcal|mg|g)$/, '');
+  });
+  const section = (title) => new RegExp(`## ${title}\\n([\\s\\S]*?)(?=\\n\\n## |$)`).exec(body)?.[1] ?? '';
+
+  if (!/<[a-z][\s\S]*>/i.test(body)) {
+    const detailsSection = section('Recipe details');
+    setFacts(detailsSection.split('\n').map((item) => item.replace(/^-\s*/, '').trim()).filter(Boolean));
+    details.ingredients = section('Ingredients').split('\n').map((item) => item.replace(/^-\s*/, '').trim()).filter(Boolean).join('\n');
+    details.steps = section('Steps').split('\n').map((item) => item.replace(/^-\s*(?:Step \d+:\s*)?/, '').trim()).filter(Boolean).join('\n');
+    return { body: body.split(/\n\n## (?:Recipe details|Ingredients|Steps)\n/)[0].trim(), details };
+  }
+
+  const root = document.createElement('div');
+  root.innerHTML = body;
+  const headings = [...root.querySelectorAll('h2')];
+  const findHeading = (title) => headings.find((heading) => heading.textContent.trim().toLowerCase() === title.toLowerCase());
+  const recipeHeading = findHeading('Recipe details');
+  const values = (title) => {
+    const list = findHeading(title)?.nextElementSibling;
+    return list?.tagName === 'UL' ? [...list.querySelectorAll('li')].map((item) => item.textContent.trim()).filter(Boolean) : [];
+  };
+  setFacts(values('Recipe details'));
+  details.ingredients = values('Ingredients').join('\n');
+  details.steps = values('Steps').map((item) => item.replace(/^Step \d+:\s*/, '')).join('\n');
+  if (!recipeHeading) return { body, details };
+
+  const main = [];
+  for (const node of [...root.childNodes]) {
+    if (node === recipeHeading) break;
+    main.push(node.outerHTML ?? node.textContent ?? '');
+  }
+  return { body: main.join('').trim(), details };
 }
 
 async function uploadVideoFile(file) {
@@ -66,6 +104,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const editType = editing?.[1];
   const editId = editing?.[2];
   const preview = import.meta.env.DEV && new URLSearchParams(location.search).get('preview') === '1';
+  const [contentType, setContentType] = useState(defaultType === 'video' ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [videoFile, setVideoFile] = useState(null);
@@ -76,6 +115,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const [file, setFile] = useState(null);
   const [imageUrl, setImageUrl] = useState('');
   const [recipeDetails, setRecipeDetails] = useState(emptyRecipeDetails);
+  const [showRecipeDetails, setShowRecipeDetails] = useState(true);
   const [existingThumbnailUrl, setExistingThumbnailUrl] = useState('');
   const [existingMediaUrl, setExistingMediaUrl] = useState('');
   const [loadingContent, setLoadingContent] = useState(Boolean(editing));
@@ -85,11 +125,25 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const dialogRef = useRef(null);
   const submitting = useRef(false);
 
-  const isVideo = editType === 'video' || (!editing && (defaultType === 'video' || Boolean(videoFile)));
+  const isVideo = editing ? editType === CONTENT_TYPES.VIDEO : contentType === CONTENT_TYPES.VIDEO;
   const trimmedTitle = title.trim();
   const bodyHtml = body.trim();
   const trimmedBody = body.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
-  const canSubmit = trimmedTitle && trimmedBody && categoryId;
+  const hasVideo = Boolean(videoFile || (editing && existingMediaUrl));
+  const hasThumbnail = Boolean(file || existingThumbnailUrl);
+  const hasRecipeDetails = Boolean(recipeDetails.ingredients.trim() && recipeDetails.steps.trim());
+
+  function missingRequiredFields() {
+    const missing = [];
+    if (!trimmedTitle) missing.push('title');
+    if (!trimmedBody) missing.push(isVideo ? 'video description' : 'post content');
+    if (isVideo && !hasVideo) missing.push('video file');
+    if (!hasThumbnail) missing.push(isVideo ? 'video thumbnail' : 'cover image');
+    if (!recipeDetails.ingredients.trim()) missing.push('ingredients');
+    if (!recipeDetails.steps.trim()) missing.push('preparation steps');
+    if (!categoryId) missing.push('category');
+    return missing;
+  }
 
   useEffect(() => {
     if (!modal) return undefined;
@@ -133,8 +187,10 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
     const getContent = editType === 'video' ? getMyVideo : getMyBlog;
     getContent(editId, controller.signal).then((item) => {
       if (controller.signal.aborted) return;
+      const parsed = parseRecipeDetails(item.body ?? '');
       setTitle(item.title ?? '');
-      setBody(item.body ?? '');
+      setBody(parsed.body);
+      setRecipeDetails(parsed.details);
       setCategoryId(item.categoryId ? String(item.categoryId) : '');
       setExistingThumbnailUrl(item.thumbnailUrl ?? '');
       setExistingMediaUrl(item.mediaUrl ?? '');
@@ -174,21 +230,11 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
     setFile(selected);
   }
 
-  function format(mark) {
-    const input = bodyRef.current;
-    if (!input) return;
-    input.focus();
-    const command = mark === 'heading' ? 'formatBlock' : mark === 'list' ? 'insertUnorderedList' : 'bold';
-    const value = mark === 'heading' ? 'h2' : undefined;
-    document.execCommand(command, false, value);
-    setBody(input.innerHTML);
-  }
-
   function chooseVideo(event) {
     const selected = event.target.files?.[0];
     if (!selected) return;
-    if (selected.type !== 'video/mp4' || selected.size > MAX_VIDEO_SIZE) {
-      setError('Choose an MP4 video no larger than 100 MB.');
+    if (!VIDEO_TYPES.includes(selected.type) || selected.size > MAX_VIDEO_SIZE) {
+      setError('Choose an MP4, WebM, or MOV video no larger than 200 MB.');
       event.target.value = '';
       return;
     }
@@ -198,19 +244,29 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
 
   async function submit(event, intent) {
     event.preventDefault();
-    if (preview || submitting.current || !canSubmit) return;
+    if (preview || submitting.current) return;
+    const missing = missingRequiredFields();
+    if (missing.length) {
+      setError(`Please complete the required fields: ${missing.join(', ')}.`);
+      return;
+    }
     submitting.current = true;
     setBusy(true);
     setError('');
     try {
       const thumbnailUrl = file ? await uploadBlogThumbnail(file) : existingThumbnailUrl || null;
-      const payload = { title: trimmedTitle, body: makeDetailBody(bodyHtml, recipeDetails), thumbnailUrl, categoryId: Number(categoryId) };
+      const payload = {
+        title: trimmedTitle,
+        body: makeContentBody(bodyHtml, recipeDetails),
+        thumbnailUrl,
+        categoryId: Number(categoryId),
+      };
       let created;
       if (isVideo) {
         const uploadedVideo = videoFile ? await uploadVideoFile(videoFile) : null;
         const videoPayload = { ...payload, mediaUrl: uploadedVideo?.mediaUrl ?? existingMediaUrl };
-        if (!videoPayload.mediaUrl) throw new Error('Add an MP4 video before saving.');
-        const durationSec = uploadedVideo?.durationSec ?? videoDuration;
+        if (!videoPayload.mediaUrl) throw new Error('Upload a video file before saving.');
+        const durationSec = videoDuration;
         if (Number.isFinite(durationSec) && durationSec > 0) videoPayload.durationSec = Math.round(durationSec);
         created = editing ? await updateMyVideo(editId, videoPayload) : await createMyVideo(videoPayload);
       } else {
@@ -232,38 +288,39 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const editor = <EditorTag className="create-blog-main">
     {modal ? <button type="button" className="create-blog-close" onClick={onClose} aria-label="Close editor" disabled={busy}><X size={19}/></button> : <Link to="/community/my-blogs" className="my-blogs-back"><ArrowLeft size={15}/> Back to my content</Link>}
     <header className="create-blog-header">
-      <div className="create-blog-hero-copy"><p className="my-blogs-eyebrow">YOUR PERSONAL JOURNAL</p><h1 id="create-blog-dialog-title">{editing ? 'Edit your post' : 'Create a post'}<span>.</span></h1><p>{editing ? 'Update every part of your post, then save it back to My content.' : 'Share a recipe, a story, or an MP4 video with the community from one simple form.'}</p></div>
+      <div className="create-blog-hero-copy"><p className="my-blogs-eyebrow">YOUR PERSONAL CONTENT</p><h1 id="create-blog-dialog-title">{editing ? 'Edit your post' : 'Create a post'}<span>.</span></h1><p>{editing ? 'Update the content, media, recipe details, and category, then save your changes.' : 'Choose Blog post or Video clip below, then add the information your community needs.'}</p></div>
     </header>
     <form className="create-blog-form" onSubmit={(event) => submit(event, 'draft')}>
       <div className="create-blog-panel">
-        <div className="create-blog-section-heading"><span>01</span><div><h2>Your post</h2><p>Give it a clear title and share the details your readers need.</p></div></div>
+        {!editing && <div className="create-blog-type-picker"><span>Post type</span><div className="create-blog-type-toggle" role="group" aria-label="Content type">
+          <button type="button" className={!isVideo ? 'is-active' : ''} aria-pressed={!isVideo} onClick={() => { setContentType(CONTENT_TYPES.BLOG); setError(''); }} disabled={busy}>Blog post</button>
+          <button type="button" className={isVideo ? 'is-active' : ''} aria-pressed={isVideo} onClick={() => { setContentType(CONTENT_TYPES.VIDEO); setError(''); }} disabled={busy}>Video clip</button>
+        </div></div>}
+        <div className="create-blog-section-heading"><span>01</span><div><h2>{isVideo ? 'Your video' : 'Your blog'}</h2><p>{isVideo ? 'Upload the clip and explain what viewers will learn.' : 'Give it a clear title and share the details your readers need.'}</p></div></div>
         <label htmlFor="create-blog-title">Title <small>{title.length}/255</small></label>
-        <input id="create-blog-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={255} required placeholder="What would you like to share?" disabled={busy}/>
-        <div className="create-video-upload">
-          <label htmlFor="create-video-file"><FileVideo size={20}/><span><b>{videoFile ? videoFile.name : 'Add an MP4 video (optional)'}</b><small>MP4 only · max 100 MB</small></span></label>
-          <input id="create-video-file" type="file" accept="video/mp4" onChange={chooseVideo} disabled={busy}/>
-          {videoFile && <button type="button" className="create-blog-remove" onClick={() => setVideoFile(null)} disabled={busy}><X size={14}/> Remove video</button>}
-          {videoPreviewUrl && <video className="create-video-preview" src={videoPreviewUrl} controls preload="metadata" onLoadedMetadata={(event) => setVideoDuration(event.currentTarget.duration)} aria-label="MP4 video preview"/>}
-        </div>
-        <label htmlFor="create-blog-body">Post content</label>
-        <div className="create-blog-editor">
-          <div className="create-blog-toolbar" aria-label="Text formatting"><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => format('heading')} disabled={busy}>Heading</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => format('bold')} disabled={busy}><strong>B</strong> Bold</button><button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => format('list')} disabled={busy}>List</button></div>
-          <div id="create-blog-body" ref={bodyRef} className="create-blog-rich-editor" contentEditable={!busy} role="textbox" aria-multiline="true" aria-label={isVideo ? 'Video description' : 'Article'} data-placeholder={isVideo ? 'Describe what viewers will learn...' : 'Start writing your story...'} onInput={(event) => setBody(event.currentTarget.innerHTML)} />
-        </div>
-        <div className="create-blog-detail-fields">
-          <div className="create-blog-section-heading"><span><Clock3 size={16}/></span><div><h2>Recipe details</h2><p>Optional recipe information shown in the published post detail.</p></div></div>
-          <div className="create-blog-detail-grid">
+        <input id="create-blog-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={255} placeholder="What would you like to share?" disabled={busy}/>
+        {isVideo && <div className="create-video-upload">
+          <label htmlFor="create-video-file"><FileVideo size={20}/><span><b>{videoFile ? videoFile.name : 'Upload a video file'}</b><small>MP4, WebM, or MOV · max 200 MB</small></span></label>
+          <input id="create-video-file" type="file" accept="video/mp4,video/webm,video/quicktime" onChange={chooseVideo} disabled={busy}/>
+          {videoFile && <button type="button" className="create-blog-remove" onClick={() => setVideoFile(null)} disabled={busy}><X size={14}/> Remove replacement</button>}
+          {videoPreviewUrl && <video className="create-video-preview" src={videoPreviewUrl} controls preload="metadata" onLoadedMetadata={(event) => setVideoDuration(event.currentTarget.duration)} aria-label="Video file preview"/>}
+        </div>}
+        <label htmlFor="create-blog-body">{isVideo ? 'Video description' : 'Post content'}</label>
+        <div className="create-blog-editor"><div id="create-blog-body" ref={bodyRef} className="create-blog-rich-editor" contentEditable={!busy} role="textbox" aria-multiline="true" aria-label={isVideo ? 'Video description' : 'Article'} data-placeholder={isVideo ? 'Describe what viewers will learn...' : 'Start writing your story...'} onInput={(event) => setBody(event.currentTarget.innerHTML)} /></div>
+        <section className="create-blog-detail-fields">
+          <div className="create-recipe-toggle"><div className="create-blog-section-heading"><span><Clock3 size={16}/></span><div><h2>Recipe details</h2><p>Required ingredients and preparation steps for this {isVideo ? 'video' : 'blog'}.</p></div></div><button type="button" className={showRecipeDetails ? 'is-active' : ''} aria-expanded={showRecipeDetails} onClick={() => setShowRecipeDetails((visible) => !visible)} disabled={busy}>{showRecipeDetails ? 'Hide details' : 'Show details'}</button></div>
+          {showRecipeDetails && <><div className="create-blog-detail-grid">
             {numericDetailLabels.map(([key, label, unit]) => <label key={key} htmlFor={`recipe-${key}`}>{label}{unit && <small>{unit}</small>}<input id={`recipe-${key}`} type="number" min="0" step={key === 'servings' ? '1' : '0.1'} value={recipeDetails[key]} onChange={(event) => setRecipeDetails({ ...recipeDetails, [key]: event.target.value })} disabled={busy}/></label>)}
           </div>
-          <label htmlFor="recipe-ingredients">Ingredients <small>one item per line</small></label>
+          <label htmlFor="recipe-ingredients">Ingredients <small>required · one item per line</small></label>
           <textarea id="recipe-ingredients" rows={4} value={recipeDetails.ingredients} onChange={(event) => setRecipeDetails({ ...recipeDetails, ingredients: event.target.value })} placeholder={'200 g tofu\n1 tbsp olive oil'} disabled={busy}/>
-          <label htmlFor="recipe-steps">Preparation steps <small>one step per line</small></label>
-          <textarea id="recipe-steps" rows={4} value={recipeDetails.steps} onChange={(event) => setRecipeDetails({ ...recipeDetails, steps: event.target.value })} placeholder={'Press the tofu dry\nPan-fry until crisp'} disabled={busy}/>
-        </div>
+          <label htmlFor="recipe-steps">Preparation steps <small>required · one step per line</small></label>
+          <textarea id="recipe-steps" rows={4} value={recipeDetails.steps} onChange={(event) => setRecipeDetails({ ...recipeDetails, steps: event.target.value })} placeholder={'Press the tofu dry\nPan-fry until crisp'} disabled={busy}/></>}
+        </section>
       </div>
       <aside className="create-blog-settings">
-        <div className="create-blog-panel"><div className="create-blog-section-heading"><span>02</span><div><h2>Cover image</h2><p>Help readers recognize your {isVideo ? 'video' : 'story'}.</p></div></div>
-          <label className="create-blog-upload" htmlFor="create-blog-image">{imageUrl || existingThumbnailUrl ? <img src={imageUrl || existingThumbnailUrl} alt="Selected cover preview"/> : <><ImagePlus size={30}/><strong>Upload a cover image</strong><span>JPG, PNG, or WebP - max 5 MB</span></>}</label>
+        <div className="create-blog-panel"><div className="create-blog-section-heading"><span>02</span><div><h2>{isVideo ? 'Video thumbnail' : 'Cover image'}</h2><p>{isVideo ? 'Required preview image for the uploaded video.' : 'Required cover image for this blog.'}</p></div></div>
+          <label className="create-blog-upload" htmlFor="create-blog-image">{imageUrl || existingThumbnailUrl ? <img src={imageUrl || existingThumbnailUrl} alt={isVideo ? 'Selected video thumbnail preview' : 'Selected cover preview'}/> : <><ImagePlus size={30}/><strong>{isVideo ? 'Upload a video thumbnail' : 'Upload a cover image'}</strong><span>Required · JPG, PNG, or WebP - max 5 MB</span></>}</label>
           <input id="create-blog-image" type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseImage} disabled={busy}/>
           {(file || existingThumbnailUrl) && <button type="button" className="create-blog-remove" onClick={() => { setFile(null); setExistingThumbnailUrl(''); }} disabled={busy}><X size={14}/> Remove image</button>}
         </div>
@@ -274,8 +331,8 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         </div>
         {error && <p className="create-blog-error" role="alert">{error} {error.includes('session') && <Link to="/login">Sign in</Link>}</p>}
         <div className="create-blog-submit-actions">
-          <button className="my-blog-button create-blog-submit create-blog-submit--secondary" type="submit" disabled={preview || loadingContent || busy || !canSubmit}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Saving...</> : <><Save size={16}/>{editing ? ' Save changes' : ' Save draft'}</>}</button>
-          {!editing && <button className="my-blog-button create-blog-submit" type="button" onClick={(event) => submit(event, 'submit')} disabled={preview || loadingContent || busy || !canSubmit}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Saving...</> : <><Send size={16}/> Submit for review</>}</button>}
+          <button className="my-blog-button create-blog-submit create-blog-submit--secondary" type="submit" disabled={preview || loadingContent || busy}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Saving...</> : <><Save size={16}/>{editing ? ' Save changes' : ' Save draft'}</>}</button>
+          {!editing && <button className="my-blog-button create-blog-submit" type="button" onClick={(event) => submit(event, 'submit')} disabled={preview || loadingContent || busy}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Saving...</> : <><Send size={16}/> Submit for review</>}</button>}
         </div>
       </aside>
     </form>
