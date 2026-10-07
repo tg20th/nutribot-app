@@ -15,14 +15,17 @@
 .community-avatar-btn img{width:100%;height:100%;object-fit:cover}
 
 .community-shell{display:flex;align-items:flex-start;min-height:calc(100vh - 76px)}
-.community-sidenav-spacer{flex:none;width:76px}
+.community-sidenav-spacer{flex:none;width:68px}
 
-.community-sidenav{position:sticky;top:76px;flex:none;width:76px;height:calc(100vh - 76px);overflow:hidden;transition:width .22s cubic-bezier(.2,.8,.2,1);background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:18px 8px;gap:2px}
+.community-sidenav{position:sticky;top:76px;flex:none;width:68px;height:calc(100vh - 76px);overflow:hidden;transition:width .22s cubic-bezier(.2,.8,.2,1);background:var(--card);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:18px 8px;gap:2px}
 .community-sidenav:hover{width:224px;box-shadow:6px 0 24px rgba(30,40,25,.12)}
-.community-sidenav button,.community-sidenav a{display:flex;align-items:center;gap:16px;width:100%;padding:12px 10px;border-radius:12px;background:transparent;color:var(--text-muted);font-size:13px;font-weight:600;white-space:nowrap}
-.community-sidenav button svg,.community-sidenav a svg{flex:none;margin-left:2px}
-.community-sidenav button span,.community-sidenav a span{opacity:0;transition:opacity .15s ease}
-.community-sidenav:hover button span,.community-sidenav:hover a span{opacity:1}
+.community-sidenav button,.community-sidenav a{display:flex;align-items:center;justify-content:center;gap:0;width:100%;box-sizing:border-box;margin-left:auto;margin-right:auto;padding:12px 10px;border-radius:12px;background:transparent;color:var(--text-muted);font-size:13px;font-weight:600;white-space:nowrap}
+.community-sidenav>button,.community-sidenav>a{width:44px;height:44px;padding:0}
+.community-sidenav button svg,.community-sidenav a svg{flex:none}
+.community-sidenav button span,.community-sidenav a span{display:none;opacity:0;transition:opacity .15s ease}
+.community-sidenav:hover button span,.community-sidenav:hover a span{display:inline;opacity:1}
+.community-sidenav:hover button,.community-sidenav:hover a{gap:16px;justify-content:flex-start}
+.community-sidenav:hover>button,.community-sidenav:hover>a{width:100%;height:auto;padding:12px 10px}
 .community-sidenav button:hover,.community-sidenav a:hover{background:var(--sage);color:var(--text)}
 .community-sidenav button.is-active,.community-sidenav a.is-active{background:var(--primary);color:#fffefa}
 
@@ -159,6 +162,7 @@
   .community-sidenav:hover{width:60px;box-shadow:none}
   .community-sidenav button span,.community-sidenav a span{display:none!important;opacity:0!important}
   .community-sidenav button,.community-sidenav a{justify-content:center;padding:12px 8px}
+  .community-sidenav:hover>button,.community-sidenav:hover>a{width:44px;height:44px;padding:0}
   .community-sidenav-spacer{width:60px}
   .community-layout{padding:28px 4vw 90px}
   .community-right-rail{position:static}
