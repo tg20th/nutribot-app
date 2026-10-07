@@ -44,3 +44,6 @@
 @media(max-width:520px){.nb-profile-load-error{min-height:280px;flex-direction:column}.nb-profile-load-error button{width:100%;max-width:190px}}
 @media(max-width:470px){.nb-profile-actions{flex-direction:column-reverse}.nb-profile-button{width:100%}.nb-profile-hero__copy>span{font-size:13px}.nb-profile-guide{margin-top:55px}}
 @media(prefers-reduced-motion:reduce){.nb-profile-progress span,.nb-profile-button,.nb-profile-guide button{transition:none}.nb-profile-spinner{animation:none}}
+
+/* Google Sans/Roboto provides complete Vietnamese glyph coverage in profile UI. */
+.nb-profile-page,.nb-profile-page :is(button,input,select,textarea,h1,h2,h3,p,span,label,small,b,em,blockquote){font-family:'Google Sans Text','Google Sans','Product Sans','Roboto',Arial,sans-serif!important}
