@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useNavigationType, useSearchParams } fr
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { ArrowRight, BookOpen, Eye, LoaderCircle, Play, Search, SlidersHorizontal, Sparkles, Video, X } from 'lucide-react';
+import { ArrowRight, BookOpen, Eye, LoaderCircle, Play, Search, X } from 'lucide-react';
 import MemberPageLayout from '../layouts/MemberPageLayout';
 import Header from '../components/Header';
 import ImageWithFallback from '../components/ImageWithFallback';
@@ -16,9 +16,9 @@ import '../styles/search.css';
 gsap.registerPlugin(ScrollTrigger);
 
 const TYPES = [
-  { value: '', label: 'All', description: 'Blogs and videos', icon: Sparkles },
-  { value: 'BLOG', label: 'Articles', description: 'Practical nutrition', icon: BookOpen },
-  { value: 'VIDEO', label: 'Videos', description: 'Watch and cook', icon: Video }
+  { value: '', label: 'All' },
+  { value: 'BLOG', label: 'Articles' },
+  { value: 'VIDEO', label: 'Videos' }
 ];
 const SUGGESTIONS = ['High-protein breakfast', 'Plant-based meals', 'Healthy eating', '20-minute dinner'];
 
@@ -99,7 +99,6 @@ function SearchExperience({ isMember, onAuth }) {
   const [categories, setCategories] = useState([]);
   const [meta, setMeta] = useState({ totalElements: null, totalPages: 0, page: 0, last: false });
   const sort = searchParams.get('sort') || 'newest';
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -251,7 +250,6 @@ function SearchExperience({ isMember, onAuth }) {
 
   const updateParams = (changes) => { const next = new URLSearchParams(searchParams); Object.entries(changes).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key)); setSearchParams(next); };
   const submitSearch = (event) => { event.preventDefault(); updateParams({ q: draft.trim() }); };
-  const activeCategory = categories.find((category) => String(category.categoryId ?? category.id) === categoryId);
   const returnTo = `${location.pathname}${location.search}`;
 
   if (!isMember) return <main className="public-search-main" ref={pageRef}>
@@ -289,10 +287,9 @@ function SearchExperience({ isMember, onAuth }) {
     <div className="member-search-suggestions" aria-label="Search suggestions">{SUGGESTIONS.map((suggestion) => <button type="button" key={suggestion} onClick={() => setDraft(suggestion)}>{suggestion}<ArrowRight size={14} /></button>)}</div>
 
     <section className="search-controls" aria-label="Search filters">
-      <div className="search-type-accordion">{TYPES.map(({ value, label, description, icon: Icon }) => <button type="button" key={label} className={contentType === value ? 'is-active' : ''} onClick={() => updateParams({ type: value })}><Icon size={19} /><span><b>{label}</b><small>{description}</small></span></button>)}</div>
-      <button type="button" className={`search-filter-trigger${filtersOpen ? ' is-active' : ''}`} onClick={() => setFiltersOpen((open) => !open)}><SlidersHorizontal size={17} /> Categories {activeCategory && <span>1</span>}</button>
+      <div className="search-type-accordion" role="group" aria-label="Content type">{TYPES.map(({ value, label }) => <button type="button" key={label} className={contentType === value ? 'is-active' : ''} aria-pressed={contentType === value} onClick={() => updateParams({ type: value })}>{label}</button>)}</div>
+      <label className="search-category-control">Category<select value={categoryId} onChange={(event) => updateParams({ category: event.target.value })}><option value="">All</option>{categories.map((category) => { const id = String(category.categoryId ?? category.id); return <option value={id} key={id}>{category.name}</option>; })}</select></label>
       <label className="search-sort-control">Sort by<select value={sort} onChange={(event) => updateParams({ sort: event.target.value === 'newest' ? '' : event.target.value })}><option value="newest">Newest</option><option value="popular">Most viewed</option><option value="oldest">Oldest</option></select></label>
-      {filtersOpen && <div className="search-category-panel"><button type="button" className={!categoryId ? 'is-active' : ''} onClick={() => updateParams({ category: '' })}>All categories</button>{categories.map((category) => { const id = String(category.categoryId ?? category.id); return <button type="button" key={id} className={categoryId === id ? 'is-active' : ''} onClick={() => updateParams({ category: id })}>{category.name}</button>; })}</div>}
     </section>
 
     <section className="search-results" id="search-results" aria-live="polite">
