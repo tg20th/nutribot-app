@@ -11,14 +11,12 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
-  Leaf,
   LoaderCircle,
   LockKeyhole,
   Mail,
   ImageUp,
   RotateCcw,
   Save,
-  ShieldCheck,
   Trash2,
   UserRound,
   X,
@@ -59,27 +57,6 @@ const getTrustedAvatarUrl = (value) => {
     return '';
   }
 };
-
-const PROFILE_GUIDE = [
-  {
-    id: 'identity',
-    icon: UserRound,
-    title: 'Your identity',
-    copy: 'Use the name you want NutriBot to show across your personal experience.',
-  },
-  {
-    id: 'privacy',
-    icon: ShieldCheck,
-    title: 'Private by design',
-    copy: 'Your personal details are used to personalize your account and stay protected.',
-  },
-  {
-    id: 'next',
-    icon: Leaf,
-    title: 'Ready for nutrition',
-    copy: 'A complete profile makes your future health and meal settings easier to manage.',
-  },
-];
 
 const PROFILE_NOTES = [
   'A clear photo and short bio help your NutriBot space feel recognizably yours.',
@@ -166,6 +143,7 @@ const validatePasswordChange = (passwords) => {
 export default function ProfilePage() {
   const pageRef = useRef(null);
   const avatarInputRef = useRef(null);
+  const savingRef = useRef(false);
   const fallbackUser = useMemo(() => getCurrentUserFromToken() ?? { username: '', email: '' }, []);
   const [profile, setProfile] = useState(() => toFormProfile(EMPTY_PROFILE, fallbackUser));
   const [savedProfile, setSavedProfile] = useState(() => toFormProfile(EMPTY_PROFILE, fallbackUser));
@@ -180,7 +158,6 @@ export default function ProfilePage() {
   const [serverPendingEmail, setServerPendingEmail] = useState('');
   const [confirmedEmail, setConfirmedEmail] = useState('');
   const [notice, setNotice] = useState(null);
-  const [activeGuide, setActiveGuide] = useState('identity');
   const [activeNote, setActiveNote] = useState(0);
   const [headerQuery, setHeaderQuery] = useState('');
   const [avatarFile, setAvatarFile] = useState(null);
@@ -224,6 +201,12 @@ export default function ProfilePage() {
   useEffect(() => () => {
     if (avatarPreview) URL.revokeObjectURL(avatarPreview);
   }, [avatarPreview]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timeoutId = window.setTimeout(() => setNotice((current) => current === notice ? null : current), 3500);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   useGSAP(() => {
     const media = gsap.matchMedia();
@@ -286,6 +269,10 @@ export default function ProfilePage() {
   const completion = [profile.fullName, profile.email, profile.dateOfBirth, profile.gender, profile.bio].filter(Boolean).length * 20;
   const visibleAvatar = avatarPreview || (!avatarRemoved ? profile.avatarUrl : '');
 
+  const scrollToSaveFeedback = () => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' })));
+  };
+
   const updateField = (event) => {
     const { name, value } = event.target;
     setProfile((current) => ({ ...current, [name]: value }));
@@ -335,14 +322,16 @@ export default function ProfilePage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!hasLoadedProfile) return;
+    if (!hasLoadedProfile || savingRef.current) return;
     const nextErrors = validateProfile(profile);
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       setNotice({ type: 'error', message: 'Please review the highlighted fields before saving.' });
+      scrollToSaveFeedback();
       return;
     }
 
+    savingRef.current = true;
     setIsSaving(true);
     setNotice(null);
     try {
@@ -385,7 +374,9 @@ export default function ProfilePage() {
     } catch (error) {
       setNotice({ type: 'error', message: error?.message || 'We could not save your changes. Please try again.' });
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
+      scrollToSaveFeedback();
     }
   };
 
@@ -474,6 +465,7 @@ export default function ProfilePage() {
             <div className={`nb-profile-notice nb-profile-notice--${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>
               {notice.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
               <span>{notice.message}</span>
+              <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss notification"><X size={16} /></button>
             </div>
           )}
 
@@ -602,17 +594,6 @@ export default function ProfilePage() {
             </aside>
           </div>
 
-          <section className="nb-profile-guide" aria-label="Profile guide">
-            {PROFILE_GUIDE.map(({ id, icon: Icon, title, copy }) => {
-              const isActive = activeGuide === id;
-              return (
-                <button key={id} type="button" className={isActive ? 'is-active' : ''} onMouseEnter={() => setActiveGuide(id)} onFocus={() => setActiveGuide(id)} onClick={() => setActiveGuide(id)} aria-expanded={isActive}>
-                  <Icon size={21} />
-                  <span><b>{title}</b>{isActive && <small>{copy}</small>}</span>
-                </button>
-              );
-            })}
-          </section>
         </main>
       </div>
       {isAvatarViewerOpen && visibleAvatar && (
@@ -632,6 +613,7 @@ export default function ProfilePage() {
             purpose: 'emailChange',
             expirationSeconds: 30 * 60,
             onVerify: handleEmailVerification,
+            onVerified: () => { setHasDismissedEmailVerification(false); setIsEmailVerificationOpen(false); },
             onResend: resendEmailVerification,
             onBack: () => { setHasDismissedEmailVerification(true); setIsEmailVerificationOpen(false); },
           }}
