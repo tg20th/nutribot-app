@@ -43,3 +43,38 @@ it('opens the existing detail dialog and scrolls to the full caption from See mo
   await screen.findByRole('dialog');
   await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled());
 });
+
+it('extracts story from recipe JSON body or caption and does not display raw JSON', () => {
+  const jsonBody = JSON.stringify({
+    version: 1,
+    story: 'Lời dẫn hoặc câu chuyện giới thiệu về món ăn...',
+    prepMinutes: 15,
+    cookMinutes: 20,
+    servings: 2,
+    nutrition: { calories: 320, proteinG: 18.5, carbsG: 22.0, fatG: 12.0, fiberG: 5.5, sodiumMg: 420.0 },
+    ingredients: [
+      { name: 'Đậu phụ', quantity: '200', unit: 'g', isCustom: false },
+      { name: 'Xà lách', quantity: '100', unit: 'g', isCustom: false }
+    ],
+    steps: [
+      'Sơ chế và rửa sạch nguyên liệu.',
+      'Cắt đậu phụ thành miếng vừa ăn và áp chảo vàng.',
+      'Trộn đều cùng rau sốt mè và thưởng thức.'
+    ]
+  });
+
+  const post = normalizePost({
+    contentId: 126,
+    contentType: 'BLOG',
+    title: 'Đậu phụ áp chảo sốt mè',
+    body: jsonBody,
+    caption: jsonBody,
+    thumbnailUrl: '/tofu.jpg'
+  }, 'BLOG');
+
+  render(<CommunityPostCard post={post} interactionApi={{ loadVote: async () => ({ voteCount: 0, isVoted: false }) }} />);
+
+  expect(screen.getByText('Lời dẫn hoặc câu chuyện giới thiệu về món ăn...')).toBeInTheDocument();
+  expect(screen.queryByText(/prepMinutes/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/\{"version":/)).not.toBeInTheDocument();
+});

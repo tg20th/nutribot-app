@@ -75,6 +75,43 @@ class PersonalizedFeedServiceTest {
     }
 
     @Test
+    void feedReturnsStoryWhenBodyIsRecipeJson() {
+        Content recipePost = content(126, LocalDateTime.of(2026, 10, 8, 19, 0));
+        recipePost.setTitle("Đậu phụ áp chảo sốt mè");
+        recipePost.setBody("""
+                {
+                  "version": 1,
+                  "story": "Lời dẫn hoặc câu chuyện giới thiệu về món ăn...",
+                  "prepMinutes": 15,
+                  "cookMinutes": 20,
+                  "servings": 2,
+                  "nutrition": {
+                    "calories": 320,
+                    "proteinG": 18.5,
+                    "carbsG": 22.0,
+                    "fatG": 12.0,
+                    "fiberG": 5.5,
+                    "sodiumMg": 420.0
+                  },
+                  "ingredients": [
+                    { "name": "Đậu phụ", "quantity": "200", "unit": "g", "isCustom": false },
+                    { "name": "Xà lách", "quantity": "100", "unit": "g", "isCustom": false }
+                  ],
+                  "steps": [
+                    "Sơ chế và rửa sạch nguyên liệu.",
+                    "Cắt đậu phụ thành miếng vừa ăn và áp chảo vàng.",
+                    "Trộn đều cùng rau sốt mè và thưởng thức."
+                  ]
+                }
+                """);
+        stubCatalog(List.of(recipePost));
+
+        PersonalizedFeedResponse response = service.getPersonalizedFeed(null, 1, null);
+
+        assertEquals("Lời dẫn hoặc câu chuyện giới thiệu về món ăn...", response.getItems().getFirst().getCaption());
+    }
+
+    @Test
     void guestPaginatesAllFiftyEligibleContentsWithoutCallingAi() {
         stubCatalog(fiftyContents());
 

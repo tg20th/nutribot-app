@@ -1,5 +1,6 @@
 package com.fpt.swp391.nutribot.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fpt.swp391.nutribot.dto.request.RecommendationRequestDto;
 import com.fpt.swp391.nutribot.dto.response.PersonalizedFeedResponse;
@@ -401,6 +402,28 @@ public class PersonalizedFeedService {
 
     private String extractFeedCaption(String body) {
         if (body == null || body.isBlank()) return null;
+        String trimmed = body.trim();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            try {
+                JsonNode root = objectMapper.readTree(trimmed);
+                if (root != null) {
+                    if (root.hasNonNull("story")) {
+                        String story = root.get("story").asText("").trim();
+                        if (!story.isBlank()) {
+                            return story;
+                        }
+                    }
+                    if (root.hasNonNull("description")) {
+                        String desc = root.get("description").asText("").trim();
+                        if (!desc.isBlank()) {
+                            return desc;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Failed to parse body as JSON in extractFeedCaption: {}", e.getMessage());
+            }
+        }
         Matcher boundary = RECIPE_SECTION_BOUNDARY.matcher(body);
         String caption = (boundary.find() ? body.substring(0, boundary.start()) : body).trim();
         return caption.isBlank() ? null : caption;

@@ -4,7 +4,7 @@ import ImageWithFallback from '../ImageWithFallback';
 import PostDiscussionModal from '../content/PostDiscussionModal';
 import VoteButton from '../content/VoteButton';
 import FeedContentDetail from '../content/FeedContentDetail';
-import { formatPostDate } from '../../utils/content';
+import { formatPostDate, extractStoryText } from '../../utils/content';
 
 const firstPresent = (...values) => values.find((value) => value != null && value !== '');
 
@@ -17,7 +17,8 @@ export default function CommunityPostCard({ post: sourcePost, interactionApi = {
   const [voteRevision, setVoteRevision] = useState(0);
   const [captionExpanded, setCaptionExpanded] = useState(false);
   const images = post.type === 'gallery' ? post.images : [post.image];
-  const caption = String(firstPresent(post.caption, post.story, post.description, post.summary, typeof post.content === 'string' ? post.content : null, post.cleanBody) ?? '').trim();
+  const rawCaption = firstPresent(post.caption, post.story, post.description, post.summary, typeof post.content === 'string' ? post.content : null, post.cleanBody);
+  const caption = String(extractStoryText(rawCaption) ?? '').trim();
   const captionPreviewLength = 280;
   const captionIsLong = caption.length > captionPreviewLength;
   const visibleCaption = captionExpanded || !captionIsLong ? caption : `${caption.slice(0, captionPreviewLength).trimEnd()}…`;

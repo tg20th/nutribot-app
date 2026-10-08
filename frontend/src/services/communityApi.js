@@ -1,4 +1,5 @@
 import { apiRequest, unwrapData } from './apiClient';
+import { extractStoryText } from '../utils/content';
 
 const itemsFrom = (payload) => {
   const data = unwrapData(payload);
@@ -92,6 +93,7 @@ export function parseBodyRecipeData(body = '') {
         const clean = stripHtmlToCleanText(storyText);
         if (clean) data.cleanBody = clean;
         else if (storyText) data.cleanBody = storyText;
+        data.story = data.cleanBody || storyText || '';
 
         const details = parsed.details || parsed;
         const nut = parsed.nutrition || {};
@@ -274,9 +276,12 @@ export const normalizePost = (item = {}, fallbackType = 'BLOG') => {
   const rawType = item.type ?? item.contentType ?? fallbackType;
   const author = item.author ?? item.user ?? {};
   const parsedRecipe = parseBodyRecipeData(item.body);
-  const cleanBody = parsedRecipe.cleanBody || stripHtmlToCleanText(item.body) || '';
-  const captionSource = firstDefined(item.caption, item.story, item.description, item.summary, typeof item.content === 'string' ? item.content : null, cleanBody);
-  const cleanDescription = stripHtmlToCleanText(captionSource);
+  const cleanBody = parsedRecipe.cleanBody || extractStoryText(stripHtmlToCleanText(item.body)) || '';
+  const rawCaption = extractStoryText(item.caption);
+  const rawContent = typeof item.content === 'string' ? extractStoryText(item.content) : null;
+  const captionSource = firstDefined(rawCaption, item.story, parsedRecipe.story, item.description, item.summary, rawContent, cleanBody);
+  const cleanDescription = extractStoryText(stripHtmlToCleanText(captionSource));
+  const finalStory = parsedRecipe.story || cleanDescription || cleanBody;
   const calories = extractCalories(item, parsedRecipe);
   const protein = extractProtein(item, parsedRecipe);
   const nutrition = normalizeNutrition(item, parsedRecipe);
@@ -291,9 +296,11 @@ export const normalizePost = (item = {}, fallbackType = 'BLOG') => {
     servings: item.servings ?? parsedRecipe.servings ?? null,
     prepTime: item.prepTime ?? parsedRecipe.prepTime ?? null,
     cookTime: item.cookTime ?? parsedRecipe.cookTime ?? null,
-    cleanBody,
-    body: cleanBody,
+    cleanBody: finalStory,
+    body: finalStory || extractStoryText(item.body),
     description: cleanDescription,
+    caption: cleanDescription || finalStory,
+    story: finalStory,
     id: item.id ?? item.contentId,
     type: String(rawType).toUpperCase() === 'VIDEO' ? 'video' : 'blog',
     author: item.authorName ?? author.fullName ?? author.name ?? (typeof author === 'string' ? author : ''),
