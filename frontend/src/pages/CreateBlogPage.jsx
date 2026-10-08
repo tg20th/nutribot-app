@@ -227,9 +227,13 @@ function submitForReview(contentType, contentId) {
 export default function CreateBlogPage({ modal = false, onClose, defaultType = 'blog' } = {}) {
   const navigate = useNavigate();
   const location = useLocation();
-  const editing = location.pathname.match(/^\/community\/my-content\/(blog|video)\/([^/]+)\/edit$/);
-  const editType = editing?.[1];
-  const editId = editing?.[2];
+  const editing = useMemo(() => {
+    const match = location.pathname.match(/^\/community\/my-content\/(blog|video)\/([^/]+)\/edit$/);
+    return match ? { type: match[1], id: match[2] } : null;
+  }, [location.pathname]);
+  const isEditing = Boolean(editing);
+  const editType = editing?.type;
+  const editId = editing?.id;
   const preview = import.meta.env.DEV && new URLSearchParams(location.search).get('preview') === '1';
   const [contentType, setContentType] = useState(defaultType === 'video' ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG);
   const [title, setTitle] = useState('');
@@ -250,19 +254,20 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const [showRecipeDetails, setShowRecipeDetails] = useState(true);
   const [existingThumbnailUrl, setExistingThumbnailUrl] = useState('');
   const [existingMediaUrl, setExistingMediaUrl] = useState('');
-  const [loadingContent, setLoadingContent] = useState(Boolean(editing));
+  const [loadingContent, setLoadingContent] = useState(isEditing);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const bodyRef = useRef(null);
   const dialogRef = useRef(null);
   const stepInputRefs = useRef([]);
   const submitting = useRef(false);
+  const hasLoadedPostRef = useRef(null);
 
-  const isVideo = editing ? editType === CONTENT_TYPES.VIDEO : contentType === CONTENT_TYPES.VIDEO;
+  const isVideo = isEditing ? editType === CONTENT_TYPES.VIDEO : contentType === CONTENT_TYPES.VIDEO;
   const trimmedTitle = title.trim();
   const bodyHtml = body.trim();
   const trimmedBody = body.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
-  const hasVideo = Boolean(videoFile || (editing && existingMediaUrl));
+  const hasVideo = Boolean(videoFile || (isEditing && existingMediaUrl));
   const hasThumbnail = Boolean(file || existingThumbnailUrl);
 
   const combinedIngredients = useMemo(() => {
@@ -443,14 +448,20 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   }, []);
 
   useEffect(() => {
-    if (!editing) return undefined;
+    if (!isEditing || !editId) return undefined;
+    if (hasLoadedPostRef.current === `${editType}_${editId}`) return undefined;
+
     const controller = new AbortController();
     const getContent = editType === 'video' ? getMyVideo : getMyBlog;
     getContent(editId, controller.signal).then((item) => {
       if (controller.signal.aborted) return;
+      hasLoadedPostRef.current = `${editType}_${editId}`;
       const parsed = parseRecipeDetails(item.body ?? '', availableIngredients);
       setTitle(item.title ?? '');
       setBody(parsed.body);
+      if (bodyRef.current) {
+        bodyRef.current.innerHTML = parsed.body;
+      }
       setRecipeDetails(parsed.details);
       setIngredientRows(parsed.ingredientRows);
       setStepRows(parsed.stepRows);
@@ -461,7 +472,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
       if (!controller.signal.aborted) setError(failure.status === 404 ? 'This post is no longer available.' : 'Could not load this post for editing.');
     }).finally(() => { if (!controller.signal.aborted) setLoadingContent(false); });
     return () => controller.abort();
-  }, [editId, editType, editing, availableIngredients]);
+  }, [editId, editType, isEditing, availableIngredients]);
 
   useEffect(() => {
     if (!file) { setImageUrl(''); return undefined; }
@@ -478,8 +489,10 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   }, [videoFile]);
 
   useEffect(() => {
-    if (!loadingContent && bodyRef.current && bodyRef.current.innerHTML !== body) bodyRef.current.innerHTML = body;
-  }, [body, loadingContent]);
+    if (!loadingContent && bodyRef.current && !bodyRef.current.innerHTML && body) {
+      bodyRef.current.innerHTML = body;
+    }
+  }, [loadingContent, body]);
 
   function chooseImage(event) {
     const selected = event.target.files?.[0];
@@ -531,19 +544,19 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         if (!videoPayload.mediaUrl) throw new Error('Upload a video file before saving.');
         const durationSec = videoDuration;
         if (Number.isFinite(durationSec) && durationSec > 0) videoPayload.durationSec = Math.round(durationSec);
-        created = editing ? await updateMyVideo(editId, videoPayload) : await createMyVideo(videoPayload);
+        created = isEditing ? await updateMyVideo(editId, videoPayload) : await createMyVideo(videoPayload);
       } else {
-        created = editing ? await updateMyBlog(editId, payload) : await createMyBlog(payload);
+        created = isEditing ? await updateMyBlog(editId, payload) : await createMyBlog(payload);
       }
       let finalStatus = created?.status || 'draft';
       if (intent === 'submit') {
-        const targetId = editing ? editId : created?.contentId;
+        const targetId = isEditing ? editId : created?.contentId;
         const reviewRes = await submitForReview(isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG, targetId);
         const reviewData = reviewRes?.data ?? reviewRes ?? {};
         finalStatus = reviewData.status || 'under_review';
       }
 
-      const canPrioritizeOnFeed = !editing
+      const canPrioritizeOnFeed = !isEditing
         && intent === 'submit'
         && String(finalStatus).toLowerCase() === 'published'
         && created?.contentId != null;
@@ -554,8 +567,8 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
 
       navigate('/community/my-blogs', {
         state: {
-          edited: editing,
-          created: !editing,
+          edited: isEditing,
+          created: !isEditing,
           type: isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG,
           submitted: intent === 'submit',
           status: finalStatus,
@@ -573,11 +586,11 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const editor = <EditorTag className="create-blog-main">
     {modal ? <button type="button" className="create-blog-close" onClick={onClose} aria-label="Close editor" disabled={busy}><X size={19}/></button> : <Link to="/community/my-blogs" className="my-blogs-back"><ArrowLeft size={15}/> Back to my content</Link>}
     <header className="create-blog-header">
-      <div className="create-blog-hero-copy"><p className="my-blogs-eyebrow">YOUR PERSONAL CONTENT</p><h1 id="create-blog-dialog-title">{editing ? 'Edit your post' : 'Create a post'}<span>.</span></h1><p>{editing ? 'Update the content, media, recipe details, and category, then save your changes.' : 'Choose Blog post or Video clip below, then add the information your community needs.'}</p></div>
+      <div className="create-blog-hero-copy"><p className="my-blogs-eyebrow">YOUR PERSONAL CONTENT</p><h1 id="create-blog-dialog-title">{isEditing ? 'Edit your post' : 'Create a post'}<span>.</span></h1><p>{isEditing ? 'Update the content, media, recipe details, and category, then save your changes.' : 'Choose Blog post or Video clip below, then add the information your community needs.'}</p></div>
     </header>
     <form className="create-blog-form" onSubmit={(event) => submit(event, 'draft')}>
       <div className="create-blog-panel">
-        {!editing && <div className="create-blog-type-picker"><span>Post type</span><div className="create-blog-type-toggle" role="group" aria-label="Content type">
+        {!isEditing && <div className="create-blog-type-picker"><span>Post type</span><div className="create-blog-type-toggle" role="group" aria-label="Content type">
           <button type="button" className={!isVideo ? 'is-active' : ''} aria-pressed={!isVideo} onClick={() => { setContentType(CONTENT_TYPES.BLOG); setError(''); }} disabled={busy}>Blog post</button>
           <button type="button" className={isVideo ? 'is-active' : ''} aria-pressed={isVideo} onClick={() => { setContentType(CONTENT_TYPES.VIDEO); setError(''); }} disabled={busy}>Video clip</button>
         </div></div>}
@@ -860,7 +873,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         </div>
         {error && <p className="create-blog-error" role="alert">{error} {error.includes('đăng nhập') && <Link to="/login">Sign in</Link>}</p>}
         <div className="create-blog-submit-actions">
-          <button className="my-blog-button create-blog-submit create-blog-submit--secondary" type="submit" disabled={preview || loadingContent || busy}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Saving...</> : <><Save size={16}/>{editing ? ' Save changes' : ' Save draft'}</>}</button>
+          <button className="my-blog-button create-blog-submit create-blog-submit--secondary" type="submit" disabled={preview || loadingContent || busy}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Saving...</> : <><Save size={16}/>{isEditing ? ' Save changes' : ' Save draft'}</>}</button>
           <button className="my-blog-button create-blog-submit" type="button" onClick={(event) => submit(event, 'submit')} disabled={preview || loadingContent || busy}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Submitting...</> : <><Send size={16}/> Submit for review</>}</button>
         </div>
       </aside>
