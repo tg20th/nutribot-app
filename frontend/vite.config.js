@@ -7,6 +7,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: {
+      allowedHosts: true,
       proxy: {
         '/api/ai': {
           target: env.AI_SERVICE_PROXY_TARGET || 'http://127.0.0.1:8000',
