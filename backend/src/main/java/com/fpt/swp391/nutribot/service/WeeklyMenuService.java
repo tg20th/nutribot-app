@@ -21,6 +21,8 @@ import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.DailyMenuRepository;
 import com.fpt.swp391.nutribot.repository.DishRepository;
+import com.fpt.swp391.nutribot.repository.RecipeIngredientRepository;
+import com.fpt.swp391.nutribot.repository.RecipeRepository;
 import com.fpt.swp391.nutribot.repository.UserProfileRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.WeeklyMenuItemRepository;
@@ -54,6 +56,8 @@ public class WeeklyMenuService {
     private final DailyMenuRepository dailyMenuRepository;
     private final WeeklyMenuItemRepository weeklyMenuItemRepository;
     private final DishRepository dishRepository;
+    private final RecipeRepository recipeRepository;
+    private final RecipeIngredientRepository recipeIngredientRepository;
     private final NutritionTargetService nutritionTargetService;
 
     @Transactional(readOnly = true)
@@ -153,6 +157,51 @@ public class WeeklyMenuService {
             throw new BadRequestException("Thực đơn chứa món không tồn tại, không hoạt động hoặc thiếu calo");
         }
 
+        // --- NB-55: Trust boundary revalidation ---
+        UserProfile profile = userProfileRepository.findById(user.getUserId()).orElse(null);
+        String userVegetarianType = profile != null ? profile.getVegetarianType() : null;
+
+        // 1. Validate vegetarian compatibility
+        if (userVegetarianType != null) {
+            for (Dish dish : dishesById.values()) {
+                if (!isVegetarianCompatible(dish.getVegetarianType(), userVegetarianType)) {
+                    throw new BadRequestException("Món '" + dish.getName()
+                            + "' không tương thích với chế độ ăn " + userVegetarianType);
+                }
+            }
+        }
+
+        // 2. Validate allergy - re-query canonical ingredients via recipes
+        if (profile != null && !profile.getAllergies().isEmpty()) {
+            Set<Integer> userAllergyIngredientIds = profile.getAllergies().stream()
+                    .map(a -> a.getIngredient().getIngredientId())
+                    .collect(Collectors.toSet());
+
+            for (Dish dish : dishesById.values()) {
+                List<Integer> ingredientIds = recipeRepository.findByDishId(dish.getDishId())
+                        .map(recipe -> recipeIngredientRepository.findIngredientIdsByRecipeId(recipe.getRecipeId()))
+                        .orElse(List.of());
+
+                List<String> conflictingIngredients = ingredientIds.stream()
+                        .filter(userAllergyIngredientIds::contains)
+                        .map(ingId -> {
+                            for (var allergy : profile.getAllergies()) {
+                                if (allergy.getIngredient().getIngredientId().equals(ingId)) {
+                                    return allergy.getIngredient().getName();
+                                }
+                            }
+                            return null;
+                        })
+                        .filter(name -> name != null)
+                        .toList();
+
+                if (!conflictingIngredients.isEmpty()) {
+                    throw new BadRequestException("Món '" + dish.getName()
+                            + "' chứa nguyên liệu dị ứng: " + String.join(", ", conflictingIngredients));
+                }
+            }
+        }
+
         WeeklyMenu menu = weeklyMenuRepository
                 .findFirstByUserUserIdAndStartDateOrderByUpdatedAtDesc(user.getUserId(), startDate)
                 .orElseGet(() -> WeeklyMenu.builder().user(user).startDate(startDate).endDate(startDate.plusDays(6)).build());
@@ -190,7 +239,6 @@ public class WeeklyMenuService {
                         .build());
             }
         }
-        UserProfile profile = userProfileRepository.findById(user.getUserId()).orElse(null);
         return toWeeklyMenuResponse(menu, profile, username);
     }
 
@@ -589,5 +637,23 @@ public class WeeklyMenuService {
 
     private LocalDate currentWeekStart() {
         return LocalDate.now().with(DayOfWeek.MONDAY);
+    }
+
+    // NB-55: Vegetarian compatibility hierarchy
+    // VEGAN strictest (VEGAN only) → LACTO → OVO → LACTO_OVO most flexible
+    private boolean isVegetarianCompatible(String dishVegetarianType, String userVegetarianType) {
+        if (dishVegetarianType == null || dishVegetarianType.isBlank()) {
+            return false;
+        }
+        if (userVegetarianType == null || userVegetarianType.isBlank()) {
+            return true;
+        }
+        String dish = dishVegetarianType.toUpperCase();
+        String user = userVegetarianType.toUpperCase();
+        if (user.equals("VEGAN")) return dish.equals("VEGAN");
+        if (user.equals("LACTO")) return dish.equals("VEGAN") || dish.equals("LACTO");
+        if (user.equals("OVO")) return dish.equals("VEGAN") || dish.equals("OVO");
+        if (user.equals("LACTO_OVO")) return true; // accepts all
+        return false;
     }
 }
