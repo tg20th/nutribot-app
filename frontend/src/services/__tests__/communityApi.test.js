@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from '../apiClient';
-import { appendUniquePersonalizedPosts, getPersonalizedPostsPage } from '../communityApi';
+import { appendUniquePersonalizedPosts, getPersonalizedPostsPage, prioritizePersonalizedPost } from '../communityApi';
 
 vi.mock('../apiClient', () => ({
   apiRequest: vi.fn(),
@@ -52,5 +52,12 @@ describe('personalized community feed API', () => {
     ];
 
     expect(appendUniquePersonalizedPosts(pageOne, pageTwo).map((post) => post.title)).toEqual(['A', 'B', 'C', 'D', 'E']);
+  });
+
+  it('moves a newly published post to the front without leaving a duplicate behind', () => {
+    const priority = { id: 2, type: 'blog', title: 'New post' };
+    const rankedPosts = [{ id: 1, type: 'blog' }, priority, { id: 3, type: 'video' }];
+
+    expect(prioritizePersonalizedPost(rankedPosts, priority).map((post) => post.id)).toEqual([2, 1, 3]);
   });
 });

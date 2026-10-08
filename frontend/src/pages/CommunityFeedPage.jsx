@@ -3,6 +3,7 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ArrowUpRight, Play, Sparkles } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import MemberPageLayout from '../layouts/MemberPageLayout';
 import CommunityComposer from '../components/community/CommunityComposer';
 import CommunityFilters from '../components/community/CommunityFilters';
@@ -10,7 +11,7 @@ import CommunityPostCard from '../components/community/CommunityPostCard';
 import CommunityRightRail from '../components/community/CommunityRightRail';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CreateBlogPage from './CreateBlogPage';
-import { appendUniquePersonalizedPosts, getCommunityFilters, getPersonalizedPostsPage } from '../services/communityApi';
+import { appendUniquePersonalizedPosts, getCommunityFilters, getPersonalizedPostsPage, getPost, prioritizePersonalizedPost } from '../services/communityApi';
 import { getMyProfile } from '../services/profileApi';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -43,11 +44,15 @@ function FeedPostSkeleton() {
 }
 
 export default function CommunityFeedPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const page = useRef(null);
   const composerTrigger = useRef(null);
   const loadMoreTrigger = useRef(null);
   const pagination = useRef({ cursor: null, hasMore: true });
   const loadingNextPage = useRef(false);
+  const requestedPriorityId = useRef(location.state?.prioritizeContentId ?? null);
+  const pinnedContentId = useRef(null);
   const [filter, setFilter] = useState('All');
   const [composerType, setComposerType] = useState(null);
   const [posts, setPosts] = useState([]); const [profile, setProfile] = useState({}); const [filters, setFilters] = useState([]); const [loading, setLoading] = useState(true); const [loadingMore, setLoadingMore] = useState(false); const [error, setError] = useState('');
@@ -65,7 +70,35 @@ export default function CommunityFeedPage() {
         cursor: result.nextCursor,
         hasMore: result.hasMore
       };
-      setPosts((existing) => initial ? appendUniquePersonalizedPosts([], result.posts) : appendUniquePersonalizedPosts(existing, result.posts));
+      let nextPosts = result.posts;
+      if (initial && requestedPriorityId.current != null) {
+        const priorityId = requestedPriorityId.current;
+        let priorityPost = result.posts.find((post) => String(post.id ?? post.contentId) === String(priorityId));
+        if (!priorityPost) {
+          try {
+            priorityPost = await getPost(priorityId, signal);
+          } catch {
+            // Pending, rejected, and inaccessible posts must not disrupt the feed.
+          }
+        }
+        if (!signal?.aborted && priorityPost) {
+          pinnedContentId.current = priorityId;
+          nextPosts = prioritizePersonalizedPost(result.posts, priorityPost);
+        }
+        requestedPriorityId.current = null;
+      }
+      setPosts((existing) => {
+        const incoming = pinnedContentId.current == null
+          ? nextPosts
+          : nextPosts.filter((post) => String(post.id ?? post.contentId) !== String(pinnedContentId.current));
+        if (initial && pinnedContentId.current != null) {
+          const priorityPost = nextPosts.find((post) => String(post.id ?? post.contentId) === String(pinnedContentId.current));
+          return priorityPost
+            ? prioritizePersonalizedPost(appendUniquePersonalizedPosts([], incoming), priorityPost)
+            : appendUniquePersonalizedPosts([], incoming);
+        }
+        return appendUniquePersonalizedPosts(existing, incoming);
+      });
       setError('');
     } catch (failure) {
       if (!signal?.aborted) setError(initial ? 'Unable to load the community feed.' : failure.message || 'Unable to load more community posts.');
@@ -74,6 +107,13 @@ export default function CommunityFeedPage() {
       if (!initial && !signal?.aborted) setLoadingMore(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (requestedPriorityId.current != null) {
+      // Consume route state now: after a browser reload the normal rank is used.
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.pathname, navigate]);
 
   useEffect(() => {
     const controller = new AbortController();

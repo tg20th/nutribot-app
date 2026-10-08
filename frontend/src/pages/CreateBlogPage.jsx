@@ -451,6 +451,16 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         const reviewData = reviewRes?.data ?? reviewRes ?? {};
         finalStatus = reviewData.status || 'under_review';
       }
+
+      const canPrioritizeOnFeed = !editing
+        && intent === 'submit'
+        && String(finalStatus).toLowerCase() === 'published'
+        && created?.contentId != null;
+      if (canPrioritizeOnFeed) {
+        navigate('/home', { state: { prioritizeContentId: created.contentId } });
+        return;
+      }
+
       navigate('/community/my-blogs', {
         state: {
           edited: editing,
