@@ -1,6 +1,6 @@
 import { AlertTriangle, X } from 'lucide-react';
 
-export default function NutritionOverflowDialog({ overflow, onKeep, onCancel }) {
+export default function NutritionOverflowDialog({ overflow, isAddMode, onKeep, onCancel }) {
   if (!overflow) return null;
   const { details } = overflow;
   return (
@@ -39,7 +39,9 @@ export default function NutritionOverflowDialog({ overflow, onKeep, onCancel }) 
         </div>
         <footer>
           <button type="button" className="planner-btn-ghost" onClick={onCancel}>Cancel</button>
-          <button type="button" className="planner-btn-primary overflow-replace-btn" onClick={onKeep}>Choose Another Dish</button>
+          <button type="button" className="planner-btn-primary overflow-confirm-btn" onClick={onKeep}>
+            {isAddMode ? 'Choose Another Dish' : 'Keep Replacement'}
+          </button>
         </footer>
       </section>
     </div>

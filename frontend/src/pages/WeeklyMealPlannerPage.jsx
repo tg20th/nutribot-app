@@ -169,34 +169,26 @@ export default function WeeklyMealPlannerPage() {
     // Create new local meal entry
     const newMeal = createLocalMeal(dish, slot, servings, notes, false);
 
+    // Old meal key for REPLACE mode (to subtract old meal's nutrition)
+    const oldMealKey = isAddMode ? null : editor.meal?.key;
+
     // Build meals array after this change (for overflow check)
     const dayMealsAfter = isAddMode
       ? [...(menu.days[dayIndex]?.meals ?? []), newMeal]
-      : (menu.days[dayIndex]?.meals ?? []).map((meal) => meal.key === editor.meal.key ? newMeal : meal);
+      : [...(menu.days[dayIndex]?.meals ?? []).filter((m) => m.key !== oldMealKey), newMeal];
 
     // Check nutrition overflow
     const tempMenu = { ...menu, days: menu.days.map((day, idx) => idx === dayIndex ? { ...day, meals: dayMealsAfter } : day) };
-    const overflow = checkNutritionOverflow(tempMenu, dayIndex, newMeal);
+    const overflow = checkNutritionOverflow(tempMenu, dayIndex, newMeal, oldMealKey);
     if (overflow) {
+      // Close editor, store overflow state for dialog
       setEditor(null);
-      setPendingOverflowMeal({ newMeal, isAddMode });
+      setPendingOverflowMeal({ newMeal, isAddMode, oldMealKey, editor: { day: editor.day, dayIndex, slot: editor.slot } });
       setPendingNutritionOverflow(overflow);
       return;
     }
 
-    // No overflow — update local state
-    setMenu((current) => recalculateMenu({
-      ...current,
-      days: current.days.map((day, index) => {
-        if (index !== dayIndex) return day;
-        if (isAddMode) {
-          return { ...day, meals: [...day.meals, newMeal] };
-        } else {
-          return { ...day, meals: day.meals.map((meal) => meal.key === editor.meal.key ? newMeal : meal) };
-        }
-      })
-    }));
-
+    // No overflow — proceed with add/replace
     setEditor(null);
     setNotice({ type: 'saving', text: 'Saving your meal...' });
 
@@ -263,23 +255,55 @@ export default function WeeklyMealPlannerPage() {
 
   const confirmOverflowKeep = () => {
     if (!pendingOverflowMeal || !pendingNutritionOverflow) return;
-    const { newMeal, isAddMode } = pendingOverflowMeal;
-    const dayIndex = editor.dayIndex;
-    const targetMealKey = editor.meal?.key;
+    const { newMeal, isAddMode, oldMealKey, editor: storedEditor } = pendingOverflowMeal;
+    const dayIndex = storedEditor.dayIndex;
+    setPendingOverflowMeal(null);
+    setPendingNutritionOverflow(null);
+
+    if (isAddMode) {
+      // ADD mode: reopen editor so user picks a different dish
+      setEditor({ day: storedEditor.day, dayIndex, slot: storedEditor.slot, meal: null });
+      return;
+    }
+
+    // REPLACE mode: proceed with the replacement
+    setNotice({ type: 'saving', text: 'Saving your meal...' });
     setMenu((current) => recalculateMenu({
       ...current,
       days: current.days.map((day, index) => {
         if (index !== dayIndex) return day;
-        if (isAddMode) {
-          return { ...day, meals: [...day.meals, newMeal] };
-        } else {
-          return { ...day, meals: day.meals.map((meal) => meal.key === targetMealKey ? newMeal : meal) };
-        }
+        return { ...day, meals: [...day.meals.filter((m) => m.key !== oldMealKey), newMeal] };
       })
     }));
-    setPendingOverflowMeal(null);
-    setPendingNutritionOverflow(null);
-    setNotice({ type: 'saving', text: 'Saving your meal...' });
+
+    if (!menu.menuId) {
+      setNotice({ type: 'success', text: `Replaced ${newMeal.name} in ${storedEditor.day.label}.` });
+      return;
+    }
+
+    const menuId = menu.menuId;
+    const nextMenu = recalculateMenu({
+      ...menu,
+      days: menu.days.map((day, index) => index !== dayIndex ? day : {
+        ...day,
+        meals: [...day.meals.filter((m) => m.key !== oldMealKey), newMeal]
+      })
+    });
+    updateWeeklyMenu(menuId, {
+      ...menuPayload(nextMenu),
+      meals: nextMenu.days.flatMap((day) => day.meals.map((item) => ({
+        dayOfWeek: day.dayOfWeek,
+        mealType: item.slot.toLowerCase(),
+        dishId: item.dishId,
+        servings: item.servings,
+        notes: item.notes
+      })))
+    }).then((savedMenu) => {
+      setMenu(normalizeWeeklyMenu(savedMenu, weekStart));
+      setNotice({ type: 'success', text: `Replaced ${newMeal.name} in ${storedEditor.day.label}.` });
+    }).catch(() => {
+      setNotice({ type: 'offline', text: 'Backend unavailable. Change saved locally.' });
+    });
   };
 
   const savePlan = async () => {
@@ -570,7 +594,8 @@ export default function WeeklyMealPlannerPage() {
     {pendingNutritionOverflow && (
       <NutritionOverflowDialog
         overflow={pendingNutritionOverflow}
-        onKeep={() => { setPendingNutritionOverflow(null); setPendingOverflowMeal(null); }}
+        isAddMode={pendingOverflowMeal?.isAddMode ?? true}
+        onKeep={confirmOverflowKeep}
         onCancel={() => { setPendingOverflowMeal(null); setPendingNutritionOverflow(null); setNotice(null); }}
       />
     )}

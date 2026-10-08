@@ -138,15 +138,18 @@ const mergeNutritionSummary = (backendSummary, localSummary) => {
   return { status, missingFields, actual: localSummary.actual, target, percentage };
 };
 
-// Check if adding a dish to a slot would exceed daily nutrition targets.
+// Check if adding/replacing a dish would exceed daily nutrition targets.
+// oldMealKey: if provided (REPLACE mode), the old meal is removed before adding the new one.
 // Returns { overflowed: bool, details: { calorie: {...}, protein: {...}, ... } } or null.
-export const checkNutritionOverflow = (menu, dayIndex, newMeal) => {
+export const checkNutritionOverflow = (menu, dayIndex, newMeal, oldMealKey = null) => {
   if (dayIndex < 0 || dayIndex >= (menu.days ?? []).length) return null;
   const day = menu.days[dayIndex];
   if (!day) return null;
 
-  // Simulate adding the new meal to the day
-  const tempMeals = [...(day.meals ?? []), newMeal];
+  // Build meal list after change: remove old meal (REPLACE) then add new meal
+  const tempMeals = oldMealKey
+    ? [...(day.meals ?? []).filter((m) => m.key !== oldMealKey), newMeal]
+    : [...(day.meals ?? []), newMeal];
   const totals = tempMeals.reduce((sum, meal) => {
     const m = mealTotals(meal);
     return { calories: sum.calories + m.calories, protein: sum.protein + m.protein, carbs: sum.carbs + m.carbs, fats: sum.fats + m.fats };

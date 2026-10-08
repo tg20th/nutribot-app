@@ -47,7 +47,6 @@ export default function MealEditorDialog({ editor, dishes, onClose, onSubmit }) 
   }, [dishes, query, existingSlotDishIds]);
 
   const selectedDish = dishes.find((dish) => String(dish.dishId) === String(selectedId));
-  const isAddMode = !editor?.meal;
 
   return <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="meal-dialog" role="dialog" aria-modal="true" aria-labelledby="meal-dialog-title">
