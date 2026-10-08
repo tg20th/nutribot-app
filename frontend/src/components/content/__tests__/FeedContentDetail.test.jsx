@@ -47,3 +47,18 @@ it('shows a retryable error without presenting partial content as the full story
   fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
   expect(await screen.findByText('Full story')).toBeInTheDocument();
 });
+
+it('closes detail dialog on popstate (browser back) so user stays on feed', async () => {
+  const post = { id: 18, title: 'Dinner plan', type: 'blog', author: 'Truong' };
+  render(<CommunityPostCard fullPageDetail post={post} interactionApi={interactionApi} loadPost={async () => ({ ...post, body: 'Dinner story' })}/>);
+  fireEvent.click(screen.getByRole('button', { name: 'Dinner plan' }));
+  expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  expect(await screen.findByText('Dinner story')).toBeInTheDocument();
+
+  // Simulate user pressing browser back button
+  fireEvent(window, new PopStateEvent('popstate', { state: null }));
+
+  await waitFor(() => {
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+});

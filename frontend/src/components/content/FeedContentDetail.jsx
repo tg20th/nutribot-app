@@ -27,9 +27,53 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
     nutrition.carbs && { label: 'Carbs', value: nutrition.carbs },
     nutrition.fat && { label: 'Healthy fats', value: nutrition.fat },
   ].filter(Boolean) : [];
+  const closedByPopstateRef = useRef(false);
+
   useEffect(() => {
-    if (location.key !== openedAt.current) onClose();
+    if (typeof window !== 'undefined' && window.history?.pushState && post?.id) {
+      try {
+        window.history.pushState({ feedDetailModal: true, postId: post.id }, '', `/community/posts/${post.id}`);
+      } catch {
+        // Safe fallback in test or sandboxed environments
+      }
+    }
+
+    const handlePopState = () => {
+      closedByPopstateRef.current = true;
+      onClose();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      if (!closedByPopstateRef.current && window.history?.state?.feedDetailModal) {
+        try {
+          window.history.back();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, [post?.id, onClose]);
+
+  useEffect(() => {
+    if (!closedByPopstateRef.current && location.key !== openedAt.current) {
+      onClose();
+    }
   }, [location.key, onClose]);
+
+  const handleBack = () => {
+    if (!closedByPopstateRef.current && window.history?.state?.feedDetailModal) {
+      closedByPopstateRef.current = true;
+      try {
+        window.history.back();
+      } catch {
+        // ignore
+      }
+    }
+    onClose();
+  };
 
   useEffect(() => {
     const element = dialog.current;
@@ -68,13 +112,13 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
   }, [detail, focusCaption, focusComments]);
 
   return createPortal(<dialog ref={dialog} className="community-page nb-content-detail" aria-labelledby="nb-content-title"
-    onCancel={(event) => { event.preventDefault(); onClose(); }}>
+    onCancel={(event) => { event.preventDefault(); handleBack(); }}>
     <CommunityTopBar/>
     <div className="community-shell">
     <CommunitySideNav activePath="/home"/>
     <span className="community-sidenav-spacer" aria-hidden="true"/>
     <main className="content-detail-main">
-      <button className="detail-back" type="button" onClick={onClose}><ArrowLeft size={16}/> Back to {post.type === 'video' ? 'video' : 'blog'}</button>
+      <button className="detail-back" type="button" onClick={handleBack}><ArrowLeft size={16}/> Back to {post.type === 'video' ? 'video' : 'blog'}</button>
       {!detail ? <section className="nb-content-state"><h1 id="nb-content-title">{post.title}</h1>{error
         ? <div role="alert"><p>{error}</p><button type="button" onClick={() => setRetry((value) => value + 1)}><RotateCcw size={16}/> Try again</button></div>
         : <p role="status">Loading full post...</p>}</section>
@@ -107,7 +151,7 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
           </article>}
           <RestaurantRecommendations dishName={detail.title}/>
           <section className="detail-actions"><VoteButton contentId={post.id} loadVote={interactionApi.loadVote} submitVote={interactionApi.submitVote}/></section>
-          <section ref={comments} tabIndex={-1} className="detail-comments" aria-label="Comments"><CommentSection contentId={post.id} loadComments={interactionApi.loadComments} submitComment={interactionApi.submitComment}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><button type="button" onClick={onClose}>Open the feed</button></div></section>
+          <section ref={comments} tabIndex={-1} className="detail-comments" aria-label="Comments"><CommentSection contentId={post.id} loadComments={interactionApi.loadComments} submitComment={interactionApi.submitComment}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><button type="button" onClick={handleBack}>Open the feed</button></div></section>
         </>}
     </main>
     </div>
