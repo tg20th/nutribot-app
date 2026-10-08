@@ -5,8 +5,8 @@ import com.fpt.swp391.nutribot.dto.response.PersonalizedFeedResponse;
 import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.User;
-import com.fpt.swp391.nutribot.entity.UserProfile;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
+
 import com.fpt.swp391.nutribot.repository.UserProfileRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.VoteRepository;
@@ -210,7 +210,6 @@ class PersonalizedFeedIntegrationTest {
         // Logged-in user
         User user = User.builder().userId(1).username("reader").status(AccountStatus.ACTIVE).build();
         when(userRepository.findByUsername("reader")).thenReturn(Optional.of(user));
-        when(userProfileRepository.findById(1)).thenReturn(Optional.empty()); // No vegetarian type
 
         PersonalizedFeedResponse userFeed = service.getPersonalizedFeed("reader", 10, null);
 
@@ -220,12 +219,9 @@ class PersonalizedFeedIntegrationTest {
     }
 
     @Test
-    @DisplayName("Vấn đề 2: Dietary - Bài không khớp sở thích vẫn được hiển thị, không bị loại")
-    void dietaryMismatch_stillDisplayedNotBlocked() {
-        // Setup: 5 bài
-        // - ID 1,3,5: Rau củ (phù hợp)
-        // - ID 2: Cá (HARD BLOCK cho vegan - động vật)
-        // - ID 4: Sữa (SOFT MISMATCH cho vegan - không phải động vật)
+    @DisplayName("NB-70 FIX: Dietary - TẤT CẢ bài đều được hiển thị, dietary chỉ ảnh hưởng ranking")
+    void dietaryMismatch_allDisplayedNoBlocking() {
+        // Setup: 5 bài - TẤT CẢ phải được hiển thị cho mọi user
         List<Content> catalog = List.of(
                 content(1, "Salad rau xanh", "Salad với rau tươi", LocalDateTime.now().minusMinutes(1)),
                 content(2, "Cá hồi áp chảo", "Cá hồi với bơ tỏi", LocalDateTime.now().minusMinutes(2)),
@@ -236,29 +232,23 @@ class PersonalizedFeedIntegrationTest {
         stubCatalog(catalog);
         stubAiFailure();
 
-        // Vegan user
+        // Vegan user - KHÔNG CÒN hard block nữa
         User veganUser = User.builder().userId(1).username("vegan").status(AccountStatus.ACTIVE).build();
         when(userRepository.findByUsername("vegan")).thenReturn(Optional.of(veganUser));
-
-        UserProfile veganProfile = UserProfile.builder()
-                .user(veganUser)
-                .userId(1)
-                .vegetarianType("VEGAN")
-                .build();
-        when(userProfileRepository.findById(1)).thenReturn(Optional.of(veganProfile));
 
         PersonalizedFeedResponse response = service.getPersonalizedFeed("vegan", 10, null);
 
         List<Integer> responseIds = getContentIds(response);
 
-        // HARD BLOCK: Cá (ID 2) - chứa động vật - phải bị loại
-        assertFalse(responseIds.contains(2), "Cá phải bị LOẠI cho vegan (hard block - động vật)");
+        // NB-70 FIX: TẤT CẢ bài đều được hiển thị - không có dietary blocking
+        assertTrue(responseIds.contains(1), "Salad phải được HIỂN THỊ");
+        assertTrue(responseIds.contains(2), "Cá phải được HIỂN THỊ (NB-70: dietary chỉ ảnh hưởng ranking, không block)");
+        assertTrue(responseIds.contains(3), "Súp phải được HIỂN THỊ");
+        assertTrue(responseIds.contains(4), "Smoothie sữa phải được HIỂN THỊ (NB-70: dietary chỉ ảnh hưởng ranking, không block)");
+        assertTrue(responseIds.contains(5), "Gỏi phải được HIỂN THỊ");
 
-        // SOFT MISMATCH: Smoothie sữa (ID 4) - không chứa động vật - phải được HIỂN THỊ
-        assertTrue(responseIds.contains(4), "Smoothie sữa phải được HIỂN THỊ cho vegan (soft mismatch - chỉ có sữa)");
-
-        // Tổng: 5 - 1 hard block = 4 bài
-        assertEquals(4, response.getItems().size(), "Phải có 4 bài: 3 rau củ + 1 smoothie sữa");
+        // Tổng: TẤT CẢ 5 bài đều visible
+        assertEquals(5, response.getItems().size(), "Phải có 5 bài - NB-70: all content visible");
     }
 
     @Test

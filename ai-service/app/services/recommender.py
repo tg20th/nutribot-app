@@ -1,4 +1,9 @@
-"""NB-59 vector retrieval and rule-based ranking; no trained model or Gemini call."""
+"""NB-59 vector retrieval and rule-based ranking; no trained model or Gemini call.
+
+Home Feed dietary policy: Health Profile (vegetarianType, allergies, dietary preferences)
+only affects RELEVANCE SCORING (soft deprioritization), NOT hard filtering.
+All eligible content must be visible to all users for social discovery.
+"""
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -16,6 +21,7 @@ class RankingWeights:
     popularity: float = .15
     freshness: float = .10
     diversity_penalty: float = .12
+    dietary_penalty: float = .40  # Soft penalty for incompatible dietary content
     retrieval_k: int = 50
 
 class Embedder(Protocol):
@@ -58,11 +64,20 @@ class ContentRecommender:
     """Two-stage deterministic recommender with visibility checks before and after ranking."""
     def __init__(self, embedder: Embedder | None = None, weights: RankingWeights = RankingWeights()): self.embedder=embedder or SentenceTransformerEmbedder(); self.weights=weights
     def recommend(self, request: RecommendationRequest, now: datetime | None = None) -> RecommendationResponse:
-        """Return bounded, unique published IDs. Empty catalog/history is a valid empty/cold-start result."""
-        now=now or datetime.now(UTC); catalog={c.content_id:c for c in request.contents if c.status==PUBLISHED and evaluate_dietary_compatibility(c, request.vegetarian_type)==Compatibility.COMPATIBLE}; contents=list(catalog.values())
+        """Return bounded, unique published IDs with soft dietary deprioritization.
+
+        Dietary policy: ALL content is included; incompatible content receives a score penalty
+        instead of being excluded. This ensures Home Feed shows all eligible content while
+        still personalizing the ranking order.
+        """
+        now=now or datetime.now(UTC)
+        # Include ALL published content - no dietary hard filtering
+        catalog={c.content_id:c for c in request.contents if c.status==PUBLISHED}; contents=list(catalog.values())
         if not contents: return RecommendationResponse(items=[], embedding_model=self.embedder.model_name)
         vectors=dict(zip((c.content_id for c in contents), self.embedder.encode([content_text(c) for c in contents])))
         user, categories=self._user_vector(request.interactions, vectors, catalog)
+        # Evaluate dietary compatibility for soft scoring (not filtering)
+        dietary_compat={c.content_id:evaluate_dietary_compatibility(c, request.vegetarian_type) for c in contents}
         candidates=sorted(contents, key=lambda c: (-cosine(user,vectors[c.content_id]), c.content_id))[:self.weights.retrieval_k] if any(user) else contents
         scored=[]
         for c in candidates:
@@ -70,7 +85,9 @@ class ContentRecommender:
             category=categories.get((c.category or "").casefold(),0.0)
             popularity=math.log1p(c.view_count)/math.log1p(max(x.view_count for x in contents)+1)
             age=max(0,(now-(c.published_at or now)).total_seconds()/86400); freshness=math.exp(-age/30)
-            score=self.weights.semantic*semantic+self.weights.category*category+self.weights.popularity*popularity+self.weights.freshness*freshness
+            # Apply soft dietary penalty instead of hard filtering
+            dietary_penalty=self.weights.dietary_penalty if dietary_compat.get(c.content_id)==Compatibility.INCOMPATIBLE else 0.0
+            score=self.weights.semantic*semantic+self.weights.category*category+self.weights.popularity*popularity+self.weights.freshness*freshness-dietary_penalty
             scored.append((score,c))
         return RecommendationResponse(items=self._diversify(scored, request.limit, bool(any(user)), catalog), embedding_model=self.embedder.model_name)
     def _user_vector(self, interactions: list[Interaction], vectors: dict[int,list[float]], catalog: dict[int,ContentCandidate]):

@@ -9,6 +9,7 @@ import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
+
 import com.fpt.swp391.nutribot.repository.UserProfileRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.VoteRepository;
@@ -44,12 +45,12 @@ class FeedTraceTest {
         // === SETUP: Match real data ===
         ContentRepository contentRepo = mock(ContentRepository.class);
         UserRepository userRepo = mock(UserRepository.class);
-        UserProfileRepository profileRepo = mock(UserProfileRepository.class);
+
         VoteRepository voteRepo = mock(VoteRepository.class);
         RestClient restClient = mock(RestClient.class);
 
         PersonalizedFeedService service = new PersonalizedFeedService(
-                contentRepo, userRepo, profileRepo, voteRepo, restClient, new ObjectMapper());
+                contentRepo, userRepo, mock(UserProfileRepository.class), voteRepo, restClient, new ObjectMapper());
 
         // Create 63 items (matching DB count)
         List<Content> catalog = new ArrayList<>();
@@ -93,7 +94,6 @@ class FeedTraceTest {
                 .status(AccountStatus.ACTIVE)
                 .build();
         when(userRepo.findByUsername("reader")).thenReturn(Optional.of(user));
-        when(profileRepo.findById(1)).thenReturn(Optional.empty()); // No vegetarian type
         when(voteRepo.findByUserId(1)).thenReturn(List.of()); // No interactions
 
         // === CRITICAL: Stub AI returning exactly 25 items ===
@@ -159,12 +159,12 @@ class FeedTraceTest {
         // Setup with detailed logging
         ContentRepository contentRepo = mock(ContentRepository.class);
         UserRepository userRepo = mock(UserRepository.class);
-        UserProfileRepository profileRepo = mock(UserProfileRepository.class);
+
         VoteRepository voteRepo = mock(VoteRepository.class);
         RestClient restClient = mock(RestClient.class);
 
         PersonalizedFeedService service = new PersonalizedFeedService(
-                contentRepo, userRepo, profileRepo, voteRepo, restClient, new ObjectMapper());
+                contentRepo, userRepo, mock(UserProfileRepository.class), voteRepo, restClient, new ObjectMapper());
 
         // Create 100 items
         List<Content> catalog = new ArrayList<>();
@@ -199,7 +199,6 @@ class FeedTraceTest {
 
         User user = User.builder().userId(1).username("reader").status(AccountStatus.ACTIVE).build();
         when(userRepo.findByUsername("reader")).thenReturn(Optional.of(user));
-        when(profileRepo.findById(1)).thenReturn(Optional.empty());
         when(voteRepo.findByUserId(1)).thenReturn(List.of());
 
         // AI returns only 10 items
@@ -255,12 +254,12 @@ class FeedTraceTest {
 
         ContentRepository contentRepo = mock(ContentRepository.class);
         UserRepository userRepo = mock(UserRepository.class);
-        UserProfileRepository profileRepo = mock(UserProfileRepository.class);
+
         VoteRepository voteRepo = mock(VoteRepository.class);
         RestClient restClient = mock(RestClient.class);
 
         PersonalizedFeedService service = new PersonalizedFeedService(
-                contentRepo, userRepo, profileRepo, voteRepo, restClient, new ObjectMapper());
+                contentRepo, userRepo, mock(UserProfileRepository.class), voteRepo, restClient, new ObjectMapper());
 
         // Create items with VERY different score tiers
         // Tier 0 (0.9+): IDs 1-2 (very high)
@@ -291,7 +290,6 @@ class FeedTraceTest {
 
         User user = User.builder().userId(1).username("reader").status(AccountStatus.ACTIVE).build();
         when(userRepo.findByUsername("reader")).thenReturn(Optional.of(user));
-        when(profileRepo.findById(1)).thenReturn(Optional.empty());
         when(voteRepo.findByUserId(1)).thenReturn(List.of());
 
         RestClient.RequestBodyUriSpec request = mock(RestClient.RequestBodyUriSpec.class);
@@ -349,12 +347,12 @@ class FeedTraceTest {
 
         ContentRepository contentRepo = mock(ContentRepository.class);
         UserRepository userRepo = mock(UserRepository.class);
-        UserProfileRepository profileRepo = mock(UserProfileRepository.class);
+
         VoteRepository voteRepo = mock(VoteRepository.class);
         RestClient restClient = mock(RestClient.class);
 
         PersonalizedFeedService service = new PersonalizedFeedService(
-                contentRepo, userRepo, profileRepo, voteRepo, restClient, new ObjectMapper());
+                contentRepo, userRepo, mock(UserProfileRepository.class), voteRepo, restClient, new ObjectMapper());
 
         List<Content> catalog = new ArrayList<>();
         for (int i = 1; i <= 20; i++) {
@@ -441,12 +439,12 @@ class FeedTraceTest {
 
         ContentRepository contentRepo = mock(ContentRepository.class);
         UserRepository userRepo = mock(UserRepository.class);
-        UserProfileRepository profileRepo = mock(UserProfileRepository.class);
+
         VoteRepository voteRepo = mock(VoteRepository.class);
         RestClient restClient = mock(RestClient.class);
 
         PersonalizedFeedService service = new PersonalizedFeedService(
-                contentRepo, userRepo, profileRepo, voteRepo, restClient, new ObjectMapper());
+                contentRepo, userRepo, mock(UserProfileRepository.class), voteRepo, restClient, new ObjectMapper());
 
         List<Content> catalog = new ArrayList<>();
         for (int i = 1; i <= 30; i++) {
@@ -474,7 +472,6 @@ class FeedTraceTest {
 
         User user = User.builder().userId(1).username("reader").status(AccountStatus.ACTIVE).build();
         when(userRepo.findByUsername("reader")).thenReturn(Optional.of(user));
-        when(profileRepo.findById(1)).thenReturn(Optional.empty());
         when(voteRepo.findByUserId(1)).thenReturn(List.of());
 
         RestClient.RequestBodyUriSpec request = mock(RestClient.RequestBodyUriSpec.class);
