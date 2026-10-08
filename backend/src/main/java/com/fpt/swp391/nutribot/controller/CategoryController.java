@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -47,13 +48,14 @@ public class CategoryController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<CategoryResponse>> createCategory(
             @Valid @RequestBody CategoryCreateRequest request) {
         String categoryName = request.getCategoryName().trim();
         String slug = request.getSlug().trim();
 
-        if (categoryRepository.existsByCategoryNameIgnoreCase(categoryName)) {
-            throw new BadRequestException("A category with this name already exists.");
+        if (categoryRepository.existsByCategoryNameIgnoreCaseAndCategoryTypeIgnoreCase(categoryName, request.getCategoryType().trim().toUpperCase())) {
+            throw new BadRequestException("A category with this name and type already exists.");
         }
         if (categoryRepository.existsBySlugIgnoreCase(slug)) {
             throw new BadRequestException("A category with this slug already exists.");
@@ -74,6 +76,7 @@ public class CategoryController {
     }
 
     @PutMapping("/{categoryId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<CategoryResponse>> updateCategory(
             @PathVariable Integer categoryId,
             @Valid @RequestBody CategoryUpdateRequest request) {
@@ -83,8 +86,8 @@ public class CategoryController {
         String categoryName = request.getCategoryName().trim();
         String slug = request.getSlug().trim();
 
-        if (categoryRepository.existsByCategoryNameIgnoreCaseAndCategoryIdNot(categoryName, categoryId)) {
-            throw new BadRequestException("A category with this name already exists.");
+        if (categoryRepository.existsByCategoryNameIgnoreCaseAndCategoryTypeIgnoreCaseAndCategoryIdNot(categoryName, request.getCategoryType().trim().toUpperCase(), categoryId)) {
+            throw new BadRequestException("A category with this name and type already exists.");
         }
         if (categoryRepository.existsBySlugIgnoreCaseAndCategoryIdNot(slug, categoryId)) {
             throw new BadRequestException("A category with this slug already exists.");
@@ -103,6 +106,7 @@ public class CategoryController {
     }
 
     @DeleteMapping("/{categoryId}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<CategoryResponse>> deactivateCategory(@PathVariable Integer categoryId) {
         Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new NotFoundException("Category not found."));

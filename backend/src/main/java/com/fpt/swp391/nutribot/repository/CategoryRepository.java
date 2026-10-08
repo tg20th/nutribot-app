@@ -22,6 +22,10 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
 
     boolean existsBySlugIgnoreCaseAndCategoryIdNot(String slug, Integer categoryId);
 
+    boolean existsByCategoryNameIgnoreCaseAndCategoryTypeIgnoreCase(String categoryName, String categoryType);
+
+    boolean existsByCategoryNameIgnoreCaseAndCategoryTypeIgnoreCaseAndCategoryIdNot(String categoryName, String categoryType, Integer categoryId);
+
     @Query("SELECT c FROM Category c WHERE c.active = true ORDER BY c.categoryName ASC")
     List<Category> findRootCategories();
 
