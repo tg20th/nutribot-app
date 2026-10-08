@@ -69,8 +69,6 @@ public class VideoAuthorController {
         AuthorContentResponse response = authorContentService.submitContent(user.getUsername(), id, "VIDEO");
         String message = "published".equalsIgnoreCase(response.getStatus())
                 ? "Video đã được AI tự động kiểm duyệt và xuất bản thành công"
-                : "rejected".equalsIgnoreCase(response.getStatus())
-                ? "Video đã bị từ chối do không đạt tiêu chuẩn nội dung"
                 : "Nộp video chờ duyệt thành công";
         return ResponseEntity.ok(ApiResponse.success(message, response));
     }

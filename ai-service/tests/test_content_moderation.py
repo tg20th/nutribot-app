@@ -20,3 +20,10 @@ def test_failsafe_video_invalid_and_retry():
  assert run(ContentModerationService(FakeGemini(error=True))).decision=="NEEDS_REVIEW"
  assert run(ContentModerationService(FakeGemini({"bad":1})),request("tofu", "VIDEO")).decision=="NEEDS_REVIEW"
  s=ContentModerationService(FakeGemini({"decision":"APPROVE","reason":"safe","confidence":.1,"categories":["SAFE"]})); assert run(s,request(revision="1")).decision==run(s,request(revision="1")).decision=="NEEDS_REVIEW"
+def test_thumbnail_multimodal_categories():
+ req = ModerationRequest(content_id=2, content_type="BLOG", title="Bữa cơm chay dinh dưỡng", thumbnail_url="https://res.cloudinary.com/sample/image/upload/sample.jpg")
+ assert req.thumbnail_url == "https://res.cloudinary.com/sample/image/upload/sample.jpg"
+ res = run(ContentModerationService(FakeGemini({"decision":"REJECT","reason":"Ảnh chứa nội dung phản cảm","confidence":0.95,"categories":["SENSITIVE_IMAGE"]})), req)
+ assert res.decision == "REJECT" and "SENSITIVE_IMAGE" in res.categories
+ res_meat = run(ContentModerationService(FakeGemini({"decision":"REJECT","reason":"Ảnh chứa thịt trong bài ăn chay","confidence":0.95,"categories":["NON_VEGETARIAN_IMAGE"]})), req)
+ assert res_meat.decision == "REJECT" and "NON_VEGETARIAN_IMAGE" in res_meat.categories

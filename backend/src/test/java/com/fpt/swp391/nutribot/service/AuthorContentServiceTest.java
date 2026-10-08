@@ -239,7 +239,7 @@ class AuthorContentServiceTest {
         when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
         when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
         when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any()))
+        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new ContentModerationGatewayService.ModerationResult("NEEDS_REVIEW", "Needs review", 0.7, java.util.List.of("AMBIGUOUS")));
 
         AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
@@ -254,7 +254,7 @@ class AuthorContentServiceTest {
         when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
         when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
         when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any()))
+        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new ContentModerationGatewayService.ModerationResult("APPROVE", "Safe vegetarian content", 0.98, java.util.List.of("SAFE")));
 
         AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
@@ -264,18 +264,18 @@ class AuthorContentServiceTest {
     }
 
     @Test
-    @DisplayName("9c. Nộp bài viết tự động chuyển sang REJECTED khi AI từ chối (REJECT)")
-    void submitContent_whenAiRejects_transitionsToRejected() {
+    @DisplayName("9c. Nộp bài viết khi AI từ chối (REJECT) -> Vẫn giữ UNDER_REVIEW để Admin duyệt lần 2")
+    void submitContent_whenAiRejects_transitionsToUnderReview() {
         when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
         when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
         when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any()))
+        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new ContentModerationGatewayService.ModerationResult("REJECT", "Non-vegetarian recipe", 0.95, java.util.List.of("NON_VEGETARIAN_CONTENT")));
 
         AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
 
-        assertEquals("rejected", response.getStatus());
-        assertEquals("rejected", sampleContent.getStatus());
+        assertEquals("under_review", response.getStatus());
+        assertEquals("under_review", sampleContent.getStatus());
     }
 
     @Test
@@ -478,7 +478,7 @@ class AuthorContentServiceTest {
         when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
         when(contentRepository.findById(200)).thenReturn(Optional.of(video));
         when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any()))
+        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any()))
                 .thenReturn(new ContentModerationGatewayService.ModerationResult("NEEDS_REVIEW", "Needs review", 0.7, java.util.List.of("AMBIGUOUS")));
 
         // Submit
@@ -488,5 +488,32 @@ class AuthorContentServiceTest {
         // Recall
         AuthorContentResponse recallRes = authorContentService.recallContent("truong_author", 200, "VIDEO");
         assertEquals("draft", recallRes.getStatus());
+    }
+
+    @Test
+    @DisplayName("20. AI trả về REJECT hoặc nghi ngờ vi phạm -> Bài viết vẫn giữ STATUS_UNDER_REVIEW để Admin duyệt lần 2")
+    void submitContent_whenAiRejects_staysUnderReviewForAdmin() {
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ContentModerationGatewayService.ModerationResult("REJECT", "Chứa nội dung vi phạm hình ảnh", 0.95, java.util.List.of("SENSITIVE_IMAGE")));
+
+        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
+        // Bắt buộc phải là under_review để Admin có thể xem và duyệt lần 2
+        assertEquals("under_review", response.getStatus());
+    }
+
+    @Test
+    @DisplayName("21. AI trả về APPROVE đạt chuẩn an toàn -> Tự động chuyển sang STATUS_PUBLISHED ngay lập tức")
+    void submitContent_whenAiApproves_autoPublishes() {
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ContentModerationGatewayService.ModerationResult("APPROVE", "Safe content", 0.98, java.util.List.of("SAFE")));
+
+        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
+        assertEquals("published", response.getStatus());
     }
 }
