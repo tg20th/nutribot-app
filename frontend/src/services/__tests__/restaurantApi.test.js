@@ -97,3 +97,4 @@ describe('restaurantApi service', () => {
     await expect(getUserCurrentPosition()).rejects.toThrow(/Location access denied/i);
   });
 });
+

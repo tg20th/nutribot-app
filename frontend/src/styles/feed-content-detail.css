@@ -8,13 +8,15 @@
 .nb-content-detail .detail-media:has(video):after{display:none}
 .nb-content-detail .detail-nutrition{gap:40px}
 .nb-content-detail .detail-nutrition-title h2{font-size:44px;letter-spacing:0}
-.nb-content-detail .nutrition-grid b{font-size:36px;letter-spacing:0}
+.nb-content-detail .nutrition-grid b,.nb-content-detail .detail-micro-nutrition b{font-family:var(--nutribot-brand-font,'Playfair Display',Georgia,serif)!important;font-size:36px;letter-spacing:0;font-weight:500!important}
 .nb-content-detail .detail-section-head h2{letter-spacing:0}
-.nb-content-detail .detail-section-head small{position:static;display:block;margin-top:12px}
-.nb-content-detail .detail-hero-copy p{white-space:pre-line;line-height:1.7}
+.nb-content-detail .detail-section-head small{position:static;display:block;margin-top:12px;font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important}
+.nb-content-detail .detail-hero-copy p{font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important;white-space:pre-line;line-height:1.7}
 .nb-content-detail .nb-content-body{padding:48px 0;overflow-wrap:anywhere;white-space:pre-line}
-.nb-content-detail .nb-content-body p{white-space:pre-line;line-height:1.8;margin:0 0 16px}
-.nb-content-detail .detail-comments{scroll-margin-top:88px;min-height:65vh;width:100%}
+.nb-content-detail .nb-content-body p{font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important;white-space:pre-line;line-height:1.8;margin:0 0 16px}
+.nb-content-detail .detail-ingredients ul li,.nb-content-detail .detail-ingredients ul li i,.nb-content-detail .detail-method ol li p,.nb-content-detail .detail-method ol li b,.nb-content-detail .detail-nutrition-title p{font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important}
+.nb-content-detail .nutrition-grid span,.nb-content-detail .detail-micro-nutrition span{font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important}
+.nb-content-detail .detail-comments{scroll-margin-top:88px;min-height:65vh;width:100%;font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important}
 .nb-content-detail .detail-community-cta button{margin-left:auto;padding:10px 12px;background:#d7f261;color:#173529;font-size:11px;font-weight:800;white-space:nowrap}
 @media(max-width:1100px){.nb-content-detail .detail-nutrition{grid-template-columns:1fr}.nb-content-detail .detail-hero h1{font-size:48px}}
 @media(max-width:800px){.nb-content-detail .detail-hero{grid-template-columns:1fr}.nb-content-detail .detail-hero h1{font-size:45px}.nb-content-detail .detail-nutrition-title h2{font-size:34px}}

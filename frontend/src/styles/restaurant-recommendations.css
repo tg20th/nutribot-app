@@ -1,1 +1,255 @@
-.restaurant-preview-main{grid-column:1/-1;max-width:1060px;width:100%;margin-inline:auto}.restaurant-recommendations{padding:52px 0 34px}.restaurant-recommendations-head{gap:24px;margin-bottom:20px}.restaurant-recommendations-head h2{max-width:620px;font-size:clamp(27px,3.1vw,39px);line-height:1.03}.restaurant-recommendations-head>p{max-width:245px;font-size:11px}.restaurant-recommendation-grid{gap:11px}.restaurant-recommendation-media{height:150px}.restaurant-recommendation-copy{padding:14px 15px 16px}.restaurant-recommendation-copy h3{margin:9px 0 7px;font-size:20px}.restaurant-recommendation-copy>button{margin-top:13px}.restaurant-recommendation-skeleton{height:300px}@media(max-width:800px){.restaurant-preview-main{max-width:100%}.restaurant-recommendations{padding:48px 0 27px}.restaurant-recommendations-head{gap:13px}}@media(max-width:540px){.restaurant-recommendations{padding-top:42px}.restaurant-recommendations-head h2{font-size:30px}}
+/* Clean Editorial Restaurant Recommendations (No images, no emojis, no star ratings) */
+.restaurant-preview-main {
+  grid-column: 1 / -1;
+  max-width: 1180px;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.restaurant-recommendations {
+  padding: 56px 0 40px;
+  border-top: 1px solid var(--border, #e3e9de);
+}
+
+.restaurant-recommendations-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.restaurant-recommendations-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--primary, #2d5a27);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif);
+}
+
+.restaurant-recommendations-head h2 {
+  max-width: 680px;
+  margin: 10px 0 0;
+  font: 500 clamp(26px, 3vw, 36px) / 1.1 var(--nutribot-brand-font, 'Playfair Display', Georgia, serif);
+  letter-spacing: -0.04em;
+  color: #1e281b;
+}
+
+.restaurant-recommendations-head > p {
+  max-width: 280px;
+  margin: 0;
+  color: var(--text-muted, #66756b);
+  font-size: 12px;
+  line-height: 1.6;
+  font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif);
+}
+
+/* Grid Layout: 3 columns on desktop, 2 on tablet, 1 on mobile */
+.restaurant-recommendation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+/* Ultra-clean Compact Card without media */
+.restaurant-recommendation-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20px 22px;
+  background: #ffffff;
+  border: 1px solid #e1e7dc;
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.22s ease,
+              background-color 0.22s ease;
+  user-select: none;
+}
+
+.restaurant-recommendation-card:hover {
+  transform: translateY(-3px);
+  background: #fbfdfa;
+  border-color: #2e6047;
+  box-shadow: 0 12px 28px rgba(26, 54, 38, 0.08);
+}
+
+.restaurant-recommendation-card:focus-visible {
+  outline: 2px solid #2e6047;
+  outline-offset: 2px;
+}
+
+/* Header inside card */
+.restaurant-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.restaurant-card-distance {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #edf3e9;
+  color: #28543d;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif);
+}
+
+.restaurant-card-category {
+  font-size: 11px;
+  color: #728277;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif);
+}
+
+/* Title */
+.restaurant-card-name {
+  margin: 0 0 10px;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #1a241d;
+  font-family: var(--nutribot-user-font, 'Google Sans', sans-serif);
+  letter-spacing: -0.015em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+
+/* Address */
+.restaurant-card-address {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 0 16px;
+  color: #5c6b61;
+  font-size: 12px;
+  line-height: 1.5;
+  min-height: 36px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif);
+}
+
+.restaurant-card-address svg,
+.restaurant-pin-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #2e6047;
+}
+
+/* Action row */
+.restaurant-card-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid #edf2ea;
+  color: #244b36;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif);
+}
+
+.restaurant-recommendation-card:hover .restaurant-card-action {
+  color: var(--primary, #2d5a27);
+}
+
+.restaurant-card-action svg {
+  transition: transform 0.2s ease;
+}
+
+.restaurant-recommendation-card:hover .restaurant-card-action svg {
+  transform: translate(2px, -2px);
+}
+
+/* Skeleton & Empty state */
+.restaurant-recommendation-skeleton {
+  height: 165px;
+  border-radius: 14px;
+  background: linear-gradient(100deg, #e7ece2 25%, #f4f6f1 40%, #e7ece2 55%);
+  background-size: 220% 100%;
+  animation: restaurant-shimmer 1.4s infinite;
+}
+
+@keyframes restaurant-shimmer {
+  to {
+    background-position: -120% 0;
+  }
+}
+
+.restaurant-recommendation-empty {
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed #c0cebd;
+  border-radius: 14px;
+  color: #6c7c71;
+  font-size: 12px;
+  background: #f7f9f5;
+  padding: 24px;
+}
+
+/* Responsive */
+@media (max-width: 960px) {
+  .restaurant-recommendation-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 800px) {
+  .restaurant-preview-main {
+    max-width: 100%;
+  }
+  .restaurant-recommendations {
+    padding: 44px 0 28px;
+  }
+  .restaurant-recommendations-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .restaurant-recommendations-head > p {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 580px) {
+  .restaurant-recommendation-grid {
+    grid-template-columns: 1fr;
+  }
+  .restaurant-recommendations-head h2 {
+    font-size: 26px;
+  }
+  .restaurant-recommendation-card {
+    padding: 16px 18px;
+  }
+}
