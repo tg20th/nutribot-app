@@ -45,7 +45,10 @@ export default function UserManagementPage() {
         setTotalPages(result.totalPages || 1);
       })
       .catch((requestError) => {
-        if (requestError.name !== 'AbortError') setError(true);
+        // React StrictMode aborts its first development-only request while it
+        // checks effect cleanup. apiRequest deliberately wraps fetch errors,
+        // so the signal is the reliable way to identify that cancellation.
+        if (!controller.signal.aborted) setError(true);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -80,14 +83,14 @@ export default function UserManagementPage() {
     </div>
     <div className="admin-toolbar members-admin-toolbar">
       <SearchBox value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search name, email, or username..." />
-      <label>Status<select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="BANNED">Banned</option><option value="DELETED">Deleted</option></select></label>
+      <label>Status<select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="WARN">Warn</option><option value="BANNED">Banned</option><option value="PENDING_VERIFY">Pending verification</option></select></label>
     </div>
     <section className="admin-panel table-panel members-table-panel">
-      {error ? <ErrorState onRetry={reload} /> : loading ? <LoadingState /> : items.length ? <table className="admin-table"><thead><tr><th>Member</th><th>User ID</th><th>Status</th><th>Role</th><th>Joined</th><th aria-label="Actions" /></tr></thead><tbody>{items.map((user) => {
+      {error ? <ErrorState onRetry={reload} /> : loading ? <LoadingState /> : items.length ? <table className="admin-table members-admin-table"><colgroup><col className="member-column" /><col className="id-column" /><col className="status-column" /><col className="role-column" /><col className="joined-column" /><col className="actions-column" /></colgroup><thead><tr><th>Member</th><th>User ID</th><th>Status</th><th>Role</th><th>Joined</th><th aria-label="Actions" /></tr></thead><tbody>{items.map((user) => {
         const locked = user.status === 'BANNED';
         return <tr key={user.id}><td className="member-cell"><span><b>{user.name}</b><small>{user.username ? `${user.username} / ${user.email}` : user.email}</small></span></td><td>{user.id}</td><td><StatusBadge status={user.status} /></td><td>{user.role}</td><td>{user.joinedAt}</td><td className="row-actions">{['ACTIVE', 'BANNED'].includes(user.status) && <button type="button" className={locked ? '' : 'delete-icon'} onClick={() => setConfirm({ id: user.id, status: locked ? 'ACTIVE' : 'BANNED', title: locked ? 'Unlock this user?' : 'Lock this user?', text: locked ? 'The user will be able to access authorized features again.' : 'The user will no longer be able to access authorized features.', confirm: locked ? 'Unlock Account' : 'Lock Account' })} aria-label={`${locked ? 'Unlock' : 'Lock'} ${user.name}`}>{locked ? <UnlockKeyhole size={16} /> : <LockKeyhole size={16} />}</button>}</td></tr>;
       })}</tbody></table> : <EmptyState title="No members found." text="Try changing your search or status filter." />}
-      <Pagination page={page} total={totalPages} onPage={setPage} />
+      {!error && !loading && items.length > 0 && <Pagination page={page} total={totalPages} onPage={setPage} />}
     </section>
     <ConfirmDialog dialog={confirm} onClose={() => setConfirm(null)} onConfirm={updateStatus} />
     <Toast message={toast} onDismiss={() => setToast('')} />

@@ -16,6 +16,20 @@
 .members-admin-toolbar .admin-search input,.members-admin-toolbar .admin-search input:focus{box-sizing:border-box;display:block;flex:1;height:100%;min-height:0;min-width:0;padding:0;border:0;outline:0;box-shadow:none;line-height:normal;align-self:stretch;background:transparent}
 .members-admin-toolbar label select{height:44px;min-height:44px;border-color:#c8d8c0}
 .members-table-panel{border-color:#c8d8c0;box-shadow:0 14px 35px rgba(49,92,43,.06)}
+.members-admin-table{table-layout:fixed}
+.members-admin-table .member-column{width:45%}
+.members-admin-table .id-column{width:11%}
+.members-admin-table .status-column{width:12%}
+.members-admin-table .role-column{width:10%}
+.members-admin-table .joined-column{width:15%}
+.members-admin-table .actions-column{width:7%}
+.members-admin-table .member-cell{display:table-cell;min-width:0}
+.members-admin-table .member-cell>span{min-width:0}
+.members-admin-table .member-cell b,.members-admin-table .member-cell small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.members-admin-table .row-actions{justify-content:center}
+.members-table-panel .pagination{min-height:64px;box-sizing:border-box;padding:14px 22px;align-items:center}
+.members-table-panel .pagination button{min-height:36px;display:inline-flex;align-items:center;justify-content:center;gap:3px}
+.status-pending-verify{background:#f4ead1;color:#846416}
 .status-banned,.status-suspended{background:#f1dfda;color:#8b493e}
 .status-deleted{background:#ecece7;color:#67655f}
 .category-admin-hero{margin:-22px 0 22px;padding:34px clamp(24px,4vw,44px) 30px;border:1px solid #d7e6ce;border-radius:18px;background:linear-gradient(135deg,#e8f3dd 0%,#f4f8ef 58%,#d6ebc8 100%);box-shadow:0 18px 46px rgba(49,92,43,.08)}
