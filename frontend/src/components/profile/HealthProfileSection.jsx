@@ -107,6 +107,7 @@ export default function HealthProfileSection() {
     const controller = new AbortController();
     Promise.all([getHealthProfile(controller.signal), getAllergyIngredients(controller.signal)])
       .then(([profile, ingredientOptions]) => {
+        if (controller.signal.aborted) return;
         const mapped = toFormHealth(profile);
         setHealth(mapped);
         setSavedHealth(mapped);
@@ -114,9 +115,8 @@ export default function HealthProfileSection() {
         setIngredients(Array.isArray(ingredientOptions) ? ingredientOptions : []);
       })
       .catch((error) => {
-        if (error?.name !== 'AbortError') {
-          setNotice({ type: 'error', message: error?.message || 'We could not load your health profile.' });
-        }
+        if (controller.signal.aborted || error?.name === 'AbortError') return;
+        setNotice({ type: 'error', message: error?.message || 'We could not load your health profile.' });
       })
       .finally(() => {
         if (!controller.signal.aborted) setIsLoading(false);

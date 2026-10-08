@@ -25,9 +25,9 @@ export async function apiRequest(path, options = {}) {
       body
     });
   } catch (networkError) {
-    // Cung cấp thông tin chi tiết hơn về lỗi network
+    // Giữ nguyên AbortError để các component phân biệt được request bị hủy vòng đời
     if (networkError.name === 'AbortError') {
-      throw new ApiError('Yêu cầu bị hủy bởi người dùng', 0, null);
+      throw networkError;
     }
     throw new ApiError(
       `Không thể kết nối đến máy chủ. Vui lòng kiểm tra:\n1. Backend server đang chạy trên port 8080\n2. Kết nối mạng ổn định\n3. Không có VPN/Firewall chặn kết nối`,

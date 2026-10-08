@@ -175,6 +175,7 @@ export default function ProfilePage() {
     setHasLoadedProfile(false);
     getMyProfile(controller.signal)
       .then((data) => {
+        if (controller.signal.aborted) return;
         const mapped = toFormProfile(data, fallbackUser);
         const editableProfile = { ...mapped, email: data.pendingEmail || mapped.email };
         setProfile(editableProfile);
@@ -185,12 +186,11 @@ export default function ProfilePage() {
         publishProfileUpdate(editableProfile);
       })
       .catch((error) => {
-        if (error?.name !== 'AbortError') {
-          const emptyProfile = toFormProfile(EMPTY_PROFILE);
-          setProfile(emptyProfile);
-          setSavedProfile(emptyProfile);
-          setNotice({ type: 'error', message: 'We could not load your saved profile. Please try again before making changes.' });
-        }
+        if (controller.signal.aborted || error?.name === 'AbortError') return;
+        const emptyProfile = toFormProfile(EMPTY_PROFILE);
+        setProfile(emptyProfile);
+        setSavedProfile(emptyProfile);
+        setNotice({ type: 'error', message: 'We could not load your saved profile. Please try again before making changes.' });
       })
       .finally(() => {
         if (!controller.signal.aborted) setIsLoading(false);
