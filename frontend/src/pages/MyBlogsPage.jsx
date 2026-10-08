@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, ArrowUpRight, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, Film, LoaderCircle, Pencil, Trash2, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowUpRight, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, Film, LoaderCircle, Pencil, Send, Trash2, Undo2, X } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
-import { deleteMyBlog, deleteMyVideo, getBlogCategories, getMyBlog, getMyBlogs, getMyVideo, getMyVideos, updateMyBlog, updateMyVideo } from '../services/authorBlogApi';
+import { deleteMyBlog, deleteMyVideo, getBlogCategories, getMyBlog, getMyBlogs, getMyVideo, getMyVideos, recallAuthorContent, submitAuthorContent, updateMyBlog, updateMyVideo } from '../services/authorBlogApi';
 import '../styles/my-blogs.css';
 
 const PAGE_SIZE = 6;
@@ -213,6 +213,8 @@ export default function MyBlogsPage() {
   const [page, setPage] = useState(0);
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState({ content: [], totalElements: 0, totalPages: 0 });
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [actionBusyId, setActionBusyId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dialog, setDialog] = useState(null);
@@ -220,13 +222,25 @@ export default function MyBlogsPage() {
   const headingRef = useRef(null);
 
   useEffect(() => {
-    if (location.state?.edited) setNotice('Your post has been updated.');
-    else if (location.state?.created) setNotice(location.state.submitted ? 'Your post has been submitted for review.' : 'Your draft has been saved.');
+    if (location.state?.edited && !location.state?.submitted) {
+      setNotice('Your post has been updated.');
+    } else if (location.state?.submitted) {
+      const st = location.state?.status;
+      if (st === 'published') {
+        setNotice('Bài viết đã được AI kiểm duyệt và xuất bản tự động thành công! (Published)');
+      } else if (st === 'rejected') {
+        setNotice('Bài viết đã bị từ chối do vi phạm tiêu chuẩn kiểm duyệt nội dung. (Rejected)');
+      } else {
+        setNotice('Bài viết đã được nộp và đang chờ quản trị viên kiểm duyệt. (Under review)');
+      }
+    } else if (location.state?.created) {
+      setNotice('Your draft has been saved.');
+    }
   }, [location.state]);
 
   useEffect(() => {
     if (!notice) return undefined;
-    const timeout = window.setTimeout(() => setNotice(''), 4000);
+    const timeout = window.setTimeout(() => setNotice(''), 5000);
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
@@ -254,6 +268,39 @@ export default function MyBlogsPage() {
     return () => controller.abort();
   }, [page, revision]);
 
+  async function handleSubmitItem(item) {
+    if (actionBusyId) return;
+    setActionBusyId(item.contentId);
+    try {
+      const res = await submitAuthorContent(item.contentType, item.contentId);
+      const st = res?.status;
+      if (st === 'published') {
+        refresh('Bài viết đã được AI tự động duyệt và xuất bản công khai thành công!');
+      } else if (st === 'rejected') {
+        refresh('Bài viết đã bị từ chối do vi phạm tiêu chuẩn kiểm duyệt.');
+      } else {
+        refresh('Bài viết đã được nộp và đang chờ duyệt.');
+      }
+    } catch (err) {
+      setNotice(err.message || 'Không thể nộp bài duyệt lúc này.');
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
+  async function handleRecallItem(item) {
+    if (actionBusyId) return;
+    setActionBusyId(item.contentId);
+    try {
+      await recallAuthorContent(item.contentType, item.contentId);
+      refresh('Đã rút bài viết về bản nháp thành công.');
+    } catch (err) {
+      setNotice(err.message || 'Không thể rút bài lúc này.');
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
   function refresh(message) {
     setDialog(null);
     setNotice(message);
@@ -268,6 +315,8 @@ export default function MyBlogsPage() {
     headingRef.current?.focus();
   }
 
+  const displayedContent = result.content.filter((item) => statusFilter === 'all' || item.status === statusFilter);
+
   return <div className="community-page my-blogs-page">
     <CommunityTopBar/><div className="community-shell"><CommunitySideNav/><span className="community-sidenav-spacer" aria-hidden="true"/>
       <main className="my-blogs-main">
@@ -276,18 +325,30 @@ export default function MyBlogsPage() {
           <div><p className="my-blogs-eyebrow">YOUR PERSONAL CONTENT</p><h1>My content<span>.</span></h1><p>Manage your blogs and videos together. Drafts, published posts, and reviews stay in one library.</p></div>
           <span className="my-blogs-header-mark" aria-hidden="true"><Icon size={38} strokeWidth={1.3}/></span>
         </header>
+
+        <div className="my-blogs-tabs" role="tablist" aria-label="Lọc theo trạng thái">
+          <button type="button" className={statusFilter === 'all' ? 'is-active' : ''} onClick={() => setStatusFilter('all')}>All ({result.content.length})</button>
+          <button type="button" className={statusFilter === 'published' ? 'is-active' : ''} onClick={() => setStatusFilter('published')}>Published ({result.content.filter((x) => x.status === 'published').length})</button>
+          <button type="button" className={statusFilter === 'under_review' ? 'is-active' : ''} onClick={() => setStatusFilter('under_review')}>Under review ({result.content.filter((x) => x.status === 'under_review').length})</button>
+          <button type="button" className={statusFilter === 'draft' ? 'is-active' : ''} onClick={() => setStatusFilter('draft')}>Draft ({result.content.filter((x) => x.status === 'draft').length})</button>
+          <button type="button" className={statusFilter === 'rejected' ? 'is-active' : ''} onClick={() => setStatusFilter('rejected')}>Rejected ({result.content.filter((x) => x.status === 'rejected').length})</button>
+        </div>
+
         <section className="my-blogs-collection" aria-labelledby="my-blogs-list-title" aria-busy={loading}>
-          <div className="my-blogs-list-heading"><h2 id="my-blogs-list-title" ref={headingRef} tabIndex={-1}>Your posts {!loading && !error && <span>{result.totalElements}</span>}</h2><Link className="my-blog-button" to="/community/blogs/new">Create post</Link></div>
+          <div className="my-blogs-list-heading"><h2 id="my-blogs-list-title" ref={headingRef} tabIndex={-1}>Your posts {!loading && !error && <span>{displayedContent.length}</span>}</h2><Link className="my-blog-button" to="/community/blogs/new">Create post</Link></div>
           {notice && <div className="my-blogs-alert" role="status"><CheckCircle2 size={18}/><span>{notice}</span><button className="my-blog-icon-button" aria-label="Dismiss notification" onClick={() => setNotice('')}><X size={16}/></button></div>}
           {loading ? <div className="my-blogs-state" role="status"><LoaderCircle className="my-blogs-spinner" size={28}/><h3>Gathering your content...</h3><p>Your blogs and videos will be ready in a moment.</p></div>
             : error ? <div className="my-blogs-state"><RequestError error={error} type="content" fallback="We couldn't load your content. Please try again."/><button className="my-blog-button" onClick={() => setRevision((value) => value + 1)}>Try again</button></div>
-              : !result.content.length ? <div className="my-blogs-state"><span className="my-blogs-empty-icon"><Icon size={32}/></span><p className="my-blogs-eyebrow">A FRESH PAGE</p><h3>Your first post starts here.</h3><p>Share a recipe, note, story, or helpful video with the community.</p><Link className="my-blog-button" to="/community/blogs/new">Create post <ArrowUpRight size={16}/></Link></div>
-                : <div className="my-blogs-list">{result.content.map((item) => { const itemConfig = CONTENT_TYPES[item.contentType]; return <article className="my-blog-card" key={`${item.contentType}-${item.contentId}`}>
+              : !displayedContent.length ? <div className="my-blogs-state"><span className="my-blogs-empty-icon"><Icon size={32}/></span><p className="my-blogs-eyebrow">A FRESH PAGE</p><h3>{statusFilter === 'all' ? 'Your first post starts here.' : `No posts in ${statuses[statusFilter] || statusFilter}.`}</h3><p>{statusFilter === 'all' ? 'Share a recipe, note, story, or helpful video with the community.' : 'You have no posts matching this filter.'}</p><Link className="my-blog-button" to="/community/blogs/new">Create post <ArrowUpRight size={16}/></Link></div>
+                : <div className="my-blogs-list">{displayedContent.map((item) => { const itemConfig = CONTENT_TYPES[item.contentType]; return <article className="my-blog-card" key={`${item.contentType}-${item.contentId}`}>
                   <Thumbnail src={item.thumbnailUrl} type={item.contentType}/><div className="my-blog-card-body">
                     <div className="my-blog-meta"><span className="my-blog-content-type">{item.contentType === 'video' ? <><Film size={13}/> Video</> : <><BookOpen size={13}/> Blog</>}</span><span className={`my-blog-status my-blog-status--${statuses[item.status] ? item.status : 'unknown'}`}>{statuses[item.status] ?? 'Unknown status'}</span><span>Updated {formattedDate(item.updatedAt ?? item.createdAt)}</span>{item.contentType === 'video' && item.durationSec ? <span>{Math.round(item.durationSec / 60)} min</span> : null}</div>
                     <h3>{item.status === 'published' ? <Link to={`/community/posts/${item.contentId}`} state={{ returnTo: '/community/my-blogs' }}>{item.title}</Link> : item.title}</h3>
                     <p className="my-blog-excerpt">{excerpt(item.body) || (item.contentType === 'video' ? 'No description yet.' : 'No story text yet.')}</p>
                     <div className="my-blog-card-footer"><span className="my-blog-views"><Eye size={15}/>{(item.viewCount ?? 0).toLocaleString()} views</span><div className="my-blog-card-actions">
+                      {item.status === 'draft' && <button type="button" className="my-blog-button my-blog-button--secondary" style={{ padding: '6px 12px', minHeight: '34px', fontSize: '11px' }} disabled={actionBusyId === item.contentId} onClick={() => handleSubmitItem(item)}>{actionBusyId === item.contentId ? <LoaderCircle className="my-blogs-spinner" size={13}/> : <Send size={13}/>} Submit</button>}
+                      {item.status === 'under_review' && <button type="button" className="my-blog-button my-blog-button--secondary" style={{ padding: '6px 12px', minHeight: '34px', fontSize: '11px' }} disabled={actionBusyId === item.contentId} onClick={() => handleRecallItem(item)}>{actionBusyId === item.contentId ? <LoaderCircle className="my-blogs-spinner" size={13}/> : <Undo2 size={13}/>} Recall</button>}
+                      {item.status === 'published' && <Link to={`/community/posts/${item.contentId}`} state={{ returnTo: '/community/my-blogs' }} style={{ padding: '6px 12px', minHeight: '34px', fontSize: '11px' }}><Eye size={13}/> View</Link>}
                       <Link to={`/community/my-content/${item.contentType}/${item.contentId}/edit`} aria-label={`Edit ${item.title}`}><Pencil size={15}/> Edit</Link>
                       <button type="button" className="my-blog-delete-button" onClick={() => { setNotice(''); setDialog({ type: 'delete', item, config: itemConfig }); }} aria-label={`Delete ${item.title}`}><Trash2 size={15}/> Delete</button>
                     </div></div>

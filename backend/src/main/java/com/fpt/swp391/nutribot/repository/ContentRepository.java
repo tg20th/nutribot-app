@@ -98,6 +98,15 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
 
     Page<Content> findByStatus(String status, Pageable pageable);
 
+    @Query("SELECT c FROM Content c WHERE c.status IN :statuses")
+    Page<Content> findByStatusIn(@Param("statuses") List<String> statuses, Pageable pageable);
+
+    @Query("SELECT c FROM Content c WHERE c.status IN :statuses AND LOWER(c.contentType) = LOWER(:contentType)")
+    Page<Content> findByStatusInAndContentType(
+            @Param("statuses") List<String> statuses,
+            @Param("contentType") String contentType,
+            Pageable pageable);
+
     @Modifying
     @Query("UPDATE Content c SET c.viewCount = c.viewCount + 1 WHERE c.contentId = :contentId")
     void incrementViewCount(@Param("contentId") Integer contentId);

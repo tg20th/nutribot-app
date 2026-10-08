@@ -26,7 +26,7 @@ it('opens the full post from Comments with a footer composer and restores focus 
   expect(composer).toHaveFocus();
   expect(document.body.style.overflow).toBe('hidden');
   fireEvent.change(composer, { target: { value: 'My lunch idea' } });
-  fireEvent.click(within(modal).getByRole('button', { name: 'Post comment' }));
+  fireEvent.click(within(modal).getByRole('button', { name: 'Post' }));
   expect(await within(modal).findByText('My lunch idea')).toBeInTheDocument();
   fireEvent.click(within(modal).getByRole('button', { name: 'Close post' }));
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();

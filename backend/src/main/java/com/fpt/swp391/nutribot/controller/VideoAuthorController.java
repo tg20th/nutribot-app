@@ -67,7 +67,12 @@ public class VideoAuthorController {
             @AuthenticationPrincipal UserDetails user,
             @PathVariable Integer id) {
         AuthorContentResponse response = authorContentService.submitContent(user.getUsername(), id, "VIDEO");
-        return ResponseEntity.ok(ApiResponse.success("Nộp video chờ duyệt thành công", response));
+        String message = "published".equalsIgnoreCase(response.getStatus())
+                ? "Video đã được AI tự động kiểm duyệt và xuất bản thành công"
+                : "rejected".equalsIgnoreCase(response.getStatus())
+                ? "Video đã bị từ chối do không đạt tiêu chuẩn nội dung"
+                : "Nộp video chờ duyệt thành công";
+        return ResponseEntity.ok(ApiResponse.success(message, response));
     }
 
     @PostMapping("/{id}/recall")
