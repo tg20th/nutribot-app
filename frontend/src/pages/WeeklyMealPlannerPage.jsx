@@ -14,7 +14,10 @@ import freshProduce from '../assets/fresh-produce.jpg';
 import { getHealthProfile, getMyProfile } from '../services/profileApi';
 import { addWeeklyMenuItem, createWeeklyMenu, deleteWeeklyMenuItem, getCurrentWeeklyMenu, getWeeklyMenuDishes, saveAiGeneratedMenu, updateWeeklyMenu } from '../services/weeklyMealApi';
 import { generateMealPlan } from '../services/mealPlannerApi';
-import { createLocalMeal, MEAL_SLOTS, normalizeDishCatalog, normalizeWeeklyMenu, recalculateMenu, serializeMenu, shiftWeek, startOfWeek, toIsoDate } from '../utils/weeklyMenuModel';
+import { createLocalMeal, MEAL_SLOTS, normalizeDishCatalog, normalizeWeeklyMenu, recalculateMenu, serializeMenu, shiftWeek, startOfWeek, toIsoDate, checkNutritionOverflow } from '../utils/weeklyMenuModel';
+import NutritionOverflowDialog from '../components/dialog/NutritionOverflowDialog';
+import ServiceUnavailableDialog from '../components/dialog/ServiceUnavailableDialog';
+import PlanExistsDialog from '../components/dialog/PlanExistsDialog';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -69,6 +72,11 @@ export default function WeeklyMealPlannerPage() {
   const [aiSaveError, setAiSaveError] = useState('');
   const aiSaveRequest = useRef(false);
   const [notice, setNotice] = useState(null);
+  const [showServiceUnavailableDialog, setShowServiceUnavailableDialog] = useState(false);
+  const [serviceUnavailableDraftExists, setServiceUnavailableDraftExists] = useState(false);
+  const [showPlanExistsDialog, setShowPlanExistsDialog] = useState(false);
+  const [pendingNutritionOverflow, setPendingNutritionOverflow] = useState(null);
+  const [pendingOverflowMeal, setPendingOverflowMeal] = useState(null);
 
   const loadWeek = useCallback(async (startDate, signal) => {
     setLoading(true);
@@ -80,7 +88,13 @@ export default function WeeklyMealPlannerPage() {
       if (error?.name === 'AbortError') return;
       const draft = readDraft(startDate);
       setMenu(normalizeWeeklyMenu(draft ?? {}, startDate));
-      setNotice({ type: 'offline', text: draft ? 'The menu service is unavailable. Your local draft is open.' : 'The menu service is unavailable. New changes will stay on this device.' });
+      if (draft) {
+        setServiceUnavailableDraftExists(true);
+        setShowServiceUnavailableDialog(true);
+      } else {
+        setServiceUnavailableDraftExists(false);
+        setShowServiceUnavailableDialog(true);
+      }
     } finally {
       setLoading(false);
     }
@@ -155,20 +169,30 @@ export default function WeeklyMealPlannerPage() {
     // Create new local meal entry
     const newMeal = createLocalMeal(dish, slot, servings, notes, false);
 
-    // Update local state
+    // Build meals array after this change (for overflow check)
+    const dayMealsAfter = isAddMode
+      ? [...(menu.days[dayIndex]?.meals ?? []), newMeal]
+      : (menu.days[dayIndex]?.meals ?? []).map((meal) => meal.key === editor.meal.key ? newMeal : meal);
+
+    // Check nutrition overflow
+    const tempMenu = { ...menu, days: menu.days.map((day, idx) => idx === dayIndex ? { ...day, meals: dayMealsAfter } : day) };
+    const overflow = checkNutritionOverflow(tempMenu, dayIndex, newMeal);
+    if (overflow) {
+      setEditor(null);
+      setPendingOverflowMeal({ newMeal, isAddMode });
+      setPendingNutritionOverflow(overflow);
+      return;
+    }
+
+    // No overflow — update local state
     setMenu((current) => recalculateMenu({
       ...current,
       days: current.days.map((day, index) => {
         if (index !== dayIndex) return day;
         if (isAddMode) {
-          // ADD mode: append new dish to existing meals
           return { ...day, meals: [...day.meals, newMeal] };
         } else {
-          // REPLACE mode: replace specific existing dish
-          return {
-            ...day,
-            meals: day.meals.map((meal) => meal.key === editor.meal.key ? newMeal : meal)
-          };
+          return { ...day, meals: day.meals.map((meal) => meal.key === editor.meal.key ? newMeal : meal) };
         }
       })
     }));
@@ -235,6 +259,26 @@ export default function WeeklyMealPlannerPage() {
     const { dayIndex, meal } = pendingMealRemoval;
     setPendingMealRemoval(null);
     await removeMeal(dayIndex, meal);
+  };
+
+  const confirmOverflowKeep = () => {
+    if (!pendingOverflowMeal || !pendingNutritionOverflow) return;
+    const { newMeal, isAddMode } = pendingOverflowMeal;
+    const dayIndex = editor?.dayIndex ?? pendingOverflowMeal.dayIndex;
+    setMenu((current) => recalculateMenu({
+      ...current,
+      days: current.days.map((day, index) => {
+        if (index !== dayIndex) return day;
+        if (isAddMode) {
+          return { ...day, meals: [...day.meals, newMeal] };
+        } else {
+          return { ...day, meals: day.meals.map((meal) => meal.key === pendingOverflowMeal.mealKey ? newMeal : meal) };
+        }
+      })
+    }));
+    setPendingOverflowMeal(null);
+    setPendingNutritionOverflow(null);
+    setNotice({ type: 'saving', text: 'Saving your meal...' });
   };
 
   const savePlan = async () => {
@@ -304,7 +348,10 @@ export default function WeeklyMealPlannerPage() {
       setShowProfileReadinessModal(true);
       return;
     }
-    if (menu.menuId && !window.confirm('Generating a new preview will not replace your saved plan until you choose Use this plan or save it. Continue?')) return;
+    if (menu.menuId) {
+      setShowPlanExistsDialog(true);
+      return;
+    }
     setShowAiGenerator(true);
   };
 
@@ -504,6 +551,27 @@ export default function WeeklyMealPlannerPage() {
     </div>}
     {aiPreview && (
       <MenuPreviewModal preview={aiPreview} dishes={dishes} isSaving={savingAiPreview} saveError={aiSaveError} onClose={() => setAiPreview(null)} onSave={persistAiPreview} onUse={applyAiPreview} onReplace={replacePreviewMeal}/>
+    )}
+    {showServiceUnavailableDialog && (
+      <ServiceUnavailableDialog
+        draftExists={serviceUnavailableDraftExists}
+        onRetry={() => { setShowServiceUnavailableDialog(false); loadWeek(weekStart); }}
+        onUseDraft={() => setShowServiceUnavailableDialog(false)}
+        onClose={() => setShowServiceUnavailableDialog(false)}
+      />
+    )}
+    {showPlanExistsDialog && (
+      <PlanExistsDialog
+        onConfirm={() => { setShowPlanExistsDialog(false); setShowAiGenerator(true); }}
+        onCancel={() => setShowPlanExistsDialog(false)}
+      />
+    )}
+    {pendingNutritionOverflow && (
+      <NutritionOverflowDialog
+        overflow={pendingNutritionOverflow}
+        onKeep={() => { setPendingNutritionOverflow(null); setPendingOverflowMeal(null); }}
+        onCancel={() => { setPendingOverflowMeal(null); setPendingNutritionOverflow(null); setNotice(null); }}
+      />
     )}
     <ChatbotWidget/>
   </>;

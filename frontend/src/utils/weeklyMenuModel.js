@@ -138,6 +138,43 @@ const mergeNutritionSummary = (backendSummary, localSummary) => {
   return { status, missingFields, actual: localSummary.actual, target, percentage };
 };
 
+// Check if adding a dish to a slot would exceed daily nutrition targets.
+// Returns { overflowed: bool, details: { calorie: {...}, protein: {...}, ... } } or null.
+export const checkNutritionOverflow = (menu, dayIndex, newMeal) => {
+  if (dayIndex < 0 || dayIndex >= (menu.days ?? []).length) return null;
+  const day = menu.days[dayIndex];
+  if (!day) return null;
+
+  // Simulate adding the new meal to the day
+  const tempMeals = [...(day.meals ?? []), newMeal];
+  const totals = tempMeals.reduce((sum, meal) => {
+    const m = mealTotals(meal);
+    return { calories: sum.calories + m.calories, protein: sum.protein + m.protein, carbs: sum.carbs + m.carbs, fats: sum.fats + m.fats };
+  }, { calories: 0, protein: 0, carbs: 0, fats: 0 });
+
+  const overflow = {};
+  const THRESHOLD = 1.0; // exact match considered overflow
+  const makeEntry = (actual, goal, key) => {
+    if (goal == null || !Number.isFinite(goal)) return null;
+    if (actual > goal * THRESHOLD) {
+      return { actual: Math.round(actual), goal: Math.round(goal), excess: Math.round(actual - goal) };
+    }
+    return null;
+  };
+
+  const calorieEntry = makeEntry(totals.calories, day.calorieGoal, 'calorie');
+  const proteinEntry = makeEntry(totals.protein, day.proteinGoal, 'protein');
+  const carbsEntry = makeEntry(totals.carbs, day.carbsGoal, 'carbs');
+  const fatsEntry = makeEntry(totals.fats, day.fatsGoal, 'fats');
+
+  if (calorieEntry) overflow.calorie = calorieEntry;
+  if (proteinEntry) overflow.protein = proteinEntry;
+  if (carbsEntry) overflow.carbs = carbsEntry;
+  if (fatsEntry) overflow.fats = fatsEntry;
+
+  return Object.keys(overflow).length > 0 ? { overflowed: true, details: overflow } : null;
+};
+
 export const recalculateMenu = (menu) => {
   let weeklyCalories = 0;
   let weeklyProtein = 0;

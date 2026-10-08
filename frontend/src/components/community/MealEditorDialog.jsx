@@ -27,10 +27,23 @@ export default function MealEditorDialog({ editor, dishes, onClose, onSubmit }) 
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
+  // In ADD mode, filter out dishes already in this slot to avoid duplicates
+  const existingSlotDishIds = useMemo(() => {
+    if (!isAddMode) return new Set();
+    // editor.day.meals = meals already in this slot
+    const slotMeals = editor?.day?.meals ?? [];
+    return new Set(slotMeals.map((m) => String(m.dishId)));
+  }, [editor, isAddMode]);
+
   const filteredDishes = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return normalized ? dishes.filter((dish) => dish.name.toLowerCase().includes(normalized)) : dishes;
-  }, [dishes, query]);
+    const base = dishes.filter((dish) => {
+      if (existingSlotDishIds.has(String(dish.dishId))) return false;
+      if (!normalized) return true;
+      return dish.name.toLowerCase().includes(normalized);
+    });
+    return base;
+  }, [dishes, query, existingSlotDishIds]);
 
   const selectedDish = dishes.find((dish) => String(dish.dishId) === String(selectedId));
   const isAddMode = !editor?.meal;
@@ -59,7 +72,7 @@ export default function MealEditorDialog({ editor, dishes, onClose, onSubmit }) 
             {selected && <Check size={16}/>}
           </button>;
         })}
-        {!filteredDishes.length && <p className="meal-dialog-empty">{dishes.length ? 'No dishes match your search.' : 'No dishes are available from the database yet. The dish catalog API must be connected before a meal can be added.'}</p>}
+        {!filteredDishes.length && <p className="meal-dialog-empty">{dishes.length === 0 ? 'No dishes are available from the database yet. The dish catalog API must be connected before a meal can be added.' : existingSlotDishIds.size > 0 ? 'All dishes have already been added to this meal slot.' : 'No dishes match your search.'}</p>}
       </div>
 
       <div className="meal-dialog-fields">
