@@ -51,28 +51,83 @@ const numericDetailLabels = [
 
 function makeContentBody(body, details, ingredientRows = [], stepRows = []) {
   const cleanBody = stripHtmlToCleanText(body);
-  const facts = numericDetailLabels.filter(([key]) => String(details[key]).trim())
-    .map(([key, label, unit]) => `${label}: ${String(details[key]).trim()}${unit ? ` ${unit}` : ''}`);
-  
-  const ingredients = ingredientRows
-    .map((row) => {
-      const name = (row.isCustom ? row.customName : row.name)?.trim();
-      if (!name) return '';
-      const qty = row.quantity ? `${row.quantity} ${row.unit || 'g'}` : '';
-      return qty ? `${qty} ${name}` : name;
-    })
-    .filter(Boolean);
-
-  const steps = stepRows.map((item) => item.trim()).filter(Boolean);
-  const sections = [cleanBody || body];
-  if (facts.length) sections.push(`## Recipe details\n${facts.map((item) => `- ${item}`).join('\n')}`);
-  if (ingredients.length) sections.push(`## Ingredients\n${ingredients.map((item) => `- ${item}`).join('\n')}`);
-  if (steps.length) sections.push(`## Steps\n${steps.map((item, index) => `- Step ${index + 1}: ${item}`).join('\n')}`);
-  return sections.join('\n\n');
+  const structuredData = {
+    version: 1,
+    story: cleanBody || body,
+    prepMinutes: details.prepMinutes || '',
+    cookMinutes: details.cookMinutes || '',
+    servings: details.servings || '',
+    nutrition: {
+      calories: details.calories || '',
+      proteinG: details.proteinG || '',
+      carbsG: details.carbsG || '',
+      fatG: details.fatG || '',
+      fiberG: details.fiberG || '',
+      sodiumMg: details.sodiumMg || '',
+    },
+    ingredients: ingredientRows
+      .map((row) => ({
+        name: (row.isCustom ? row.customName : row.name)?.trim() || '',
+        quantity: row.quantity || '',
+        unit: row.unit || 'g',
+        isCustom: Boolean(row.isCustom),
+      }))
+      .filter((item) => item.name),
+    steps: stepRows.map((item) => item.trim()).filter(Boolean),
+  };
+  return JSON.stringify(structuredData);
 }
 
 function parseRecipeDetails(body = '', availableOptions = []) {
   const details = { ...emptyRecipeDetails };
+  const trimmed = (body || '').trim();
+
+  // 1. Try parsing JSON format
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        const nut = parsed.nutrition || {};
+        details.prepMinutes = parsed.prepMinutes ?? parsed.details?.prepMinutes ?? '';
+        details.cookMinutes = parsed.cookMinutes ?? parsed.details?.cookMinutes ?? '';
+        details.servings = parsed.servings ?? parsed.details?.servings ?? '';
+        details.calories = nut.calories ?? parsed.calories ?? parsed.details?.calories ?? '';
+        details.proteinG = nut.proteinG ?? parsed.proteinG ?? parsed.details?.proteinG ?? '';
+        details.carbsG = nut.carbsG ?? parsed.carbsG ?? parsed.details?.carbsG ?? '';
+        details.fatG = nut.fatG ?? parsed.fatG ?? parsed.details?.fatG ?? '';
+        details.fiberG = nut.fiberG ?? parsed.fiberG ?? parsed.details?.fiberG ?? '';
+        details.sodiumMg = nut.sodiumMg ?? parsed.sodiumMg ?? parsed.details?.sodiumMg ?? '';
+
+        const parsedIngredients = Array.isArray(parsed.ingredients)
+          ? parsed.ingredients.map((item) => {
+              if (typeof item === 'string') {
+                return { name: '__custom__', quantity: '', unit: 'g', isCustom: true, customName: item };
+              }
+              const name = item.name || '';
+              const matched = availableOptions.find((ing) => (ing.name || ing).toLowerCase() === name.toLowerCase());
+              if (matched) {
+                return { name: matched.name || matched, quantity: item.quantity || '', unit: item.unit || 'g', isCustom: false, customName: '' };
+              }
+              return { name: item.isCustom ? '__custom__' : name, quantity: item.quantity || '', unit: item.unit || 'g', isCustom: item.isCustom !== false, customName: name };
+            })
+          : [];
+
+        const parsedSteps = Array.isArray(parsed.steps) ? parsed.steps.map((s) => String(s).trim()).filter(Boolean) : [];
+        const cleanBody = parsed.story || parsed.description || '';
+
+        return {
+          body: cleanBody,
+          details,
+          ingredientRows: parsedIngredients.length ? parsedIngredients : [{ name: '', quantity: '', unit: 'g', isCustom: false, customName: '' }],
+          stepRows: parsedSteps.length ? parsedSteps : [''],
+        };
+      }
+    } catch {
+      // fallback to legacy parser below
+    }
+  }
+
+  // 2. Legacy parser (Markdown or HTML)
   const setFacts = (facts) => facts.forEach((fact) => {
     const [key, label] = numericDetailLabels.find(([, detailLabel]) => fact.startsWith(`${detailLabel}:`)) ?? [];
     if (key) details[key] = fact.replace(`${label}:`, '').trim().replace(/\s*(min|kcal|mg|g)$/, '');
