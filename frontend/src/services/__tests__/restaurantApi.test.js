@@ -6,6 +6,7 @@ import {
   searchNearbyRestaurants,
   getUserCurrentPosition
 } from '../restaurantApi';
+import { extractDishName } from '../../components/community/RestaurantRecommendations';
 
 describe('restaurantApi service', () => {
   beforeEach(() => {
@@ -97,3 +98,28 @@ describe('restaurantApi service', () => {
     await expect(getUserCurrentPosition()).rejects.toThrow(/Location access denied/i);
   });
 });
+
+describe('extractDishName helper', () => {
+  it('cleans recipe title prefix and suffix to isolate the dish name', () => {
+    expect(extractDishName('Cách làm Salad Đậu Phụ Sốt Mè Rang Thanh Đạm Cho Bữa Trưa'))
+      .toBe('Salad Đậu Phụ Sốt Mè Rang');
+  });
+
+  it('handles titles with delimiters like dash or pipe', () => {
+    expect(extractDishName('Salad Đậu Phụ Sốt Mè Rang - Món ăn thanh đạm'))
+      .toBe('Salad Đậu Phụ Sốt Mè Rang');
+    expect(extractDishName('Công thức làm Canh Rong Biển Hạt Sen | Bổ dưỡng thanh mát'))
+      .toBe('Canh Rong Biển Hạt Sen');
+  });
+
+  it('handles simple English dish names without stripping necessary words', () => {
+    expect(extractDishName('Mushroom tofu bowl')).toBe('Mushroom tofu bowl');
+    expect(extractDishName('How to make Vegan Tofu Salad for lunch')).toBe('Vegan Tofu Salad');
+  });
+
+  it('handles empty or null gracefully', () => {
+    expect(extractDishName('')).toBe('');
+    expect(extractDishName(null)).toBe('');
+  });
+});
+
