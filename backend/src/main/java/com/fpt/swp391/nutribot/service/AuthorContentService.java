@@ -36,6 +36,7 @@ public class AuthorContentService {
     private final UserRepository userRepository;
     private final CategoryRepository categoryRepository;
     private final CloudinaryMediaService cloudinaryMediaService;
+    private final ContentModerationGatewayService contentModerationGatewayService;
 
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_UNDER_REVIEW = "under_review";
@@ -207,9 +208,44 @@ public class AuthorContentService {
             throw new ForbiddenException("Bạn không có quyền thao tác trên nội dung này");
         }
 
+        // Step 1: Set to UNDER_REVIEW
         content.setStatus(STATUS_UNDER_REVIEW);
+        contentRepository.save(content);
+
+        // Step 2: Call AI moderation
+        ContentModerationGatewayService.ModerationResult moderation = contentModerationGatewayService.moderateContent(
+                content.getContentId(),
+                content.getContentType(),
+                content.getTitle(),
+                extractDescription(content.getBody()),
+                content.getBody(),
+                getCategoryName(content.getCategoryId()),
+                java.util.List.of()
+        );
+
+        log.info("AI moderation result for content {}: decision={}, reason={}, confidence={}",
+                contentId, moderation.decision(), moderation.reason(), moderation.confidence());
+
+        // Step 3: Process based on AI decision
+        String finalStatus;
+        switch (moderation.decision()) {
+            case "APPROVE" -> {
+                finalStatus = STATUS_PUBLISHED;
+                log.info("Content {} auto-approved by AI", contentId);
+            }
+            case "REJECT" -> {
+                finalStatus = STATUS_REJECTED;
+                log.info("Content {} auto-rejected by AI: {}", contentId, moderation.reason());
+            }
+            default -> {
+                // NEEDS_REVIEW or any other case - keep under review for admin
+                finalStatus = STATUS_UNDER_REVIEW;
+                log.info("Content {} needs admin review: {}", contentId, moderation.reason());
+            }
+        }
+
+        content.setStatus(finalStatus);
         Content saved = contentRepository.save(content);
-        log.info("Tác giả {} đã nộp nội dung {} sang trạng thái {}", username, contentId, STATUS_UNDER_REVIEW);
         return toAuthorResponse(saved);
     }
 
@@ -362,5 +398,26 @@ public class AuthorContentService {
                 .createdAt(content.getCreatedAt())
                 .updatedAt(content.getUpdatedAt())
                 .build();
+    }
+
+    private String extractDescription(String body) {
+        if (body == null || body.isBlank()) {
+            return "";
+        }
+        // Extract first ~200 chars as description
+        String text = body.replaceAll("<[^>]*>", "").trim();
+        if (text.length() <= 200) {
+            return text;
+        }
+        return text.substring(0, 200) + "...";
+    }
+
+    private String getCategoryName(Integer categoryId) {
+        if (categoryId == null) {
+            return "";
+        }
+        return categoryRepository.findById(categoryId)
+                .map(Category::getCategoryName)
+                .orElse("");
     }
 }

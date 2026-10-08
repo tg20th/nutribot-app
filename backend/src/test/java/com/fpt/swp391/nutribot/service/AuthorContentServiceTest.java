@@ -45,6 +45,9 @@ class AuthorContentServiceTest {
     @Mock
     private CloudinaryMediaService cloudinaryMediaService;
 
+    @Mock
+    private ContentModerationGatewayService contentModerationGatewayService;
+
     @InjectMocks
     private AuthorContentService authorContentService;
 
@@ -231,16 +234,48 @@ class AuthorContentServiceTest {
     }
 
     @Test
-    @DisplayName("9. Nộp bài viết chuyển trạng thái sang UNDER_REVIEW")
+    @DisplayName("9. Nộp bài viết chuyển trạng thái sang UNDER_REVIEW khi AI yêu cầu duyệt thủ công")
     void submitContent_transitionsToUnderReview() {
         when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
         when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
         when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ContentModerationGatewayService.ModerationResult("NEEDS_REVIEW", "Needs review", 0.7, java.util.List.of("AMBIGUOUS")));
 
         AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
 
         assertEquals("under_review", response.getStatus());
         assertEquals("under_review", sampleContent.getStatus());
+    }
+
+    @Test
+    @DisplayName("9b. Nộp bài viết tự động chuyển sang PUBLISHED khi AI phê duyệt (APPROVE)")
+    void submitContent_whenAiApproves_transitionsToPublished() {
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ContentModerationGatewayService.ModerationResult("APPROVE", "Safe vegetarian content", 0.98, java.util.List.of("SAFE")));
+
+        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
+
+        assertEquals("published", response.getStatus());
+        assertEquals("published", sampleContent.getStatus());
+    }
+
+    @Test
+    @DisplayName("9c. Nộp bài viết tự động chuyển sang REJECTED khi AI từ chối (REJECT)")
+    void submitContent_whenAiRejects_transitionsToRejected() {
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ContentModerationGatewayService.ModerationResult("REJECT", "Non-vegetarian recipe", 0.95, java.util.List.of("NON_VEGETARIAN_CONTENT")));
+
+        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
+
+        assertEquals("rejected", response.getStatus());
+        assertEquals("rejected", sampleContent.getStatus());
     }
 
     @Test
@@ -443,6 +478,8 @@ class AuthorContentServiceTest {
         when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
         when(contentRepository.findById(200)).thenReturn(Optional.of(video));
         when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(new ContentModerationGatewayService.ModerationResult("NEEDS_REVIEW", "Needs review", 0.7, java.util.List.of("AMBIGUOUS")));
 
         // Submit
         AuthorContentResponse submitRes = authorContentService.submitContent("truong_author", 200, "VIDEO");

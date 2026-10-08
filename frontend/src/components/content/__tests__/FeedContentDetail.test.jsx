@@ -32,7 +32,7 @@ it.each(['blog', 'video'])('opens %s at the top, opens comments at the bottom, a
   fireEvent.click(trigger);
   expect(await within(screen.getByRole('dialog')).findByText('Full story')).toBeInTheDocument();
   await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled());
-  expect(screen.getByRole('region', { name: 'Comments' })).toHaveFocus();
+  expect(screen.getAllByRole('region', { name: 'Comments' })[0]).toHaveFocus();
   fireEvent.click(screen.getByRole('button', { name: `Back to ${type}` }));
   expect(trigger).toHaveFocus();
   expect(document.body.style.overflow).toBe('');

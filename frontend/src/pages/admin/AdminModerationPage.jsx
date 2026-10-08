@@ -14,6 +14,15 @@ const formatDate = (value) => value
   ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
   : 'Date unavailable';
 
+const statusLabel = (status) => {
+  const s = String(status || '').toLowerCase();
+  if (s === 'under_review') return 'Under Review';
+  if (s === 'published') return 'Published';
+  if (s === 'rejected') return 'Rejected';
+  if (s === 'archived' || s === 'hidden') return 'Archived';
+  return 'Pending';
+};
+
 export default function AdminModerationPage() {
   const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview') === '1';
   const [items, setItems] = useState([]);
@@ -117,7 +126,7 @@ export default function AdminModerationPage() {
                     return <button key={item.id} type="button" className={active ? 'moderation-queue-item is-active' : 'moderation-queue-item'} onClick={() => setSelectedId(item.id)} aria-pressed={active}>
                       <span className="moderation-type-icon"><Icon size={18} /></span>
                       <span className="moderation-queue-copy"><b>{item.title}</b><small>{item.type === 'VIDEO' ? 'Video' : 'Blog'} · {item.author}</small><time dateTime={item.submittedAt}>{formatDate(item.submittedAt)}</time></span>
-                      <span className="moderation-pending">Pending</span>
+                      <span className="moderation-pending">{statusLabel(item.status)}</span>
                     </button>;
                   })}
                 </div>
@@ -130,7 +139,7 @@ export default function AdminModerationPage() {
 
               <article className="admin-panel moderation-detail">
                 <div className="moderation-detail-header">
-                  <div><span className="moderation-detail-kicker">{selected.type === 'VIDEO' ? 'VIDEO SUBMISSION' : 'BLOG SUBMISSION'}</span><span className="moderation-pending">Pending</span></div>
+                  <div><span className="moderation-detail-kicker">{selected.type === 'VIDEO' ? 'VIDEO SUBMISSION' : 'BLOG SUBMISSION'}</span><span className="moderation-pending">{statusLabel(selected.status)}</span></div>
                   <time dateTime={selected.submittedAt}>Submitted {formatDate(selected.submittedAt)}</time>
                 </div>
                 {selected.thumbnailUrl
