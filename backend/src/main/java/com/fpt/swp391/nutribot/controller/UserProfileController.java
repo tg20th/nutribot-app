@@ -3,6 +3,7 @@ package com.fpt.swp391.nutribot.controller;
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
 import com.fpt.swp391.nutribot.dto.response.AvatarResponse;
 import com.fpt.swp391.nutribot.dto.request.EmailVerificationRequest;
+import com.fpt.swp391.nutribot.dto.request.PasswordUpdateRequest;
 import com.fpt.swp391.nutribot.dto.request.ProfileUpdateRequest;
 import com.fpt.swp391.nutribot.dto.response.EmailVerificationResponse;
 import com.fpt.swp391.nutribot.dto.response.UserProfileResponse;
@@ -44,6 +45,17 @@ public class UserProfileController {
             @Valid @RequestBody ProfileUpdateRequest request) {
         UserProfileResponse response = userProfileService.updateProfile(principal.getName(), request);
         return ResponseEntity.ok(ApiResponse.success("Profile updated successfully.", response));
+    }
+
+    @PutMapping("/password")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> changePassword(
+            Principal principal,
+            @Valid @RequestBody PasswordUpdateRequest request) {
+        UserProfileResponse response = userProfileService.changePassword(principal.getName(), request);
+        String message = Boolean.TRUE.equals(response.getHasPassword()) && "GOOGLE".equals(response.getAuthProvider())
+                ? "Thiết lập mật khẩu thành công. Bạn có thể đăng nhập bằng Google hoặc mật khẩu."
+                : "Đổi mật khẩu thành công.";
+        return ResponseEntity.ok(ApiResponse.success(message, response));
     }
 
     @PostMapping("/email/verify")

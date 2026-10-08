@@ -208,6 +208,8 @@ public class AuthService {
                     .avatarUrl(picture)
                     .role(userRole)
                     .status(AccountStatus.ACTIVE)
+                    .authProvider("GOOGLE")
+                    .hasPassword(false)
                     .build();
             user = userRepository.save(user);
         }

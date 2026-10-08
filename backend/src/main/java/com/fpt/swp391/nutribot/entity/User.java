@@ -49,6 +49,14 @@ public class User {
     @Builder.Default
     private AccountStatus status = AccountStatus.ACTIVE;
 
+    @Column(name = "auth_provider", nullable = false, length = 20)
+    @Builder.Default
+    private String authProvider = "LOCAL";
+
+    @Column(name = "has_password", nullable = false)
+    @Builder.Default
+    private Boolean hasPassword = true;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -65,6 +73,12 @@ public class User {
         }
         if (status == null) {
             status = AccountStatus.ACTIVE;
+        }
+        if (authProvider == null || authProvider.isBlank()) {
+            authProvider = "LOCAL";
+        }
+        if (hasPassword == null) {
+            hasPassword = true;
         }
         if (strikeCount == null || strikeCount < 0) {
             strikeCount = 0;
