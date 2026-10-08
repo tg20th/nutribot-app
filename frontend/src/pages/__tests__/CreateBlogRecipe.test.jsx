@@ -110,4 +110,37 @@ describe('CreateBlogPage Recipe Details & Steps UI', () => {
     const secondStepInput = screen.getByLabelText('Step 2 description');
     expect(secondStepInput).toBeInTheDocument();
   });
+
+  it('allows editing post content without resetting inputs on keystroke in edit mode', async () => {
+    const { getMyBlog } = await import('../../services/authorBlogApi');
+    getMyBlog.mockResolvedValueOnce({
+      contentId: 81,
+      title: 'Original Recipe Title',
+      body: 'Original story description',
+      categoryId: 1,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/community/my-content/blog/81/edit']}>
+        <CreateBlogPage />
+      </MemoryRouter>
+    );
+
+    // Wait for the original content to load into the input
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Original Recipe Title')).toBeInTheDocument();
+    });
+
+    const titleInput = screen.getByLabelText(/Title/i);
+
+    // User types in a new title
+    fireEvent.change(titleInput, { target: { value: 'Updated Salad Recipe' } });
+
+    // Ensure the new typed value persists and is NOT reset back to 'Original Recipe Title'
+    expect(titleInput.value).toBe('Updated Salad Recipe');
+
+    // Simulate another keystroke/render cycle
+    fireEvent.change(titleInput, { target: { value: 'Updated Salad Recipe 2026' } });
+    expect(titleInput.value).toBe('Updated Salad Recipe 2026');
+  });
 });
