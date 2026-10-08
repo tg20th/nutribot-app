@@ -1,4 +1,4 @@
-import { Check, ChevronLeft, ChevronRight, EyeOff, FileText, Search, ShieldCheck, Video, X } from 'lucide-react';
+import { Bot, Check, ChevronLeft, ChevronRight, EyeOff, FileText, Search, ShieldCheck, Video, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { adminApi } from '../../services/adminApi';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState, Toast } from '../../components/admin/AdminUi';
@@ -126,7 +126,14 @@ export default function AdminModerationPage() {
                     return <button key={item.id} type="button" className={active ? 'moderation-queue-item is-active' : 'moderation-queue-item'} onClick={() => setSelectedId(item.id)} aria-pressed={active}>
                       <span className="moderation-type-icon"><Icon size={18} /></span>
                       <span className="moderation-queue-copy"><b>{item.title}</b><small>{item.type === 'VIDEO' ? 'Video' : 'Blog'} · {item.author}</small><time dateTime={item.submittedAt}>{formatDate(item.submittedAt)}</time></span>
-                      <span className="moderation-pending">{statusLabel(item.status)}</span>
+                      <div className="moderation-queue-badges">
+                        <span className="moderation-pending">{statusLabel(item.status)}</span>
+                        {item.aiReason && (
+                          <span className={`moderation-ai-pill ${item.aiFlagged !== false ? 'flagged' : 'passed'}`} title={item.aiReason}>
+                            <Bot size={11} /> AI
+                          </span>
+                        )}
+                      </div>
                     </button>;
                   })}
                 </div>
@@ -147,6 +154,27 @@ export default function AdminModerationPage() {
                   : <div className="moderation-cover-placeholder"><span>{selected.type === 'VIDEO' ? <Video size={26} /> : <FileText size={26} />}</span></div>}
                 <div className="moderation-detail-content">
                   <h2>{selected.title}</h2>
+
+                  {selected.aiReason && (
+                    <div className={`moderation-ai-card ${selected.aiFlagged !== false ? 'is-flagged' : 'is-passed'}`}>
+                      <div className="moderation-ai-header">
+                        <div className="moderation-ai-title">
+                          <Bot size={16} />
+                          <strong>Đánh giá kiểm duyệt AI</strong>
+                          <span className={`moderation-ai-badge ${selected.aiFlagged !== false ? 'flagged' : 'approved'}`}>
+                            {selected.aiFlagged !== false ? 'AI Yêu cầu Admin duyệt' : 'AI Đã duyệt'}
+                          </span>
+                        </div>
+                        {selected.aiConfidence != null && (
+                          <span className="moderation-ai-confidence">
+                            Độ tin cậy: {Math.round(selected.aiConfidence * 100)}%
+                          </span>
+                        )}
+                      </div>
+                      <p className="moderation-ai-reason">{selected.aiReason}</p>
+                    </div>
+                  )}
+
                   <dl className="moderation-metadata">
                     <div><dt>Author</dt><dd>{selected.author}</dd></div>
                     {selected.authorEmail && <div><dt>Email</dt><dd>{selected.authorEmail}</dd></div>}

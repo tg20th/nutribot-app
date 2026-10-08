@@ -11,7 +11,11 @@ vi.mock('../../../services/adminApi', () => ({
   },
 }));
 
-const first = { id: 1, type: 'BLOG', title: 'Healthy lunch ideas', status: 'pending', author: 'minhanh', submittedAt: '2026-09-26T08:30:00', body: 'A short article preview.' };
+const first = {
+  id: 1, type: 'BLOG', title: 'Healthy lunch ideas', status: 'pending',
+  author: 'minhanh', submittedAt: '2026-09-26T08:30:00', body: 'A short article preview.',
+  aiFlagged: true, aiReason: 'Phát hiện nghi vấn cần duyệt tay', aiConfidence: 0.91,
+};
 const second = { id: 2, type: 'VIDEO', title: 'Prep fresh produce', status: 'pending', author: 'nutribot', submittedAt: '2026-09-25T10:15:00' };
 
 describe('admin moderation screen', () => {
@@ -40,5 +44,12 @@ describe('admin moderation screen', () => {
     const rejectionButtons = screen.getAllByRole('button', { name: 'Reject' });
     fireEvent.click(rejectionButtons[rejectionButtons.length - 1]);
     await waitFor(() => expect(adminApi.moderateContent).toHaveBeenCalledWith(1, 'REJECT'));
+  });
+
+  it('renders AI moderation evaluation and confidence when available', async () => {
+    render(<AdminModerationPage />);
+    expect(await screen.findByText('Đánh giá kiểm duyệt AI')).toBeTruthy();
+    expect(screen.getByText('Phát hiện nghi vấn cần duyệt tay')).toBeTruthy();
+    expect(screen.getByText(/Độ tin cậy: 91%/)).toBeTruthy();
   });
 });

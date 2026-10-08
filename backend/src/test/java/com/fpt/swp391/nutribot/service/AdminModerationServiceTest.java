@@ -5,9 +5,11 @@ import com.fpt.swp391.nutribot.dto.response.AdminContentResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Content;
+import com.fpt.swp391.nutribot.entity.ContentModeration;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
+import com.fpt.swp391.nutribot.repository.ContentModerationRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,11 +36,15 @@ class AdminModerationServiceTest {
     @Mock
     private ContentRepository contentRepository;
 
+    @Mock
+    private ContentModerationRepository contentModerationRepository;
+
     @InjectMocks
     private AdminModerationService adminModerationService;
 
     private User sampleAuthor;
     private Content underReviewContent;
+    private ContentModeration sampleModeration;
 
     @BeforeEach
     void setUp() {
@@ -59,13 +66,24 @@ class AdminModerationServiceTest {
                 .status("under_review")
                 .viewCount(5)
                 .build();
+
+        sampleModeration = ContentModeration.builder()
+                .moderationId(1)
+                .contentId(10)
+                .aiFlagged(true)
+                .aiReason("Phát hiện nguyên liệu cần kiểm tra thủ công")
+                .aiConfidence(new BigDecimal("0.8500"))
+                .status("pending")
+                .build();
     }
 
     @Test
-    @DisplayName("Lấy danh sách nội dung chờ duyệt bao gồm under_review và pending")
+    @DisplayName("Lấy danh sách nội dung chờ duyệt bao gồm under_review và pending cùng thông tin AI")
     void getPendingContents_returnsUnderReviewItems() {
         when(contentRepository.findByStatusIn(eq(List.of("under_review", "pending")), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(underReviewContent)));
+        when(contentModerationRepository.findByContentIdIn(eq(List.of(10))))
+                .thenReturn(List.of(sampleModeration));
 
         PagedResponse<AdminContentResponse> result = adminModerationService.getPendingContents(null, 0, 10);
 
@@ -78,6 +96,9 @@ class AdminModerationServiceTest {
         assertEquals("truong_author", item.getAuthorUsername());
         assertEquals("https://example.com/thumb.jpg", item.getThumbnailUrl());
         assertEquals("Rau củ tươi ngon", item.getBody());
+        assertTrue(item.getAiFlagged());
+        assertEquals("Phát hiện nguyên liệu cần kiểm tra thủ công", item.getAiReason());
+        assertEquals(0.85, item.getAiConfidence());
     }
 
     @Test
@@ -85,6 +106,8 @@ class AdminModerationServiceTest {
     void getPendingContents_filteredByType() {
         when(contentRepository.findByStatusInAndContentType(eq(List.of("under_review", "pending")), eq("BLOG"), any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(underReviewContent)));
+        when(contentModerationRepository.findByContentIdIn(eq(List.of(10))))
+                .thenReturn(List.of(sampleModeration));
 
         PagedResponse<AdminContentResponse> result = adminModerationService.getPendingContents("BLOG", 0, 10);
 
