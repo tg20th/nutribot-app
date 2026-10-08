@@ -13,7 +13,12 @@ describe('NB-38 moderation API contract', () => {
 
   it('loads the paged moderation queue and maps backend fields', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok({
-      content: [{ contentId: 41, contentType: 'VIDEO', title: 'Review this clip', slug: 'review-this-clip', status: 'pending', authorUsername: 'khanh', authorEmail: 'khanh@example.com', viewCount: 0, createdAt: '2026-09-26T10:00:00' }],
+      content: [{
+        contentId: 41, contentType: 'VIDEO', title: 'Review this clip', slug: 'review-this-clip',
+        status: 'pending', authorUsername: 'khanh', authorEmail: 'khanh@example.com',
+        viewCount: 0, createdAt: '2026-09-26T10:00:00',
+        aiFlagged: true, aiReason: 'Phát hiện nguyên liệu nghi vấn', aiConfidence: 0.88,
+      }],
       page: 0,
       size: 10,
       totalElements: 1,
@@ -24,6 +29,7 @@ describe('NB-38 moderation API contract', () => {
     expect(page.content[0]).toEqual(expect.objectContaining({
       id: 41, type: 'VIDEO', author: 'khanh', authorEmail: 'khanh@example.com',
       status: 'pending', submittedAt: '2026-09-26T10:00:00',
+      aiFlagged: true, aiReason: 'Phát hiện nguyên liệu nghi vấn', aiConfidence: 0.88,
     }));
     expect(page.totalElements).toBe(1);
   });

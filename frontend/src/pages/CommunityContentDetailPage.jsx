@@ -64,7 +64,7 @@ export default function CommunityContentDetailPage() {
       <main className="content-detail-main">
         <Link className="detail-back detail-reveal" to={returnTo} state={searchReturnState}><ArrowLeft size={16}/>{isMyContentReturn ? 'Back to my content' : isSearchReturn ? 'Back to search results' : 'Back to home'}</Link>
         <section className="detail-hero detail-reveal">
-          <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1><p>{post.description}</p><div className="detail-author">{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}<div><b>{post.author}</b><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></div></div></div>
+          <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1>{post.description && post.description !== (post.cleanBody || post.body) && <p>{post.description}</p>}<div className="detail-author">{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}<div><b>{post.author}</b><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></div></div></div>
           <div className="detail-media"><img src={image} alt={post.title}/>{post.type === 'video' && <button className="detail-play" type="button" aria-label="Play video"><Play fill="currentColor" size={24}/></button>}<span className="detail-duration"><Clock3 size={13}/>{post.prepTime} prep</span></div>
         </section>
         <section className="detail-nutrition detail-reveal" aria-label="Nutrition information">
@@ -75,6 +75,15 @@ export default function CommunityContentDetailPage() {
           <article className="detail-ingredients"><div className="detail-section-head"><span>What you need</span><h2>Ingredients</h2><small>Serves {post.servings}</small></div><ul>{(post.pantryItems ?? ['Ingredients will be shared soon.']).map((item, index) => <li key={item}><i>{String(index + 1).padStart(2, '0')}</i>{item}</li>)}</ul><div className="detail-micro-nutrition"><span>Fiber <b>{nutrition.fiber}</b></span><span>Sodium <b>{nutrition.sodium}</b></span></div></article>
           <article className="detail-method"><div className="detail-section-head"><span>Make it yours</span><h2>Method</h2><small>{post.prepTime} prep · {post.cookTime} cook</small></div><ol>{(post.steps ?? []).map((step, index) => <li key={step}><b>{index + 1}</b><p>{step}</p></li>)}</ol></article>
         </section>
+        <article className="nb-content-body detail-reveal">
+          <div className="detail-section-head"><h2>{post.type === 'video' ? 'About this video' : 'The story'}</h2></div>
+          {String(post.cleanBody || post.body || post.description || 'No detail content has been added yet.')
+            .split(/\n\n+/)
+            .filter(Boolean)
+            .map((paragraph, index) => (
+              <p key={index}>{paragraph}</p>
+            ))}
+        </article>
         <RestaurantRecommendations dishName={post.title}/>
         <section className="detail-actions detail-reveal"><VoteButton contentId={post.id}/></section>
         <section className="detail-comments detail-reveal"><CommentSection contentId={post.id}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><Link to="/home">Open the feed</Link></div></section>

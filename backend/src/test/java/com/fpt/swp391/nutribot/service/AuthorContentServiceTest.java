@@ -11,6 +11,7 @@ import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ForbiddenException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.CategoryRepository;
+import com.fpt.swp391.nutribot.repository.ContentModerationRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -47,6 +48,9 @@ class AuthorContentServiceTest {
 
     @Mock
     private ContentModerationGatewayService contentModerationGatewayService;
+
+    @Mock
+    private ContentModerationRepository contentModerationRepository;
 
     @InjectMocks
     private AuthorContentService authorContentService;
@@ -502,10 +506,17 @@ class AuthorContentServiceTest {
         AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
         // Bắt buộc phải là under_review để Admin có thể xem và duyệt lần 2
         assertEquals("under_review", response.getStatus());
+
+        verify(contentModerationRepository, atLeastOnce()).save(argThat(cm ->
+                cm.getContentId().equals(100) &&
+                Boolean.TRUE.equals(cm.getAiFlagged()) &&
+                "pending".equals(cm.getStatus()) &&
+                "Chứa nội dung vi phạm hình ảnh".equals(cm.getAiReason())
+        ));
     }
 
     @Test
-    @DisplayName("21. AI trả về APPROVE đạt chuẩn an toàn -> Tự động chuyển sang STATUS_PUBLISHED ngay lập tức")
+    @DisplayName("21. AI trả về APPROVE đạt chuẩn an toàn -> Tự động chuyển sang STATUS_PUBLISHED ngay lập tức và lưu status approved")
     void submitContent_whenAiApproves_autoPublishes() {
         when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
         when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
@@ -515,5 +526,11 @@ class AuthorContentServiceTest {
 
         AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
         assertEquals("published", response.getStatus());
+
+        verify(contentModerationRepository, atLeastOnce()).save(argThat(cm ->
+                cm.getContentId().equals(100) &&
+                Boolean.FALSE.equals(cm.getAiFlagged()) &&
+                "approved".equals(cm.getStatus())
+        ));
     }
 }

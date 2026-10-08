@@ -6,11 +6,13 @@ import com.fpt.swp391.nutribot.dto.response.AuthorContentResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.entity.Category;
 import com.fpt.swp391.nutribot.entity.Content;
+import com.fpt.swp391.nutribot.entity.ContentModeration;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ForbiddenException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.CategoryRepository;
+import com.fpt.swp391.nutribot.repository.ContentModerationRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +24,10 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.Normalizer;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
@@ -37,6 +42,7 @@ public class AuthorContentService {
     private final CategoryRepository categoryRepository;
     private final CloudinaryMediaService cloudinaryMediaService;
     private final ContentModerationGatewayService contentModerationGatewayService;
+    private final ContentModerationRepository contentModerationRepository;
 
     private static final String STATUS_DRAFT = "draft";
     private static final String STATUS_UNDER_REVIEW = "under_review";
@@ -234,7 +240,8 @@ public class AuthorContentService {
         // BẮT BUỘC giữ trạng thái STATUS_UNDER_REVIEW để đưa vào hàng đợi Admin duyệt lần 2,
         // tránh việc tự động reject khiến bài biến mất khỏi hàng đợi kiểm duyệt của Admin.
         String finalStatus;
-        if ("APPROVE".equalsIgnoreCase(moderation.decision())) {
+        boolean isApproved = "APPROVE".equalsIgnoreCase(moderation.decision());
+        if (isApproved) {
             finalStatus = STATUS_PUBLISHED;
             log.info("Content {} auto-approved by AI", contentId);
         } else {
@@ -245,7 +252,33 @@ public class AuthorContentService {
 
         content.setStatus(finalStatus);
         Content saved = contentRepository.save(content);
+
+        // Lưu hoặc cập nhật bản ghi vào content_moderations
+        saveOrUpdateModeration(contentId, moderation, isApproved);
         return toAuthorResponse(saved);
+    }
+
+    private void saveOrUpdateModeration(Integer contentId, ContentModerationGatewayService.ModerationResult moderation, boolean isApproved) {
+        try {
+            ContentModeration cm = contentModerationRepository.findByContentId(contentId)
+                    .orElseGet(() -> ContentModeration.builder()
+                            .contentId(contentId)
+                            .createdAt(LocalDateTime.now())
+                            .build());
+
+            cm.setAiFlagged(!isApproved);
+            cm.setAiReason(moderation.reason());
+            if (moderation.confidence() != null) {
+                double conf = Math.max(0.0, Math.min(1.0, moderation.confidence()));
+                cm.setAiConfidence(BigDecimal.valueOf(conf).setScale(4, RoundingMode.HALF_UP));
+            }
+            cm.setStatus(isApproved ? "approved" : "pending");
+            contentModerationRepository.save(cm);
+            log.info("Lưu thành công kết quả kiểm duyệt AI vào content_moderations cho content {}: status={}, aiFlagged={}",
+                    contentId, cm.getStatus(), cm.getAiFlagged());
+        } catch (Exception e) {
+            log.error("Không thể lưu kết quả kiểm duyệt AI cho content {}: {}", contentId, e.getMessage(), e);
+        }
     }
 
     @Transactional
