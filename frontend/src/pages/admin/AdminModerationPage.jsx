@@ -5,7 +5,7 @@ import { ConfirmDialog, EmptyState, ErrorState, LoadingState, Toast } from '../.
 
 const pageSize = 10;
 const actions = {
-  APPROVE: { title: 'Approve this submission?', label: 'Approve', message: 'Content approved and published.' },
+  APPROVE: { title: 'Approve this submission?', label: 'Approve', message: 'Content approved and published.', confirmClass: 'primary' },
   HIDE: { title: 'Hide this submission?', label: 'Hide', message: 'Content hidden from the community.' },
   REJECT: { title: 'Reject this submission?', label: 'Reject', message: 'Content rejected.' },
 };
@@ -51,7 +51,7 @@ export default function AdminModerationPage() {
         setSelectedId((current) => nextItems.some((item) => item.id === current) ? current : nextItems[0]?.id ?? null);
       })
       .catch((requestError) => {
-        if (requestError.name !== 'AbortError') setError(true);
+        if (!controller.signal.aborted) setError(true);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -201,6 +201,7 @@ export default function AdminModerationPage() {
         title: actions[confirm.action].title,
         text: `This will change the status of “${confirm.item.title}”.`,
         confirm: actions[confirm.action].label,
+        confirmClass: actions[confirm.action].confirmClass,
       } : null}
       onClose={() => setConfirm(null)}
       onConfirm={decide}
