@@ -18,6 +18,22 @@ const tags = (item) => asArray(item.tags ?? item.categories)
   .map((tag) => typeof tag === 'string' ? tag : tag?.name)
   .filter(Boolean);
 
+const cleanExcerpt = (value) => {
+  if (!value || typeof value !== 'string') return value ?? '';
+  const trimmed = value.trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        return parsed.story || parsed.description || '';
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return value;
+};
+
 // This adapter lets the UI accept different backend DTO field names.
 export function normalizeContent(item = {}, fallbackType = 'Article') {
   const author = item.author ?? item.user ?? item.createdBy ?? {};
@@ -27,7 +43,7 @@ export function normalizeContent(item = {}, fallbackType = 'Article') {
     slug: item.slug ?? null,
     type: contentType(item.type ?? item.contentType, fallbackType),
     title: item.title ?? item.name ?? 'Untitled story',
-    description: item.description ?? item.summary ?? item.excerpt ?? item.body ?? '',
+    description: cleanExcerpt(item.description ?? item.summary ?? item.excerpt ?? item.body ?? ''),
     image,
     videoUrl: item.videoUrl ?? item.url ?? item.mediaUrl ?? null,
     author: item.authorName ?? (typeof author === 'string' ? author : author.name ?? author.fullName) ?? 'NutriBot team',
