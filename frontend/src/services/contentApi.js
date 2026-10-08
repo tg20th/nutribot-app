@@ -14,4 +14,4 @@ export const getBlogs = (signal) => collection('/api/v1/blogs?page=0&size=4', 'A
 export const getVideos = (signal) => collection('/api/v1/videos?page=0&size=4', 'Video', signal);
 export const getTopics = async (signal) => itemsFrom(await apiRequest('/api/v1/categories?type=RECIPE', { signal }))
   .map((item) => ({ name: item.name ?? item.categoryName ?? item.title, image: item.image ?? item.imageUrl ?? item.iconUrl ?? item.icon_url ?? null }));
-export const googleAuthUrl = () => `${(import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080')}/oauth2/authorization/google`;
+export const googleAuthUrl = () => `${(import.meta.env.VITE_API_BASE_URL ?? '')}/oauth2/authorization/google`;
