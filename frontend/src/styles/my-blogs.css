@@ -11,8 +11,9 @@
 .my-blogs-header p:last-child { margin: 16px 0 0; color: #637068; font-size: 14px; line-height: 1.6; }
 .my-blogs-header-mark { display: grid; place-items: center; flex: none; width: 94px; height: 94px; border-radius: 26px; background: #eaf0d9; transform: rotate(-7deg); }
 .my-blogs-tabs { display: inline-flex; gap: 8px; padding: 6px; margin: 0 0 24px; border: 1px solid #dce4d4; border-radius: 16px; background: #f4f6ee; }
-.my-blogs-tabs button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 9px 16px; border-radius: 11px; color: #637068; font-size: 13px; font-weight: 800; }
-.my-blogs-tabs button.is-active { background: #173529; color: #fffefa; box-shadow: 0 10px 24px rgba(23, 53, 41, .13); }
+.my-blogs-tabs button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 9px 16px; border-radius: 11px; color: #637068; font-size: 13px; font-weight: 800; border: none; background: transparent; cursor: pointer; transition: all .2s ease; }
+.my-blogs-tabs button:hover:not(.is-active) { background: rgba(23, 53, 41, .06); color: #173529; }
+.my-blogs-tabs button.is-active, .my-blogs-tabs button.is-active * { background: #3E5A31; color: #ffffff !important; box-shadow: 0 10px 24px rgba(62, 90, 49, .22); }
 .my-blogs-collection { border-top: 1px solid rgba(23, 53, 41, .15); }
 .my-blogs-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 26px 0 20px; }
 .my-blogs-list-heading h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 20px; letter-spacing: -.03em; }
