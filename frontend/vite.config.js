@@ -17,6 +17,14 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:8080',
           changeOrigin: true,
         },
+        '/oauth2': {
+          target: 'http://127.0.0.1:8080',
+          changeOrigin: true,
+        },
+        '/login/oauth2': {
+          target: 'http://127.0.0.1:8080',
+          changeOrigin: true,
+        },
       },
     },
   };
