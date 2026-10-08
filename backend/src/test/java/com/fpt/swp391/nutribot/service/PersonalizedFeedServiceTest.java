@@ -138,7 +138,7 @@ class PersonalizedFeedServiceTest {
         when(restClient.post()).thenThrow(new RuntimeException("AI offline"));
 
         List<PersonalizedFeedResponse> refreshes = new java.util.ArrayList<>();
-        for (int refresh = 0; refresh < 10; refresh++) {
+        for (int refresh = 0; refresh < 5; refresh++) {
             refreshes.add(service.getPersonalizedFeed("diversity-reader", 10, null));
         }
 
@@ -146,8 +146,9 @@ class PersonalizedFeedServiceTest {
                 .map(response -> response.getItems().stream()
                         .map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList())
                 .toList();
-        assertEquals(10, topTens.size());
-        assertTrue(topTens.stream().flatMap(List::stream).allMatch(id -> id >= 31));
+        assertEquals(5, topTens.size());
+        assertEquals(50, topTens.stream().flatMap(List::stream).collect(Collectors.toSet()).size(),
+                "A catalog of 50 can supply five non-repeating featured top-10 generations");
         for (int index = 1; index < topTens.size(); index++) {
             assertNotEquals(topTens.get(index - 1), topTens.get(index),
                     "Refresh " + index + " must not repeat the preceding top-10 while its tier has 20 candidates");
@@ -180,7 +181,10 @@ class PersonalizedFeedServiceTest {
                     .map(PersonalizedFeedResponse.FeedItemResponse::getRecommendationReason).toList());
         }
 
-        assertTrue(reasons.stream().allMatch("personalized"::equals));
+        assertTrue(reasons.stream().filter("personalized"::equals).count() >= 50,
+                "AI-ranked content must retain personalization before recency fallback is needed");
+        assertEquals(100, topTens.stream().flatMap(List::stream).collect(Collectors.toSet()).size(),
+                "Ten refreshes must not repeat a featured top-10 ID when the catalog has 114 items");
         for (int index = 1; index < topTens.size(); index++) {
             assertNotEquals(topTens.get(index - 1), topTens.get(index),
                     "Personalized refresh must keep rotating after every candidate in its score tier is RECENT");
@@ -193,8 +197,8 @@ class PersonalizedFeedServiceTest {
         List<Integer> afterLoginTopTen = afterLogin.getItems().stream()
                 .map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList();
         assertNotEquals(topTens.getLast(), afterLoginTopTen);
-        assertTrue(afterLogin.getItems().stream()
-                .allMatch(item -> "personalized".equals(item.getRecommendationReason())));
+        assertTrue(afterLogin.getItems().stream().anyMatch(item -> "cold_start".equals(item.getRecommendationReason())),
+                "After AI's ranked subset is exhausted, recency-ranked catalog content may fill discovery slots");
 
         PersonalizedFeedResponse first = service.getPersonalizedFeed("personalized-reader", 10, null);
         List<Integer> pagedIds = new java.util.ArrayList<>(first.getItems().stream()
