@@ -19,6 +19,29 @@ function postKey(post) {
   return `${post.type ?? 'POST'}:${post.id ?? post.slug ?? post.title}`;
 }
 
+function FeedPostSkeleton() {
+  return <article className="community-post-skeleton" aria-hidden="true">
+    <header className="feed-skeleton-header">
+      <span className="feed-skeleton-shape feed-skeleton-avatar"/>
+      <div className="feed-skeleton-author">
+        <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--author"/>
+        <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--meta"/>
+      </div>
+      <span className="feed-skeleton-shape feed-skeleton-options"/>
+    </header>
+    <div className="feed-skeleton-copy">
+      <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--title"/>
+      <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--title-short"/>
+      <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--body"/>
+    </div>
+    <span className="feed-skeleton-shape feed-skeleton-media"/>
+    <footer className="feed-skeleton-actions">
+      <span className="feed-skeleton-shape feed-skeleton-action"/>
+      <span className="feed-skeleton-shape feed-skeleton-action feed-skeleton-action--short"/>
+    </footer>
+  </article>;
+}
+
 export default function CommunityFeedPage() {
   const page = useRef(null);
   const composerTrigger = useRef(null);
@@ -111,9 +134,13 @@ export default function CommunityFeedPage() {
           <div className="feed-stream-heading"><div><span>The community stream</span><h2>What&apos;s nourishing people now</h2></div><p>Stories and videos, all in one thoughtful place.</p></div>
           <CommunityComposer onOpen={openComposer} profile={profile}/>
           <CommunityFilters filters={filters} active={filter} onChange={setFilter}/>
-          {loading ? <p className="content-status">Loading community posts...</p> : error && !posts.length ? <p className="content-status content-status--error">{error}</p> : visiblePosts.length ? visiblePosts.map((post) => <CommunityPostCard key={postKey(post)} post={post} profile={profile} fullPageDetail/>) : <div className="empty-results">No posts match that filter yet.</div>}
+          {loading ? <div className="feed-skeleton-list" role="status" aria-label="Loading community posts" aria-busy="true">
+            {Array.from({ length: 3 }, (_, index) => <FeedPostSkeleton key={index}/>)}
+          </div> : error && !posts.length ? <p className="content-status content-status--error">{error}</p> : visiblePosts.length ? visiblePosts.map((post) => <CommunityPostCard key={postKey(post)} post={post} profile={profile} fullPageDetail/>) : <div className="empty-results">No posts match that filter yet.</div>}
           {!loading && <div ref={loadMoreTrigger} className="feed-load-more" aria-live="polite">
-            {loadingMore && <span>Loading more posts...</span>}
+            {loadingMore && <div className="feed-skeleton-more" role="status" aria-label="Loading more community posts" aria-busy="true">
+              {Array.from({ length: 2 }, (_, index) => <FeedPostSkeleton key={index}/>)}
+            </div>}
             {error && posts.length > 0 && <span className="content-status--error">{error}</span>}
           </div>}
         </main>
