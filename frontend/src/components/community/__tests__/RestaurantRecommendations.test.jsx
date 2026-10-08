@@ -55,4 +55,20 @@ describe('RestaurantRecommendations component', () => {
       'noopener,noreferrer'
     );
   });
+
+  it('strictly filters out non-vegetarian and meat places', async () => {
+    const mixedRestaurants = [
+      { id: '1', name: 'Quán Cơm Tấm Sườn Bì Chả', address: '123 CMT8', category: 'Cơm mặn' },
+      { id: '2', name: 'GreenSQL - Học Lập Trình Online', address: '456 Lê Lợi', category: 'Tin học' },
+      { id: '3', name: 'Phở Bò Tái Nạm', address: '789 NTMK', category: 'Phở' },
+      { id: '4', name: 'Nhà Hàng Chay An Lạc', address: '10 Hai Bà Trưng', category: 'Buffet Chay' },
+    ];
+
+    render(<RestaurantRecommendations previewRestaurants={mixedRestaurants} />);
+
+    expect(screen.queryByText('Quán Cơm Tấm Sườn Bì Chả')).not.toBeInTheDocument();
+    expect(screen.queryByText('GreenSQL - Học Lập Trình Online')).not.toBeInTheDocument();
+    expect(screen.queryByText('Phở Bò Tái Nạm')).not.toBeInTheDocument();
+    expect(screen.getByText('Nhà Hàng Chay An Lạc')).toBeInTheDocument();
+  });
 });

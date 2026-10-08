@@ -10,22 +10,26 @@ const filterValidRestaurants = (list) => {
   const excludedKeywords = [
     'lập trình', 'tin học', 'phần mềm', 'công nghệ', 'bất động sản',
     'bảo hiểm', 'sửa chữa', 'garage', 'khách sạn', 'hotel', 'spa',
-    'tiệm vàng', 'tiệm thuốc', 'bệnh viện', 'phòng khám', 'trường học', 'lớp học'
+    'tiệm vàng', 'tiệm thuốc', 'bệnh viện', 'phòng khám', 'trường học', 'lớp học',
+    'thịt', 'sườn', 'bò né', 'bún bò', 'phở bò', 'cơm tấm sườn', 'heo quay',
+    'chả cá', 'gà rán', 'hải sản', 'ốc', 'vịt', 'dê', 'bbq', 'nhậu', 'quán nhậu', 'bia'
   ];
-  const diningKeywords = [
-    'chay', 'cơm', 'quán', 'nhà hàng', 'bếp', 'ẩm thực', 'bistro', 'vegan',
-    'vegetarian', 'salad', 'noodle', 'phở', 'bún', 'lẩu', 'buffet', 'tiệm',
-    'món', 'dining', 'kitchen', 'eatery', 'food', 'café', 'cafe'
+  const vegetarianKeywords = [
+    'chay', 'vegan', 'vegetarian', 'thực dưỡng', 'plant-based', 'macrobiotic'
   ];
 
   return list.filter((item) => {
     if (!item || !item.name) return false;
     const nameLower = item.name.toLowerCase();
     const addrLower = (item.address || '').toLowerCase();
-    if (excludedKeywords.some((kw) => nameLower.includes(kw) || addrLower.includes(kw))) {
+    const catLower = (item.category || '').toLowerCase();
+    const tagsLower = Array.isArray(item.tags) ? item.tags.join(' ').toLowerCase() : '';
+    const fullText = `${nameLower} ${addrLower} ${catLower} ${tagsLower}`;
+
+    if (excludedKeywords.some((kw) => fullText.includes(kw))) {
       return false;
     }
-    return diningKeywords.some((kw) => nameLower.includes(kw) || addrLower.includes(kw));
+    return vegetarianKeywords.some((kw) => fullText.includes(kw));
   });
 };
 
@@ -36,18 +40,15 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
 
   useEffect(() => {
     if (previewRestaurants) {
-      setRestaurants(previewRestaurants.slice(0, 6));
+      setRestaurants(filterValidRestaurants(previewRestaurants).slice(0, 6));
       setStatus('ready');
       return undefined;
     }
     const controller = new AbortController();
     setStatus('loading');
 
-    const cleanDish = (dishName || '').trim();
-    const keywords = ['nhà hàng chay', 'quán chay', 'cơm chay', 'ẩm thực chay'];
-    if (cleanDish) {
-      keywords.unshift(`${cleanDish} chay`);
-    }
+    // Strictly search for verified vegetarian establishments only
+    const keywords = ['nhà hàng chay', 'quán chay', 'cơm chay', 'ẩm thực chay', 'buffet chay', 'vegan'];
 
     searchNearbyRestaurants({
       keywords,
