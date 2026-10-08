@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock3, FileVideo, ImagePlus, LoaderCircle, Save, Send, X } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock3, FileVideo, ImagePlus, LoaderCircle, Plus, Save, Send, Sparkles, Trash2, X } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
-import { createMyBlog, createMyVideo, getBlogCategories, getMyBlog, getMyVideo, updateMyBlog, updateMyVideo, uploadBlogThumbnail } from '../services/authorBlogApi';
+import { calculateRecipeNutrition, createMyBlog, createMyVideo, getBlogCategories, getMyBlog, getMyVideo, updateMyBlog, updateMyVideo, uploadBlogThumbnail } from '../services/authorBlogApi';
+import { getAllergyIngredients } from '../services/profileApi';
 import { apiRequest } from '../services/apiClient';
 import '../styles/my-blogs.css';
 import '../styles/create-blog.css';
@@ -15,8 +16,31 @@ const CONTENT_TYPES = { BLOG: 'blog', VIDEO: 'video' };
 const MAX_VIDEO_SIZE = 200 * 1024 * 1024;
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
+const FALLBACK_INGREDIENTS = [
+  'Đậu phụ (Tofu)', 'Cà chua', 'Hành tây', 'Cà rốt', 'Rau cải xanh', 'Bắp cải', 'Khoai tây',
+  'Hành lá', 'Ớt chuông', 'Gừng', 'Tỏi', 'Nấm hương', 'Nấm đùi gà', 'Nấm rơm', 'Súp lơ (Bông cải xanh)',
+  'Rau chân vịt (Bina)', 'Bí đỏ', 'Dưa leo', 'Trứng gà', 'Sữa chua Hy Lạp', 'Sữa tươi không đường',
+  'Yến mạch', 'Gạo lứt', 'Quinoa (Hạt diêm mạch)', 'Bánh mì nguyên cám', 'Hạt chia', 'Hạt óc chó',
+  'Hạnh nhân', 'Đậu đen', 'Đậu gà (Chickpeas)', 'Dầu ô-liu', 'Dầu mè', 'Mật ong', 'Chuối',
+  'Bơ (Avocado)', 'Táo', 'Ức gà', 'Cá hồi', 'Tôm sú', 'Thịt bò nạc'
+];
+
+const MEASUREMENT_UNITS = [
+  { value: 'g', label: 'g (Gram)' },
+  { value: 'ml', label: 'ml (Mililit)' },
+  { value: 'kg', label: 'kg' },
+  { value: 'l', label: 'l (Lít)' },
+  { value: 'tbsp', label: 'tbsp (Thìa canh)' },
+  { value: 'tsp', label: 'tsp (Thìa cà phê)' },
+  { value: 'quả', label: 'quả / trái' },
+  { value: 'củ', label: 'củ' },
+  { value: 'chén', label: 'chén / bát' },
+  { value: 'cái', label: 'cái / lát' },
+  { value: 'gói', label: 'gói / hộp' },
+];
+
 const emptyRecipeDetails = {
-  prepMinutes: '', cookMinutes: '', servings: '', calories: '', proteinG: '', carbsG: '', fatG: '', fiberG: '', sodiumMg: '', ingredients: '', steps: '',
+  prepMinutes: '', cookMinutes: '', servings: '', calories: '', proteinG: '', carbsG: '', fatG: '', fiberG: '', sodiumMg: '',
 };
 
 const numericDetailLabels = [
@@ -24,28 +48,37 @@ const numericDetailLabels = [
   ['proteinG', 'Protein', 'g'], ['carbsG', 'Carbohydrates', 'g'], ['fatG', 'Fat', 'g'], ['fiberG', 'Fiber', 'g'], ['sodiumMg', 'Sodium', 'mg'],
 ];
 
-function makeContentBody(body, details) {
+function makeContentBody(body, details, ingredientRows = [], stepRows = []) {
   const facts = numericDetailLabels.filter(([key]) => String(details[key]).trim())
     .map(([key, label, unit]) => `${label}: ${String(details[key]).trim()}${unit ? ` ${unit}` : ''}`);
-  const ingredients = details.ingredients.split('\n').map((item) => item.trim()).filter(Boolean);
-  const steps = details.steps.split('\n').map((item) => item.trim()).filter(Boolean);
+  
+  const ingredients = ingredientRows
+    .map((row) => {
+      const name = (row.isCustom ? row.customName : row.name)?.trim();
+      if (!name) return '';
+      const qty = row.quantity ? `${row.quantity} ${row.unit || 'g'}` : '';
+      return qty ? `${qty} ${name}` : name;
+    })
+    .filter(Boolean);
+
+  const steps = stepRows.map((item) => item.trim()).filter(Boolean);
   const isHtml = /<[a-z][\s\S]*>/i.test(body);
   const escapeHtml = (value) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
   const list = (items) => `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
   const sections = [body];
   if (isHtml) {
     if (facts.length) sections.push(`<h2>Recipe details</h2>${list(facts)}`);
-    sections.push(`<h2>Ingredients</h2>${list(ingredients)}`);
-    sections.push(`<h2>Steps</h2>${list(steps.map((item, index) => `Step ${index + 1}: ${item}`))}`);
+    if (ingredients.length) sections.push(`<h2>Ingredients</h2>${list(ingredients)}`);
+    if (steps.length) sections.push(`<h2>Steps</h2>${list(steps.map((item, index) => `Step ${index + 1}: ${item}`))}`);
   } else {
     if (facts.length) sections.push(`## Recipe details\n${facts.map((item) => `- ${item}`).join('\n')}`);
-    sections.push(`## Ingredients\n${ingredients.map((item) => `- ${item}`).join('\n')}`);
-    sections.push(`## Steps\n${steps.map((item, index) => `- Step ${index + 1}: ${item}`).join('\n')}`);
+    if (ingredients.length) sections.push(`## Ingredients\n${ingredients.map((item) => `- ${item}`).join('\n')}`);
+    if (steps.length) sections.push(`## Steps\n${steps.map((item, index) => `- Step ${index + 1}: ${item}`).join('\n')}`);
   }
   return sections.join('\n\n');
 }
 
-function parseRecipeDetails(body = '') {
+function parseRecipeDetails(body = '', availableOptions = []) {
   const details = { ...emptyRecipeDetails };
   const setFacts = (facts) => facts.forEach((fact) => {
     const [key, label] = numericDetailLabels.find(([, detailLabel]) => fact.startsWith(`${detailLabel}:`)) ?? [];
@@ -53,34 +86,65 @@ function parseRecipeDetails(body = '') {
   });
   const section = (title) => new RegExp(`## ${title}\\n([\\s\\S]*?)(?=\\n\\n## |$)`).exec(body)?.[1] ?? '';
 
+  let rawIngredients = '';
+  let rawSteps = '';
+  let cleanBody = body;
+
   if (!/<[a-z][\s\S]*>/i.test(body)) {
     const detailsSection = section('Recipe details');
     setFacts(detailsSection.split('\n').map((item) => item.replace(/^-\s*/, '').trim()).filter(Boolean));
-    details.ingredients = section('Ingredients').split('\n').map((item) => item.replace(/^-\s*/, '').trim()).filter(Boolean).join('\n');
-    details.steps = section('Steps').split('\n').map((item) => item.replace(/^-\s*(?:Step \d+:\s*)?/, '').trim()).filter(Boolean).join('\n');
-    return { body: body.split(/\n\n## (?:Recipe details|Ingredients|Steps)\n/)[0].trim(), details };
+    rawIngredients = section('Ingredients').split('\n').map((item) => item.replace(/^-\s*/, '').trim()).filter(Boolean).join('\n');
+    rawSteps = section('Steps').split('\n').map((item) => item.replace(/^-\s*(?:Step \d+:\s*)?/, '').trim()).filter(Boolean).join('\n');
+    cleanBody = body.split(/\n\n## (?:Recipe details|Ingredients|Steps)\n/)[0].trim();
+  } else {
+    const root = document.createElement('div');
+    root.innerHTML = body;
+    const headings = [...root.querySelectorAll('h2')];
+    const findHeading = (title) => headings.find((heading) => heading.textContent.trim().toLowerCase() === title.toLowerCase());
+    const recipeHeading = findHeading('Recipe details');
+    const values = (title) => {
+      const el = findHeading(title)?.nextElementSibling;
+      return el?.tagName === 'UL' ? [...el.querySelectorAll('li')].map((item) => item.textContent.trim()).filter(Boolean) : [];
+    };
+    setFacts(values('Recipe details'));
+    rawIngredients = values('Ingredients').join('\n');
+    rawSteps = values('Steps').map((item) => item.replace(/^Step \d+:\s*/, '')).join('\n');
+    if (recipeHeading) {
+      const main = [];
+      for (const node of [...root.childNodes]) {
+        if (node === recipeHeading) break;
+        main.push(node.outerHTML ?? node.textContent ?? '');
+      }
+      cleanBody = main.join('').trim();
+    }
   }
 
-  const root = document.createElement('div');
-  root.innerHTML = body;
-  const headings = [...root.querySelectorAll('h2')];
-  const findHeading = (title) => headings.find((heading) => heading.textContent.trim().toLowerCase() === title.toLowerCase());
-  const recipeHeading = findHeading('Recipe details');
-  const values = (title) => {
-    const list = findHeading(title)?.nextElementSibling;
-    return list?.tagName === 'UL' ? [...list.querySelectorAll('li')].map((item) => item.textContent.trim()).filter(Boolean) : [];
+  const ingredientLines = rawIngredients.split('\n').map((l) => l.trim()).filter(Boolean);
+  const parsedIngredientRows = ingredientLines.map((line) => {
+    const match = line.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z\u00C0-\u024F\u1EA0-\u1EF9]+)?\s*(.*)$/);
+    if (match) {
+      const qty = match[1] || '';
+      const unitCand = (match[2] || '').toLowerCase();
+      const isKnownUnit = MEASUREMENT_UNITS.some((u) => u.value === unitCand);
+      const unit = isKnownUnit ? unitCand : 'g';
+      const name = (isKnownUnit ? match[3] : `${match[2] || ''} ${match[3]}`).trim();
+      const matched = availableOptions.find((ing) => (ing.name || ing).toLowerCase() === name.toLowerCase());
+      if (matched) {
+        return { name: matched.name || matched, quantity: qty, unit, isCustom: false, customName: '' };
+      }
+      return { name: '__custom__', quantity: qty, unit, isCustom: true, customName: name || line };
+    }
+    return { name: '__custom__', quantity: '', unit: 'g', isCustom: true, customName: line };
+  });
+
+  const parsedStepRows = rawSteps.split('\n').map((l) => l.trim()).filter(Boolean);
+
+  return {
+    body: cleanBody,
+    details,
+    ingredientRows: parsedIngredientRows.length ? parsedIngredientRows : [{ name: '', quantity: '', unit: 'g', isCustom: false, customName: '' }],
+    stepRows: parsedStepRows.length ? parsedStepRows : [''],
   };
-  setFacts(values('Recipe details'));
-  details.ingredients = values('Ingredients').join('\n');
-  details.steps = values('Steps').map((item) => item.replace(/^Step \d+:\s*/, '')).join('\n');
-  if (!recipeHeading) return { body, details };
-
-  const main = [];
-  for (const node of [...root.childNodes]) {
-    if (node === recipeHeading) break;
-    main.push(node.outerHTML ?? node.textContent ?? '');
-  }
-  return { body: main.join('').trim(), details };
 }
 
 async function uploadVideoFile(file) {
@@ -112,6 +176,11 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const [videoDuration, setVideoDuration] = useState(null);
   const [categoryId, setCategoryId] = useState('');
   const [categories, setCategories] = useState([]);
+  const [availableIngredients, setAvailableIngredients] = useState([]);
+  const [ingredientRows, setIngredientRows] = useState([{ name: '', quantity: '', unit: 'g', isCustom: false, customName: '' }]);
+  const [stepRows, setStepRows] = useState(['']);
+  const [isCalculatingNutrition, setIsCalculatingNutrition] = useState(false);
+  const [aiCalcSuccess, setAiCalcSuccess] = useState('');
   const [file, setFile] = useState(null);
   const [imageUrl, setImageUrl] = useState('');
   const [recipeDetails, setRecipeDetails] = useState(emptyRecipeDetails);
@@ -131,18 +200,114 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const trimmedBody = body.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
   const hasVideo = Boolean(videoFile || (editing && existingMediaUrl));
   const hasThumbnail = Boolean(file || existingThumbnailUrl);
-  const hasRecipeDetails = Boolean(recipeDetails.ingredients.trim() && recipeDetails.steps.trim());
+
+  const combinedIngredients = useMemo(() => {
+    const names = new Set();
+    const list = [];
+    (availableIngredients || []).forEach((item) => {
+      const name = item?.name || item;
+      if (name && !names.has(name.toLowerCase())) {
+        names.add(name.toLowerCase());
+        list.push(name);
+      }
+    });
+    FALLBACK_INGREDIENTS.forEach((name) => {
+      if (!names.has(name.toLowerCase())) {
+        names.add(name.toLowerCase());
+        list.push(name);
+      }
+    });
+    return list.sort((a, b) => a.localeCompare(b, 'vi'));
+  }, [availableIngredients]);
 
   function missingRequiredFields() {
     const missing = [];
-    if (!trimmedTitle) missing.push('title');
-    if (!trimmedBody) missing.push(isVideo ? 'video description' : 'post content');
-    if (isVideo && !hasVideo) missing.push('video file');
-    if (!hasThumbnail) missing.push(isVideo ? 'video thumbnail' : 'cover image');
-    if (!recipeDetails.ingredients.trim()) missing.push('ingredients');
-    if (!recipeDetails.steps.trim()) missing.push('preparation steps');
-    if (!categoryId) missing.push('category');
+    if (!trimmedTitle) missing.push('tiêu đề (title)');
+    if (!trimmedBody) missing.push(isVideo ? 'mô tả video' : 'nội dung bài viết');
+    if (isVideo && !hasVideo) missing.push('video tải lên');
+    if (!hasThumbnail) missing.push(isVideo ? 'ảnh đại diện video' : 'ảnh bìa bài viết');
+    const validIngredients = ingredientRows.map((r) => (r.isCustom ? r.customName : r.name)?.trim()).filter(Boolean);
+    const validSteps = stepRows.map((s) => s.trim()).filter(Boolean);
+    if (!validIngredients.length) missing.push('thành phần nguyên liệu (ingredients)');
+    if (!validSteps.length) missing.push('các bước chế biến (steps)');
+    if (!categoryId) missing.push('danh mục (category)');
     return missing;
+  }
+
+  function addIngredientRow() {
+    setIngredientRows((prev) => [...prev, { name: '', quantity: '', unit: 'g', isCustom: false, customName: '' }]);
+  }
+
+  function updateIngredientRow(index, field, value) {
+    setIngredientRows((prev) => prev.map((row, i) => {
+      if (i !== index) return row;
+      if (field === 'name') {
+        if (value === '__custom__') {
+          return { ...row, name: '__custom__', isCustom: true };
+        }
+        return { ...row, name: value, isCustom: false, customName: '' };
+      }
+      return { ...row, [field]: value };
+    }));
+  }
+
+  function removeIngredientRow(index) {
+    setIngredientRows((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : [{ name: '', quantity: '', unit: 'g', isCustom: false, customName: '' }]));
+  }
+
+  function addStepRow() {
+    setStepRows((prev) => [...prev, '']);
+  }
+
+  function updateStepRow(index, value) {
+    setStepRows((prev) => prev.map((step, i) => (i === index ? value : step)));
+  }
+
+  function removeStepRow(index) {
+    setStepRows((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : ['']));
+  }
+
+  async function handleCalculateNutrition() {
+    const validIngredients = ingredientRows
+      .map((row) => ({
+        name: (row.isCustom ? row.customName : row.name)?.trim(),
+        quantity: Number(row.quantity) || 0,
+        unit: row.unit || 'g',
+      }))
+      .filter((row) => Boolean(row.name));
+
+    if (!validIngredients.length) {
+      setError('Vui lòng chọn hoặc nhập ít nhất một nguyên liệu trước khi tính dinh dưỡng.');
+      return;
+    }
+
+    setIsCalculatingNutrition(true);
+    setError('');
+    setAiCalcSuccess('');
+
+    try {
+      const servings = Number(recipeDetails.servings) || 1;
+      const res = await calculateRecipeNutrition({
+        servings,
+        dishName: trimmedTitle || 'Món ăn dinh dưỡng',
+        ingredients: validIngredients,
+      });
+      const facts = res?.nutritionFacts || res || {};
+      setRecipeDetails((prev) => ({
+        ...prev,
+        calories: facts.calories != null ? String(facts.calories) : prev.calories,
+        proteinG: facts.proteinG != null ? String(facts.proteinG) : prev.proteinG,
+        carbsG: facts.carbsG != null ? String(facts.carbsG) : prev.carbsG,
+        fatG: facts.fatG != null ? String(facts.fatG) : prev.fatG,
+        fiberG: facts.fiberG != null ? String(facts.fiberG) : prev.fiberG,
+        sodiumMg: facts.sodiumMg != null ? String(facts.sodiumMg) : prev.sodiumMg,
+      }));
+      setAiCalcSuccess('AI đã tự động tính toán dinh dưỡng thành công dựa trên nguyên liệu của bạn!');
+    } catch (err) {
+      setError('Không thể tính toán dinh dưỡng tự động lúc này. Bạn có thể tự nhập thủ công.');
+    } finally {
+      setIsCalculatingNutrition(false);
+    }
   }
 
   useEffect(() => {
@@ -182,15 +347,29 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   }, [preview]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    getAllergyIngredients(controller.signal)
+      .then((items) => {
+        if (!controller.signal.aborted && Array.isArray(items) && items.length) {
+          setAvailableIngredients(items);
+        }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
     if (!editing) return undefined;
     const controller = new AbortController();
     const getContent = editType === 'video' ? getMyVideo : getMyBlog;
     getContent(editId, controller.signal).then((item) => {
       if (controller.signal.aborted) return;
-      const parsed = parseRecipeDetails(item.body ?? '');
+      const parsed = parseRecipeDetails(item.body ?? '', availableIngredients);
       setTitle(item.title ?? '');
       setBody(parsed.body);
       setRecipeDetails(parsed.details);
+      setIngredientRows(parsed.ingredientRows);
+      setStepRows(parsed.stepRows);
       setCategoryId(item.categoryId ? String(item.categoryId) : '');
       setExistingThumbnailUrl(item.thumbnailUrl ?? '');
       setExistingMediaUrl(item.mediaUrl ?? '');
@@ -198,7 +377,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
       if (!controller.signal.aborted) setError(failure.status === 404 ? 'This post is no longer available.' : 'Could not load this post for editing.');
     }).finally(() => { if (!controller.signal.aborted) setLoadingContent(false); });
     return () => controller.abort();
-  }, [editId, editType, editing]);
+  }, [editId, editType, editing, availableIngredients]);
 
   useEffect(() => {
     if (!file) { setImageUrl(''); return undefined; }
@@ -247,7 +426,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
     if (preview || submitting.current) return;
     const missing = missingRequiredFields();
     if (missing.length) {
-      setError(`Please complete the required fields: ${missing.join(', ')}.`);
+      setError(`Vui lòng điền đủ các trường bắt buộc: ${missing.join(', ')}.`);
       return;
     }
     submitting.current = true;
@@ -257,7 +436,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
       const thumbnailUrl = file ? await uploadBlogThumbnail(file) : existingThumbnailUrl || null;
       const payload = {
         title: trimmedTitle,
-        body: makeContentBody(bodyHtml, recipeDetails),
+        body: makeContentBody(bodyHtml, recipeDetails, ingredientRows, stepRows),
         thumbnailUrl,
         categoryId: Number(categoryId),
       };
@@ -289,7 +468,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         },
       });
     } catch (failure) {
-      setError(failure.status === 401 ? 'Your session expired. Please sign in again.' : failure.message || `Could not save your ${isVideo ? 'video' : 'blog'}. Please try again.`);
+      setError(failure.status === 401 ? 'Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.' : failure.message || `Không thể lưu bài viết. Vui lòng thử lại.`);
     } finally {
       submitting.current = false;
       setBusy(false);
@@ -319,17 +498,224 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         </div>}
         <label htmlFor="create-blog-body">{isVideo ? 'Video description' : 'Post content'}</label>
         <div className="create-blog-editor"><div id="create-blog-body" ref={bodyRef} className="create-blog-rich-editor" contentEditable={!busy} role="textbox" aria-multiline="true" aria-label={isVideo ? 'Video description' : 'Article'} data-placeholder={isVideo ? 'Describe what viewers will learn...' : 'Start writing your story...'} onInput={(event) => setBody(event.currentTarget.innerHTML)} /></div>
+        
         <section className="create-blog-detail-fields">
-          <div className="create-recipe-toggle"><div className="create-blog-section-heading"><span><Clock3 size={16}/></span><div><h2>Recipe details</h2><p>Required ingredients and preparation steps for this {isVideo ? 'video' : 'blog'}.</p></div></div><button type="button" className={showRecipeDetails ? 'is-active' : ''} aria-expanded={showRecipeDetails} onClick={() => setShowRecipeDetails((visible) => !visible)} disabled={busy}>{showRecipeDetails ? 'Hide details' : 'Show details'}</button></div>
-          {showRecipeDetails && <><div className="create-blog-detail-grid">
-            {numericDetailLabels.map(([key, label, unit]) => <label key={key} htmlFor={`recipe-${key}`}>{label}{unit && <small>{unit}</small>}<input id={`recipe-${key}`} type="number" min="0" step={key === 'servings' ? '1' : '0.1'} value={recipeDetails[key]} onChange={(event) => setRecipeDetails({ ...recipeDetails, [key]: event.target.value })} disabled={busy}/></label>)}
+          <div className="create-recipe-toggle">
+            <div className="create-blog-section-heading">
+              <span><Clock3 size={16}/></span>
+              <div>
+                <h2>Thông tin công thức (Recipe details)</h2>
+                <p>Thành phần nguyên liệu, tính toán dinh dưỡng và các bước thực hiện.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              className={showRecipeDetails ? 'is-active' : ''}
+              aria-expanded={showRecipeDetails}
+              onClick={() => setShowRecipeDetails((visible) => !visible)}
+              disabled={busy}
+            >
+              {showRecipeDetails ? 'Ẩn chi tiết' : 'Hiện chi tiết'}
+            </button>
           </div>
-          <label htmlFor="recipe-ingredients">Ingredients <small>required · one item per line</small></label>
-          <textarea id="recipe-ingredients" rows={4} value={recipeDetails.ingredients} onChange={(event) => setRecipeDetails({ ...recipeDetails, ingredients: event.target.value })} placeholder={'200 g tofu\n1 tbsp olive oil'} disabled={busy}/>
-          <label htmlFor="recipe-steps">Preparation steps <small>required · one step per line</small></label>
-          <textarea id="recipe-steps" rows={4} value={recipeDetails.steps} onChange={(event) => setRecipeDetails({ ...recipeDetails, steps: event.target.value })} placeholder={'Press the tofu dry\nPan-fry until crisp'} disabled={busy}/></>}
+
+          {showRecipeDetails && (
+            <>
+              {/* PHẦN 1: NGUYÊN LIỆU (SELECT + KHỐI LƯỢNG) */}
+              <div className="recipe-subhead">
+                <label>
+                  <span>Thành phần nguyên liệu (Ingredients) <small>chọn nguyên liệu và nhập định lượng</small></span>
+                </label>
+              </div>
+
+              <div className="recipe-ingredient-rows" role="group" aria-label="Danh sách nguyên liệu">
+                {ingredientRows.map((row, index) => (
+                  <div key={index} className="recipe-ingredient-row">
+                    {!row.isCustom ? (
+                      <select
+                        className="recipe-ingredient-select"
+                        value={row.name}
+                        onChange={(e) => updateIngredientRow(index, 'name', e.target.value)}
+                        disabled={busy}
+                        aria-label={`Chọn nguyên liệu ${index + 1}`}
+                      >
+                        <option value="">-- Chọn nguyên liệu --</option>
+                        {combinedIngredients.map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                        <option value="__custom__">➕ Khác (tự gõ tên)...</option>
+                      </select>
+                    ) : (
+                      <div className="recipe-custom-input-wrap">
+                        <input
+                          type="text"
+                          className="recipe-ingredient-custom-input"
+                          placeholder="Tên nguyên liệu..."
+                          value={row.customName}
+                          onChange={(e) => updateIngredientRow(index, 'customName', e.target.value)}
+                          disabled={busy}
+                          aria-label={`Nhập tên nguyên liệu ${index + 1}`}
+                        />
+                        <button
+                          type="button"
+                          className="recipe-back-to-select-btn"
+                          title="Chọn từ danh sách có sẵn"
+                          onClick={() => updateIngredientRow(index, 'name', '')}
+                          disabled={busy}
+                        >
+                          Danh sách
+                        </button>
+                      </div>
+                    )}
+
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      className="recipe-ingredient-qty"
+                      placeholder="Khối lượng"
+                      value={row.quantity}
+                      onChange={(e) => updateIngredientRow(index, 'quantity', e.target.value)}
+                      disabled={busy}
+                      aria-label={`Khối lượng nguyên liệu ${index + 1}`}
+                    />
+
+                    <select
+                      className="recipe-ingredient-unit"
+                      value={row.unit}
+                      onChange={(e) => updateIngredientRow(index, 'unit', e.target.value)}
+                      disabled={busy}
+                      aria-label={`Đơn vị nguyên liệu ${index + 1}`}
+                    >
+                      {MEASUREMENT_UNITS.map((u) => (
+                        <option key={u.value} value={u.value}>{u.label}</option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      className="recipe-row-remove-btn"
+                      title="Xóa nguyên liệu này"
+                      aria-label={`Xóa nguyên liệu ${index + 1}`}
+                      onClick={() => removeIngredientRow(index)}
+                      disabled={busy}
+                    >
+                      <Trash2 size={15}/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="recipe-row-actions">
+                <button
+                  type="button"
+                  className="recipe-add-row-btn"
+                  onClick={addIngredientRow}
+                  disabled={busy}
+                >
+                  <Plus size={15}/> Thêm nguyên liệu
+                </button>
+
+                <button
+                  type="button"
+                  className="recipe-ai-calc-btn"
+                  onClick={handleCalculateNutrition}
+                  disabled={busy || isCalculatingNutrition}
+                >
+                  {isCalculatingNutrition ? (
+                    <>
+                      <LoaderCircle className="my-blogs-spinner" size={15}/>
+                      <span>AI đang tính toán...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={15}/>
+                      <span>Tự động tính dinh dưỡng bằng AI</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {aiCalcSuccess && (
+                <div className="recipe-ai-feedback-banner">
+                  <CheckCircle2 size={16}/>
+                  <span>{aiCalcSuccess}</span>
+                </div>
+              )}
+
+              {/* PHẦN 2: THÔNG SỐ DINH DƯỠNG & THỜI GIAN */}
+              <div className="recipe-subhead" style={{ marginTop: '18px' }}>
+                <label>
+                  <span>Chỉ số dinh dưỡng & Thời gian <small>AI tự động điền hoặc nhập thủ công</small></span>
+                </label>
+              </div>
+
+              <div className="create-blog-detail-grid">
+                {numericDetailLabels.map(([key, label, unit]) => (
+                  <label key={key} htmlFor={`recipe-${key}`}>
+                    {label}{unit && <small>{unit}</small>}
+                    <input
+                      id={`recipe-${key}`}
+                      type="number"
+                      min="0"
+                      step={key === 'servings' ? '1' : '0.1'}
+                      value={recipeDetails[key]}
+                      onChange={(event) => setRecipeDetails({ ...recipeDetails, [key]: event.target.value })}
+                      disabled={busy}
+                    />
+                  </label>
+                ))}
+              </div>
+
+              {/* PHẦN 3: CÁC BƯỚC THỰC HIỆN (METHOD / STEPS) */}
+              <div className="recipe-subhead" style={{ marginTop: '20px' }}>
+                <label>
+                  <span>Các bước thực hiện (Method / Steps) <small>hướng dẫn từng bước cách làm</small></span>
+                </label>
+              </div>
+
+              <div className="recipe-steps-list" role="group" aria-label="Các bước thực hiện">
+                {stepRows.map((step, index) => (
+                  <div key={index} className="recipe-step-item">
+                    <span className="recipe-step-badge">Bước {index + 1}</span>
+                    <textarea
+                      rows={2}
+                      className="recipe-step-textarea"
+                      placeholder={`Mô tả chi tiết bước ${index + 1}...`}
+                      value={step}
+                      onChange={(e) => updateStepRow(index, e.target.value)}
+                      disabled={busy}
+                      aria-label={`Mô tả bước ${index + 1}`}
+                    />
+                    <button
+                      type="button"
+                      className="recipe-step-remove-btn"
+                      title="Xóa bước này"
+                      aria-label={`Xóa bước ${index + 1}`}
+                      onClick={() => removeStepRow(index)}
+                      disabled={busy}
+                    >
+                      <Trash2 size={15}/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="recipe-row-actions">
+                <button
+                  type="button"
+                  className="recipe-add-row-btn"
+                  onClick={addStepRow}
+                  disabled={busy}
+                >
+                  <Plus size={15}/> Thêm bước tiếp theo
+                </button>
+              </div>
+            </>
+          )}
         </section>
       </div>
+
       <aside className="create-blog-settings">
         <div className="create-blog-panel"><div className="create-blog-section-heading"><span>02</span><div><h2>{isVideo ? 'Video thumbnail' : 'Cover image'}</h2><p>{isVideo ? 'Required preview image for the uploaded video.' : 'Required cover image for this blog.'}</p></div></div>
           <label className="create-blog-upload" htmlFor="create-blog-image">{imageUrl || existingThumbnailUrl ? <img src={imageUrl || existingThumbnailUrl} alt={isVideo ? 'Selected video thumbnail preview' : 'Selected cover preview'}/> : <><ImagePlus size={30}/><strong>{isVideo ? 'Upload a video thumbnail' : 'Upload a cover image'}</strong><span>Required · JPG, PNG, or WebP - max 5 MB</span></>}</label>
@@ -341,7 +727,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
           <select id="create-blog-category" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} disabled={busy || !categories.length}><option value="">Select category</option>{categories.map((item) => <option key={item.categoryId} value={item.categoryId}>{item.name ?? item.categoryName}</option>)}</select>
           {!categories.length && <p className="create-blog-hint">Categories will appear here when the backend provides them.</p>}
         </div>
-        {error && <p className="create-blog-error" role="alert">{error} {error.includes('session') && <Link to="/login">Sign in</Link>}</p>}
+        {error && <p className="create-blog-error" role="alert">{error} {error.includes('đăng nhập') && <Link to="/login">Sign in</Link>}</p>}
         <div className="create-blog-submit-actions">
           <button className="my-blog-button create-blog-submit create-blog-submit--secondary" type="submit" disabled={preview || loadingContent || busy}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Saving...</> : <><Save size={16}/>{editing ? ' Save changes' : ' Save draft'}</>}</button>
           <button className="my-blog-button create-blog-submit" type="button" onClick={(event) => submit(event, 'submit')} disabled={preview || loadingContent || busy}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Submitting...</> : <><Send size={16}/> Submit for review</>}</button>
