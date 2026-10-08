@@ -12,18 +12,22 @@ export default defineConfig(({ mode }) => {
         '/api/ai': {
           target: env.AI_SERVICE_PROXY_TARGET || 'http://127.0.0.1:8000',
           changeOrigin: true,
+          xfwd: true,
         },
         '/api': {
           target: 'http://127.0.0.1:8080',
           changeOrigin: true,
+          xfwd: true,
         },
         '/oauth2': {
           target: 'http://127.0.0.1:8080',
           changeOrigin: true,
+          xfwd: true,
         },
         '/login/oauth2': {
           target: 'http://127.0.0.1:8080',
           changeOrigin: true,
+          xfwd: true,
         },
       },
     },

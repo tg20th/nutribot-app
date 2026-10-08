@@ -6,7 +6,9 @@ import com.fpt.swp391.nutribot.dto.response.ApiResponse;
 import com.fpt.swp391.nutribot.filter.GuestRateLimitFilter;
 import com.fpt.swp391.nutribot.service.AuthService;
 import com.fpt.swp391.nutribot.service.TokenBlacklistService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.nio.charset.StandardCharsets;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
@@ -186,9 +188,10 @@ public class SecurityConfig {
 
                 var authResponse = authService.handleOAuth2Login(email, fullName, picture);
 
-                String frontendUrl = "http://localhost:5173/auth/callback?token=" + URLEncoder.encode(authResponse.getToken(), "UTF-8")
-                        + "&username=" + URLEncoder.encode(authResponse.getUsername(), "UTF-8")
-                        + "&role=" + URLEncoder.encode(authResponse.getRole(), "UTF-8");
+                String frontendBaseUrl = determineFrontendBaseUrl(request);
+                String frontendUrl = frontendBaseUrl + "/auth/callback?token=" + URLEncoder.encode(authResponse.getToken(), StandardCharsets.UTF_8)
+                        + "&username=" + URLEncoder.encode(authResponse.getUsername(), StandardCharsets.UTF_8)
+                        + "&role=" + URLEncoder.encode(authResponse.getRole(), StandardCharsets.UTF_8);
 
                 response.sendRedirect(frontendUrl);
             } catch (Exception e) {
@@ -197,6 +200,28 @@ public class SecurityConfig {
                 response.getWriter().write("{\"success\":false,\"message\":\"OAuth login failed: " + e.getMessage() + "\"}");
             }
         };
+    }
+
+    private String determineFrontendBaseUrl(HttpServletRequest request) {
+        String forwardedHost = request.getHeader("X-Forwarded-Host");
+        String forwardedProto = request.getHeader("X-Forwarded-Proto");
+        if (StringUtils.hasText(forwardedHost)) {
+            String proto = StringUtils.hasText(forwardedProto) ? forwardedProto : "https";
+            return proto + "://" + forwardedHost;
+        }
+        String origin = request.getHeader("Origin");
+        if (StringUtils.hasText(origin)) {
+            return origin;
+        }
+        String referer = request.getHeader("Referer");
+        if (StringUtils.hasText(referer)) {
+            try {
+                java.net.URI uri = java.net.URI.create(referer);
+                return uri.getScheme() + "://" + uri.getAuthority();
+            } catch (Exception ignored) {
+            }
+        }
+        return "http://localhost:5173";
     }
 
     @Bean
