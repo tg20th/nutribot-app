@@ -6,6 +6,7 @@ import CommunitySideNav from '../components/community/CommunitySideNav';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import { calculateRecipeNutrition, createMyBlog, createMyVideo, getBlogCategories, getMyBlog, getMyVideo, updateMyBlog, updateMyVideo, uploadBlogThumbnail } from '../services/authorBlogApi';
 import { getAllergyIngredients } from '../services/profileApi';
+import { stripHtmlToCleanText } from '../services/communityApi';
 import { apiRequest } from '../services/apiClient';
 import '../styles/my-blogs.css';
 import '../styles/create-blog.css';
@@ -49,6 +50,7 @@ const numericDetailLabels = [
 ];
 
 function makeContentBody(body, details, ingredientRows = [], stepRows = []) {
+  const cleanBody = stripHtmlToCleanText(body);
   const facts = numericDetailLabels.filter(([key]) => String(details[key]).trim())
     .map(([key, label, unit]) => `${label}: ${String(details[key]).trim()}${unit ? ` ${unit}` : ''}`);
   
@@ -62,19 +64,10 @@ function makeContentBody(body, details, ingredientRows = [], stepRows = []) {
     .filter(Boolean);
 
   const steps = stepRows.map((item) => item.trim()).filter(Boolean);
-  const isHtml = /<[a-z][\s\S]*>/i.test(body);
-  const escapeHtml = (value) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
-  const list = (items) => `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`;
-  const sections = [body];
-  if (isHtml) {
-    if (facts.length) sections.push(`<h2>Recipe details</h2>${list(facts)}`);
-    if (ingredients.length) sections.push(`<h2>Ingredients</h2>${list(ingredients)}`);
-    if (steps.length) sections.push(`<h2>Steps</h2>${list(steps.map((item, index) => `Step ${index + 1}: ${item}`))}`);
-  } else {
-    if (facts.length) sections.push(`## Recipe details\n${facts.map((item) => `- ${item}`).join('\n')}`);
-    if (ingredients.length) sections.push(`## Ingredients\n${ingredients.map((item) => `- ${item}`).join('\n')}`);
-    if (steps.length) sections.push(`## Steps\n${steps.map((item, index) => `- Step ${index + 1}: ${item}`).join('\n')}`);
-  }
+  const sections = [cleanBody || body];
+  if (facts.length) sections.push(`## Recipe details\n${facts.map((item) => `- ${item}`).join('\n')}`);
+  if (ingredients.length) sections.push(`## Ingredients\n${ingredients.map((item) => `- ${item}`).join('\n')}`);
+  if (steps.length) sections.push(`## Steps\n${steps.map((item, index) => `- Step ${index + 1}: ${item}`).join('\n')}`);
   return sections.join('\n\n');
 }
 

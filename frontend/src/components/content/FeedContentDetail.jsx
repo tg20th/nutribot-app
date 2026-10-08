@@ -86,7 +86,15 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
             <article className="detail-ingredients"><div className="detail-section-head"><span>What you need</span><h2>Ingredients</h2>{detail.servings && <small>Serves {detail.servings}</small>}</div><ul>{(detail.pantryItems?.length ? detail.pantryItems : ['Ingredients will be shared soon.']).map((item, index) => <li key={index}><i>{String(index + 1).padStart(2, '0')}</i>{item}</li>)}</ul><div className="detail-micro-nutrition"><span>Fiber <b>{nutrition.fiber ?? '-'}</b></span><span>Sodium <b>{nutrition.sodium ?? '-'}</b></span></div></article>
             <article className="detail-method"><div className="detail-section-head"><span>Make it yours</span><h2>Method</h2>{detail.prepTime && <small>{detail.prepTime} prep{detail.cookTime ? ` / ${detail.cookTime} cook` : ''}</small>}</div>{detail.steps?.length ? <ol>{detail.steps.map((step, index) => <li key={index}><b>{index + 1}</b><p>{step}</p></li>)}</ol> : <p>Method will be shared soon.</p>}</article>
           </section>
-          <article className="nb-content-body"><div className="detail-section-head"><h2>{detail.type === 'video' ? 'About this video' : 'The story'}</h2></div><p>{detail.body || detail.description || 'No detail content has been added yet.'}</p></article>
+          <article className="nb-content-body">
+            <div className="detail-section-head"><h2>{detail.type === 'video' ? 'About this video' : 'The story'}</h2></div>
+            {String(detail.cleanBody || detail.body || detail.description || 'No detail content has been added yet.')
+              .split(/\n\n+/)
+              .filter(Boolean)
+              .map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+          </article>
           <RestaurantRecommendations dishName={detail.title}/>
           <section className="detail-actions"><VoteButton contentId={post.id} loadVote={interactionApi.loadVote} submitVote={interactionApi.submitVote}/></section>
           <section ref={comments} tabIndex={-1} className="detail-comments" aria-label="Comments"><CommentSection contentId={post.id} loadComments={interactionApi.loadComments} submitComment={interactionApi.submitComment}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><button type="button" onClick={onClose}>Open the feed</button></div></section>
