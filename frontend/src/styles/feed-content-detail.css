@@ -14,7 +14,7 @@
 .nb-content-detail .detail-hero-copy p{font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important;white-space:pre-line;line-height:1.7}
 .nb-content-detail .nb-content-body{padding:48px 0;overflow-wrap:anywhere;white-space:pre-line}
 .nb-content-detail .nb-content-body p{font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important;white-space:pre-line;line-height:1.8;margin:0 0 16px}
-.nb-content-detail .detail-ingredients ul li,.nb-content-detail .detail-method ol li p,.nb-content-detail .detail-nutrition-title p{font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important}
+.nb-content-detail .detail-ingredients ul li,.nb-content-detail .detail-ingredients ul li i,.nb-content-detail .detail-method ol li p,.nb-content-detail .detail-method ol li b,.nb-content-detail .detail-nutrition-title p{font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important}
 .nb-content-detail .nutrition-grid span,.nb-content-detail .detail-micro-nutrition span{font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important}
 .nb-content-detail .detail-comments{scroll-margin-top:88px;min-height:65vh;width:100%;font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important}
 .nb-content-detail .detail-community-cta button{margin-left:auto;padding:10px 12px;background:#d7f261;color:#173529;font-size:11px;font-weight:800;white-space:nowrap}
