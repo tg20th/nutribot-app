@@ -80,6 +80,99 @@ function parseFactLines(lines = [], data = {}) {
 
 export function parseBodyRecipeData(body = '') {
   if (!body || typeof body !== 'string') return {};
+  const trimmed = body.trim();
+
+  // 1. Try parsing JSON format
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        const data = {};
+        const storyText = parsed.story || parsed.description || '';
+        const clean = stripHtmlToCleanText(storyText);
+        if (clean) data.cleanBody = clean;
+        else if (storyText) data.cleanBody = storyText;
+
+        const details = parsed.details || parsed;
+        const nut = parsed.nutrition || {};
+
+        const calVal = details.calories ?? nut.calories;
+        if (calVal != null && calVal !== '') {
+          const num = parseInt(String(calVal).replace(/[^\d]/g, ''), 10);
+          if (!isNaN(num)) data.calories = num;
+        }
+
+        const protVal = details.proteinG ?? details.protein ?? nut.proteinG ?? nut.protein;
+        if (protVal != null && protVal !== '') {
+          const num = parseFloat(String(protVal).replace(/[^\d.]/g, ''));
+          if (!isNaN(num)) data.protein = num;
+        }
+
+        const nutrition = {};
+        const carbsVal = details.carbsG ?? details.carbs ?? nut.carbsG ?? nut.carbs;
+        if (carbsVal != null && carbsVal !== '') {
+          const val = String(carbsVal).trim();
+          nutrition.carbs = /g$/i.test(val) ? val.replace(/\s*g$/i, 'g') : `${val}g`;
+        }
+
+        const fatVal = details.fatG ?? details.fat ?? nut.fatG ?? nut.fat;
+        if (fatVal != null && fatVal !== '') {
+          const val = String(fatVal).trim();
+          nutrition.fat = /g$/i.test(val) ? val.replace(/\s*g$/i, 'g') : `${val}g`;
+        }
+
+        const fiberVal = details.fiberG ?? details.fiber ?? nut.fiberG ?? nut.fiber;
+        if (fiberVal != null && fiberVal !== '') {
+          const val = String(fiberVal).trim();
+          nutrition.fiber = /g$/i.test(val) ? val.replace(/\s*g$/i, 'g') : `${val}g`;
+        }
+
+        const sodiumVal = details.sodiumMg ?? details.sodium ?? nut.sodiumMg ?? nut.sodium;
+        if (sodiumVal != null && sodiumVal !== '') {
+          const val = String(sodiumVal).trim();
+          nutrition.sodium = /mg$/i.test(val) ? val.replace(/\s*mg$/i, 'mg') : `${val}mg`;
+        }
+
+        if (Object.keys(nutrition).length > 0) data.nutrition = nutrition;
+
+        const servingsVal = details.servings ?? parsed.servings;
+        if (servingsVal != null && servingsVal !== '') {
+          const num = parseInt(String(servingsVal).replace(/[^\d]/g, ''), 10);
+          if (!isNaN(num)) data.servings = num;
+        }
+
+        const prepVal = details.prepMinutes ?? details.prepTime ?? parsed.prepMinutes ?? parsed.prepTime;
+        if (prepVal != null && prepVal !== '') {
+          const s = String(prepVal).trim();
+          data.prepTime = /^\d+$/.test(s) ? `${s} min` : s;
+        }
+
+        const cookVal = details.cookMinutes ?? details.cookTime ?? parsed.cookMinutes ?? parsed.cookTime;
+        if (cookVal != null && cookVal !== '') {
+          const s = String(cookVal).trim();
+          data.cookTime = /^\d+$/.test(s) ? `${s} min` : s;
+        }
+
+        if (Array.isArray(parsed.ingredients)) {
+          data.pantryItems = parsed.ingredients.map((item) => {
+            if (typeof item === 'string') return item.trim();
+            const qty = item.quantity ? `${item.quantity} ${item.unit || 'g'}` : '';
+            const name = item.name || item.customName || '';
+            return qty ? `${qty} ${name}`.trim() : name.trim();
+          }).filter(Boolean);
+        }
+
+        if (Array.isArray(parsed.steps)) {
+          data.steps = parsed.steps.map((s) => String(s).replace(/^Step \d+:\s*/i, '').trim()).filter(Boolean);
+        }
+
+        return data;
+      }
+    } catch {
+      // fallback to legacy parser below
+    }
+  }
+
   const data = {};
 
   const isHtml = /<h2[^>]*>\s*(?:Recipe details|Ingredients|Steps)\s*<\/h2>/i.test(body);
@@ -139,18 +232,42 @@ export function parseBodyRecipeData(body = '') {
   return data;
 }
 
-const firstDefined = (...values) => values.find((value) => value != null && value !== '');
+const firstDefined = (...values) => {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return null;
+};
 
 const normalizeNutrition = (item = {}, parsedRecipe = {}) => {
   const metrics = item.nutrition ?? item.nutritionSummary ?? item.nutritionMetrics ?? {};
-  return {
-    calories: firstDefined(item.calories, item.caloriesKcal, metrics.calories, metrics.totalCalories, parsedRecipe.calories, null),
-    protein: firstDefined(item.protein, item.proteinG, metrics.protein, metrics.proteinG, parsedRecipe.protein, null),
-    carbs: firstDefined(metrics.carbs, metrics.carbsG, item.carbs, item.carbsG, parsedRecipe.nutrition?.carbs, null),
-    fat: firstDefined(metrics.fat, metrics.fatG, metrics.healthyFatsG, item.fat, item.fatG, parsedRecipe.nutrition?.fat, null),
-    fiber: firstDefined(metrics.fiber, metrics.fiberG, item.fiber, item.fiberG, parsedRecipe.nutrition?.fiber, null),
-    sodium: firstDefined(metrics.sodium, metrics.sodiumMg, item.sodium, item.sodiumMg, parsedRecipe.nutrition?.sodium, null),
-  };
+  const base = item.nutrition && typeof item.nutrition === 'object'
+    ? { ...item.nutrition }
+    : (parsedRecipe.nutrition ? { ...parsedRecipe.nutrition } : {});
+
+  const carbs = firstDefined(metrics.carbs, metrics.carbsG, item.carbs, item.carbsG, parsedRecipe.nutrition?.carbs);
+  if (carbs != null) base.carbs = carbs;
+
+  const fat = firstDefined(metrics.fat, metrics.fatG, metrics.healthyFatsG, item.fat, item.fatG, parsedRecipe.nutrition?.fat);
+  if (fat != null) base.fat = fat;
+
+  const fiber = firstDefined(metrics.fiber, metrics.fiberG, item.fiber, item.fiberG, parsedRecipe.nutrition?.fiber);
+  if (fiber != null) base.fiber = fiber;
+
+  const sodium = firstDefined(metrics.sodium, metrics.sodiumMg, item.sodium, item.sodiumMg, parsedRecipe.nutrition?.sodium);
+  if (sodium != null) base.sodium = sodium;
+
+  return base;
+};
+
+const extractCalories = (item = {}, parsedRecipe = {}) => {
+  const metrics = item.nutrition ?? item.nutritionSummary ?? item.nutritionMetrics ?? {};
+  return firstDefined(item.calories, item.caloriesKcal, metrics.calories, metrics.totalCalories, parsedRecipe.calories);
+};
+
+const extractProtein = (item = {}, parsedRecipe = {}) => {
+  const metrics = item.nutrition ?? item.nutritionSummary ?? item.nutritionMetrics ?? {};
+  return firstDefined(item.protein, item.proteinG, metrics.protein, metrics.proteinG, parsedRecipe.protein);
 };
 
 export const normalizePost = (item = {}, fallbackType = 'BLOG') => {
@@ -160,12 +277,14 @@ export const normalizePost = (item = {}, fallbackType = 'BLOG') => {
   const cleanBody = parsedRecipe.cleanBody || stripHtmlToCleanText(item.body) || '';
   const captionSource = firstDefined(item.caption, item.story, item.description, item.summary, typeof item.content === 'string' ? item.content : null, cleanBody);
   const cleanDescription = stripHtmlToCleanText(captionSource);
+  const calories = extractCalories(item, parsedRecipe);
+  const protein = extractProtein(item, parsedRecipe);
   const nutrition = normalizeNutrition(item, parsedRecipe);
 
   return {
     ...item,
-    calories: nutrition.calories,
-    protein: nutrition.protein,
+    calories,
+    protein,
     nutrition,
     pantryItems: item.pantryItems ?? parsedRecipe.pantryItems ?? null,
     steps: item.steps ?? parsedRecipe.steps ?? null,

@@ -143,4 +143,59 @@ describe('authorBlogApi & nutrition normalization', () => {
     expect(normalized.body).not.toContain('<font');
     expect(normalized.body).not.toContain('<h2>');
   });
+
+  it('normalizes structured JSON recipe body into detail page format', () => {
+    const rawPost = {
+      contentId: 101,
+      contentType: 'BLOG',
+      title: 'Canh rong biển đậu hũ',
+      body: JSON.stringify({
+        version: 1,
+        story: 'Món canh thanh nhiệt, dễ nấu cho ngày hè.',
+        prepMinutes: 10,
+        cookMinutes: 15,
+        servings: 3,
+        nutrition: {
+          calories: 150,
+          proteinG: 12,
+          carbsG: 10,
+          fatG: 4,
+          fiberG: 3,
+          sodiumMg: 280,
+        },
+        ingredients: [
+          { name: 'Rong biển khô', quantity: '20', unit: 'g' },
+          { name: 'Đậu hũ non', quantity: '1', unit: 'hộp' },
+        ],
+        steps: [
+          'Ngâm nở rong biển',
+          'Nấu sôi nước dùng và cho đậu hũ vào',
+        ],
+      }),
+    };
+
+    const normalized = normalizePost(rawPost);
+
+    expect(normalized.description).toBe('Món canh thanh nhiệt, dễ nấu cho ngày hè.');
+    expect(normalized.cleanBody).toBe('Món canh thanh nhiệt, dễ nấu cho ngày hè.');
+    expect(normalized.calories).toBe(150);
+    expect(normalized.protein).toBe(12);
+    expect(normalized.nutrition).toEqual({
+      carbs: '10g',
+      fat: '4g',
+      fiber: '3g',
+      sodium: '280mg',
+    });
+    expect(normalized.pantryItems).toEqual([
+      '20 g Rong biển khô',
+      '1 hộp Đậu hũ non',
+    ]);
+    expect(normalized.steps).toEqual([
+      'Ngâm nở rong biển',
+      'Nấu sôi nước dùng và cho đậu hũ vào',
+    ]);
+    expect(normalized.prepTime).toBe('10 min');
+    expect(normalized.cookTime).toBe('15 min');
+    expect(normalized.servings).toBe(3);
+  });
 });

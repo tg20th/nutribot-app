@@ -42,6 +42,19 @@ function RequestError({ error, fallback, type }) {
 }
 
 function excerpt(body) {
+  if (!body) return '';
+  const trimmed = String(body).trim();
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') {
+        const text = parsed.story || parsed.description || '';
+        return text.replace(/\s+/g, ' ').trim();
+      }
+    } catch {
+      // Fall through to HTML/text parser
+    }
+  }
   const doc = new DOMParser().parseFromString(body ?? '', 'text/html');
   doc.querySelectorAll('script, style').forEach((node) => node.remove());
   return (doc.body.textContent ?? '').replace(/\s+/g, ' ').trim();
