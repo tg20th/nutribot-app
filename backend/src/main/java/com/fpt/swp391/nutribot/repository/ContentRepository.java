@@ -98,6 +98,15 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
 
     Page<Content> findByStatus(String status, Pageable pageable);
 
+    @Query("SELECT c FROM Content c WHERE c.status IN :statuses")
+    Page<Content> findByStatusIn(@Param("statuses") List<String> statuses, Pageable pageable);
+
+    @Query("SELECT c FROM Content c WHERE c.status IN :statuses AND LOWER(c.contentType) = LOWER(:contentType)")
+    Page<Content> findByStatusInAndContentType(
+            @Param("statuses") List<String> statuses,
+            @Param("contentType") String contentType,
+            Pageable pageable);
+
     @Modifying
     @Query("UPDATE Content c SET c.viewCount = c.viewCount + 1 WHERE c.contentId = :contentId")
     void incrementViewCount(@Param("contentId") Integer contentId);
@@ -124,4 +133,16 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
             @Param("excludeId") Integer excludeId,
             @Param("status") String status,
             Pageable pageable);
+
+    // NB-65: Catalog cho AI recommender - tất cả public content
+    @Query("SELECT c FROM Content c WHERE c.status = :status AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE")
+    List<Content> findPublicCatalogForRecommendation(@Param("status") String status, Pageable pageable);
+
+    @Query("SELECT c FROM Content c WHERE c.contentId IN :contentIds AND c.status = :status " +
+           "AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE")
+    List<Content> findPublicByIds(@Param("contentIds") List<Integer> contentIds, @Param("status") String status);
+
+    // NB-65: Đếm vote cho content
+    @Query("SELECT COUNT(v) FROM Vote v WHERE v.contentId = :contentId AND v.voteValue = 1")
+    Long countVoteByContentId(@Param("contentId") Integer contentId);
 }

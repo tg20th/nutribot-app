@@ -12,8 +12,8 @@ import lombok.*;
 public class AdminUserStatusRequest {
 
     @NotBlank(message = "Trạng thái tài khoản không được để trống")
-    @Pattern(regexp = "ACTIVE|WARN|SUSPENDED|BANNED",
-             message = "Trạng thái chỉ được là ACTIVE, WARN, SUSPENDED hoặc BANNED")
+    @Pattern(regexp = "ACTIVE|WARN|BANNED",
+             message = "Trạng thái chỉ được là ACTIVE, WARN hoặc BANNED")
     private String status;
 
     @Size(max = 255, message = "Lý do thay đổi trạng thái tối đa 255 ký tự")

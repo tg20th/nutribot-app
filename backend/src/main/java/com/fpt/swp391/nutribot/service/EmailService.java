@@ -1,10 +1,12 @@
 package com.fpt.swp391.nutribot.service;
 
+import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 import java.util.Properties;
@@ -59,6 +61,30 @@ public class EmailService {
             log.info("Subject: {}", subject);
             log.info("Body: {}", body);
             log.info("================");
+        }
+    }
+
+    /** Sends an HTML email with inline CSS styling. */
+    public void sendHtmlEmail(String to, String subject, String htmlBody) {
+        if (emailEnabled && mailSender != null) {
+            try {
+                MimeMessage message = mailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+                helper.setTo(to);
+                helper.setSubject(subject);
+                helper.setText(htmlBody, true);
+                mailSender.send(message);
+                log.info("HTML email sent to {}", to);
+            } catch (Exception e) {
+                log.error("Failed to send HTML email to {}: {}", to, e.getMessage());
+            }
+        } else {
+            // Dev mode: log to console
+            log.info("=== DEV HTML EMAIL ===");
+            log.info("To: {}", to);
+            log.info("Subject: {}", subject);
+            log.info("Body: {}", htmlBody);
+            log.info("======================");
         }
     }
 

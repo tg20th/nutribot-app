@@ -93,22 +93,22 @@ class AdminUserServiceTest {
     }
 
     @Test
-    @DisplayName("Admin chuyển trạng thái user thành công sang SUSPENDED kèm lý do kiểm toán (BL-031)")
+    @DisplayName("Admin chuyển trạng thái user thành công sang BANNED kèm lý do kiểm toán (BL-031)")
     void updateUserStatus_success_transitionsStatusAndAudits() {
         when(userRepository.findByIdForUpdate(10)).thenReturn(Optional.of(normalUser));
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         AdminUserStatusRequest request = AdminUserStatusRequest.builder()
-                .status("SUSPENDED")
+                .status("BANNED")
                 .reason("Nghi ngờ gian lận đăng bài")
                 .build();
 
         AdminUserResponse response = adminUserService.updateUserStatus(10, request, "super_admin");
 
         assertThat(response).isNotNull();
-        assertThat(response.getStatus()).isEqualTo("SUSPENDED");
+        assertThat(response.getStatus()).isEqualTo("BANNED");
         verify(userRepository).save(normalUser);
-        assertThat(normalUser.getStatus()).isEqualTo(AccountStatus.SUSPENDED);
+        assertThat(normalUser.getStatus()).isEqualTo(AccountStatus.BANNED);
     }
 
     @Test
@@ -136,7 +136,7 @@ class AdminUserServiceTest {
         when(userRepository.findByIdForUpdate(1)).thenReturn(Optional.of(adminUser));
 
         AdminUserStatusRequest request = AdminUserStatusRequest.builder()
-                .status("SUSPENDED")
+                .status("BANNED")
                 .reason("Tự khóa")
                 .build();
 

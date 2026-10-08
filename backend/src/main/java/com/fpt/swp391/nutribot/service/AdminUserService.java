@@ -92,15 +92,15 @@ public class AdminUserService {
         }
 
         // 3. Bảo vệ Last Active Admin (BL-022)
-        if (isUserAdmin(user) && (newStatus == AccountStatus.BANNED || newStatus == AccountStatus.SUSPENDED)) {
+        if (isUserAdmin(user) && newStatus == AccountStatus.BANNED) {
             long activeAdminCount = userRepository.countActiveAdmins(AccountStatus.ACTIVE);
             if (activeAdminCount <= 1) {
                 throw new BadRequestException("Không thể khóa tài khoản Quản trị viên duy nhất còn lại trong hệ thống");
             }
         }
 
-        // 4. Nếu mở khóa từ SUSPENDED hoặc BANNED về ACTIVE, reset strikeCount về 0
-        if ((oldStatus == AccountStatus.SUSPENDED || oldStatus == AccountStatus.BANNED) && newStatus == AccountStatus.ACTIVE) {
+        // 4. Nếu mở khóa từ BANNED về ACTIVE, reset strikeCount về 0
+        if (oldStatus == AccountStatus.BANNED && newStatus == AccountStatus.ACTIVE) {
             user.setStrikeCount(0);
         }
 

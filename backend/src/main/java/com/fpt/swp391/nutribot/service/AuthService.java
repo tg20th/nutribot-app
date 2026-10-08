@@ -129,10 +129,16 @@ public class AuthService {
 
         if (user.getStatus() != AccountStatus.ACTIVE) {
             log.warn("Đăng nhập bị từ chối: tài khoản {} đang có trạng thái {}", user.getUsername(), user.getStatus());
-            if (user.getStatus() == AccountStatus.PENDING_VERIFY) {
-                throw new BadRequestException("Tài khoản chưa xác thực email. Vui lòng kiểm tra hộp thư.");
+            switch (user.getStatus()) {
+                case PENDING_VERIFY:
+                    throw new BadRequestException("Tài khoản chưa xác thực email. Vui lòng kiểm tra hộp thư.");
+                case WARN:
+                    throw new BadRequestException("Tài khoản đang bị cảnh báo. Vui lòng liên hệ hỗ trợ.");
+                case BANNED:
+                    throw new BadRequestException("Tài khoản đã bị khóa. Không thể đăng nhập.");
+                default:
+                    throw new BadRequestException("Tài khoản không hợp lệ.");
             }
-            throw new BadRequestException("Tài khoản đã bị khóa hoặc tạm ngưng hoạt động");
         }
 
         String token = jwtTokenProvider.generateToken(

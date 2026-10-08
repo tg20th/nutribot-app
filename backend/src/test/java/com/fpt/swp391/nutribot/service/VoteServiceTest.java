@@ -151,7 +151,7 @@ class VoteServiceTest {
     @Test
     @DisplayName("Tài khoản chưa ACTIVE (Bị khóa hoặc chờ xác thực) -> Bị cấm vote với ForbiddenException")
     void toggleVote_WhenUserNotActive_ThrowsForbiddenException() {
-        User voter = createSampleUser(2, "banned_user", AccountStatus.SUSPENDED);
+        User voter = createSampleUser(2, "banned_user", AccountStatus.BANNED);
         when(userRepository.findByUsernameForUpdate("banned_user")).thenReturn(Optional.of(voter));
 
         ForbiddenException ex = assertThrows(

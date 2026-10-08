@@ -65,6 +65,10 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
+                // Filter order: JwtAuthenticationFilter → GuestRateLimitFilter → UsernamePasswordAuthenticationFilter
+                // Both filters are added before UsernamePasswordAuthenticationFilter
+                // HttpSecurity adds them in order, so JwtAuthenticationFilter runs first
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(guestRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -82,6 +86,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/blogs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/home/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/feed/home").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/contents/*/comments").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/contents/*/vote").permitAll()
@@ -119,7 +124,6 @@ public class SecurityConfig {
                             response.getWriter().write(writeJsonResponse(apiResponse));
                         })
                 )
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")
                         .addLogoutHandler((request, response, authentication) -> {

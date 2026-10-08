@@ -52,7 +52,7 @@ CREATE TABLE users (
     CONSTRAINT UQ_users_email UNIQUE (email),
     CONSTRAINT FK_users_roles FOREIGN KEY (role_id) REFERENCES roles(role_id),
     CONSTRAINT CK_users_strike_count CHECK (strike_count >= 0),
-    CONSTRAINT CK_users_status CHECK (status IN (N'ACTIVE', N'WARN', N'SUSPENDED', N'BANNED', N'PENDING_VERIFY'))
+    CONSTRAINT CK_users_status CHECK (status IN (N'ACTIVE', N'WARN', N'BANNED', N'PENDING_VERIFY'))
 );
 GO
 
@@ -68,7 +68,7 @@ BEGIN
     UPDATE u
     SET status = CASE
                     WHEN i.status IN (N'BANNED', N'PENDING_VERIFY') THEN i.status
-                    WHEN i.strike_count >= 3 THEN N'SUSPENDED'
+                    WHEN i.strike_count >= 3 THEN N'BANNED'
                     WHEN i.strike_count BETWEEN 1 AND 2 THEN N'WARN'
                     ELSE N'ACTIVE'
                  END,
@@ -441,11 +441,12 @@ CREATE TABLE chat_sessions (
 GO
 
 CREATE TABLE chat_messages (
-    message_id      INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-    session_id      INT NOT NULL,
-    sender_type     NVARCHAR(20) NOT NULL,
-    content         NVARCHAR(MAX) NOT NULL,
-    created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_chat_messages_created_at DEFAULT (SYSUTCDATETIME()),
+    message_id          INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    session_id          INT NOT NULL,
+    sender_type         NVARCHAR(20) NOT NULL,
+    content             NVARCHAR(MAX) NOT NULL,
+    created_at          DATETIME2(3) NOT NULL CONSTRAINT DF_chat_messages_created_at DEFAULT (SYSUTCDATETIME()),
+    idempotency_key     NVARCHAR(100) NULL,
     CONSTRAINT FK_chat_messages_sessions FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id) ON DELETE CASCADE,
     CONSTRAINT CK_chat_messages_sender CHECK (sender_type IN (N'USER', N'ASSISTANT', N'SYSTEM'))
 );

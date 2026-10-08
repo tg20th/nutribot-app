@@ -1,11 +1,11 @@
-import { Check, ChevronLeft, ChevronRight, EyeOff, FileText, Search, ShieldCheck, Video, X } from 'lucide-react';
+import { Bot, Check, ChevronLeft, ChevronRight, EyeOff, FileText, Search, ShieldCheck, Video, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { adminApi } from '../../services/adminApi';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState, Toast } from '../../components/admin/AdminUi';
 
 const pageSize = 10;
 const actions = {
-  APPROVE: { title: 'Approve this submission?', label: 'Approve', message: 'Content approved and published.' },
+  APPROVE: { title: 'Approve this submission?', label: 'Approve', message: 'Content approved and published.', confirmClass: 'primary' },
   HIDE: { title: 'Hide this submission?', label: 'Hide', message: 'Content hidden from the community.' },
   REJECT: { title: 'Reject this submission?', label: 'Reject', message: 'Content rejected.' },
 };
@@ -13,6 +13,15 @@ const actions = {
 const formatDate = (value) => value
   ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
   : 'Date unavailable';
+
+const statusLabel = (status) => {
+  const s = String(status || '').toLowerCase();
+  if (s === 'under_review') return 'Under Review';
+  if (s === 'published') return 'Published';
+  if (s === 'rejected') return 'Rejected';
+  if (s === 'archived' || s === 'hidden') return 'Archived';
+  return 'Pending';
+};
 
 export default function AdminModerationPage() {
   const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview') === '1';
@@ -42,7 +51,7 @@ export default function AdminModerationPage() {
         setSelectedId((current) => nextItems.some((item) => item.id === current) ? current : nextItems[0]?.id ?? null);
       })
       .catch((requestError) => {
-        if (requestError.name !== 'AbortError') setError(true);
+        if (!controller.signal.aborted) setError(true);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -117,7 +126,14 @@ export default function AdminModerationPage() {
                     return <button key={item.id} type="button" className={active ? 'moderation-queue-item is-active' : 'moderation-queue-item'} onClick={() => setSelectedId(item.id)} aria-pressed={active}>
                       <span className="moderation-type-icon"><Icon size={18} /></span>
                       <span className="moderation-queue-copy"><b>{item.title}</b><small>{item.type === 'VIDEO' ? 'Video' : 'Blog'} · {item.author}</small><time dateTime={item.submittedAt}>{formatDate(item.submittedAt)}</time></span>
-                      <span className="moderation-pending">Pending</span>
+                      <div className="moderation-queue-badges">
+                        <span className="moderation-pending">{statusLabel(item.status)}</span>
+                        {item.aiReason && (
+                          <span className={`moderation-ai-pill ${item.aiFlagged !== false ? 'flagged' : 'passed'}`} title={item.aiReason}>
+                            <Bot size={11} /> AI
+                          </span>
+                        )}
+                      </div>
                     </button>;
                   })}
                 </div>
@@ -130,7 +146,7 @@ export default function AdminModerationPage() {
 
               <article className="admin-panel moderation-detail">
                 <div className="moderation-detail-header">
-                  <div><span className="moderation-detail-kicker">{selected.type === 'VIDEO' ? 'VIDEO SUBMISSION' : 'BLOG SUBMISSION'}</span><span className="moderation-pending">Pending</span></div>
+                  <div><span className="moderation-detail-kicker">{selected.type === 'VIDEO' ? 'VIDEO SUBMISSION' : 'BLOG SUBMISSION'}</span><span className="moderation-pending">{statusLabel(selected.status)}</span></div>
                   <time dateTime={selected.submittedAt}>Submitted {formatDate(selected.submittedAt)}</time>
                 </div>
                 {selected.thumbnailUrl
@@ -138,6 +154,27 @@ export default function AdminModerationPage() {
                   : <div className="moderation-cover-placeholder"><span>{selected.type === 'VIDEO' ? <Video size={26} /> : <FileText size={26} />}</span></div>}
                 <div className="moderation-detail-content">
                   <h2>{selected.title}</h2>
+
+                  {selected.aiReason && (
+                    <div className={`moderation-ai-card ${selected.aiFlagged !== false ? 'is-flagged' : 'is-passed'}`}>
+                      <div className="moderation-ai-header">
+                        <div className="moderation-ai-title">
+                          <Bot size={16} />
+                          <strong>Đánh giá kiểm duyệt AI</strong>
+                          <span className={`moderation-ai-badge ${selected.aiFlagged !== false ? 'flagged' : 'approved'}`}>
+                            {selected.aiFlagged !== false ? 'AI Yêu cầu Admin duyệt' : 'AI Đã duyệt'}
+                          </span>
+                        </div>
+                        {selected.aiConfidence != null && (
+                          <span className="moderation-ai-confidence">
+                            Độ tin cậy: {Math.round(selected.aiConfidence * 100)}%
+                          </span>
+                        )}
+                      </div>
+                      <p className="moderation-ai-reason">{selected.aiReason}</p>
+                    </div>
+                  )}
+
                   <dl className="moderation-metadata">
                     <div><dt>Author</dt><dd>{selected.author}</dd></div>
                     {selected.authorEmail && <div><dt>Email</dt><dd>{selected.authorEmail}</dd></div>}
@@ -164,6 +201,7 @@ export default function AdminModerationPage() {
         title: actions[confirm.action].title,
         text: `This will change the status of “${confirm.item.title}”.`,
         confirm: actions[confirm.action].label,
+        confirmClass: actions[confirm.action].confirmClass,
       } : null}
       onClose={() => setConfirm(null)}
       onConfirm={decide}

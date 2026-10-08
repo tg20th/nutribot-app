@@ -5,6 +5,23 @@
   scrollbar-color: #b9c9b3 transparent;
 }
 
+/* Giữ font cũ cho điểm nhấn thương hiệu; nội dung biểu mẫu vẫn dùng Google Sans. */
+body:not(:has(.admin-shell)) #root .auth-modal h2,
+body:not(:has(.admin-shell)) #root .email-verification__heading h2 {
+  font-family: 'Playfair Display', Georgia, serif !important;
+  font-weight: 600 !important;
+  letter-spacing: -.05em;
+}
+
+.auth-modal > p,
+.auth-modal > span,
+.auth-modal label,
+.auth-modal input,
+.auth-modal button,
+.auth-modal small {
+  font-family: var(--nutribot-user-font, 'Google Sans Text', 'Google Sans', 'Product Sans', Roboto, Arial, sans-serif) !important;
+}
+
 .auth-modal .password-input,
 .auth-modal .password-input input {
   width: 100%;

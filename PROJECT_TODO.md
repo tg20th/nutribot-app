@@ -124,7 +124,7 @@
 - [x] **#16 [FE] Màn hình Danh sách & Chi tiết Blog** ✅
   - *Mô tả:* Trang lưới các bài viết blog kèm phân trang và trang đọc nội dung bài viết chi tiết.
   - *File cần tạo:* `frontend/src/pages/BlogListPage.jsx`, `frontend/src/pages/BlogDetailPage.jsx`.
-- [ ] **#18 [FE] Form Soạn thảo & Đăng Blog**
+- [x] **#18 [FE] Form Soạn thảo & Đăng Blog** ✅
   - *Mô tả:* Trình soạn thảo văn bản, upload ảnh thumbnail, chọn danh mục bài viết.
   - *File cần tạo:* `frontend/src/pages/CreateBlogPage.jsx`.
 - [x] **#20 [FE] Màn hình "Blog của tôi"** ✅

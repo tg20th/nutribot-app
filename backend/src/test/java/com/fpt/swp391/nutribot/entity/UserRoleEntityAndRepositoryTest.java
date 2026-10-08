@@ -34,10 +34,9 @@ class UserRoleEntityAndRepositoryTest {
         @DisplayName("AccountStatus phải chứa đúng 5 trạng thái theo CHECK constraint của DB")
         void accountStatus_mustMatchDatabaseCheckConstraints() {
             AccountStatus[] statuses = AccountStatus.values();
-            assertEquals(5, statuses.length);
+            assertEquals(4, statuses.length);
             assertTrue(Arrays.asList(statuses).contains(AccountStatus.ACTIVE));
             assertTrue(Arrays.asList(statuses).contains(AccountStatus.WARN));
-            assertTrue(Arrays.asList(statuses).contains(AccountStatus.SUSPENDED));
             assertTrue(Arrays.asList(statuses).contains(AccountStatus.BANNED));
             assertTrue(Arrays.asList(statuses).contains(AccountStatus.PENDING_VERIFY));
         }

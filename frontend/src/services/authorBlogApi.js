@@ -89,3 +89,24 @@ export async function updateMyVideo(id, values) {
 export const deleteMyBlog = (id) => apiRequest(`${authorBlogsPath}/${id}`, { method: 'DELETE' });
 
 export const deleteMyVideo = (id) => apiRequest(`${authorVideosPath}/${id}`, { method: 'DELETE' });
+
+export async function submitAuthorContent(type, id) {
+  const resource = type === 'video' ? authorVideosPath : authorBlogsPath;
+  const payload = await apiRequest(`${resource}/${id}/submit`, { method: 'POST' });
+  return unwrapData(payload, {});
+}
+
+export async function recallAuthorContent(type, id) {
+  const resource = type === 'video' ? authorVideosPath : authorBlogsPath;
+  const payload = await apiRequest(`${resource}/${id}/recall`, { method: 'POST' });
+  return unwrapData(payload, {});
+}
+
+export async function calculateRecipeNutrition({ servings = 1, dishName = '', ingredients = [] } = {}, signal) {
+  const payload = await apiRequest('/api/v1/author/nutrition/calculate', {
+    method: 'POST',
+    body: JSON.stringify({ servings: Number(servings) || 1, dishName, ingredients }),
+    signal,
+  });
+  return unwrapData(payload, {});
+}

@@ -2,7 +2,10 @@ import { apiRequest, unwrapData } from './apiClient';
 export const getMyProfile = async (signal) => unwrapData(await apiRequest('/api/v1/users/profile', { signal }), {});
 export const updateMyProfile = async (payload) => {
   const profile = unwrapData(await apiRequest('/api/v1/users/profile', { method: 'PUT', body: JSON.stringify(payload) }), {});
-  if (profile.token) localStorage.setItem('nutribot-auth-token', profile.token);
+  if (profile.token) {
+    localStorage.setItem('nutribot-auth-token', profile.token);
+    window.dispatchEvent(new Event('nutribot-auth-changed'));
+  }
   return profile;
 };
 export const updateMyAvatar = async (file) => {

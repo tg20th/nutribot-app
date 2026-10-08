@@ -82,7 +82,12 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const isGuest = !authToken;
 
   const refreshAuthState = useCallback(() => {
-    setAuthToken(localStorage.getItem('nutribot-auth-token'));
+    const newToken = localStorage.getItem('nutribot-auth-token');
+    setAuthToken(newToken);
+    // Reset guest limit modal when user logs in successfully
+    if (newToken) {
+      setShowLimitModal(false);
+    }
   }, []);
 
   const syncGuestTrialCount = useCallback((remaining) => {
@@ -202,9 +207,11 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     };
     window.addEventListener('storage', handleStorage);
     window.addEventListener('focus', refreshAuthState);
+    window.addEventListener('nutribot-auth-changed', refreshAuthState);
     return () => {
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('focus', refreshAuthState);
+      window.removeEventListener('nutribot-auth-changed', refreshAuthState);
     };
   }, [refreshAuthState]);
 

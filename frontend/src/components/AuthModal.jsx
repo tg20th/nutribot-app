@@ -2,6 +2,7 @@ import { Eye, EyeOff, LoaderCircle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ApiError } from '../services/apiClient';
 import { loginAccount, registerAccount, resendRegistrationOtp, verifyRegistrationOtp } from '../services/authApi';
+import { getLoginErrorMessage, getLoginErrorState } from '../services/loginErrorState';
 import AuthToast from './AuthToast';
 import EmailVerificationStep from './auth/EmailVerificationStep';
 import '../styles/auth-popup.css';
@@ -79,6 +80,7 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
   const [form, setForm] = useState(emptyForm);
   const [touched, setTouched] = useState({});
   const [error, setError] = useState('');
+  const [loginErrorState, setLoginErrorState] = useState(null);
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -128,6 +130,7 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
     const { name, value } = event.target;
     setForm((current) => ({ ...current, [name]: value }));
     setError('');
+    setLoginErrorState(null);
   };
   const touch = (name) => setTouched((current) => ({ ...current, [name]: true }));
 
@@ -139,6 +142,7 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
 
     setSubmitting(true);
     setError('');
+    setLoginErrorState(null);
     try {
       const data = isSignup
         ? await registerAccount({ fullName: form.name.trim(), username: form.username.trim(), email: form.email.trim(), password: form.password })
@@ -150,7 +154,10 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
         onSubmit?.(null, 'verify-email');
         return;
       }
-      if (data.token) localStorage.setItem('nutribot-auth-token', data.token);
+      if (data.token) {
+        localStorage.setItem('nutribot-auth-token', data.token);
+        window.dispatchEvent(new Event('nutribot-auth-changed'));
+      }
       if (data.username && data.role) {
         localStorage.setItem('nutribot-user', JSON.stringify({ username: data.username, role: data.role }));
       }
@@ -158,9 +165,16 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
       setSuccess('Welcome back.');
       window.setTimeout(onClose, 700);
     } catch (requestError) {
-      const message = requestError instanceof ApiError ? requestError.message : requestError.message || 'Something went wrong. Please try again.';
-      setError(message);
-      if (!isSignup && isUnverifiedAccountError(requestError)) {
+      if (isSignup) {
+        const message = requestError instanceof ApiError ? requestError.message : requestError.message || 'Something went wrong. Please try again.';
+        setError(message);
+        return;
+      }
+
+      const state = getLoginErrorState(requestError);
+      setLoginErrorState(state);
+      setError(getLoginErrorMessage(state));
+      if (state === 'PENDING_VERIFY') {
         const pendingOtp = getPendingOtp();
         setPendingVerificationEmail(pendingOtp?.email || (isEmail(form.email) ? normalizeEmail(form.email) : ''));
       }
@@ -185,6 +199,7 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
       }
       const data = await verifyRegistrationOtp({ email, otpCode });
       localStorage.setItem('nutribot-auth-token', data.token);
+      window.dispatchEvent(new Event('nutribot-auth-changed'));
       clearPendingOtp();
       setVerificationState('verified');
       onAuthenticated?.(data, 'verify-email');
@@ -270,7 +285,7 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
         </label>
         {isSignup && <label>Confirm password<span className="password-input"><input name="confirmPassword" type={showConfirmation ? 'text' : 'password'} autoComplete="new-password" value={form.confirmPassword} onChange={update} onBlur={() => touch('confirmPassword')} aria-invalid={Boolean(fieldError('confirmPassword'))} aria-describedby={fieldError('confirmPassword') ? 'confirm-password-error' : undefined} placeholder="Repeat your password" /><button type="button" onClick={() => setShowConfirmation((current) => !current)} aria-label={showConfirmation ? 'Hide password confirmation' : 'Show password confirmation'}>{showConfirmation ? <EyeOff size={18} /> : <Eye size={18} />}</button></span>{fieldError('confirmPassword') && <small id="confirm-password-error">{fieldError('confirmPassword')}</small>}</label>}
         <button className="auth-submit" type="submit" disabled={submitting || Boolean(success)}>{submitting ? <><LoaderCircle className="auth-spinner" size={17} />Please wait...</> : isSignup ? 'Create account' : 'Log in'}</button>
-        {!isSignup && isUnverifiedAccountError({ message: error }) && <button className="auth-verification-action" type="button" onClick={openPendingVerification}>Nhập mã OTP / Xác thực email</button>}
+        {!isSignup && loginErrorState === 'PENDING_VERIFY' && <button className="auth-verification-action" type="button" onClick={openPendingVerification}>Nhập mã OTP / Xác thực email</button>}
         <button className="auth-switch" type="button" onClick={() => onSubmit?.(null, isSignup ? 'login' : 'signup')}>{isSignup ? 'Already have an account? Log in' : 'New here? Create an account'}</button>
       </form>
     </div>

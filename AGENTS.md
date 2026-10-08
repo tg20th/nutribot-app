@@ -62,6 +62,24 @@ git commit -m "feat(NB-02-BE): hoàn thành API đăng ký và mã hóa mật kh
 - Chạy unit test AuthControllerTest đạt 100%"
 ```
 
+### 2.3. Quy trình Dọn dẹp Nhánh & Khởi tạo Task mới:
+1. **Dọn dẹp nhánh tại local sau khi merge:**
+   - Sau khi PR được merge vào `master`, Agent hoặc lập trình viên **BẮT BUỘC** chuyển về nhánh `master`, cập nhật code mới nhất và xóa nhánh tính năng cũ tại local:
+     ```bash
+     git checkout master
+     git pull origin master
+     git branch -D <tên_nhánh_cũ>
+     ```
+   - Giữ môi trường làm việc local sạch sẽ, tránh xung đột lịch sử (squash merge conflict) và tránh commit nhầm vào nhánh cũ.
+2. **Khởi tạo Task / Nhiệm vụ mới không liên quan:**
+   - Khi chuyển sang làm một task hoặc nhiệm vụ mới không liên quan, Agent **BẮT BUỘC** đề xuất và tạo một nhánh mới trực tiếp từ `master` mới nhất (tuân theo đúng cú pháp ở mục 2.1):
+     ```bash
+     git checkout master
+     git pull origin master
+     git checkout -b <loại>/NB-<mã_task>-<tên_ngắn>-<tên_thành_viên>
+     ```
+   - **Tuyệt đối nghiêm cấm:** Code task mới trên nhánh cũ đã merge hoặc commit chồng chéo các tính năng không liên quan lên cùng một nhánh/PR.
+
 ---
 
 ## 📐 3. NGUYÊN TẮC KIẾN TRÚC & HỢP ĐỒNG DỮ LIỆU

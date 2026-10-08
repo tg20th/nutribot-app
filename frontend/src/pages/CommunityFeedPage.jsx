@@ -10,7 +10,7 @@ import CommunityPostCard from '../components/community/CommunityPostCard';
 import CommunityRightRail from '../components/community/CommunityRightRail';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CreateBlogPage from './CreateBlogPage';
-import { getCommunityFilters, getPostsPage } from '../services/communityApi';
+import { appendUniquePersonalizedPosts, getCommunityFilters, getPersonalizedPostsPage } from '../services/communityApi';
 import { getMyProfile } from '../services/profileApi';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -19,46 +19,53 @@ function postKey(post) {
   return `${post.type ?? 'POST'}:${post.id ?? post.slug ?? post.title}`;
 }
 
-function mergeUniquePosts(existingPosts, nextPosts) {
-  const seen = new Set(existingPosts.map(postKey));
-  return [...existingPosts, ...nextPosts.filter((post) => {
-    const key = postKey(post);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  })];
+function FeedPostSkeleton() {
+  return <article className="community-post-skeleton" aria-hidden="true">
+    <header className="feed-skeleton-header">
+      <span className="feed-skeleton-shape feed-skeleton-avatar"/>
+      <div className="feed-skeleton-author">
+        <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--author"/>
+        <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--meta"/>
+      </div>
+      <span className="feed-skeleton-shape feed-skeleton-options"/>
+    </header>
+    <div className="feed-skeleton-copy">
+      <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--title"/>
+      <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--title-short"/>
+      <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--body"/>
+    </div>
+    <span className="feed-skeleton-shape feed-skeleton-media"/>
+    <footer className="feed-skeleton-actions">
+      <span className="feed-skeleton-shape feed-skeleton-action"/>
+      <span className="feed-skeleton-shape feed-skeleton-action feed-skeleton-action--short"/>
+    </footer>
+  </article>;
 }
 
 export default function CommunityFeedPage() {
   const page = useRef(null);
   const composerTrigger = useRef(null);
   const loadMoreTrigger = useRef(null);
-  const pagination = useRef({ blogPage: 0, videoPage: 0, blogLast: false, videoLast: false });
+  const pagination = useRef({ cursor: null, hasMore: true });
   const loadingNextPage = useRef(false);
   const [filter, setFilter] = useState('All');
-  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerType, setComposerType] = useState(null);
   const [posts, setPosts] = useState([]); const [profile, setProfile] = useState({}); const [filters, setFilters] = useState([]); const [loading, setLoading] = useState(true); const [loadingMore, setLoadingMore] = useState(false); const [error, setError] = useState('');
 
   const loadNextPage = useCallback(async (signal, { initial = false } = {}) => {
-    if (loadingNextPage.current || (!initial && pagination.current.blogLast && pagination.current.videoLast)) return;
+    if (loadingNextPage.current || (!initial && !pagination.current.hasMore)) return;
 
     loadingNextPage.current = true;
     if (!initial) setLoadingMore(true);
     const current = pagination.current;
     try {
-      const result = await getPostsPage({
-        blogPage: current.blogLast ? null : current.blogPage,
-        videoPage: current.videoLast ? null : current.videoPage,
-        signal
-      });
+      const result = await getPersonalizedPostsPage({ cursor: initial ? null : current.cursor, signal });
       if (signal?.aborted) return;
       pagination.current = {
-        blogPage: result.blogLast ? current.blogPage : current.blogPage + 1,
-        videoPage: result.videoLast ? current.videoPage : current.videoPage + 1,
-        blogLast: result.blogLast,
-        videoLast: result.videoLast
+        cursor: result.nextCursor,
+        hasMore: result.hasMore
       };
-      setPosts((existing) => initial ? mergeUniquePosts([], result.posts) : mergeUniquePosts(existing, result.posts));
+      setPosts((existing) => initial ? appendUniquePersonalizedPosts([], result.posts) : appendUniquePersonalizedPosts(existing, result.posts));
       setError('');
     } catch (failure) {
       if (!signal?.aborted) setError(initial ? 'Unable to load the community feed.' : failure.message || 'Unable to load more community posts.');
@@ -84,7 +91,7 @@ export default function CommunityFeedPage() {
 
   useEffect(() => {
     const trigger = loadMoreTrigger.current;
-    if (!trigger || loading || (pagination.current.blogLast && pagination.current.videoLast)) return;
+    if (!trigger || loading || !pagination.current.hasMore) return;
     const controller = new AbortController();
     const observer = new IntersectionObserver(([entry]) => {
       if (entry.isIntersecting) loadNextPage(controller.signal);
@@ -98,8 +105,8 @@ export default function CommunityFeedPage() {
     return matchesFilter;
   }), [posts, filter]);
   const discoverPosts = useMemo(() => posts.filter((post) => post.image).slice(0, 2), [posts]);
-  const openComposer = () => { composerTrigger.current = document.activeElement; setComposerOpen(true); };
-  const closeComposer = () => { setComposerOpen(false); requestAnimationFrame(() => composerTrigger.current?.focus()); };
+  const openComposer = (type = 'blog') => { composerTrigger.current = document.activeElement; setComposerType(type); };
+  const closeComposer = () => { setComposerType(null); requestAnimationFrame(() => composerTrigger.current?.focus()); };
 
   useGSAP(() => {
     gsap.from('.feed-intro > *', { y: 28, opacity: 0, duration: .85, stagger: .11, ease: 'power3.out' });
@@ -127,9 +134,13 @@ export default function CommunityFeedPage() {
           <div className="feed-stream-heading"><div><span>The community stream</span><h2>What&apos;s nourishing people now</h2></div><p>Stories and videos, all in one thoughtful place.</p></div>
           <CommunityComposer onOpen={openComposer} profile={profile}/>
           <CommunityFilters filters={filters} active={filter} onChange={setFilter}/>
-          {loading ? <p className="content-status">Loading community posts...</p> : error && !posts.length ? <p className="content-status content-status--error">{error}</p> : visiblePosts.length ? visiblePosts.map((post) => <CommunityPostCard key={postKey(post)} post={post} profile={profile} fullPageDetail/>) : <div className="empty-results">No posts match that filter yet.</div>}
+          {loading ? <div className="feed-skeleton-list" role="status" aria-label="Loading community posts" aria-busy="true">
+            {Array.from({ length: 3 }, (_, index) => <FeedPostSkeleton key={index}/>)}
+          </div> : error && !posts.length ? <p className="content-status content-status--error">{error}</p> : visiblePosts.length ? visiblePosts.map((post) => <CommunityPostCard key={postKey(post)} post={post} profile={profile} fullPageDetail/>) : <div className="empty-results">No posts match that filter yet.</div>}
           {!loading && <div ref={loadMoreTrigger} className="feed-load-more" aria-live="polite">
-            {loadingMore && <span>Loading more posts...</span>}
+            {loadingMore && <div className="feed-skeleton-more" role="status" aria-label="Loading more community posts" aria-busy="true">
+              {Array.from({ length: 2 }, (_, index) => <FeedPostSkeleton key={index}/>)}
+            </div>}
             {error && posts.length > 0 && <span className="content-status--error">{error}</span>}
           </div>}
         </main>
@@ -137,6 +148,6 @@ export default function CommunityFeedPage() {
       </div>
     </MemberPageLayout>
     <ChatbotWidget/>
-    {composerOpen && <CreateBlogPage modal onClose={closeComposer}/>}
+    {composerType && <CreateBlogPage modal defaultType={composerType} onClose={closeComposer}/>}
   </>;
 }

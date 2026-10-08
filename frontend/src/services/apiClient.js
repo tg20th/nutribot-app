@@ -1,3 +1,5 @@
+import { getApiAuthFailureState } from './loginErrorState';
+
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 
 export class ApiError extends Error {
@@ -8,11 +10,45 @@ export async function apiRequest(path, options = {}) {
   const { body, headers, signal, token, ...requestOptions } = options;
   const authToken = token ?? (typeof window !== 'undefined' ? localStorage.getItem('nutribot-auth-token') : null);
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
-  const response = await fetch(`${baseUrl}${path}`, { ...requestOptions, signal, headers: { Accept: 'application/json', ...(body && !isFormData ? { 'Content-Type': 'application/json' } : {}), ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}), ...headers }, body });
+
+  let response;
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      ...requestOptions,
+      signal,
+      headers: {
+        Accept: 'application/json',
+        ...(body && !isFormData ? { 'Content-Type': 'application/json' } : {}),
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...headers
+      },
+      body
+    });
+  } catch (networkError) {
+    // Cung cấp thông tin chi tiết hơn về lỗi network
+    if (networkError.name === 'AbortError') {
+      throw new ApiError('Yêu cầu bị hủy bởi người dùng', 0, null);
+    }
+    throw new ApiError(
+      `Không thể kết nối đến máy chủ. Vui lòng kiểm tra:\n1. Backend server đang chạy trên port 8080\n2. Kết nối mạng ổn định\n3. Không có VPN/Firewall chặn kết nối`,
+      0,
+      { originalError: networkError.message }
+    );
+  }
+
   if (response.status === 204) return null;
   const contentType = response.headers.get('content-type') ?? '';
   const payload = contentType.includes('application/json') ? await response.json() : await response.text();
-  if (!response.ok) throw new ApiError(payload?.message || `Request failed (${response.status})`, response.status, payload);
+  if (!response.ok) {
+    const authFailureState = getApiAuthFailureState(response.status, Boolean(authToken));
+    if (authFailureState && typeof window !== 'undefined') {
+      localStorage.removeItem('nutribot-auth-token');
+      localStorage.removeItem('nutribot-user');
+      window.dispatchEvent(new CustomEvent('nutribot-auth-changed'));
+      window.dispatchEvent(new CustomEvent('nutribot-auth-failure', { detail: { state: authFailureState } }));
+    }
+    throw new ApiError(payload?.message || `Yêu cầu thất bại (${response.status})`, response.status, payload);
+  }
   return payload;
 }
 export const unwrapData = (payload, fallback = []) => Array.isArray(payload) ? payload : payload?.data ?? payload?.items ?? payload?.results ?? fallback;
