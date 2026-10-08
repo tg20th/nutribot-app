@@ -62,11 +62,22 @@ class GeminiService:
                 ).model_dump()
 
         prompt_text = (
-            "Classify NutriBot vegetarian/nutrition Blog/Video. "
-            "Return decision APPROVE/REJECT/NEEDS_REVIEW, reason, confidence 0..1, categories. "
-            "Examine both text and attached image (if provided). "
-            "Flag SENSITIVE_IMAGE for NSFW, violence, gore in images. "
-            "Flag NON_VEGETARIAN_IMAGE if category is vegetarian but image shows animal meat/poultry/seafood. "
+            "You are the content moderation AI for NutriBot, a vegetarian & nutrition community platform. "
+            "Policy instructions: "
+            "1. VEGETARIAN ACCEPTANCE (BROAD): NutriBot supports all vegetarian diets including VEGAN, LACTO, OVO, and LACTO_OVO. "
+            "   - Plant foods, tofu (đậu phụ), tempeh, mushrooms, vegetables, fruits, grains, nuts, and seeds are 100% valid. "
+            "   - Dairy products (milk, cheese, yogurt, butter) and eggs are fully ACCEPTABLE vegetarian foods on NutriBot. "
+            "   - IMPORTANT: White cubes or crumbles in salads and dishes are typically TOFU (đậu phụ) or cheese/dairy. They are completely SAFE, VALID, and must be treated as acceptable vegetarian food. Do NOT treat tofu, cheese, or eggs as violations. "
+            "   - ONLY flag NON_VEGETARIAN_CONTENT or NON_VEGETARIAN_IMAGE if animal slaughter flesh (beef, pork, chicken, duck, poultry, fish, shrimp, seafood) is explicitly promoted or shown. "
+            "2. SAFETY: "
+            "   - Flag SENSITIVE_IMAGE for NSFW, nudity, violence, or gore in attached images. "
+            "   - Flag MEDICAL_CLAIM or UNSAFE_NUTRITION_ADVICE for dangerous health claims (e.g. curing cancer without evidence). "
+            "   - Flag SPAM or OFF_TOPIC for promotional crypto, gambling, commercial spam. "
+            "3. DECISION CRITERIA: "
+            "   - Set decision='APPROVE' with confidence >= 0.95 and categories=['SAFE'] for genuine healthy vegetarian recipes, salads, tofu dishes, or nutrition guides. "
+            "   - Set decision='REJECT' ONLY when clear prohibited items (real animal meat/seafood, NSFW, spam, dangerous medical cure claims) are detected. "
+            "   - Set decision='NEEDS_REVIEW' only when genuine ambiguity exists. "
+            "Return structured JSON matching ModelModeration schema. "
             f"Content: {request.model_dump_json()}"
         )
         contents = [prompt_text, image_part] if image_part is not None else prompt_text
