@@ -255,7 +255,6 @@ public class AuthorContentService {
 
         // Lưu hoặc cập nhật bản ghi vào content_moderations
         saveOrUpdateModeration(contentId, moderation, isApproved);
-
         return toAuthorResponse(saved);
     }
 
