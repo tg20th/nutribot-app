@@ -27,10 +27,11 @@ export default function MealEditorDialog({ editor, dishes, onClose, onSubmit }) 
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
+  const isAddMode = !editor?.meal;
+
   // In ADD mode, filter out dishes already in this slot to avoid duplicates
   const existingSlotDishIds = useMemo(() => {
     if (!isAddMode) return new Set();
-    // editor.day.meals = meals already in this slot
     const slotMeals = editor?.day?.meals ?? [];
     return new Set(slotMeals.map((m) => String(m.dishId)));
   }, [editor, isAddMode]);

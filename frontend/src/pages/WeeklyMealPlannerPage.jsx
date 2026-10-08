@@ -264,7 +264,8 @@ export default function WeeklyMealPlannerPage() {
   const confirmOverflowKeep = () => {
     if (!pendingOverflowMeal || !pendingNutritionOverflow) return;
     const { newMeal, isAddMode } = pendingOverflowMeal;
-    const dayIndex = editor?.dayIndex ?? pendingOverflowMeal.dayIndex;
+    const dayIndex = editor.dayIndex;
+    const targetMealKey = editor.meal?.key;
     setMenu((current) => recalculateMenu({
       ...current,
       days: current.days.map((day, index) => {
@@ -272,7 +273,7 @@ export default function WeeklyMealPlannerPage() {
         if (isAddMode) {
           return { ...day, meals: [...day.meals, newMeal] };
         } else {
-          return { ...day, meals: day.meals.map((meal) => meal.key === pendingOverflowMeal.mealKey ? newMeal : meal) };
+          return { ...day, meals: day.meals.map((meal) => meal.key === targetMealKey ? newMeal : meal) };
         }
       })
     }));
