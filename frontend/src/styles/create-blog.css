@@ -53,9 +53,12 @@
 @media(max-width:550px){.create-blog-backdrop{padding:8px}.create-blog-dialog{max-height:calc(100dvh - 16px);border-radius:18px}.create-blog-dialog .create-blog-main{padding:12px}.create-blog-close{top:23px;right:23px}}
 
 /* Recipe Ingredients & Steps Structured Layout */
-.recipe-subhead{display:flex;justify-content:space-between;align-items:center;margin:14px 0 8px}
+.recipe-subhead{display:flex;justify-content:space-between;align-items:center;margin:10px 0 8px}
 .recipe-subhead label{margin:0!important;font-size:13px;font-weight:700;color:#173529}
 .recipe-subhead small{color:#68746c;font-size:11px;font-weight:400;margin-left:6px}
+.recipe-subhead-icon{color:#498031;margin-right:2px}
+.recipe-nutrition-subhead-title{display:inline-flex;align-items:center;gap:6px;color:#244d33;font-weight:800}
+
 .recipe-ingredient-rows{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
 .recipe-ingredient-row{display:grid;grid-template-columns:minmax(140px,1.8fr) minmax(80px,1fr) minmax(90px,1fr) 36px;gap:8px;align-items:center}
 .recipe-ingredient-select,.recipe-ingredient-qty,.recipe-ingredient-unit{min-height:42px!important;padding:8px 10px!important;font-size:13px!important;border-radius:9px!important}
@@ -72,12 +75,39 @@
 .recipe-ai-calc-btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 5px 14px rgba(23,53,41,.25);background:linear-gradient(135deg,#1b3d30 0%,#306b52 100%)}
 .recipe-ai-calc-btn:disabled{opacity:.7;cursor:not-allowed}
 .recipe-ai-feedback-banner{display:flex;align-items:center;gap:8px;padding:10px 14px;margin:6px 0 10px;border:1px solid #c2e2be;border-radius:10px;background:#eef8ec;color:#245821;font-size:12px;font-weight:600}
-.recipe-steps-list{display:flex;flex-direction:column;gap:10px;margin-bottom:10px}
-.recipe-step-item{display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid #d9e1d4;border-radius:12px;background:#fbfdf9}
-.recipe-step-badge{flex:none;display:inline-flex;align-items:center;justify-content:center;padding:4px 10px;border-radius:6px;background:#173529;color:#d7f261;font-size:11px;font-weight:800;letter-spacing:.02em}
-.recipe-step-textarea{display:block;flex:1 1 auto;min-height:64px!important;padding:8px 12px!important;border:1px solid #d2dbca!important;border-radius:8px!important;background:#ffffff!important;font-size:13px!important;line-height:1.5!important;resize:vertical!important}
-.recipe-step-textarea:focus{border-color:#597d39!important}
-.recipe-step-remove-btn{flex:none;display:grid;place-items:center;width:32px;height:32px;border:1px solid #ecd5cb;border-radius:8px;background:#fcf4f0;color:#a44835;cursor:pointer;margin-top:2px;transition:all .15s ease}
+
+/* Phân cụm riêng biệt: Time & Servings vs Dinh dưỡng AI tính */
+.recipe-subgroup-box{margin-top:14px;padding:14px 16px;border:1px solid #dbe3d3;border-radius:14px;background:#fcfdfa}
+.recipe-cooking-meta-box{background:linear-gradient(180deg,#fafcf8 0%,#f5f9f2 100%);border-color:#d5e0cd}
+.recipe-nutrition-box{background:linear-gradient(180deg,#f9fbf7 0%,#f2f8ed 100%);border-color:#ccdcc3;box-shadow:inset 0 1px 3px rgba(23,53,41,.03)}
+
+.recipe-cooking-meta-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px;margin-top:4px}
+.recipe-meta-field{display:flex;flex-direction:column;gap:5px;margin:0!important}
+.recipe-meta-label{font-size:12px;font-weight:700;color:#204030}
+.recipe-meta-label small{color:#68746c;font-size:11px;font-weight:500;margin-left:3px}
+.recipe-cooking-meta-grid input{min-height:40px!important;padding:8px 11px!important;border-radius:8px!important}
+
+.recipe-nutrition-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 14px;margin-top:4px}
+.recipe-nutrition-field{display:flex;flex-direction:column;gap:5px;margin:0!important}
+.recipe-nutrition-label{font-size:12px;font-weight:700;color:#244d33}
+.recipe-nutrition-label small{color:#577452;font-size:11px;font-weight:600;margin-left:3px}
+.recipe-nutrition-grid input{min-height:40px!important;padding:8px 11px!important;border-radius:8px!important}
+
+/* Steps (Cách làm): Chiều cao mặc định bằng nhãn Step 1, không tràn */
+.recipe-steps-list{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.recipe-step-item{display:flex;gap:8px;align-items:center;width:100%;min-width:0;box-sizing:border-box;padding:4px;border:1px solid #d9e1d4;border-radius:10px;background:#fbfdf9;transition:border-color .15s ease}
+.recipe-step-item:focus-within{border-color:#597d39;background:#ffffff}
+.recipe-step-badge{flex:none;display:inline-flex;align-items:center;justify-content:center;height:38px;min-height:38px;padding:0 12px;border-radius:8px;background:#173529;color:#d7f261;font-size:11px;font-weight:800;letter-spacing:.02em;box-sizing:border-box;white-space:nowrap}
+.recipe-step-input{flex:1 1 0;min-width:0;width:100%;height:38px;min-height:38px!important;padding:0 12px!important;border:1px solid #d2dbca!important;border-radius:8px!important;background:#ffffff!important;color:#173529!important;font:400 13px/1.4 'Outfit',sans-serif!important;box-sizing:border-box}
+.recipe-step-input:focus{outline:none;border-color:#487431!important;box-shadow:0 0 0 2px rgba(72,116,49,.15)}
+.recipe-step-remove-btn{flex:none;display:grid;place-items:center;width:38px;height:38px;min-height:38px;border:1px solid #ecd5cb;border-radius:8px;background:#fcf4f0;color:#a44835;cursor:pointer;margin:0;transition:all .15s ease;box-sizing:border-box}
 .recipe-step-remove-btn:hover{background:#f8ded4;color:#8c2e1b}
-@media(max-width:600px){.recipe-ingredient-row{grid-template-columns:1fr 1fr;gap:6px}.recipe-ingredient-select,.recipe-custom-input-wrap{grid-column:1/-1}}
+
+@media(max-width:600px){
+  .recipe-ingredient-row{grid-template-columns:1fr 1fr;gap:6px}
+  .recipe-ingredient-select,.recipe-custom-input-wrap{grid-column:1/-1}
+  .recipe-cooking-meta-grid{grid-template-columns:1fr}
+  .recipe-nutrition-grid{grid-template-columns:1fr 1fr}
+  .recipe-step-badge{padding:0 8px;font-size:10px}
+}
 

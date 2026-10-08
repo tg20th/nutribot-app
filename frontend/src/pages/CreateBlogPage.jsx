@@ -28,26 +28,41 @@ const FALLBACK_INGREDIENTS = [
 
 const MEASUREMENT_UNITS = [
   { value: 'g', label: 'g (Gram)' },
-  { value: 'ml', label: 'ml (Mililit)' },
-  { value: 'kg', label: 'kg' },
-  { value: 'l', label: 'l (Lít)' },
-  { value: 'tbsp', label: 'tbsp (Thìa canh)' },
-  { value: 'tsp', label: 'tsp (Thìa cà phê)' },
-  { value: 'quả', label: 'quả / trái' },
-  { value: 'củ', label: 'củ' },
-  { value: 'chén', label: 'chén / bát' },
-  { value: 'cái', label: 'cái / lát' },
-  { value: 'gói', label: 'gói / hộp' },
+  { value: 'ml', label: 'ml (Milliliter)' },
+  { value: 'kg', label: 'kg (Kilogram)' },
+  { value: 'l', label: 'l (Liter)' },
+  { value: 'tbsp', label: 'tbsp (Tablespoon)' },
+  { value: 'tsp', label: 'tsp (Teaspoon)' },
+  { value: 'pcs', label: 'pcs (Pieces)' },
+  { value: 'cup', label: 'cup (Cup)' },
+  { value: 'pack', label: 'pack (Pack / Box)' },
+  { value: 'quả', label: 'quả / piece' },
+  { value: 'củ', label: 'củ / piece' },
+  { value: 'chén', label: 'chén / cup' },
+  { value: 'cái', label: 'cái / slice' },
+  { value: 'gói', label: 'gói / pack' },
 ];
 
 const emptyRecipeDetails = {
   prepMinutes: '', cookMinutes: '', servings: '', calories: '', proteinG: '', carbsG: '', fatG: '', fiberG: '', sodiumMg: '',
 };
 
-const numericDetailLabels = [
-  ['prepMinutes', 'Prep time', 'min'], ['cookMinutes', 'Cook time', 'min'], ['servings', 'Servings', ''], ['calories', 'Calories', 'kcal'],
-  ['proteinG', 'Protein', 'g'], ['carbsG', 'Carbohydrates', 'g'], ['fatG', 'Fat', 'g'], ['fiberG', 'Fiber', 'g'], ['sodiumMg', 'Sodium', 'mg'],
+const cookingMetaLabels = [
+  ['prepMinutes', 'Prep time', 'min'],
+  ['cookMinutes', 'Cook time', 'min'],
+  ['servings', 'Servings', ''],
 ];
+
+const nutritionDetailLabels = [
+  ['calories', 'Calories', 'kcal'],
+  ['proteinG', 'Protein', 'g'],
+  ['carbsG', 'Carbohydrates', 'g'],
+  ['fatG', 'Fat', 'g'],
+  ['fiberG', 'Fiber', 'g'],
+  ['sodiumMg', 'Sodium', 'mg'],
+];
+
+const numericDetailLabels = [...cookingMetaLabels, ...nutritionDetailLabels];
 
 function makeContentBody(body, details, ingredientRows = [], stepRows = []) {
   const cleanBody = stripHtmlToCleanText(body);
@@ -240,6 +255,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const [busy, setBusy] = useState(false);
   const bodyRef = useRef(null);
   const dialogRef = useRef(null);
+  const stepInputRefs = useRef([]);
   const submitting = useRef(false);
 
   const isVideo = editing ? editType === CONTENT_TYPES.VIDEO : contentType === CONTENT_TYPES.VIDEO;
@@ -270,15 +286,15 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
 
   function missingRequiredFields() {
     const missing = [];
-    if (!trimmedTitle) missing.push('tiêu đề (title)');
-    if (!trimmedBody) missing.push(isVideo ? 'mô tả video' : 'nội dung bài viết');
-    if (isVideo && !hasVideo) missing.push('video tải lên');
-    if (!hasThumbnail) missing.push(isVideo ? 'ảnh đại diện video' : 'ảnh bìa bài viết');
+    if (!trimmedTitle) missing.push('title');
+    if (!trimmedBody) missing.push(isVideo ? 'video description' : 'post content');
+    if (isVideo && !hasVideo) missing.push('video file');
+    if (!hasThumbnail) missing.push(isVideo ? 'video thumbnail' : 'cover image');
     const validIngredients = ingredientRows.map((r) => (r.isCustom ? r.customName : r.name)?.trim()).filter(Boolean);
     const validSteps = stepRows.map((s) => s.trim()).filter(Boolean);
-    if (!validIngredients.length) missing.push('thành phần nguyên liệu (ingredients)');
-    if (!validSteps.length) missing.push('các bước chế biến (steps)');
-    if (!categoryId) missing.push('danh mục (category)');
+    if (!validIngredients.length) missing.push('ingredients');
+    if (!validSteps.length) missing.push('preparation steps');
+    if (!categoryId) missing.push('category');
     return missing;
   }
 
@@ -304,7 +320,13 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   }
 
   function addStepRow() {
-    setStepRows((prev) => [...prev, '']);
+    setStepRows((prev) => {
+      const next = [...prev, ''];
+      setTimeout(() => {
+        stepInputRefs.current[next.length - 1]?.focus();
+      }, 40);
+      return next;
+    });
   }
 
   function updateStepRow(index, value) {
@@ -313,6 +335,20 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
 
   function removeStepRow(index) {
     setStepRows((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : ['']));
+  }
+
+  function handleStepKeyDown(event, index) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      setStepRows((prev) => {
+        const next = [...prev];
+        next.splice(index + 1, 0, '');
+        setTimeout(() => {
+          stepInputRefs.current[index + 1]?.focus();
+        }, 40);
+        return next;
+      });
+    }
   }
 
   async function handleCalculateNutrition() {
@@ -325,7 +361,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
       .filter((row) => Boolean(row.name));
 
     if (!validIngredients.length) {
-      setError('Vui lòng chọn hoặc nhập ít nhất một nguyên liệu trước khi tính dinh dưỡng.');
+      setError('Please choose or enter at least one ingredient before calculating nutrition.');
       return;
     }
 
@@ -337,7 +373,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
       const servings = Number(recipeDetails.servings) || 1;
       const res = await calculateRecipeNutrition({
         servings,
-        dishName: trimmedTitle || 'Món ăn dinh dưỡng',
+        dishName: trimmedTitle || 'Healthy dish',
         ingredients: validIngredients,
       });
       const facts = res?.nutritionFacts || res || {};
@@ -350,9 +386,9 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         fiberG: facts.fiberG != null ? String(facts.fiberG) : prev.fiberG,
         sodiumMg: facts.sodiumMg != null ? String(facts.sodiumMg) : prev.sodiumMg,
       }));
-      setAiCalcSuccess('AI đã tự động tính toán dinh dưỡng thành công dựa trên nguyên liệu của bạn!');
+      setAiCalcSuccess('AI calculated nutrition facts successfully based on your ingredients!');
     } catch (err) {
-      setError('Không thể tính toán dinh dưỡng tự động lúc này. Bạn có thể tự nhập thủ công.');
+      setError('Could not calculate nutrition automatically at this time. You can enter values manually.');
     } finally {
       setIsCalculatingNutrition(false);
     }
@@ -562,8 +598,8 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
             <div className="create-blog-section-heading">
               <span><Clock3 size={16}/></span>
               <div>
-                <h2>Thông tin công thức (Recipe details)</h2>
-                <p>Thành phần nguyên liệu, tính toán dinh dưỡng và các bước thực hiện.</p>
+                <h2>Recipe details</h2>
+                <p>Ingredients, nutritional values, and preparation steps.</p>
               </div>
             </div>
             <button
@@ -573,20 +609,20 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
               onClick={() => setShowRecipeDetails((visible) => !visible)}
               disabled={busy}
             >
-              {showRecipeDetails ? 'Ẩn chi tiết' : 'Hiện chi tiết'}
+              {showRecipeDetails ? 'Hide details' : 'Show details'}
             </button>
           </div>
 
           {showRecipeDetails && (
             <>
-              {/* PHẦN 1: NGUYÊN LIỆU (SELECT + KHỐI LƯỢNG) */}
+              {/* INGREDIENTS */}
               <div className="recipe-subhead">
                 <label>
-                  <span>Thành phần nguyên liệu (Ingredients) <small>chọn nguyên liệu và nhập định lượng</small></span>
+                  <span>Ingredients <small>select ingredients and enter quantity</small></span>
                 </label>
               </div>
 
-              <div className="recipe-ingredient-rows" role="group" aria-label="Danh sách nguyên liệu">
+              <div className="recipe-ingredient-rows" role="group" aria-label="Ingredients list">
                 {ingredientRows.map((row, index) => (
                   <div key={index} className="recipe-ingredient-row">
                     {!row.isCustom ? (
@@ -595,33 +631,33 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
                         value={row.name}
                         onChange={(e) => updateIngredientRow(index, 'name', e.target.value)}
                         disabled={busy}
-                        aria-label={`Chọn nguyên liệu ${index + 1}`}
+                        aria-label={`Select ingredient ${index + 1}`}
                       >
-                        <option value="">-- Chọn nguyên liệu --</option>
+                        <option value="">-- Select ingredient --</option>
                         {combinedIngredients.map((name) => (
                           <option key={name} value={name}>{name}</option>
                         ))}
-                        <option value="__custom__">➕ Khác (tự gõ tên)...</option>
+                        <option value="__custom__">➕ Other (custom name)...</option>
                       </select>
                     ) : (
                       <div className="recipe-custom-input-wrap">
                         <input
                           type="text"
                           className="recipe-ingredient-custom-input"
-                          placeholder="Tên nguyên liệu..."
+                          placeholder="Ingredient name..."
                           value={row.customName}
                           onChange={(e) => updateIngredientRow(index, 'customName', e.target.value)}
                           disabled={busy}
-                          aria-label={`Nhập tên nguyên liệu ${index + 1}`}
+                          aria-label={`Enter ingredient name ${index + 1}`}
                         />
                         <button
                           type="button"
                           className="recipe-back-to-select-btn"
-                          title="Chọn từ danh sách có sẵn"
+                          title="Select from list"
                           onClick={() => updateIngredientRow(index, 'name', '')}
                           disabled={busy}
                         >
-                          Danh sách
+                          List
                         </button>
                       </div>
                     )}
@@ -631,11 +667,11 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
                       min="0"
                       step="any"
                       className="recipe-ingredient-qty"
-                      placeholder="Khối lượng"
+                      placeholder="Quantity"
                       value={row.quantity}
                       onChange={(e) => updateIngredientRow(index, 'quantity', e.target.value)}
                       disabled={busy}
-                      aria-label={`Khối lượng nguyên liệu ${index + 1}`}
+                      aria-label={`Ingredient quantity ${index + 1}`}
                     />
 
                     <select
@@ -643,7 +679,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
                       value={row.unit}
                       onChange={(e) => updateIngredientRow(index, 'unit', e.target.value)}
                       disabled={busy}
-                      aria-label={`Đơn vị nguyên liệu ${index + 1}`}
+                      aria-label={`Ingredient unit ${index + 1}`}
                     >
                       {MEASUREMENT_UNITS.map((u) => (
                         <option key={u.value} value={u.value}>{u.label}</option>
@@ -653,8 +689,8 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
                     <button
                       type="button"
                       className="recipe-row-remove-btn"
-                      title="Xóa nguyên liệu này"
-                      aria-label={`Xóa nguyên liệu ${index + 1}`}
+                      title="Remove ingredient"
+                      aria-label={`Remove ingredient ${index + 1}`}
                       onClick={() => removeIngredientRow(index)}
                       disabled={busy}
                     >
@@ -671,7 +707,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
                   onClick={addIngredientRow}
                   disabled={busy}
                 >
-                  <Plus size={15}/> Thêm nguyên liệu
+                  <Plus size={15}/> Add ingredient
                 </button>
 
                 <button
@@ -683,12 +719,12 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
                   {isCalculatingNutrition ? (
                     <>
                       <LoaderCircle className="my-blogs-spinner" size={15}/>
-                      <span>AI đang tính toán...</span>
+                      <span>Calculating...</span>
                     </>
                   ) : (
                     <>
                       <Sparkles size={15}/>
-                      <span>Tự động tính dinh dưỡng bằng AI</span>
+                      <span>Auto calculate nutrition</span>
                     </>
                   )}
                 </button>
@@ -701,55 +737,92 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
                 </div>
               )}
 
-              {/* PHẦN 2: THÔNG SỐ DINH DƯỠNG & THỜI GIAN */}
-              <div className="recipe-subhead" style={{ marginTop: '18px' }}>
-                <label>
-                  <span>Chỉ số dinh dưỡng & Thời gian <small>AI tự động điền hoặc nhập thủ công</small></span>
-                </label>
-              </div>
-
-              <div className="create-blog-detail-grid">
-                {numericDetailLabels.map(([key, label, unit]) => (
-                  <label key={key} htmlFor={`recipe-${key}`}>
-                    {label}{unit && <small>{unit}</small>}
-                    <input
-                      id={`recipe-${key}`}
-                      type="number"
-                      min="0"
-                      step={key === 'servings' ? '1' : '0.1'}
-                      value={recipeDetails[key]}
-                      onChange={(event) => setRecipeDetails({ ...recipeDetails, [key]: event.target.value })}
-                      disabled={busy}
-                    />
+              {/* GROUP 1: COOKING TIME & SERVINGS */}
+              <div className="recipe-subgroup-box recipe-cooking-meta-box">
+                <div className="recipe-subhead">
+                  <label>
+                    <span>Time & Servings <small>prep time, cook time, and portions</small></span>
                   </label>
-                ))}
+                </div>
+                <div className="recipe-cooking-meta-grid">
+                  {cookingMetaLabels.map(([key, label, unit]) => (
+                    <label key={key} htmlFor={`recipe-${key}`} className="recipe-meta-field">
+                      <span className="recipe-meta-label">
+                        {label} {unit && <small>({unit})</small>}
+                      </span>
+                      <input
+                        id={`recipe-${key}`}
+                        type="number"
+                        min="0"
+                        step={key === 'servings' ? '1' : '0.1'}
+                        placeholder={unit ? `0 ${unit}` : '1'}
+                        value={recipeDetails[key]}
+                        onChange={(event) => setRecipeDetails({ ...recipeDetails, [key]: event.target.value })}
+                        disabled={busy}
+                      />
+                    </label>
+                  ))}
+                </div>
               </div>
 
-              {/* PHẦN 3: CÁC BƯỚC THỰC HIỆN (METHOD / STEPS) */}
-              <div className="recipe-subhead" style={{ marginTop: '20px' }}>
+              {/* GROUP 2: NUTRITION ESTIMATES (AI TÍNH RIÊNG) */}
+              <div className="recipe-subgroup-box recipe-nutrition-box">
+                <div className="recipe-subhead">
+                  <label>
+                    <span className="recipe-nutrition-subhead-title">
+                      <Sparkles size={14} className="recipe-subhead-icon"/>
+                      Nutrition facts <small>AI-calculated or manual input</small>
+                    </span>
+                  </label>
+                </div>
+                <div className="recipe-nutrition-grid">
+                  {nutritionDetailLabels.map(([key, label, unit]) => (
+                    <label key={key} htmlFor={`recipe-${key}`} className="recipe-nutrition-field">
+                      <span className="recipe-nutrition-label">
+                        {label} <small>({unit})</small>
+                      </span>
+                      <input
+                        id={`recipe-${key}`}
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        placeholder="0"
+                        value={recipeDetails[key]}
+                        onChange={(event) => setRecipeDetails({ ...recipeDetails, [key]: event.target.value })}
+                        disabled={busy}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* GROUP 3: PREPARATION STEPS (METHOD) */}
+              <div className="recipe-subhead" style={{ marginTop: '22px' }}>
                 <label>
-                  <span>Các bước thực hiện (Method / Steps) <small>hướng dẫn từng bước cách làm</small></span>
+                  <span>Preparation steps (Method) <small>step-by-step instructions</small></span>
                 </label>
               </div>
 
-              <div className="recipe-steps-list" role="group" aria-label="Các bước thực hiện">
+              <div className="recipe-steps-list" role="group" aria-label="Preparation steps">
                 {stepRows.map((step, index) => (
                   <div key={index} className="recipe-step-item">
-                    <span className="recipe-step-badge">Bước {index + 1}</span>
-                    <textarea
-                      rows={2}
-                      className="recipe-step-textarea"
-                      placeholder={`Mô tả chi tiết bước ${index + 1}...`}
+                    <span className="recipe-step-badge">Step {index + 1}</span>
+                    <input
+                      ref={(el) => { stepInputRefs.current[index] = el; }}
+                      type="text"
+                      className="recipe-step-input"
+                      placeholder={`Describe step ${index + 1}...`}
                       value={step}
                       onChange={(e) => updateStepRow(index, e.target.value)}
+                      onKeyDown={(e) => handleStepKeyDown(e, index)}
                       disabled={busy}
-                      aria-label={`Mô tả bước ${index + 1}`}
+                      aria-label={`Step ${index + 1} description`}
                     />
                     <button
                       type="button"
                       className="recipe-step-remove-btn"
-                      title="Xóa bước này"
-                      aria-label={`Xóa bước ${index + 1}`}
+                      title="Remove this step"
+                      aria-label={`Remove step ${index + 1}`}
                       onClick={() => removeStepRow(index)}
                       disabled={busy}
                     >
@@ -766,7 +839,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
                   onClick={addStepRow}
                   disabled={busy}
                 >
-                  <Plus size={15}/> Thêm bước tiếp theo
+                  <Plus size={15}/> Add next step
                 </button>
               </div>
             </>
