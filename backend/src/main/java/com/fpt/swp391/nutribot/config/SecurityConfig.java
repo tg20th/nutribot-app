@@ -205,21 +205,13 @@ public class SecurityConfig {
     private String determineFrontendBaseUrl(HttpServletRequest request) {
         String forwardedHost = request.getHeader("X-Forwarded-Host");
         String forwardedProto = request.getHeader("X-Forwarded-Proto");
-        if (StringUtils.hasText(forwardedHost)) {
+        if (StringUtils.hasText(forwardedHost) && !forwardedHost.contains("localhost") && !forwardedHost.contains("127.0.0.1")) {
             String proto = StringUtils.hasText(forwardedProto) ? forwardedProto : "https";
             return proto + "://" + forwardedHost;
         }
         String origin = request.getHeader("Origin");
-        if (StringUtils.hasText(origin)) {
+        if (StringUtils.hasText(origin) && !origin.contains("google.com") && !origin.contains("accounts.google")) {
             return origin;
-        }
-        String referer = request.getHeader("Referer");
-        if (StringUtils.hasText(referer)) {
-            try {
-                java.net.URI uri = java.net.URI.create(referer);
-                return uri.getScheme() + "://" + uri.getAuthority();
-            } catch (Exception ignored) {
-            }
         }
         return "http://localhost:5173";
     }
