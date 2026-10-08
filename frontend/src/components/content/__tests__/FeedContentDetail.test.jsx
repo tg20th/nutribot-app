@@ -27,6 +27,7 @@ it.each(['blog', 'video'])('opens %s at the top, opens comments at the bottom, a
   expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
   if (type === 'video') expect(dialog.querySelector('video')).toHaveAttribute('controls');
   fireEvent.click(within(dialog).getByRole('button', { name: `Back to ${type}` }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   const trigger = screen.getByRole('button', { name: 'Comments' });
   trigger.focus();
   fireEvent.click(trigger);

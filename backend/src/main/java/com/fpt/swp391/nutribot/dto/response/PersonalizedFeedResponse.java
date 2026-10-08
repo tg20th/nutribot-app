@@ -41,6 +41,9 @@ public class PersonalizedFeedResponse {
         @JsonProperty("title")
         private String title;
 
+        @JsonProperty("caption")
+        private String caption;
+
         @JsonProperty("slug")
         private String slug;
 

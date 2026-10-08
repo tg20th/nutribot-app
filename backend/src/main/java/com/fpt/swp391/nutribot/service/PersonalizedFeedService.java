@@ -28,11 +28,16 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class PersonalizedFeedService {
+
+    private static final Pattern RECIPE_SECTION_BOUNDARY = Pattern.compile(
+            "(?im)^\\s*##\\s*(?:recipe details|ingredients|steps)\\s*$|<h2[^>]*>\\s*(?:recipe details|ingredients|steps)\\s*</h2>");
 
     private static final String PUBLISHED_STATUS = "published";
     private static final int MAX_CATALOG_SIZE = 5000;
@@ -445,6 +450,7 @@ public class PersonalizedFeedService {
                 .contentId(content.getContentId())
                 .contentType(content.getContentType())
                 .title(content.getTitle())
+                .caption(extractFeedCaption(content.getBody()))
                 .slug(content.getSlug())
                 .thumbnailUrl(content.getThumbnailUrl())
                 .categoryId(content.getCategoryId())
@@ -459,6 +465,13 @@ public class PersonalizedFeedService {
                         : null)
                 .recommendationReason(reason)
                 .build();
+    }
+
+    private String extractFeedCaption(String body) {
+        if (body == null || body.isBlank()) return null;
+        Matcher boundary = RECIPE_SECTION_BOUNDARY.matcher(body);
+        String caption = (boundary.find() ? body.substring(0, boundary.start()) : body).trim();
+        return caption.isBlank() ? null : caption;
     }
 
     private SnapshotCursor decodeCursor(String cursor) {

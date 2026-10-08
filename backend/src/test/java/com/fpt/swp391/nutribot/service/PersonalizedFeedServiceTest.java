@@ -63,6 +63,18 @@ class PersonalizedFeedServiceTest {
     }
 
     @Test
+    void feedReturnsOnlyTheStoryBeforeRecipeSectionsAsCaption() {
+        Content snackChay = content(125, LocalDateTime.of(2026, 10, 8, 18, 51));
+        snackChay.setTitle("Snack chay");
+        snackChay.setBody("snack chay ngon ngon\n\n## Recipe details\n- Calories: 23 kcal\n\n## Ingredients\n- 100 g Cải bó xôi\n\n## Steps\n- Step 1: Trộn thui");
+        stubCatalog(List.of(snackChay));
+
+        PersonalizedFeedResponse response = service.getPersonalizedFeed(null, 1, null);
+
+        assertEquals("snack chay ngon ngon", response.getItems().getFirst().getCaption());
+    }
+
+    @Test
     void guestPaginatesAllFiftyEligibleContentsWithoutCallingAi() {
         stubCatalog(fiftyContents());
 

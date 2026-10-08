@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from '../apiClient';
-import { appendUniquePersonalizedPosts, getPersonalizedPostsPage, prioritizePersonalizedPost } from '../communityApi';
+import { appendUniquePersonalizedPosts, getPersonalizedPostsPage, normalizePost, prioritizePersonalizedPost } from '../communityApi';
 
 vi.mock('../apiClient', () => ({
   apiRequest: vi.fn(),
@@ -59,5 +59,51 @@ describe('personalized community feed API', () => {
     const rankedPosts = [{ id: 1, type: 'blog' }, priority, { id: 3, type: 'video' }];
 
     expect(prioritizePersonalizedPost(rankedPosts, priority).map((post) => post.id)).toEqual([2, 1, 3]);
+  });
+
+  it('preserves an API caption and nested nutrition metrics for the feed card', () => {
+    const post = normalizePost({
+      contentId: 9,
+      contentType: 'BLOG',
+      title: 'Bữa trưa xanh',
+      story: 'Rau theo mùa, thêm một chút chanh.\nĂn ngon nhé.',
+      nutrition: { calories: 420, proteinG: 24, carbsG: 38 }
+    });
+
+    expect(post.description).toBe('Rau theo mùa, thêm một chút chanh.\nĂn ngon nhé.');
+    expect(post.calories).toBe(420);
+    expect(post.protein).toBe(24);
+    expect(post.nutrition.carbs).toBe(38);
+  });
+
+  it('does not invent a caption or nutrition for the real Snack chay feed contract', () => {
+    const snackFeedItem = {
+      contentId: 125,
+      contentType: 'BLOG',
+      title: 'Snack chay',
+      thumbnailUrl: 'https://cdn.example.test/snack.jpg',
+      authorUsername: 'lan_tuyt',
+      authorName: 'Lan Tuyết',
+      createdAt: '2026-10-08T18:51:01.794Z'
+    };
+
+    const post = normalizePost(snackFeedItem, snackFeedItem.contentType);
+    expect(post.description).toBe('');
+    expect(post.calories).toBeNull();
+    expect(post.protein).toBeNull();
+  });
+
+  it('maps Snack chay detail body into its story and nutrition without including recipe sections', () => {
+    const post = normalizePost({
+      contentId: 125,
+      contentType: 'BLOG',
+      title: 'Snack chay',
+      body: 'snack chay ngon ngon\n\n## Recipe details\n- Calories: 23 kcal\n- Protein: 2.9 g\n- Carbohydrates: 3.6 g\n- Fat: 0.4 g\n\n## Ingredients\n- 100 g Cải bó xôi\n\n## Steps\n- Step 1: Trộn thui'
+    }, 'BLOG');
+
+    expect(post.description).toBe('snack chay ngon ngon');
+    expect(post.description).not.toContain('Ingredients');
+    expect(post.calories).toBe(23);
+    expect(post.protein).toBe(2.9);
   });
 });

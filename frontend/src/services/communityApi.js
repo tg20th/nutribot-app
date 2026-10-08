@@ -139,20 +139,34 @@ export function parseBodyRecipeData(body = '') {
   return data;
 }
 
+const firstDefined = (...values) => values.find((value) => value != null && value !== '');
+
+const normalizeNutrition = (item = {}, parsedRecipe = {}) => {
+  const metrics = item.nutrition ?? item.nutritionSummary ?? item.nutritionMetrics ?? {};
+  return {
+    calories: firstDefined(item.calories, item.caloriesKcal, metrics.calories, metrics.totalCalories, parsedRecipe.calories, null),
+    protein: firstDefined(item.protein, item.proteinG, metrics.protein, metrics.proteinG, parsedRecipe.protein, null),
+    carbs: firstDefined(metrics.carbs, metrics.carbsG, item.carbs, item.carbsG, parsedRecipe.nutrition?.carbs, null),
+    fat: firstDefined(metrics.fat, metrics.fatG, metrics.healthyFatsG, item.fat, item.fatG, parsedRecipe.nutrition?.fat, null),
+    fiber: firstDefined(metrics.fiber, metrics.fiberG, item.fiber, item.fiberG, parsedRecipe.nutrition?.fiber, null),
+    sodium: firstDefined(metrics.sodium, metrics.sodiumMg, item.sodium, item.sodiumMg, parsedRecipe.nutrition?.sodium, null),
+  };
+};
+
 export const normalizePost = (item = {}, fallbackType = 'BLOG') => {
   const rawType = item.type ?? item.contentType ?? fallbackType;
   const author = item.author ?? item.user ?? {};
   const parsedRecipe = parseBodyRecipeData(item.body);
   const cleanBody = parsedRecipe.cleanBody || stripHtmlToCleanText(item.body) || '';
-  const cleanDescription = item.description
-    ? stripHtmlToCleanText(item.description)
-    : (item.summary ? stripHtmlToCleanText(item.summary) : cleanBody);
+  const captionSource = firstDefined(item.caption, item.story, item.description, item.summary, typeof item.content === 'string' ? item.content : null, cleanBody);
+  const cleanDescription = stripHtmlToCleanText(captionSource);
+  const nutrition = normalizeNutrition(item, parsedRecipe);
 
   return {
     ...item,
-    calories: item.calories ?? parsedRecipe.calories ?? null,
-    protein: item.protein ?? parsedRecipe.protein ?? null,
-    nutrition: item.nutrition ?? parsedRecipe.nutrition ?? {},
+    calories: nutrition.calories,
+    protein: nutrition.protein,
+    nutrition,
     pantryItems: item.pantryItems ?? parsedRecipe.pantryItems ?? null,
     steps: item.steps ?? parsedRecipe.steps ?? null,
     servings: item.servings ?? parsedRecipe.servings ?? null,

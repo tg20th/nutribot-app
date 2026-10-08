@@ -41,3 +41,13 @@ export function normalizeContent(item = {}, fallbackType = 'Article') {
   };
 }
 export const normalizeCollection = (items, type) => asArray(items).map((item) => normalizeContent(item, type));
+
+export function formatPostDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(date);
+}
