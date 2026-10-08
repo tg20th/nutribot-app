@@ -26,7 +26,7 @@ export default function CommunityFeedPage() {
   const pagination = useRef({ cursor: null, hasMore: true });
   const loadingNextPage = useRef(false);
   const [filter, setFilter] = useState('All');
-  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerType, setComposerType] = useState(null);
   const [posts, setPosts] = useState([]); const [profile, setProfile] = useState({}); const [filters, setFilters] = useState([]); const [loading, setLoading] = useState(true); const [loadingMore, setLoadingMore] = useState(false); const [error, setError] = useState('');
 
   const loadNextPage = useCallback(async (signal, { initial = false } = {}) => {
@@ -82,8 +82,8 @@ export default function CommunityFeedPage() {
     return matchesFilter;
   }), [posts, filter]);
   const discoverPosts = useMemo(() => posts.filter((post) => post.image).slice(0, 2), [posts]);
-  const openComposer = () => { composerTrigger.current = document.activeElement; setComposerOpen(true); };
-  const closeComposer = () => { setComposerOpen(false); requestAnimationFrame(() => composerTrigger.current?.focus()); };
+  const openComposer = (type = 'blog') => { composerTrigger.current = document.activeElement; setComposerType(type); };
+  const closeComposer = () => { setComposerType(null); requestAnimationFrame(() => composerTrigger.current?.focus()); };
 
   useGSAP(() => {
     gsap.from('.feed-intro > *', { y: 28, opacity: 0, duration: .85, stagger: .11, ease: 'power3.out' });
@@ -121,6 +121,6 @@ export default function CommunityFeedPage() {
       </div>
     </MemberPageLayout>
     <ChatbotWidget/>
-    {composerOpen && <CreateBlogPage modal onClose={closeComposer}/>}
+    {composerType && <CreateBlogPage modal defaultType={composerType} onClose={closeComposer}/>}
   </>;
 }
