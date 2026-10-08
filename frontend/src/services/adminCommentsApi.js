@@ -13,13 +13,19 @@ let previewComments = [
 ];
 
 export const adminCommentsApi = {
-  async list({ page = 0, size = 10 } = {}, signal) {
+  async list({ page = 0, size = 10, keyword = '', status = '' } = {}, signal) {
     if (previewMode()) {
+      const normalizedKeyword = keyword.trim().toLowerCase();
+      const filtered = previewComments.filter((comment) => (!status || comment.status === status)
+        && (!normalizedKeyword || [comment.body, comment.username, comment.userEmail]
+          .some((value) => value?.toLowerCase().includes(normalizedKeyword))));
       const start = page * size;
-      return { content: previewComments.slice(start, start + size), page, size,
-        totalElements: previewComments.length, totalPages: Math.ceil(previewComments.length / size) };
+      return { content: filtered.slice(start, start + size), page, size,
+        totalElements: filtered.length, totalPages: Math.ceil(filtered.length / size) };
     }
     const params = new URLSearchParams({ page: String(page), size: String(size) });
+    if (keyword.trim()) params.set('keyword', keyword.trim());
+    if (status) params.set('status', status);
     const payload = await apiRequest(`/api/v1/admin/comments?${params}`, { signal });
     return unwrapData(payload, {});
   },
@@ -29,5 +35,12 @@ export const adminCommentsApi = {
       return Promise.resolve({ success: true, data: null });
     }
     return apiRequest(`/api/v1/admin/comments/${commentId}`, { method: 'DELETE' });
+  },
+  async updateStatus(commentId, status) {
+    const payload = await apiRequest(`/api/v1/admin/comments/${commentId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+    return unwrapData(payload, {});
   },
 };

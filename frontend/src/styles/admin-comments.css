@@ -8,7 +8,13 @@
 .comment-admin-intro{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:17px}
 .comment-admin-intro h2{margin:0;font:500 27px/1.15 'Playfair Display',Georgia,serif}
 .comment-admin-intro p{margin:6px 0 0;color:#6e6a63;font-size:12px}
-.comment-admin-intro>span{color:#6e6a63;font-size:11px;white-space:nowrap}
+.comment-admin-filters{display:flex;align-items:end;gap:10px}
+.comment-admin-search{display:flex;align-items:center;width:min(320px,42vw);height:40px;padding:0 10px;gap:7px;border:1px solid #c8d8c0;border-radius:8px;background:#fffefa;color:#6e6a63}
+.comment-admin-search:focus-within{border-color:#315c2b;box-shadow:0 0 0 3px rgba(49,92,43,.1)}
+.comment-admin-search input{min-width:0;min-height:0;flex:1;padding:0;border:0;background:transparent;box-shadow:none}
+.comment-admin-search button{display:grid;place-items:center;padding:3px;background:transparent;color:#6e6a63}
+.comment-admin-status-filter{display:grid;gap:5px;color:#6e6a63;font-size:10px;font-weight:700}
+.comment-admin-status-filter select{height:40px;min-height:40px;padding-right:28px;border-color:#c8d8c0;font-size:12px}
 .comment-admin-board{display:grid;grid-template-columns:minmax(300px,1fr) minmax(0,1.1fr);align-items:start;gap:17px}
 .comment-admin-list,.comment-admin-detail{min-width:0;overflow:hidden;border-color:#d8dfd2;border-radius:11px;background:#fffefa}
 .comment-admin-list-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:18px 20px;border-bottom:1px solid #e8e8df}
@@ -45,11 +51,11 @@
 .comment-admin-context>span{color:#6c8064;font-size:10px;font-weight:700;letter-spacing:.11em}
 .comment-admin-context strong{font-size:13px;overflow-wrap:anywhere}
 .comment-admin-context small{color:#6e6a63;font-size:11px}
-.comment-admin-actions{display:flex;justify-content:flex-end;padding:16px 22px;border-top:1px solid #e8e8df;background:#fbfbf7}
+.comment-admin-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;padding:16px 22px;border-top:1px solid #e8e8df;background:#fbfbf7}
 .comment-admin-actions .admin-btn:disabled{opacity:.55;cursor:wait}
 .comment-admin-state{display:grid;min-height:250px;place-items:center}
 .comment-admin-state .admin-empty{padding:40px 20px}
 .comment-admin-preview-marker{position:fixed;right:12px;bottom:10px;z-index:20;padding:5px 8px;border-radius:4px;background:#173529;color:#fffefa;font-size:10px;opacity:.8}
 @media(max-width:920px){.comment-admin-board{grid-template-columns:minmax(250px,.9fr) minmax(0,1fr);gap:12px}.comment-admin-item{padding:14px 12px}.comment-admin-item-top{align-items:start;flex-direction:column;gap:3px}}
-@media(max-width:700px){.comment-admin-hero{margin:-17px 0 22px;padding:25px 20px;align-items:start}.comment-admin-total{padding:9px}.comment-admin-total span{display:none}.comment-admin-board{grid-template-columns:1fr}.comment-admin-item-top{align-items:center;flex-direction:row}.comment-admin-detail-body{padding:20px}.comment-admin-detail blockquote{padding:18px}}
-@media(max-width:480px){.comment-admin-hero{display:block}.comment-admin-total{width:max-content;margin-top:17px}.comment-admin-intro{align-items:start;flex-direction:column}.comment-admin-item-top,.comment-admin-item-bottom{align-items:start;flex-direction:column}.comment-admin-detail-head{padding:16px}}
+@media(max-width:700px){.comment-admin-hero{margin:-17px 0 22px;padding:25px 20px;align-items:start}.comment-admin-total{padding:9px}.comment-admin-total span{display:none}.comment-admin-intro{align-items:start;flex-direction:column}.comment-admin-filters{width:100%;align-items:stretch}.comment-admin-search{width:auto;flex:1}.comment-admin-board{grid-template-columns:1fr}.comment-admin-item-top{align-items:center;flex-direction:row}.comment-admin-detail-body{padding:20px}.comment-admin-detail blockquote{padding:18px}}
+@media(max-width:480px){.comment-admin-hero{display:block}.comment-admin-total{width:max-content;margin-top:17px}.comment-admin-filters{flex-direction:column}.comment-admin-search,.comment-admin-status-filter{width:100%}.comment-admin-status-filter select{width:100%}.comment-admin-item-top,.comment-admin-item-bottom{align-items:start;flex-direction:column}.comment-admin-detail-head{padding:16px}.comment-admin-actions .admin-btn{flex:1}}
