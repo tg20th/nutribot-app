@@ -18,6 +18,8 @@ from app.schemas.moderation import ModerationRequest, ModerationResponse
 from app.services.content_moderation_service import ContentModerationService
 from app.schemas.deterministic_planner import DeterministicPlannerRequest
 from app.services.meal_planner_service import MealPlannerService
+from app.schemas.nutrition import NutritionCalculationRequest, NutritionCalculationResponse
+from app.services.nutrition_service import NutritionCalculationService
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +135,10 @@ def create_app(
     @application.post("/api/ai/moderate-content",response_model=ModerationResponse,tags=["Moderation"])
     async def moderate_content(request: ModerationRequest) -> ModerationResponse:
         return await ContentModerationService(application.state.gemini_service).moderate(request)
+
+    @application.post("/api/ai/calculate-nutrition", response_model=NutritionCalculationResponse, tags=["Nutrition"])
+    async def calculate_nutrition(request: NutritionCalculationRequest) -> NutritionCalculationResponse:
+        return await NutritionCalculationService(application.state.gemini_service).calculate(request)
 
     return application
 
