@@ -45,7 +45,7 @@ export default function MealEditorDialog({ editor, dishes, onClose, onSubmit }) 
           const selected = String(dish.dishId) === String(selectedId);
           return <button type="button" key={dish.dishId} className={selected ? 'is-selected' : ''} onClick={() => setSelectedId(dish.dishId)} role="option" aria-selected={selected}>
             <ImageWithFallback src={dish.image} alt="" />
-            <span><b>{dish.name}</b><small>{dish.calories} kcal · {dish.protein}g protein</small></span>
+            <span><b>{dish.name}</b><small>{dish.calories} kcal · {dish.protein}g protein · {dish.carbsG ?? 0}g carbs · {dish.healthyFatsG ?? 0}g fat</small></span>
             {selected && <Check size={16}/>} 
           </button>;
         })}

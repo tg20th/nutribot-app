@@ -7,7 +7,6 @@ import com.fpt.swp391.nutribot.dto.request.WeeklyMenuUpdateRequest;
 import com.fpt.swp391.nutribot.dto.response.WeeklyMenuResponse;
 import com.fpt.swp391.nutribot.dto.response.DishOptionResponse;
 import com.fpt.swp391.nutribot.dto.response.NutritionMetrics;
-import com.fpt.swp391.nutribot.dto.response.NutritionSummary;
 import com.fpt.swp391.nutribot.dto.response.NutritionTargetResponse;
 import com.fpt.swp391.nutribot.dto.response.WeeklyNutritionSummary;
 import com.fpt.swp391.nutribot.dto.response.MealPlanDayResponse;
@@ -471,28 +470,33 @@ public class WeeklyMenuService {
             missingFields = m;
         }
 
-        // Target + Percentage from NutritionTargetService (NB-10)
+        // Target + Percentage from NutritionTargetService (NB-10).
+        // Actuals are weekly totals, so targets are scaled to a week (x7) for
+        // every metric — otherwise percentages would be ~700% for macros.
         NutritionMetrics target = null;
         NutritionMetrics percentage = null;
 
-        if (profileMissingFields.isEmpty() && menu != null) {
+        if (profileMissingFields.isEmpty() && username != null) {
             NutritionTargetResponse nutTarget = nutritionTargetService.calculateTarget(username);
             long weeklyTargetCal = (long) nutTarget.calories() * 7L;
+            long weeklyTargetProteinG = (long) nutTarget.proteinG() * 7L;
+            long weeklyTargetCarbsG = (long) nutTarget.carbsG() * 7L;
+            long weeklyTargetHealthyFatsG = (long) nutTarget.healthyFatsG() * 7L;
             target = NutritionMetrics.builder()
                     .calories(weeklyTargetCal)
-                    .proteinG(BigDecimal.valueOf(nutTarget.proteinG()))
-                    .carbsG(BigDecimal.valueOf(nutTarget.carbsG()))
-                    .healthyFatsG(BigDecimal.valueOf(nutTarget.healthyFatsG()))
+                    .proteinG(BigDecimal.valueOf(weeklyTargetProteinG))
+                    .carbsG(BigDecimal.valueOf(weeklyTargetCarbsG))
+                    .healthyFatsG(BigDecimal.valueOf(weeklyTargetHealthyFatsG))
                     .build();
 
             if (weeklyCalories > 0 && weeklyTargetCal > 0) {
                 Long pctCal = Math.round(weeklyCalories * 100.0 / weeklyTargetCal);
-                BigDecimal pctProtein = hasProtein && nutTarget.proteinG() > 0
-                        ? BigDecimal.valueOf(weeklyProteinG.doubleValue() * 100.0 / nutTarget.proteinG()).setScale(1, RoundingMode.HALF_UP) : null;
-                BigDecimal pctCarbs = hasCarbs && nutTarget.carbsG() > 0
-                        ? BigDecimal.valueOf(weeklyCarbsG.doubleValue() * 100.0 / nutTarget.carbsG()).setScale(1, RoundingMode.HALF_UP) : null;
-                BigDecimal pctFats = hasFats && nutTarget.healthyFatsG() > 0
-                        ? BigDecimal.valueOf(weeklyFatsG.doubleValue() * 100.0 / nutTarget.healthyFatsG()).setScale(1, RoundingMode.HALF_UP) : null;
+                BigDecimal pctProtein = hasProtein && weeklyTargetProteinG > 0
+                        ? BigDecimal.valueOf(weeklyProteinG.doubleValue() * 100.0 / weeklyTargetProteinG).setScale(1, RoundingMode.HALF_UP) : null;
+                BigDecimal pctCarbs = hasCarbs && weeklyTargetCarbsG > 0
+                        ? BigDecimal.valueOf(weeklyCarbsG.doubleValue() * 100.0 / weeklyTargetCarbsG).setScale(1, RoundingMode.HALF_UP) : null;
+                BigDecimal pctFats = hasFats && weeklyTargetHealthyFatsG > 0
+                        ? BigDecimal.valueOf(weeklyFatsG.doubleValue() * 100.0 / weeklyTargetHealthyFatsG).setScale(1, RoundingMode.HALF_UP) : null;
                 percentage = NutritionMetrics.builder()
                         .calories(pctCal)
                         .proteinG(pctProtein)
@@ -516,15 +520,11 @@ public class WeeklyMenuService {
             allMissing.addAll(profileMissingFields);
         }
 
-        NutritionSummary summary = NutritionSummary.builder()
+        return WeeklyNutritionSummary.builder()
+                .status(status)
                 .actual(actual)
                 .target(target)
                 .percentage(percentage)
-                .build();
-
-        return WeeklyNutritionSummary.builder()
-                .status(status)
-                .summary(summary)
                 .missingFields(allMissing.isEmpty() ? List.of() : allMissing)
                 .build();
     }

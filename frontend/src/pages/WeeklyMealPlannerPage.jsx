@@ -63,10 +63,6 @@ export default function WeeklyMealPlannerPage() {
   const [pendingMealRemoval, setPendingMealRemoval] = useState(null);
   const [showGrocery, setShowGrocery] = useState(false);
   const [showAiGenerator, setShowAiGenerator] = useState(false);
-  const [aiIngredients, setAiIngredients] = useState('đậu hũ, nấm rơm, cà chua, rau cải');
-  const [aiAllergies, setAiAllergies] = useState('');
-  const [aiGoal, setAiGoal] = useState('maintain_weight');
-  const [aiCalories, setAiCalories] = useState('');
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [aiPreview, setAiPreview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -159,7 +155,6 @@ export default function WeeklyMealPlannerPage() {
     const dayIndex = editor.dayIndex;
     setMenu((current) => recalculateMenu({
       ...current,
-      nutritionSummary: null,
       days: current.days.map((day, index) => {
         if (index !== dayIndex) return day;
         if (!previousMeal) return { ...day, meals: [...day.meals, replacement] };
@@ -173,7 +168,6 @@ export default function WeeklyMealPlannerPage() {
       if (previousMeal) {
         const nextMenu = recalculateMenu({
           ...menu,
-          nutritionSummary: null,
           days: menu.days.map((day, index) => index !== dayIndex ? day : {
             ...day,
             meals: day.meals.map((meal) => meal.key === previousMeal.key ? replacement : meal)
@@ -195,7 +189,7 @@ export default function WeeklyMealPlannerPage() {
   };
 
   const removeMeal = async (dayIndex, meal) => {
-    setMenu((current) => recalculateMenu({ ...current, nutritionSummary: null, days: current.days.map((day, index) => index === dayIndex ? { ...day, meals: day.meals.filter((item) => item.key !== meal.key) } : day) }));
+    setMenu((current) => recalculateMenu({ ...current, days: current.days.map((day, index) => index === dayIndex ? { ...day, meals: day.meals.filter((item) => item.key !== meal.key) } : day) }));
     if (!menu.menuId || !meal.itemId) {
       setNotice({ type: 'success', text: `${meal.name} was removed from your local draft.` });
       return;
@@ -232,8 +226,13 @@ export default function WeeklyMealPlannerPage() {
   };
 
   const exportPlan = () => {
-    const rows = [['Day', 'Date', 'Meal', 'Dish', 'Calories', 'Protein (g)', 'Servings', 'Notes']];
-    plannerDays.forEach((day) => day.meals.forEach((meal) => rows.push([day.label, day.isoDate, meal.slot, meal.name, meal.kcal, meal.protein, meal.servings, meal.notes])));
+    const rows = [['Day', 'Date', 'Meal', 'Dish', 'Calories', 'Protein (g)', 'Carbs (g)', 'Fat (g)', 'Servings', 'Notes']];
+    plannerDays.forEach((day) => day.meals.forEach((meal) => {
+      const servings = Number(meal.servings ?? 1) || 1;
+      const carbs = Number.isFinite(Number(meal.carbsG)) ? Math.round(Number(meal.carbsG) * servings * 10) / 10 : '';
+      const fats = Number.isFinite(Number(meal.healthyFatsG)) ? Math.round(Number(meal.healthyFatsG) * servings * 10) / 10 : '';
+      rows.push([day.label, day.isoDate, meal.slot, meal.name, meal.kcal, meal.protein, carbs, fats, meal.servings, meal.notes]);
+    }));
     const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const anchor = document.createElement('a');
@@ -251,16 +250,10 @@ export default function WeeklyMealPlannerPage() {
       setShowProfileReadinessModal(true);
       return;
     }
-    const availableIngredients = aiIngredients.split(',').map((item) => item.trim()).filter(Boolean);
-    const excludedAllergies = aiAllergies.split(',').map((item) => item.trim()).filter(Boolean);
-    if (!availableIngredients.length) {
-      setNotice({ type: 'offline', text: 'Add at least one ingredient before generating a plan.' });
-      return;
-    }
     const requestId = ++plannerRequest.current;
     setGeneratingPlan(true);
     try {
-      const result = await generateMealPlan({ targetCalories: Number(aiCalories), healthGoal: plannerProfile.healthGoal ?? plannerProfile.health_goal, vegetarianType: plannerProfile.vegetarianType ?? plannerProfile.vegetarian_type, availableIngredients, excludedAllergies });
+      const result = await generateMealPlan({ vegetarianType: plannerProfile.vegetarianType ?? plannerProfile.vegetarian_type });
       if (!Array.isArray(result.weeklyPlan) || result.weeklyPlan.length !== 7) throw new Error('The planner did not return a valid seven-day meal plan.');
       if (requestId !== plannerRequest.current) return;
       setShowAiGenerator(false);
@@ -289,7 +282,7 @@ export default function WeeklyMealPlannerPage() {
   };
 
   const replacePreviewMeal = (dayIndex, field, dish) => {
-    setAiPreview((current) => current && ({ ...current, weeklyPlan: current.weeklyPlan.map((day, index) => index !== dayIndex ? day : ({ ...day, [field]: { dishId: dish.dishId, dishName: dish.name, calories: dish.calories, proteinG: dish.protein, imageUrl: dish.image, servings: day[field]?.servings ?? 1 } })) }));
+    setAiPreview((current) => current && ({ ...current, weeklyPlan: current.weeklyPlan.map((day, index) => index !== dayIndex ? day : ({ ...day, [field]: { dishId: dish.dishId, dishName: dish.name, calories: dish.calories, proteinG: dish.protein, carbsG: dish.carbsG, healthyFatsG: dish.healthyFatsG, imageUrl: dish.image, servings: day[field]?.servings ?? 1 } })) }));
     setAiSaveError('');
   };
 
@@ -301,7 +294,7 @@ export default function WeeklyMealPlannerPage() {
     try {
       const savedMenu = await saveAiGeneratedMenu({
         startDate: weekStart,
-        dietaryGoal: aiGoal,
+        dietaryGoal: plannerProfile?.healthGoal ?? plannerProfile?.health_goal ?? null,
         generatedMenu: aiPreview
       });
       setMenu(normalizeWeeklyMenu(savedMenu, weekStart));
@@ -318,26 +311,29 @@ export default function WeeklyMealPlannerPage() {
   const applyAiPreview = () => {
     if (!aiPreview) return;
     const aiSlots = [['Breakfast', 'breakfast'], ['Lunch', 'lunch'], ['Dinner', 'dinner']];
+    const aiDailyCalories = Number(aiPreview.estimatedDailyCalories);
+    const hasAiCalories = Number.isFinite(aiDailyCalories) && aiDailyCalories > 0;
     setMenu((current) => recalculateMenu({
         ...current,
-        nutritionSummary: null,
-        targetCalories: Number(aiPreview.estimatedDailyCalories ?? aiCalories),
+        targetCalories: hasAiCalories ? aiDailyCalories : current.targetCalories,
         days: current.days.map((day, dayIndex) => {
           const generatedDay = aiPreview.weeklyPlan[dayIndex] ?? {};
           return {
             ...day,
-            calorieGoal: Number(aiPreview.estimatedDailyCalories ?? aiCalories),
+            calorieGoal: hasAiCalories ? aiDailyCalories : day.calorieGoal,
             meals: aiSlots.map(([slot, field], slotIndex) => {
               const selection = generatedDay[field] ?? {};
               const servings = Number(selection.servings ?? 1);
               const baseCalories = Number(selection.calories);
               const baseProtein = Number(selection.proteinG);
+              const carbsG = selection.carbsG != null && Number.isFinite(Number(selection.carbsG)) ? Number(selection.carbsG) : null;
+              const healthyFatsG = selection.healthyFatsG != null && Number.isFinite(Number(selection.healthyFatsG)) ? Number(selection.healthyFatsG) : null;
               return {
                 key: `ai-${Date.now()}-${dayIndex}-${slotIndex}`,
                 itemId: null, mealId: null, dishId: selection.dishId ?? null, slot,
                 name: selection.dishName || `${slot} suggestion`,
                 kcal: Number.isFinite(baseCalories) ? Math.round(baseCalories * servings) : null, protein: Number.isFinite(baseProtein) ? Math.round(baseProtein * servings) : null,
-                baseCalories, baseProtein,
+                baseCalories, baseProtein, carbsG, healthyFatsG,
                 image: selection.imageUrl || freshProduce, servings, notes: 'Suggested by NutriBot AI', swapped: false,
               };
             })
@@ -379,7 +375,9 @@ export default function WeeklyMealPlannerPage() {
             </div>
             <div className="planner-week-avg">
               <span>Daily rhythm</span>
-              <p>{menu.week.avgCalories != null && menu.week.avgProtein != null ? <><b>{menu.week.avgCalories.toLocaleString()}</b> kcal <i/> <b>{menu.week.avgProtein}g</b> protein</> : 'Nutrition summary unavailable'}</p>
+              <p>{menu.week.avgCalories != null && menu.week.avgProtein != null
+                ? <><b>{menu.week.avgCalories.toLocaleString()}</b> kcal <i/> <b>{menu.week.avgProtein}g</b> protein <i/> <b>{menu.week.avgCarbs ?? 0}g</b> carbs <i/> <b>{menu.week.avgFats ?? 0}g</b> fat</>
+                : 'Nutrition summary unavailable'}</p>
             </div>
             <div className="planner-view-toggle" aria-label="Planner view">
               <button type="button" className={view === 'daily' ? 'is-active' : ''} onClick={() => setView('daily')}>Daily</button>
@@ -402,7 +400,7 @@ export default function WeeklyMealPlannerPage() {
             {plannerDays.map((day, dayIndex) => <article className={`planner-day${day.status === 'Today' ? ' is-today' : ''}`} key={day.isoDate}>
               <header>
                 <div className="planner-day-label"><b>{day.label}</b><span>{day.date}</span>{day.status === 'Today' && <em className="planner-badge">Today</em>}</div>
-                <div className="planner-day-meta">{day.calorieActual.toLocaleString()} / {day.calorieGoal.toLocaleString()} kcal · {day.proteinActual} / {day.proteinGoal}g protein</div>
+                <div className="planner-day-meta">{day.calorieActual.toLocaleString()} / {day.calorieGoal != null ? day.calorieGoal.toLocaleString() : '—'} kcal · {day.proteinActual}g / {day.proteinGoal != null ? `${day.proteinGoal}g` : '—'} protein · {day.carbsActual ?? 0}g / {day.carbsGoal != null ? `${day.carbsGoal}g` : '—'} carbs · {day.fatsActual ?? 0}g / {day.fatsGoal != null ? `${day.fatsGoal}g` : '—'} fat</div>
               </header>
               <div className="planner-meals">
                 {MEAL_SLOTS.map((slot) => {
@@ -413,7 +411,7 @@ export default function WeeklyMealPlannerPage() {
                       {slotMeals.map((meal) => <div className="planner-meal" key={meal.key}>
                         <button type="button" className="planner-meal-detail" onClick={() => setDetailMeal(meal)} aria-label={`View details for ${meal.name}`}>
                         <ImageWithFallback src={meal.image} alt="" fallbackSrc={freshProduce}/>
-                        <div><span>{meal.swapped ? 'Replaced' : 'Dish'}</span><b>{meal.name}</b><small>{meal.kcal} kcal · {meal.protein}g protein · {meal.servings} serving{meal.servings === 1 ? '' : 's'}</small></div>
+                        <div><span>{meal.swapped ? 'Replaced' : 'Dish'}</span><b>{meal.name}</b><small>{meal.kcal} kcal · {meal.protein}g protein · {Math.round((Number(meal.carbsG) || 0) * meal.servings)}g carbs · {Math.round((Number(meal.healthyFatsG) || 0) * meal.servings)}g fat · {meal.servings} serving{meal.servings === 1 ? '' : 's'}</small></div>
                         </button>
                         <div className="planner-meal-actions">
                           <button type="button" onClick={() => openEditor(day, slot, meal)} aria-label={`Replace ${meal.name}`}><Repeat2 size={13}/></button>
@@ -467,9 +465,7 @@ export default function WeeklyMealPlannerPage() {
       <section className="meal-dialog ai-generator-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-generator-title">
         <header><div><span>NutriBot AI</span><h2 id="ai-generator-title">Create this week's meals.</h2></div><button type="button" className="meal-dialog-close" onClick={() => setShowAiGenerator(false)} disabled={generatingPlan} aria-label="Close AI generator"><X size={18}/></button></header>
         <form className="ai-generator-form" onSubmit={generateAiPlan}>
-          <label><span>What is already in your kitchen?</span><textarea value={aiIngredients} onChange={(event) => setAiIngredients(event.target.value)} placeholder="Tofu, mushrooms, tomatoes, greens" required/><small>Separate ingredients with commas.</small></label>
-          <label><span>Allergies or ingredients to avoid</span><input value={aiAllergies} onChange={(event) => setAiAllergies(event.target.value)} placeholder="Peanuts, shellfish"/></label>
-          <div className="ai-generator-grid"><label><span>Daily calorie target</span><input type="number" min="1000" max="4500" value={aiCalories} onChange={(event) => setAiCalories(event.target.value)} required/></label><label><span>Your focus</span><select value={aiGoal} onChange={(event) => setAiGoal(event.target.value)}><option value="lose_weight">Lose weight</option><option value="maintain_weight">Maintain balance</option><option value="gain_muscle">Gain muscle</option></select></label></div>
+          <p className="ai-generator-note">Calories, protein, carbs, fat targets and allergies come from your Health Profile — no need to enter them.</p>
           <p>NutriBot will replace the visible week with a seven-day preview. You can still swap or edit every meal after it is generated.</p>
           <footer><button type="button" className="planner-btn-ghost" onClick={() => setShowAiGenerator(false)} disabled={generatingPlan}>Cancel</button><button type="submit" className="planner-btn-primary" disabled={generatingPlan}>{generatingPlan ? <><Loader2 size={15} className="is-spinning"/> Generating...</> : <><Sparkles size={15}/> Generate plan</>}</button></footer>
         </form>

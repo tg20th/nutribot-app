@@ -13,6 +13,8 @@ import java.util.List;
 @AllArgsConstructor
 public class WeeklyNutritionSummary {
     private String status;
-    private NutritionSummary summary;
+    private NutritionMetrics actual;
+    private NutritionMetrics target;
+    private NutritionMetrics percentage;
     private List<String> missingFields;
 }
