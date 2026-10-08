@@ -2,7 +2,9 @@ import colorfulPlate from '../assets/colorful-plate.jpg';
 import freshProduce from '../assets/fresh-produce.jpg';
 import heroBowl from '../assets/hero-bowl.jpg';
 
-export const MEAL_SLOTS = ['Breakfast', 'Lunch', 'Dinner'];
+export const MEAL_SLOTS = ['Breakfast', 'Lunch', 'Dinner', 'Snacks'];
+
+export const mealSlotApiValue = (slot) => String(slot).toLowerCase() === 'snacks' ? 'snack' : String(slot).toLowerCase();
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const IMAGE_POOL = [heroBowl, colorfulPlate, freshProduce];
@@ -33,6 +35,7 @@ export const shiftWeek = (weekStart, amount) => {
 
 const slotTitle = (value = '') => {
   const normalized = String(value).toLowerCase();
+  if (normalized === 'snack' || normalized === 'snacks') return 'Snacks';
   return MEAL_SLOTS.find((slot) => slot.toLowerCase() === normalized) ?? 'Breakfast';
 };
 
