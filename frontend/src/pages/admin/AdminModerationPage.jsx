@@ -1,4 +1,4 @@
-import { Bot, Check, ChevronLeft, ChevronRight, EyeOff, FileText, Search, ShieldCheck, Video, X } from 'lucide-react';
+import { Bot, Check, ChevronLeft, ChevronRight, Clock3, EyeOff, FileText, ListOrdered, Search, ShieldCheck, Sparkles, UtensilsCrossed, Video, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { adminApi } from '../../services/adminApi';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState, Toast } from '../../components/admin/AdminUi';
@@ -22,6 +22,162 @@ const statusLabel = (status) => {
   if (s === 'archived' || s === 'hidden') return 'Archived';
   return 'Pending';
 };
+
+function parseRecipeBody(rawBody) {
+  if (!rawBody || typeof rawBody !== 'string') return null;
+  const trimmed = rawBody.trim();
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
+  try {
+    const data = JSON.parse(trimmed);
+    if (data && typeof data === 'object') {
+      const isRecipe = data.story || data.ingredients || data.steps || data.nutrition || data.prepMinutes || data.cookMinutes;
+      if (isRecipe) {
+        return {
+          story: data.story || data.description || '',
+          prepMinutes: data.prepMinutes ?? data.details?.prepMinutes ?? '',
+          cookMinutes: data.cookMinutes ?? data.details?.cookMinutes ?? '',
+          servings: data.servings ?? data.details?.servings ?? '',
+          nutrition: data.nutrition || data.details || {},
+          ingredients: Array.isArray(data.ingredients) ? data.ingredients : [],
+          steps: Array.isArray(data.steps) ? data.steps : [],
+        };
+      }
+    }
+  } catch {
+    // fallback to plain text
+  }
+  return null;
+}
+
+function ModerationSubmissionContent({ body }) {
+  const recipe = parseRecipeBody(body);
+
+  if (!recipe) {
+    return body ? <p>{body}</p> : <p className="moderation-no-body">No additional content details are available for this submission.</p>;
+  }
+
+  const { story, prepMinutes, cookMinutes, servings, nutrition, ingredients, steps } = recipe;
+
+  return (
+    <div className="moderation-recipe-view">
+      {story && (
+        <div className="moderation-recipe-story">
+          <p>{story}</p>
+        </div>
+      )}
+
+      {(prepMinutes || cookMinutes || servings) && (
+        <div className="moderation-recipe-section">
+          <h4 className="moderation-recipe-section-title">
+            <Clock3 size={15} /> Cooking time & Servings
+          </h4>
+          <div className="moderation-recipe-meta-cards">
+            {prepMinutes && (
+              <div className="moderation-recipe-meta-card">
+                <span className="meta-label">Prep time</span>
+                <strong className="meta-value">{prepMinutes} min</strong>
+              </div>
+            )}
+            {cookMinutes && (
+              <div className="moderation-recipe-meta-card">
+                <span className="meta-label">Cook time</span>
+                <strong className="meta-value">{cookMinutes} min</strong>
+              </div>
+            )}
+            {servings && (
+              <div className="moderation-recipe-meta-card">
+                <span className="meta-label">Servings</span>
+                <strong className="meta-value">{servings} portions</strong>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {nutrition && Object.keys(nutrition).length > 0 && (
+        <div className="moderation-recipe-section">
+          <h4 className="moderation-recipe-section-title">
+            <Sparkles size={15} /> Nutrition facts
+          </h4>
+          <div className="moderation-recipe-nutrition-grid">
+            {nutrition.calories != null && nutrition.calories !== '' && (
+              <div className="moderation-nutrition-item">
+                <span className="nut-label">Calories</span>
+                <strong className="nut-value">{nutrition.calories} <small>kcal</small></strong>
+              </div>
+            )}
+            {nutrition.proteinG != null && nutrition.proteinG !== '' && (
+              <div className="moderation-nutrition-item">
+                <span className="nut-label">Protein</span>
+                <strong className="nut-value">{nutrition.proteinG} <small>g</small></strong>
+              </div>
+            )}
+            {nutrition.carbsG != null && nutrition.carbsG !== '' && (
+              <div className="moderation-nutrition-item">
+                <span className="nut-label">Carbs</span>
+                <strong className="nut-value">{nutrition.carbsG} <small>g</small></strong>
+              </div>
+            )}
+            {nutrition.fatG != null && nutrition.fatG !== '' && (
+              <div className="moderation-nutrition-item">
+                <span className="nut-label">Fat</span>
+                <strong className="nut-value">{nutrition.fatG} <small>g</small></strong>
+              </div>
+            )}
+            {nutrition.fiberG != null && nutrition.fiberG !== '' && (
+              <div className="moderation-nutrition-item">
+                <span className="nut-label">Fiber</span>
+                <strong className="nut-value">{nutrition.fiberG} <small>g</small></strong>
+              </div>
+            )}
+            {nutrition.sodiumMg != null && nutrition.sodiumMg !== '' && (
+              <div className="moderation-nutrition-item">
+                <span className="nut-label">Sodium</span>
+                <strong className="nut-value">{nutrition.sodiumMg} <small>mg</small></strong>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {ingredients.length > 0 && (
+        <div className="moderation-recipe-section">
+          <h4 className="moderation-recipe-section-title">
+            <UtensilsCrossed size={15} /> Ingredients ({ingredients.length})
+          </h4>
+          <ul className="moderation-recipe-ingredient-list">
+            {ingredients.map((ing, idx) => {
+              const name = typeof ing === 'string' ? ing : ing.name;
+              const qty = typeof ing === 'object' && ing.quantity ? `${ing.quantity} ${ing.unit || ''}`.trim() : '';
+              return (
+                <li key={idx} className="moderation-recipe-ingredient-tag">
+                  <span className="ingredient-name">{name}</span>
+                  {qty && <span className="ingredient-qty">{qty}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      {steps.length > 0 && (
+        <div className="moderation-recipe-section">
+          <h4 className="moderation-recipe-section-title">
+            <ListOrdered size={15} /> Preparation steps ({steps.length})
+          </h4>
+          <ol className="moderation-recipe-step-list">
+            {steps.map((step, idx) => (
+              <li key={idx} className="moderation-recipe-step-item">
+                <span className="step-num">{idx + 1}</span>
+                <p className="step-text">{step}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AdminModerationPage() {
   const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview') === '1';
@@ -184,7 +340,7 @@ export default function AdminModerationPage() {
                   </dl>
                   <section className="moderation-copy">
                     <h3>Submission</h3>
-                    {selected.body ? <p>{selected.body}</p> : <p className="moderation-no-body">No additional content details are available for this submission.</p>}
+                    <ModerationSubmissionContent body={selected.body} />
                   </section>
                 </div>
                 <footer className="moderation-actions">
