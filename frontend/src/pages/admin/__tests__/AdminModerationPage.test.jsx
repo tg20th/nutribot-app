@@ -1,3 +1,66 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -51,5 +114,66 @@ describe('admin moderation screen', () => {
     expect(await screen.findByText('Đánh giá kiểm duyệt AI')).toBeTruthy();
     expect(screen.getByText('Phát hiện nghi vấn cần duyệt tay')).toBeTruthy();
     expect(screen.getByText(/Độ tin cậy: 91%/)).toBeTruthy();
+  });
+
+  it('renders structured recipe view instead of raw JSON for recipe submissions', async () => {
+    const recipeBody = JSON.stringify({
+      version: 1,
+      story: 'Một đĩa salad thanh mát, giòn rụm với sắc màu rực rỡ.',
+      prepMinutes: '15',
+      cookMinutes: '5',
+      servings: '2',
+      nutrition: { calories: '384', proteinG: '16.5', carbsG: '19.6', fatG: '30.5', fiberG: '10.1', sodiumMg: '144' },
+      ingredients: [
+        { name: 'Rau chân vịt (Bina)', quantity: '150', unit: 'g', isCustom: false },
+        { name: 'Cà chua', quantity: '100', unit: 'g', isCustom: false },
+      ],
+      steps: [
+        'Rửa sạch xà lách, dưa leo và cà chua.',
+        'Cắt đậu phụ thành các khối vuông vừa ăn.',
+      ],
+    });
+
+    const recipePost = {
+      id: 3,
+      type: 'BLOG',
+      title: 'Salad Cầu Vồng Đậu Phụ',
+      status: 'pending',
+      author: 'saladlover',
+      submittedAt: '2026-10-09T08:30:00',
+      body: recipeBody,
+    };
+
+    adminApi.getModerationQueue.mockResolvedValueOnce({
+      content: [recipePost],
+      totalElements: 1,
+      totalPages: 1,
+    });
+
+    render(<AdminModerationPage />);
+
+    // Check that structured elements are rendered
+    expect(await screen.findByText('Một đĩa salad thanh mát, giòn rụm với sắc màu rực rỡ.')).toBeInTheDocument();
+    expect(screen.getByText(/Cooking time & Servings/i)).toBeInTheDocument();
+    expect(screen.getByText('15 min')).toBeInTheDocument();
+    expect(screen.getByText('5 min')).toBeInTheDocument();
+    expect(screen.getByText('2 portions')).toBeInTheDocument();
+
+    // Check nutrition facts
+    expect(screen.getByText(/Nutrition facts/i)).toBeInTheDocument();
+    expect(screen.getByText(/384/)).toBeInTheDocument();
+    expect(screen.getByText(/16.5/)).toBeInTheDocument();
+
+    // Check ingredients
+    expect(screen.getByText('Rau chân vịt (Bina)')).toBeInTheDocument();
+    expect(screen.getByText('150 g')).toBeInTheDocument();
+    expect(screen.getByText('Cà chua')).toBeInTheDocument();
+
+    // Check steps
+    expect(screen.getByText('Rửa sạch xà lách, dưa leo và cà chua.')).toBeInTheDocument();
+    expect(screen.getByText('Cắt đậu phụ thành các khối vuông vừa ăn.')).toBeInTheDocument();
+
+    // Crucial: ensure raw JSON string is NOT shown
+    expect(screen.queryByText(recipeBody)).toBeNull();
   });
 });
