@@ -220,28 +220,27 @@ public class AuthorContentService {
                 extractDescription(content.getBody()),
                 content.getBody(),
                 getCategoryName(content.getCategoryId()),
-                java.util.List.of()
+                java.util.List.of(),
+                content.getThumbnailUrl(),
+                content.getMediaUrl()
         );
 
         log.info("AI moderation result for content {}: decision={}, reason={}, confidence={}",
                 contentId, moderation.decision(), moderation.reason(), moderation.confidence());
 
         // Step 3: Process based on AI decision
+        // QUY TẮC: Chỉ khi AI duyệt đạt APPROVE thì tự động xuất bản (STATUS_PUBLISHED).
+        // Mọi trường hợp còn lại (REJECT, NEEDS_REVIEW, ảnh lỗi, AI timeout...), bài viết
+        // BẮT BUỘC giữ trạng thái STATUS_UNDER_REVIEW để đưa vào hàng đợi Admin duyệt lần 2,
+        // tránh việc tự động reject khiến bài biến mất khỏi hàng đợi kiểm duyệt của Admin.
         String finalStatus;
-        switch (moderation.decision()) {
-            case "APPROVE" -> {
-                finalStatus = STATUS_PUBLISHED;
-                log.info("Content {} auto-approved by AI", contentId);
-            }
-            case "REJECT" -> {
-                finalStatus = STATUS_REJECTED;
-                log.info("Content {} auto-rejected by AI: {}", contentId, moderation.reason());
-            }
-            default -> {
-                // NEEDS_REVIEW or any other case - keep under review for admin
-                finalStatus = STATUS_UNDER_REVIEW;
-                log.info("Content {} needs admin review: {}", contentId, moderation.reason());
-            }
+        if ("APPROVE".equalsIgnoreCase(moderation.decision())) {
+            finalStatus = STATUS_PUBLISHED;
+            log.info("Content {} auto-approved by AI", contentId);
+        } else {
+            finalStatus = STATUS_UNDER_REVIEW;
+            log.info("Content {} chuyển sang hàng đợi Admin duyệt (AI decision: {}, reason: {})",
+                    contentId, moderation.decision(), moderation.reason());
         }
 
         content.setStatus(finalStatus);

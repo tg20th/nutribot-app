@@ -69,8 +69,6 @@ public class BlogAuthorController {
         AuthorContentResponse response = authorContentService.submitContent(user.getUsername(), id);
         String message = "published".equalsIgnoreCase(response.getStatus())
                 ? "Bài viết đã được AI tự động kiểm duyệt và xuất bản thành công"
-                : "rejected".equalsIgnoreCase(response.getStatus())
-                ? "Bài viết đã bị từ chối do không đạt tiêu chuẩn nội dung"
                 : "Nộp bài viết chờ duyệt thành công";
         return ResponseEntity.ok(ApiResponse.success(message, response));
     }

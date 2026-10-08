@@ -41,6 +41,8 @@ public class ContentModerationGatewayService {
      * @param body        Full body content
      * @param category    Category name
      * @param tags        List of tags
+     * @param thumbnailUrl URL ảnh thumbnail
+     * @param mediaUrl    URL video media
      * @return ModerationResult containing decision and details
      */
     public ModerationResult moderateContent(
@@ -50,7 +52,9 @@ public class ContentModerationGatewayService {
             String description,
             String body,
             String category,
-            java.util.List<String> tags) {
+            java.util.List<String> tags,
+            String thumbnailUrl,
+            String mediaUrl) {
         try {
             Map<String, Object> request = new LinkedHashMap<>();
             request.put("content_id", contentId != null && contentId > 0 ? contentId : 1);
@@ -60,6 +64,12 @@ public class ContentModerationGatewayService {
             request.put("body", body != null ? body : "");
             request.put("category", category != null ? category : "");
             request.put("tags", tags != null ? tags : java.util.List.of());
+            if (thumbnailUrl != null && !thumbnailUrl.isBlank()) {
+                request.put("thumbnail_url", thumbnailUrl);
+            }
+            if (mediaUrl != null && !mediaUrl.isBlank()) {
+                request.put("media_url", mediaUrl);
+            }
 
             String requestBody = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(request);
 
@@ -88,6 +98,17 @@ public class ContentModerationGatewayService {
             log.error("Unexpected error during AI moderation: {}", ex.getMessage());
             return new ModerationResult("NEEDS_REVIEW", "Moderation error, manual review required", 0.0, java.util.List.of("ERROR"));
         }
+    }
+
+    public ModerationResult moderateContent(
+            Integer contentId,
+            String contentType,
+            String title,
+            String description,
+            String body,
+            String category,
+            java.util.List<String> tags) {
+        return moderateContent(contentId, contentType, title, description, body, category, tags, null, null);
     }
 
     public record ModerationResult(
