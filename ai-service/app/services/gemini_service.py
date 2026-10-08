@@ -29,14 +29,63 @@ class GeminiService:
     def model_name(self): return self._settings.gemini_model
 
     async def moderate_content(self, request):
-        """Return structured moderation fields; no persistence or raw provider response leaks."""
+        """Return structured moderation fields; supports multimodal thumbnail evaluation."""
         from app.schemas.moderation import ModelModeration
-        client=self._get_client()
-        prompt=f"Classify NutriBot vegetarian/nutrition Blog/Video. Return decision APPROVE/REJECT/NEEDS_REVIEW, reason, confidence 0..1, categories. Content: {request.model_dump_json()}"
-        config=types.GenerateContentConfig(response_mime_type="application/json",response_schema=ModelModeration,temperature=0)
-        response=await self._generate_with_fallback(client,prompt,config)
-        parsed=getattr(response,"parsed",None)
-        return (parsed if isinstance(parsed,ModelModeration) else ModelModeration.model_validate(parsed if parsed is not None else getattr(response,"text",None))).model_dump()
+        client = self._get_client()
+
+        image_part = None
+        if request.thumbnail_url and request.thumbnail_url.strip():
+            import httpx
+            try:
+                async with httpx.AsyncClient(timeout=4.0) as http_client:
+                    resp = await http_client.get(request.thumbnail_url.strip())
+                    if resp.status_code == 200:
+                        mime = resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+                        if not mime.startswith("image/"):
+                            mime = "image/jpeg"
+                        image_part = types.Part.from_bytes(data=resp.content, mime_type=mime)
+                    else:
+                        logger.warning("Không thể tải thumbnail từ URL (HTTP %s): %s", resp.status_code, request.thumbnail_url)
+                        return ModelModeration(
+                            decision="NEEDS_REVIEW",
+                            reason="Không thể tải ảnh thumbnail (HTTP error), cần Admin duyệt thủ công",
+                            confidence=0.0,
+                            categories=["AMBIGUOUS"]
+                        ).model_dump()
+            except Exception as e:
+                logger.warning("Lỗi kết nối tải thumbnail: %s", e)
+                return ModelModeration(
+                    decision="NEEDS_REVIEW",
+                    reason="Lỗi tải ảnh thumbnail kiểm duyệt, cần Admin duyệt thủ công",
+                    confidence=0.0,
+                    categories=["AMBIGUOUS"]
+                ).model_dump()
+
+        prompt_text = (
+            "You are the content moderation AI for NutriBot, a vegetarian & nutrition community platform. "
+            "Policy instructions: "
+            "1. VEGETARIAN ACCEPTANCE (BROAD): NutriBot supports all vegetarian diets including VEGAN, LACTO, OVO, and LACTO_OVO. "
+            "   - Plant foods, tofu (đậu phụ), tempeh, mushrooms, vegetables, fruits, grains, nuts, and seeds are 100% valid. "
+            "   - Dairy products (milk, cheese, yogurt, butter) and eggs are fully ACCEPTABLE vegetarian foods on NutriBot. "
+            "   - IMPORTANT: White cubes or crumbles in salads and dishes are typically TOFU (đậu phụ) or cheese/dairy. They are completely SAFE, VALID, and must be treated as acceptable vegetarian food. Do NOT treat tofu, cheese, or eggs as violations. "
+            "   - ONLY flag NON_VEGETARIAN_CONTENT or NON_VEGETARIAN_IMAGE if animal slaughter flesh (beef, pork, chicken, duck, poultry, fish, shrimp, seafood) is explicitly promoted or shown. "
+            "2. SAFETY: "
+            "   - Flag SENSITIVE_IMAGE for NSFW, nudity, violence, or gore in attached images. "
+            "   - Flag MEDICAL_CLAIM or UNSAFE_NUTRITION_ADVICE for dangerous health claims (e.g. curing cancer without evidence). "
+            "   - Flag SPAM or OFF_TOPIC for promotional crypto, gambling, commercial spam. "
+            "3. DECISION CRITERIA: "
+            "   - Set decision='APPROVE' with confidence >= 0.95 and categories=['SAFE'] for genuine healthy vegetarian recipes, salads, tofu dishes, or nutrition guides. "
+            "   - Set decision='REJECT' ONLY when clear prohibited items (real animal meat/seafood, NSFW, spam, dangerous medical cure claims) are detected. "
+            "   - Set decision='NEEDS_REVIEW' only when genuine ambiguity exists. "
+            "Return structured JSON matching ModelModeration schema. "
+            f"Content: {request.model_dump_json()}"
+        )
+        contents = [prompt_text, image_part] if image_part is not None else prompt_text
+
+        config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=ModelModeration, temperature=0)
+        response = await self._generate_with_fallback(client, contents, config)
+        parsed = getattr(response, "parsed", None)
+        return (parsed if isinstance(parsed, ModelModeration) else ModelModeration.model_validate(parsed if parsed is not None else getattr(response, "text", None))).model_dump()
     def __init__(self, settings: Settings, client: Any | None = None) -> None:
         self._settings = settings
         self._client = client
@@ -114,7 +163,7 @@ class GeminiService:
     async def _generate_with_fallback(
         self,
         client: Any,
-        prompt: str,
+        prompt: Any,
         config: types.GenerateContentConfig,
     ) -> Any:
         try:

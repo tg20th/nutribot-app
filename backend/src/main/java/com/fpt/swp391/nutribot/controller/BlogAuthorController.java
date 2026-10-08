@@ -67,7 +67,10 @@ public class BlogAuthorController {
             @AuthenticationPrincipal UserDetails user,
             @PathVariable Integer id) {
         AuthorContentResponse response = authorContentService.submitContent(user.getUsername(), id);
-        return ResponseEntity.ok(ApiResponse.success("Nộp bài viết chờ duyệt thành công", response));
+        String message = "published".equalsIgnoreCase(response.getStatus())
+                ? "Bài viết đã được AI tự động kiểm duyệt và xuất bản thành công"
+                : "Nộp bài viết chờ duyệt thành công";
+        return ResponseEntity.ok(ApiResponse.success(message, response));
     }
 
     @PostMapping("/{id}/recall")

@@ -24,20 +24,16 @@ public class AdminModerationService {
     @Transactional(readOnly = true)
     public PagedResponse<AdminContentResponse> getPendingContents(String contentType, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Content> pendingPage = contentRepository.findByStatus("pending", pageable);
+        java.util.List<String> pendingStatuses = java.util.List.of("under_review", "pending");
 
-        Page<Content> filtered = pendingPage;
+        Page<Content> pendingPage;
         if (contentType != null && !contentType.isBlank()) {
-            filtered = new org.springframework.data.domain.PageImpl<>(
-                    pendingPage.getContent().stream()
-                            .filter(c -> c.getContentType().equalsIgnoreCase(contentType))
-                            .toList(),
-                    pageable,
-                    pendingPage.getTotalElements()
-            );
+            pendingPage = contentRepository.findByStatusInAndContentType(pendingStatuses, contentType, pageable);
+        } else {
+            pendingPage = contentRepository.findByStatusIn(pendingStatuses, pageable);
         }
 
-        return PagedResponse.of(filtered.map(this::toResponse));
+        return PagedResponse.of(pendingPage.map(this::toResponse));
     }
 
     @Transactional
@@ -48,7 +44,7 @@ public class AdminModerationService {
         String action = request.getAction().toUpperCase();
         switch (action) {
             case "APPROVE" -> content.setStatus("published");
-            case "HIDE" -> content.setStatus("hidden");
+            case "HIDE" -> content.setStatus("archived");
             case "REJECT" -> content.setStatus("rejected");
             default -> throw new BadRequestException("Action không hợp lệ: " + action);
         }
@@ -64,6 +60,9 @@ public class AdminModerationService {
                 .title(content.getTitle())
                 .slug(content.getSlug())
                 .status(content.getStatus())
+                .body(content.getBody())
+                .thumbnailUrl(content.getThumbnailUrl())
+                .mediaUrl(content.getMediaUrl())
                 .authorUsername(content.getUser() != null ? content.getUser().getUsername() : null)
                 .authorEmail(content.getUser() != null ? content.getUser().getEmail() : null)
                 .viewCount(content.getViewCount())

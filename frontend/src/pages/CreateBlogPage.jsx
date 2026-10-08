@@ -272,10 +272,22 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
       } else {
         created = editing ? await updateMyBlog(editId, payload) : await createMyBlog(payload);
       }
-      if (intent === 'submit' && !editing) {
-        await submitForReview(isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG, created.contentId);
+      let finalStatus = created?.status || 'draft';
+      if (intent === 'submit') {
+        const targetId = editing ? editId : created?.contentId;
+        const reviewRes = await submitForReview(isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG, targetId);
+        const reviewData = reviewRes?.data ?? reviewRes ?? {};
+        finalStatus = reviewData.status || 'under_review';
       }
-      navigate('/community/my-blogs', { state: { edited: editing, created: !editing, type: isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG, submitted: !editing && intent === 'submit' } });
+      navigate('/community/my-blogs', {
+        state: {
+          edited: editing,
+          created: !editing,
+          type: isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG,
+          submitted: intent === 'submit',
+          status: finalStatus,
+        },
+      });
     } catch (failure) {
       setError(failure.status === 401 ? 'Your session expired. Please sign in again.' : failure.message || `Could not save your ${isVideo ? 'video' : 'blog'}. Please try again.`);
     } finally {
@@ -332,7 +344,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         {error && <p className="create-blog-error" role="alert">{error} {error.includes('session') && <Link to="/login">Sign in</Link>}</p>}
         <div className="create-blog-submit-actions">
           <button className="my-blog-button create-blog-submit create-blog-submit--secondary" type="submit" disabled={preview || loadingContent || busy}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Saving...</> : <><Save size={16}/>{editing ? ' Save changes' : ' Save draft'}</>}</button>
-          {!editing && <button className="my-blog-button create-blog-submit" type="button" onClick={(event) => submit(event, 'submit')} disabled={preview || loadingContent || busy}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Saving...</> : <><Send size={16}/> Submit for review</>}</button>}
+          <button className="my-blog-button create-blog-submit" type="button" onClick={(event) => submit(event, 'submit')} disabled={preview || loadingContent || busy}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Submitting...</> : <><Send size={16}/> Submit for review</>}</button>
         </div>
       </aside>
     </form>

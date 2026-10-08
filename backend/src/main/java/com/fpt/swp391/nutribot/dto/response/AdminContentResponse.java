@@ -17,6 +17,9 @@ public class AdminContentResponse {
     private String authorUsername;
     private String authorEmail;
     private Integer viewCount;
+    private String body;
+    private String thumbnailUrl;
+    private String mediaUrl;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
