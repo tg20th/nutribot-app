@@ -13,7 +13,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { getAllergyIngredients, getHealthProfile, updateHealthProfile } from '../../services/profileApi';
 
 const EMPTY_HEALTH = {
@@ -90,6 +90,7 @@ const validate = (health) => {
 };
 
 export default function HealthProfileSection() {
+  const savingRef = useRef(false);
   const [health, setHealth] = useState(EMPTY_HEALTH);
   const [savedHealth, setSavedHealth] = useState(EMPTY_HEALTH);
   const [savedBmi, setSavedBmi] = useState(
@@ -123,6 +124,12 @@ export default function HealthProfileSection() {
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timeoutId = window.setTimeout(() => setNotice((current) => current === notice ? null : current), 3500);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
+
   const isDirty = JSON.stringify(health) !== JSON.stringify(savedHealth);
   const bmi = isDirty ? calculateBmi(health.heightCm, health.weightKg) : savedBmi;
   const bmiStatus = classifyBmi(bmi);
@@ -137,6 +144,10 @@ export default function HealthProfileSection() {
     if (!normalized) return ingredients;
     return ingredients.filter(({ name, slug }) => `${name} ${slug}`.toLocaleLowerCase('vi').includes(normalized));
   }, [ingredients, query]);
+
+  const scrollToSaveFeedback = () => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' })));
+  };
 
   const updateMetric = (event) => {
     const { name, value } = event.target;
@@ -164,13 +175,16 @@ export default function HealthProfileSection() {
 
   const submit = async (event) => {
     event.preventDefault();
+    if (savingRef.current) return;
     const nextErrors = validate(health);
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       setNotice({ type: 'error', message: 'Review your body metrics before saving.' });
+      scrollToSaveFeedback();
       return;
     }
 
+    savingRef.current = true;
     setIsSaving(true);
     setNotice(null);
     try {
@@ -190,7 +204,9 @@ export default function HealthProfileSection() {
     } catch (error) {
       setNotice({ type: 'error', message: error?.message || 'We could not save your health profile.' });
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
+      scrollToSaveFeedback();
     }
   };
 
@@ -204,6 +220,7 @@ export default function HealthProfileSection() {
         <div className={`health-notice health-notice--${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>
           {notice.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
           <span>{notice.message}</span>
+          <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss notification"><X size={16} /></button>
         </div>
       )}
 
