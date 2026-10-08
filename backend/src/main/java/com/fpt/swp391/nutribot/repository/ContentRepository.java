@@ -138,6 +138,10 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
     @Query("SELECT c FROM Content c WHERE c.status = :status AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE")
     List<Content> findPublicCatalogForRecommendation(@Param("status") String status, Pageable pageable);
 
+    @Query("SELECT c FROM Content c WHERE c.contentId IN :contentIds AND c.status = :status " +
+           "AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE")
+    List<Content> findPublicByIds(@Param("contentIds") List<Integer> contentIds, @Param("status") String status);
+
     // NB-65: Đếm vote cho content
     @Query("SELECT COUNT(v) FROM Vote v WHERE v.contentId = :contentId AND v.voteValue = 1")
     Long countVoteByContentId(@Param("contentId") Integer contentId);
