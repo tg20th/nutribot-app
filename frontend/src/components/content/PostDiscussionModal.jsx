@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarDays, Eye, Play, Timer, X } from 'lucide-react';
 import { getPost } from '../../services/communityApi';
+import { extractStoryText } from '../../utils/content';
 import CommentSection from './CommentSection';
 import VoteButton from './VoteButton';
 import '../../styles/post-discussion-modal.css';
@@ -77,7 +78,7 @@ export default function PostDiscussionModal({ post, onClose, focusComments = fal
               <div><dt><Eye size={15}/> Views</dt><dd>{Number(displayedPost.viewCount ?? 0).toLocaleString('en-US')}</dd></div>
             </dl>
           <article className="post-discussion-story">
-            <p className="post-discussion-body">{displayedPost.body || displayedPost.description || 'No detail content has been added yet.'}</p>
+            <p className="post-discussion-body">{extractStoryText(displayedPost.body || displayedPost.description) || 'No detail content has been added yet.'}</p>
             {!fullPost && !error && <p role="status">Loading full post...</p>}
             {error && <p role="alert">{error} <button type="button" onClick={() => setRetry((value) => value + 1)}>Retry</button></p>}
           </article>

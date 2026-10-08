@@ -10,6 +10,7 @@ import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CommentSection from '../components/content/CommentSection';
 import VoteButton from '../components/content/VoteButton';
 import { getPost } from '../services/communityApi';
+import { extractStoryText } from '../utils/content';
 
 export default function CommunityContentDetailPage() {
   const { postId } = useParams();
@@ -64,7 +65,7 @@ export default function CommunityContentDetailPage() {
       <main className="content-detail-main">
         <Link className="detail-back detail-reveal" to={returnTo} state={searchReturnState}><ArrowLeft size={16}/>{isMyContentReturn ? 'Back to my content' : isSearchReturn ? 'Back to search results' : 'Back to home'}</Link>
         <section className="detail-hero detail-reveal">
-          <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1>{post.description && post.description !== (post.cleanBody || post.body) && <p>{post.description}</p>}<div className="detail-author">{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}<div><b>{post.author}</b><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></div></div></div>
+          <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1>{post.description && post.description !== (post.cleanBody || post.body) && <p>{extractStoryText(post.description)}</p>}<div className="detail-author">{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}<div><b>{post.author}</b><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></div></div></div>
           <div className="detail-media"><img src={image} alt={post.title}/>{post.type === 'video' && <button className="detail-play" type="button" aria-label="Play video"><Play fill="currentColor" size={24}/></button>}<span className="detail-duration"><Clock3 size={13}/>{post.prepTime} prep</span></div>
         </section>
         <section className="detail-nutrition detail-reveal" aria-label="Nutrition information">
@@ -77,7 +78,7 @@ export default function CommunityContentDetailPage() {
         </section>
         <article className="nb-content-body detail-reveal">
           <div className="detail-section-head"><h2>{post.type === 'video' ? 'About this video' : 'The story'}</h2></div>
-          {String(post.cleanBody || post.body || post.description || 'No detail content has been added yet.')
+          {String(extractStoryText(post.cleanBody || post.body || post.description) || 'No detail content has been added yet.')
             .split(/\n\n+/)
             .filter(Boolean)
             .map((paragraph, index) => (
