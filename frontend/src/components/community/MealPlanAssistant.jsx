@@ -11,7 +11,9 @@ const isFiniteNumber = (value) => typeof value === 'number' && Number.isFinite(v
 const formatValue = (value, unit) => `${Number.isInteger(value) ? value : value.toFixed(1)} ${unit}`;
 
 export default function MealPlanAssistant({ nutritionSummary }) {
-  const unavailable = !nutritionSummary || nutritionSummary.status === 'PROFILE_INCOMPLETE';
+  const incomplete = nutritionSummary?.status === 'PROFILE_INCOMPLETE';
+  const empty = nutritionSummary?.status === 'EMPTY_MENU';
+  const partial = nutritionSummary?.status === 'PARTIAL';
   const missingFields = nutritionSummary?.missingFields ?? [];
 
   return <aside className="community-right-rail planner-assistant">
@@ -22,20 +24,39 @@ export default function MealPlanAssistant({ nutritionSummary }) {
         const actual = nutritionSummary?.actual?.[key];
         const target = nutritionSummary?.target?.[key];
         const percentage = nutritionSummary?.percentage?.[key];
-        const available = !unavailable && isFiniteNumber(actual) && isFiniteNumber(target)
-          && target > 0 && isFiniteNumber(percentage);
+        const hasActual = isFiniteNumber(actual);
+        const hasTarget = isFiniteNumber(target) && target > 0;
+        const hasPercentage = hasTarget && isFiniteNumber(percentage);
+        const showProgress = !incomplete && hasActual && hasTarget && hasPercentage;
+        const displayValue = showProgress
+          ? `${percentage}%`
+          : hasActual
+            ? formatValue(actual, unit)
+            : hasTarget
+              ? `${formatValue(0, unit)} / ${formatValue(target, unit)}`
+              : 'Unavailable';
         return <div className="assistant-metric" key={key}>
-          <div className="assistant-metric-row"><span>{label}</span><b>{available ? `${percentage}%` : 'Unavailable'}</b></div>
-          {available
+          <div className="assistant-metric-row"><span>{label}</span><b>{displayValue}</b></div>
+          {showProgress
             ? <><div className="community-progress" aria-label={`${label}: ${percentage}%`}><div style={{ width: `${Math.min(percentage, 100)}%` }}/></div><small>{formatValue(actual, unit)} / {formatValue(target, unit)}</small></>
-            : <small>Nutrition data is unavailable.</small>}
+            : hasTarget
+              ? hasActual
+                ? <small>Add a Health Profile to receive personalized targets.</small>
+                : <small>Target: {formatValue(target, unit)}/week · Add meals to start tracking</small>
+              : hasActual
+                ? <small>Add a Health Profile to receive personalized targets.</small>
+                : <small>Nutrition data is unavailable.</small>}
         </div>;
       })}
 
       <p className="assistant-alignment">
-        {unavailable
+        {incomplete
           ? `Complete your Health Profile${missingFields.length ? ` (${missingFields.join(', ')})` : ''} to receive personalized nutrition targets.`
-          : 'Nutrition progress is based on your saved weekly menu.'}
+          : empty
+            ? 'Add meals to your plan to see weekly nutrition totals.'
+            : partial
+              ? `Some macros are not yet reported by the dish catalog${missingFields.length ? ` (${missingFields.join(', ')})` : ''}.`
+              : 'Nutrition progress is based on your saved weekly menu.'}
       </p>
     </div>
   </aside>;

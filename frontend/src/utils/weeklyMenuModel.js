@@ -41,6 +41,7 @@ const formatDayDate = (date) => date.toLocaleDateString('en-US', { month: 'short
 const createDays = (weekStart, calorieGoal = null) => {
   const start = parseDate(weekStart);
   const today = toIsoDate(new Date());
+  const goal = calorieGoal != null && Number.isFinite(Number(calorieGoal)) ? Number(calorieGoal) : null;
   return Array.from({ length: 7 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
@@ -51,10 +52,10 @@ const createDays = (weekStart, calorieGoal = null) => {
       date: formatDayDate(date),
       isoDate,
       status: isoDate === today ? 'Today' : '',
-      calorieGoal: calorieGoal ?? 'Unknown',
-      proteinGoal: 'Unknown',
-      calorieActual: 'Unknown',
-      proteinActual: 'Unknown',
+      calorieGoal: goal,
+      proteinGoal: null,
+      calorieActual: 0,
+      proteinActual: 0,
       meals: []
     };
   });
@@ -65,6 +66,8 @@ const normalizeDish = (dish, index = 0) => ({
   name: dish.dishName ?? dish.name ?? 'Untitled dish',
   calories: Number(dish.calories ?? dish.kcal ?? 0),
   protein: Number(dish.protein ?? dish.proteinG ?? dish.protein_g ?? 0),
+  carbsG: Number(dish.carbsG ?? dish.carbs ?? dish.carbs_g ?? 0),
+  healthyFatsG: Number(dish.healthyFatsG ?? dish.fatG ?? dish.fat ?? dish.healthy_fats_g ?? 0),
   image: dish.image ?? dish.imageUrl ?? dish.image_url ?? IMAGE_POOL[index % IMAGE_POOL.length]
 });
 
@@ -75,6 +78,8 @@ export const normalizeDishCatalog = (dishes = []) => {
 const normalizeMeal = (item, meal, index) => {
   const dish = normalizeDish({ ...item, ...item.dish }, index);
   const servings = Number(item.servings ?? 1) || 1;
+  const carbsG = Number(item.carbsG ?? item.carbs ?? item.carbs_g ?? 0);
+  const healthyFatsG = Number(item.healthyFatsG ?? item.fatG ?? item.fats ?? item.healthy_fats_g ?? 0);
   return {
     key: String(item.itemId ?? item.id ?? `local-${Date.now()}-${index}`),
     itemId: item.itemId ?? item.id ?? null,
@@ -86,6 +91,8 @@ const normalizeMeal = (item, meal, index) => {
     protein: Math.round(dish.protein * servings),
     baseCalories: dish.calories,
     baseProtein: dish.protein,
+    carbsG,
+    healthyFatsG,
     image: dish.image,
     servings,
     notes: item.notes ?? '',
@@ -93,24 +100,150 @@ const normalizeMeal = (item, meal, index) => {
   };
 };
 
+const mealTotals = (meal) => {
+  const servings = Number(meal.servings ?? 1) || 1;
+  const calories = Number(meal.baseCalories ?? meal.calories ?? meal.kcal ?? 0);
+  const protein = Number(meal.baseProtein ?? meal.proteinG ?? meal.protein ?? 0);
+  const carbs = Number(meal.carbsG ?? 0);
+  const fats = Number(meal.healthyFatsG ?? 0);
+  return {
+    calories: Number.isFinite(calories) ? Math.round(calories * servings) : 0,
+    protein: Number.isFinite(protein) ? Math.round(protein * servings) : 0,
+    carbs: Number.isFinite(carbs) ? Math.round(carbs * servings) : 0,
+    fats: Number.isFinite(fats) ? Math.round(fats * servings) : 0
+  };
+};
+
+const percentageOf = (actual, target) =>
+  Number.isFinite(actual) && Number.isFinite(target) && target > 0
+    ? Math.round((actual * 1000) / target) / 10
+    : null;
+
+// Actuals are always recomputed from the meals currently shown on screen so
+// the assistant never goes stale while the user edits an unsaved plan. Target
+// values and the PROFILE_INCOMPLETE status still come from the backend.
+const mergeNutritionSummary = (backendSummary, localSummary) => {
+  const target = backendSummary?.target ?? null;
+  const incomplete = backendSummary?.status === 'PROFILE_INCOMPLETE';
+  const status = incomplete ? 'PROFILE_INCOMPLETE' : localSummary.status;
+  const missingFields = incomplete ? (backendSummary?.missingFields ?? []) : localSummary.missingFields;
+  const percentage = target
+    ? {
+        calories: percentageOf(localSummary.actual.calories, target.calories),
+        proteinG: percentageOf(localSummary.actual.proteinG, target.proteinG),
+        carbsG: percentageOf(localSummary.actual.carbsG, target.carbsG),
+        healthyFatsG: percentageOf(localSummary.actual.healthyFatsG, target.healthyFatsG)
+      }
+    : null;
+  return { status, missingFields, actual: localSummary.actual, target, percentage };
+};
+
 export const recalculateMenu = (menu) => {
-  const days = menu.days.map((day) => ({
-    ...day,
-    // Nutrition summary belongs to the canonical backend service.  Individual
-    // dish values are still displayed in the editor, but an absent nutrient is
-    // never converted to a zero weekly/day total here.
-    calorieActual: 'Unknown',
-    proteinActual: 'Unknown'
-  }));
+  let weeklyCalories = 0;
+  let weeklyProtein = 0;
+  let weeklyCarbs = 0;
+  let weeklyFats = 0;
+  const days = menu.days.map((day) => {
+    const totals = (day.meals ?? []).reduce((sum, meal) => {
+      const mealTotal = mealTotals(meal);
+      return {
+        calories: sum.calories + mealTotal.calories,
+        protein: sum.protein + mealTotal.protein,
+        carbs: sum.carbs + mealTotal.carbs,
+        fats: sum.fats + mealTotal.fats
+      };
+    }, { calories: 0, protein: 0, carbs: 0, fats: 0 });
+    weeklyCalories += totals.calories;
+    weeklyProtein += totals.protein;
+    weeklyCarbs += totals.carbs;
+    weeklyFats += totals.fats;
+    return {
+      ...day,
+      calorieActual: totals.calories,
+      proteinActual: totals.protein,
+      carbsActual: totals.carbs,
+      fatsActual: totals.fats
+    };
+  });
+  const backendSummary = menu.nutritionSummary && menu.nutritionSummary.status
+    ? menu.nutritionSummary
+    : null;
+  const nutritionSummary = mergeNutritionSummary(backendSummary, computeNutritionSummary(days));
+  const dailyTarget = (key) => nutritionSummary.target?.[key] != null
+    ? Math.round(Number(nutritionSummary.target[key]) / 7)
+    : null;
+  const proteinGoal = dailyTarget('proteinG');
+  const carbsGoal = dailyTarget('carbsG');
+  const fatsGoal = dailyTarget('healthyFatsG');
+  const hasAnyMeal = days.some((day) => (day.meals ?? []).length > 0);
   return {
     ...menu,
-    days,
+    days: days.map((day) => ({
+      ...day,
+      proteinGoal: proteinGoal ?? day.proteinGoal ?? null,
+      carbsGoal: carbsGoal ?? day.carbsGoal ?? null,
+      fatsGoal: fatsGoal ?? day.fatsGoal ?? null
+    })),
+    nutritionSummary,
     groceryList: { itemCount: days.reduce((sum, day) => sum + day.meals.length, 0) },
     week: {
       ...menu.week,
-      avgCalories: null,
-      avgProtein: null
+      avgCalories: hasAnyMeal ? Math.round(weeklyCalories / 7) : null,
+      avgProtein: hasAnyMeal ? Math.round(weeklyProtein / 7) : null,
+      avgCarbs: hasAnyMeal ? Math.round(weeklyCarbs / 7) : null,
+      avgFats: hasAnyMeal ? Math.round(weeklyFats / 7) : null
     }
+  };
+};
+
+// Build a nutrition summary from the local menu state. Used as a fallback
+// when the backend response omits the canonical `nutritionSummary` block so
+// the Meal Plan Assistant never shows "Unavailable" while meals are present.
+export const computeNutritionSummary = (days = []) => {
+  let totalCalories = 0;
+  let totalProtein = 0;
+  let totalCarbs = 0;
+  let totalFats = 0;
+  let hasProtein = false;
+  let hasCarbs = false;
+  let hasFats = false;
+
+  days.forEach((day) => {
+    (day.meals ?? []).forEach((meal) => {
+      const servings = Number(meal.servings ?? 1) || 1;
+      const calories = Number(meal.baseCalories ?? meal.calories ?? meal.kcal ?? 0);
+      const protein = Number(meal.baseProtein ?? meal.proteinG ?? meal.protein ?? 0);
+      const carbs = Number(meal.carbsG ?? meal.carbs ?? 0);
+      const fats = Number(meal.healthyFatsG ?? meal.fats ?? meal.fatG ?? 0);
+      if (Number.isFinite(calories)) totalCalories += Math.round(calories * servings);
+      if (Number.isFinite(protein) && protein) { totalProtein += protein * servings; hasProtein = true; }
+      if (Number.isFinite(carbs) && carbs) { totalCarbs += carbs * servings; hasCarbs = true; }
+      if (Number.isFinite(fats) && fats) { totalFats += fats * servings; hasFats = true; }
+    });
+  });
+  const round1 = (value) => Math.round(value * 10) / 10;
+  const hasAnyMeal = days.some((day) => (day.meals ?? []).length > 0);
+  const actual = {
+    calories: hasAnyMeal ? totalCalories : null,
+    proteinG: hasProtein ? round1(totalProtein) : null,
+    carbsG: hasCarbs ? round1(totalCarbs) : null,
+    healthyFatsG: hasFats ? round1(totalFats) : null
+  };
+  const missingFields = [];
+  if (!hasProtein) missingFields.push('proteinG');
+  if (!hasCarbs) missingFields.push('carbsG');
+  if (!hasFats) missingFields.push('healthyFatsG');
+  const status = !hasAnyMeal
+    ? 'EMPTY_MENU'
+    : missingFields.length === 0
+      ? 'AVAILABLE'
+      : 'PARTIAL';
+  return {
+    status,
+    missingFields,
+    actual,
+    target: null,
+    percentage: null
   };
 };
 
@@ -170,7 +303,8 @@ export const normalizeWeeklyMenu = (raw = {}, requestedStart) => {
     raw.days.slice(0, 7).forEach((source, index) => {
       const target = days[index];
       if (!target) return;
-      target.calorieGoal = Number(source.calorieGoal ?? target.calorieGoal);
+      const goal = Number(source.calorieGoal ?? target.calorieGoal);
+      target.calorieGoal = Number.isFinite(goal) ? goal : target.calorieGoal;
       target.proteinGoal = numberOrNull(source.proteinGoal) ?? target.proteinGoal;
       target.status = source.status ?? target.status;
       target.meals = (source.meals ?? []).map((meal, mealIndex) => normalizeMeal(meal, meal, mealIndex));
@@ -210,6 +344,8 @@ export const createLocalMeal = (dish, slot, servings = 1, notes = '', swapped = 
   protein: Math.round(dish.protein * servings),
   baseCalories: dish.calories,
   baseProtein: dish.protein,
+  carbsG: Number.isFinite(Number(dish.carbsG)) ? Number(dish.carbsG) : 0,
+  healthyFatsG: Number.isFinite(Number(dish.healthyFatsG)) ? Number(dish.healthyFatsG) : 0,
   image: dish.image,
   servings,
   notes,

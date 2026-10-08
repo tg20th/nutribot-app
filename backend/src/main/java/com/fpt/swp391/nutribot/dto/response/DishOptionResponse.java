@@ -17,5 +17,10 @@ public class DishOptionResponse {
     private String name;
     private Integer calories;
     private BigDecimal proteinG;
+    private BigDecimal carbsG;
+    private BigDecimal healthyFatsG;
+    private BigDecimal servingSize;
+    private String servingUnit;
+    private String vegetarianType;
     private String imageUrl;
 }

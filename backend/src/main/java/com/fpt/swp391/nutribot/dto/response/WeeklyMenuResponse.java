@@ -23,6 +23,7 @@ public class WeeklyMenuResponse {
     private List<MealResponse> meals;
     private List<DailyCaloriesResponse> dailyTotals;
     private long totalCalories;
+    private WeeklyNutritionSummary nutritionSummary;
 
     @Data
     @Builder
@@ -45,10 +46,14 @@ public class WeeklyMenuResponse {
         private String dishName;
         private Integer calories;
         private BigDecimal proteinG;
+        private BigDecimal carbsG;
+        private BigDecimal healthyFatsG;
         private String imageUrl;
         private BigDecimal servings;
         private String notes;
         private Integer totalCalories;
+        private BigDecimal totalCarbsG;
+        private BigDecimal totalHealthyFatsG;
     }
 
     @Data

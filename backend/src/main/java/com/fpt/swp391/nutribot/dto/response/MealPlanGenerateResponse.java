@@ -8,5 +8,6 @@ import java.util.List;
 public class MealPlanGenerateResponse {
     private String suggestedMenuTitle;
     private Integer estimatedDailyCalories;
+    private NutritionTargetResponse nutritionTarget;
     private List<MealPlanDayResponse> weeklyPlan;
 }
