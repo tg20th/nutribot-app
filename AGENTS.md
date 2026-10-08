@@ -80,6 +80,34 @@ git commit -m "feat(NB-02-BE): hoàn thành API đăng ký và mã hóa mật kh
      ```
    - **Tuyệt đối nghiêm cấm:** Code task mới trên nhánh cũ đã merge hoặc commit chồng chéo các tính năng không liên quan lên cùng một nhánh/PR.
 
+### 2.4. Quy trình Tạo PR Không Xung Đột (Zero-Conflict PR Workflow):
+Trước khi tạo Pull Request (PR) hoặc khi chuẩn bị đẩy code lên review, Agent/lập trình viên **BẮT BUỘC** thực hiện quy trình 4 bước để đảm bảo 100% không bị xung đột (conflict) với `master` trên origin:
+1. **Đồng bộ commit mới nhất từ `origin/master`:**
+   ```bash
+   git fetch origin master
+   ```
+2. **Rebase nhánh tính năng lên đầu `origin/master`:**
+   ```bash
+   git rebase origin/master
+   ```
+   - Nếu có xung đột, giải quyết dứt điểm tại local trên từng file bị conflict, sau đó:
+     ```bash
+     git add <các_file_đã_sửa>
+     git rebase --continue
+     ```
+3. **Chạy kiểm thử toàn diện tại local:**
+   - Đảm bảo toàn bộ test case (FE/BE/AI) vượt qua 100% sau khi rebase:
+     ```bash
+     # Ví dụ kiểm thử Frontend:
+     cd frontend && npm test -- --run
+     ```
+4. **Đẩy code an toàn lên remote:**
+   - Sử dụng cờ `--force-with-lease` để cập nhật nhánh đã rebase mà không sợ đè nhầm commit khác:
+     ```bash
+     git push --force-with-lease origin <tên_nhánh>
+     ```
+5. **Tạo PR:** Lúc này PR vào `master` luôn đảm bảo trạng thái xanh *"Able to merge"* và không có conflict.
+
 ---
 
 ## 📐 3. NGUYÊN TẮC KIẾN TRÚC & HỢP ĐỒNG DỮ LIỆU

@@ -1,4 +1,103 @@
-import { Users, BookOpen, ShieldAlert, ArrowUpRight, CheckCircle2, AlertTriangle, ShieldCheck, Download } from 'lucide-react';
-import { Link } from 'react-router-dom'; import { useEffect, useState } from 'react'; import { adminApi } from '../../services/adminApi'; import { ErrorState, LoadingState, Toast } from '../../components/admin/AdminUi';
-const periods = [{ label: 'Today', value: 'today' }, { label: 'Last 7 Days', value: '7d' }, { label: 'Last 30 Days', value: '30d' }];
-export default function AdminDashboard() { const [range, setRange] = useState('7d'), [data, setData] = useState(null), [error, setError] = useState(false), [toast, setToast] = useState(''); const load = () => { setError(false); adminApi.getDashboard(range).then(setData).catch(() => setError(true)); }; useEffect(load, [range]); if (error) return <ErrorState onRetry={load}/>; if (!data) return <LoadingState/>; const cards = [{ label: 'Total users', value: data.metrics.totalUsers, icon: Users, to: '/admin/users', caption: 'registered community members' }, { label: 'Published content', value: data.metrics.publishedContent, icon: BookOpen, to: '/admin/content/blogs', caption: 'blogs and videos currently public' }]; const max = Math.max(...data.weeklyContent.map(x => x.published)); return <div className="operations-dashboard"><header className="ops-heading"><div><p>ADMINISTRATION</p><h1>Platform overview</h1><span>Monitor community activity, content quality, and moderation work.</span></div><div className="ops-health"><i/><span>{data.health.status}</span><small>{data.health.version}</small></div></header><section className="ops-periods"><span>Showing data for</span>{periods.map(x => <button key={x.value} className={range === x.value ? 'active' : ''} onClick={() => { setData(null); setRange(x.value); }}>{x.label}</button>)}</section><div className="ops-layout"><div className="ops-primary"><section className="ops-metrics">{cards.map(({ label, value, icon: Icon, to, caption }) => <Link to={to} className="ops-metric" key={label}><span><Icon size={18}/>{label}</span><strong>{value.toLocaleString()}</strong><small>{caption}</small></Link>)}<Link to="/admin/moderation" className="ops-metric pending"><span><ShieldAlert size={18}/>Moderation queue</span><strong>{data.metrics.pendingModeration} items</strong><small>Pending items require a decision</small></Link></section><section className="admin-panel ops-chart"><div className="panel-heading"><div><h2>Content activity</h2><span>Published posts and moderation flags over the selected period.</span></div><div className="chart-key"><i/> Published <b/> Flagged</div></div><div className="bar-chart">{data.weeklyContent.map(x => <div className="bar-group" key={x.day}><div className="bars"><i style={{ height: `${(x.published / max) * 100}%` }} title={`${x.published} published`}/><b style={{ height: `${Math.max(7, (x.flagged / max) * 100)}%` }} title={`${x.flagged} flagged`}/></div><small>{x.day}</small></div>)}</div><div className="ops-insight"><CheckCircle2 size={17}/><span><b>Platform health insight.</b> Most recent submissions were processed within the normal moderation window.</span></div></section><section className="admin-panel ops-tags"><div className="panel-heading"><div><h2>Most active categories</h2><span>Ranked by content volume in the selected period.</span></div><Link to="/admin/categories">Manage categories <ArrowUpRight size={14}/></Link></div>{data.popularCategories.map(x => <div className="tag-row" key={x.name}><b>{x.rank}</b><span><strong>{x.name}</strong><small>{x.description}</small></span><em>{x.posts} posts</em><i>{x.growth}</i></div>)}</section></div><aside className="ops-side"><section className="admin-panel ops-feed"><div className="panel-heading"><div><h2>Moderation feed</h2><span>Recent platform events.</span></div><Link to="/admin/comments">View all</Link></div>{data.moderationFeed.map((x, i) => <div className="feed-row" key={i}><span className={x.type}>{x.type === 'approved' ? <CheckCircle2/> : x.type === 'warning' ? <AlertTriangle/> : <ShieldCheck/>}</span><p>{x.text}<small>{x.time}</small></p></div>)}</section><section className="admin-panel ops-export"><p>REPORTING</p><h2>Audit & governance export</h2><span>Prepare an overview of member activity, published content and moderation decisions.</span><button className="admin-btn primary" onClick={() => setToast('Report export will be available when the backend endpoint is connected.')}><Download size={16}/> Download report</button></section></aside></div><Toast message={toast} onDismiss={() => setToast('')}/></div>; }
+import { BookOpen, Download, FileText, ShieldCheck, Users } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { adminApi } from '../../services/adminApi';
+import { ErrorState, LoadingState, Toast } from '../../components/admin/AdminUi';
+
+const formatDate = (value) => {
+  if (!value) return 'Recently submitted';
+  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));
+};
+
+export default function AdminDashboard() {
+  const [dashboard, setDashboard] = useState(null);
+  const [error, setError] = useState(false);
+  const [toast, setToast] = useState('');
+
+  const loadDashboard = () => {
+    const controller = new AbortController();
+    setError(false);
+    adminApi.getDashboard(controller.signal)
+      .then((result) => {
+        if (!controller.signal.aborted) setDashboard(result);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setError(true);
+      });
+    return () => controller.abort();
+  };
+
+  useEffect(loadDashboard, []);
+
+  if (!dashboard && !error) return <LoadingState label="Loading platform overview..." />;
+  if (error) return <ErrorState onRetry={loadDashboard} />;
+
+  const { metrics, moderationQueue, categories } = dashboard;
+
+  return (
+    <main className="dashboard-ledger">
+      <header className="dashboard-ledger-heading">
+        <div>
+          <p className="admin-eyebrow">Administration</p>
+          <h1>Platform overview</h1>
+          <p className="dashboard-ledger-intro">A focused snapshot of the community and the decisions currently waiting for an admin.</p>
+        </div>
+        <div className="dashboard-heading-actions">
+          <button type="button" className="admin-btn dashboard-export-button" onClick={() => setToast('Report export will be available when its API is connected.')}>
+            <Download size={17} aria-hidden="true" /> Export report
+          </button>
+        </div>
+      </header>
+
+      <section className="dashboard-ledger-summary" aria-label="Platform summary">
+        <Link to="/admin/users" className="dashboard-summary-item">
+          <span className="dashboard-summary-icon"><Users size={20} aria-hidden="true" /></span>
+          <span><small>Members</small><strong>{metrics.totalUsers}</strong><em>registered accounts</em></span>
+        </Link>
+        <Link to="/admin/moderation" className="dashboard-summary-item dashboard-summary-item--priority">
+          <span className="dashboard-summary-icon"><ShieldCheck size={20} aria-hidden="true" /></span>
+          <span><small>Needs review</small><strong>{metrics.pendingModeration}</strong><em>pending submissions</em></span>
+        </Link>
+        <Link to="/admin/moderation" className="dashboard-summary-item">
+          <span className="dashboard-summary-icon"><BookOpen size={20} aria-hidden="true" /></span>
+          <span><small>Published</small><strong>{metrics.publishedContent}</strong><em>blogs and videos</em></span>
+        </Link>
+      </section>
+
+      <section className="dashboard-ledger-grid">
+        <article className="dashboard-panel dashboard-review-panel">
+          <div className="dashboard-panel-heading">
+            <div><p className="admin-eyebrow">Review desk</p><h2>Latest submissions</h2></div>
+            <Link to="/admin/moderation" className="dashboard-text-link">Open moderation</Link>
+          </div>
+          {moderationQueue.length ? (
+            <ol className="dashboard-review-list">
+              {moderationQueue.map((item) => (
+                <li key={`${item.type}-${item.id}`}>
+                  <span className="dashboard-content-icon"><FileText size={18} aria-hidden="true" /></span>
+                  <div><strong>{item.title}</strong><span>{item.author} - {formatDate(item.submittedAt)}</span></div>
+                  <span className="dashboard-status">Awaiting review</span>
+                </li>
+              ))}
+            </ol>
+          ) : <div className="dashboard-empty-copy">Nothing is waiting for review right now.</div>}
+        </article>
+
+        <aside className="dashboard-panel dashboard-category-panel">
+          <div className="dashboard-panel-heading">
+            <div><p className="admin-eyebrow">Content catalogue</p><h2>Categories</h2></div>
+            <Link to="/admin/categories" className="dashboard-text-link">Manage categories</Link>
+          </div>
+          <p className="dashboard-category-note">Configured categories only. The current API does not provide reliable category activity totals.</p>
+          {categories.length ? (
+            <ul className="dashboard-category-list">
+              {categories.map((category) => <li key={category.id}><span>{category.name}</span><small className={category.active ? 'is-active' : 'is-hidden'}>{category.active ? 'Active' : 'Hidden'}</small></li>)}
+            </ul>
+          ) : <div className="dashboard-empty-copy">No categories have been configured.</div>}
+        </aside>
+      </section>
+
+      <Toast message={toast} onDismiss={() => setToast('')} />
+    </main>
+  );
+}
