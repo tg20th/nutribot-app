@@ -22,6 +22,9 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.fpt.swp391.nutribot.dto.request.PasswordUpdateRequest;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
@@ -50,6 +53,7 @@ public class UserProfileService {
     private final CloudinaryAvatarService cloudinaryAvatarService;
     private final JwtTokenProvider jwtTokenProvider;
     private final EmailChangeService emailChangeService;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
     public UserProfileResponse getProfile(String username) {
@@ -195,7 +199,50 @@ public class UserProfileService {
                 .healthGoal(profile == null ? null : profile.getHealthGoal())
                 .allergies(allergies)
                 .token(refreshedToken)
+                .hasPassword(Boolean.TRUE.equals(user.getHasPassword()))
+                .authProvider(user.getAuthProvider() != null ? user.getAuthProvider() : "LOCAL")
                 .build();
+    }
+
+    @Transactional
+    public UserProfileResponse changePassword(String currentUsername, PasswordUpdateRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Dữ liệu yêu cầu không được để trống.");
+        }
+        String newPassword = request.getNewPassword();
+        String confirmPassword = request.getConfirmPassword();
+        if (newPassword == null || newPassword.isBlank()) {
+            throw new BadRequestException("Mật khẩu mới không được để trống.");
+        }
+        if (confirmPassword == null || confirmPassword.isBlank()) {
+            throw new BadRequestException("Vui lòng xác nhận mật khẩu mới.");
+        }
+        if (!newPassword.equals(confirmPassword)) {
+            throw new BadRequestException("Mật khẩu xác nhận không khớp.");
+        }
+
+        User user = findUserForUpdate(currentUsername);
+        boolean hasPassword = Boolean.TRUE.equals(user.getHasPassword());
+
+        if (hasPassword) {
+            String currentPassword = request.getCurrentPassword();
+            if (currentPassword == null || currentPassword.isBlank()) {
+                throw new BadRequestException("Vui lòng nhập mật khẩu hiện tại.");
+            }
+            if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+                throw new BadRequestException("Mật khẩu hiện tại không chính xác.");
+            }
+            if (passwordEncoder.matches(newPassword, user.getPasswordHash())) {
+                throw new BadRequestException("Mật khẩu mới phải khác mật khẩu hiện tại.");
+            }
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setHasPassword(true);
+        User savedUser = userRepository.saveAndFlush(user);
+
+        UserProfile profile = userProfileRepository.findById(savedUser.getUserId()).orElse(null);
+        return toResponse(savedUser, profile);
     }
 
     private BigDecimal calculateBmi(BigDecimal heightCm, BigDecimal weightKg) {

@@ -39,4 +39,6 @@ public class UserProfileResponse {
     private String healthGoal;
     private List<String> allergies;
     private String token;
+    private Boolean hasPassword;
+    private String authProvider;
 }

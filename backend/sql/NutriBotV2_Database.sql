@@ -45,6 +45,8 @@ CREATE TABLE users (
     role_id         INT NOT NULL,
     strike_count    TINYINT NOT NULL CONSTRAINT DF_users_strike_count DEFAULT (0),
     status          NVARCHAR(20) NOT NULL CONSTRAINT DF_users_status DEFAULT (N'PENDING_VERIFY'),
+    auth_provider   NVARCHAR(20) NOT NULL CONSTRAINT DF_users_auth_provider DEFAULT (N'LOCAL'),
+    has_password    BIT NOT NULL CONSTRAINT DF_users_has_password DEFAULT (1),
     created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_users_created_at DEFAULT (SYSUTCDATETIME()),
     updated_at      DATETIME2(3) NOT NULL CONSTRAINT DF_users_updated_at DEFAULT (SYSUTCDATETIME()),
 
