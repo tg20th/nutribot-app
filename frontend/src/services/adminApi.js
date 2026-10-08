@@ -57,11 +57,14 @@ const mapModerationItem = (item) => ({
   viewCount: item.viewCount ?? 0,
   body: item.body,
   thumbnailUrl: item.thumbnailUrl,
+  aiFlagged: item.aiFlagged,
+  aiReason: item.aiReason,
+  aiConfidence: item.aiConfidence,
 });
 const moderationPreviewItems = [
-  { contentId: 201, contentType: 'BLOG', title: 'A colorful bowl for busy mornings', slug: 'colorful-bowl-mornings', status: 'pending', authorUsername: 'minhanh', authorEmail: 'minhanh@example.com', createdAt: '2026-09-26T08:30:00', viewCount: 0, body: 'Fresh fruit, yogurt, and oats make a bright start to the day.', thumbnailUrl: moderationBowl },
-  { contentId: 202, contentType: 'VIDEO', title: 'Prep fresh produce for the week', slug: 'prep-fresh-produce', status: 'pending', authorUsername: 'nutribot', authorEmail: 'team@nutribot.app', createdAt: '2026-09-25T10:15:00', viewCount: 0, body: 'A quick kitchen routine for colorful weekday meals.', thumbnailUrl: moderationProduce },
-  { contentId: 203, contentType: 'BLOG', title: 'Simple greens for lunch', slug: 'simple-greens-lunch', status: 'pending', authorUsername: 'lan', authorEmail: 'lan@example.com', createdAt: '2026-09-24T14:00:00', viewCount: 0, body: 'A balanced lunch with vegetables, grains, and a little crunch.', thumbnailUrl: moderationPlate },
+  { contentId: 201, contentType: 'BLOG', title: 'A colorful bowl for busy mornings', slug: 'colorful-bowl-mornings', status: 'pending', authorUsername: 'minhanh', authorEmail: 'minhanh@example.com', createdAt: '2026-09-26T08:30:00', viewCount: 0, body: 'Fresh fruit, yogurt, and oats make a bright start to the day.', thumbnailUrl: moderationBowl, aiFlagged: true, aiReason: 'Nội dung và hình ảnh an toàn, được kiểm duyệt tự động', aiConfidence: 0.95 },
+  { contentId: 202, contentType: 'VIDEO', title: 'Prep fresh produce for the week', slug: 'prep-fresh-produce', status: 'pending', authorUsername: 'nutribot', authorEmail: 'team@nutribot.app', createdAt: '2026-09-25T10:15:00', viewCount: 0, body: 'A quick kitchen routine for colorful weekday meals.', thumbnailUrl: moderationProduce, aiFlagged: true, aiReason: 'Cần kiểm tra thủ công nguyên liệu gia vị', aiConfidence: 0.82 },
+  { contentId: 203, contentType: 'BLOG', title: 'Simple greens for lunch', slug: 'simple-greens-lunch', status: 'pending', authorUsername: 'lan', authorEmail: 'lan@example.com', createdAt: '2026-09-24T14:00:00', viewCount: 0, body: 'A balanced lunch with vegetables, grains, and a little crunch.', thumbnailUrl: moderationPlate, aiFlagged: false, aiReason: 'Món ăn hoàn toàn tuân thủ chế độ chay', aiConfidence: 0.99 },
 ];
 let moderationPreviewState = [...moderationPreviewItems];
 const isModerationPreview = () => import.meta.env.DEV && typeof window !== 'undefined'
