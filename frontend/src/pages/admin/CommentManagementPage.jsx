@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, MessageSquareText, Trash2 } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, EyeOff, MessageSquareText, Search, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingState, Toast } from '../../components/admin/AdminUi';
 import { adminCommentsApi } from '../../services/adminCommentsApi';
@@ -6,6 +6,11 @@ import '../../styles/admin-comments.css';
 
 const pageSize = 10;
 const statusLabels = { published: 'Published', hidden: 'Hidden', rejected: 'Rejected' };
+const moderationActions = {
+  published: { label: 'Publish', title: 'Publish this comment?', text: 'The comment will be visible to members again.', confirmClass: 'primary', icon: Check },
+  hidden: { label: 'Hide', title: 'Hide this comment?', text: 'The comment will no longer be visible to members.', confirmClass: 'secondary', icon: EyeOff },
+  rejected: { label: 'Reject', title: 'Reject this comment?', text: 'The comment will be marked as rejected.', confirmClass: 'danger', icon: X },
+};
 
 function formatDate(value) {
   if (!value) return 'Date unavailable';
@@ -24,20 +29,22 @@ function CommentStatus({ value }) {
 export default function CommentManagementPage() {
   const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview') === '1';
   const [page, setPage] = useState(1);
+  const [keyword, setKeyword] = useState('');
+  const [status, setStatus] = useState('');
   const [result, setResult] = useState({ content: [], totalPages: 0, totalElements: 0 });
   const [selectedId, setSelectedId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [confirm, setConfirm] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError(false);
-    adminCommentsApi.list({ page: page - 1, size: pageSize }, controller.signal)
+    adminCommentsApi.list({ page: page - 1, size: pageSize, ...(keyword ? { keyword } : {}), ...(status ? { status } : {}) }, controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
         const next = {
@@ -54,33 +61,42 @@ export default function CommentManagementPage() {
           ? current : next.content[0]?.commentId ?? null);
       })
       .catch((requestError) => {
-        if (requestError.name !== 'AbortError') setError(true);
+        if (!controller.signal.aborted) setError(true);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [page, refreshKey]);
+  }, [page, keyword, refreshKey, status]);
 
   const comments = result.content;
   const selected = comments.find((item) => item.commentId === selectedId) ?? comments[0] ?? null;
 
-  const removeComment = async () => {
-    if (!confirm || deleting) return;
-    setDeleting(true);
+  const submitModeration = async () => {
+    if (!confirm || submitting) return;
+    setSubmitting(true);
     try {
-      await adminCommentsApi.remove(confirm.commentId);
+      if (confirm.action === 'delete') await adminCommentsApi.remove(confirm.comment.commentId);
+      else await adminCommentsApi.updateStatus(confirm.comment.commentId, confirm.action);
       setConfirm(null);
       setSelectedId(null);
-      setToast('Comment deleted.');
-      if (comments.length === 1 && page > 1) setPage(page - 1);
+      setToast(confirm.action === 'delete' ? 'Comment deleted.' : `Comment ${moderationActions[confirm.action].label.toLowerCase()}.`);
+      if (confirm.action === 'delete' && comments.length === 1 && page > 1) setPage(page - 1);
       else setRefreshKey((key) => key + 1);
     } catch {
       setConfirm(null);
-      setToast('Could not delete this comment. Please try again.');
+      setToast('Could not update this comment. The latest data has been reloaded.');
+      setRefreshKey((key) => key + 1);
     } finally {
-      setDeleting(false);
+      setSubmitting(false);
     }
+  };
+
+  const updateFilters = (nextKeyword = keyword, nextStatus = status) => {
+    setKeyword(nextKeyword);
+    setStatus(nextStatus);
+    setPage(1);
+    setSelectedId(null);
   };
 
   return <div className="comment-admin-page">
@@ -95,7 +111,10 @@ export default function CommentManagementPage() {
 
     <div className="comment-admin-intro">
       <div><h2>All comments</h2><p>Select a comment to read its full text and context.</p></div>
-      <span>Newest first</span>
+      <div className="comment-admin-filters">
+        <label className="comment-admin-search"><Search size={16} aria-hidden="true" /><input value={keyword} onChange={(event) => updateFilters(event.target.value, status)} placeholder="Search comment, member, or email" aria-label="Search comments" />{keyword && <button type="button" onClick={() => updateFilters('', status)} aria-label="Clear comment search"><X size={14} /></button>}</label>
+        <label className="comment-admin-status-filter">Status<select value={status} onChange={(event) => updateFilters(keyword, event.target.value)}><option value="">All statuses</option><option value="published">Published comments</option><option value="hidden">Hidden comments</option><option value="rejected">Rejected comments</option></select></label>
+      </div>
     </div>
 
     {loading ? <section className="admin-panel comment-admin-state"><LoadingState /></section>
@@ -135,14 +154,17 @@ export default function CommentManagementPage() {
                 <blockquote>{selected.body}</blockquote>
                 <div className="comment-admin-context"><span>RELATED CONTENT</span><strong>{selected.contentTitle || 'Untitled content'}</strong><small>{selected.contentType === 'VIDEO' ? 'Video' : 'Blog'}{selected.parentId ? ' · Reply to a comment' : ''}</small></div>
               </div>
-              <footer className="comment-admin-actions"><button type="button" className="admin-btn danger" disabled={deleting} onClick={() => setConfirm(selected)}><Trash2 size={16} /> Delete comment</button></footer>
+              <footer className="comment-admin-actions">
+                {Object.entries(moderationActions).filter(([nextStatus]) => nextStatus !== selected.status).map(([nextStatus, action]) => { const Icon = action.icon; return <button key={nextStatus} type="button" className={`admin-btn ${action.confirmClass}`} disabled={submitting} onClick={() => setConfirm({ comment: selected, action: nextStatus })}><Icon size={16} /> {action.label}</button>; })}
+                <button type="button" className="admin-btn danger" disabled={submitting} onClick={() => setConfirm({ comment: selected, action: 'delete' })}><Trash2 size={16} /> Delete comment</button>
+              </footer>
             </article>
           </div>}
 
     <ConfirmDialog
-      dialog={confirm ? { title: 'Delete this comment?', text: `The comment by ${confirm.username || 'this member'} will be permanently removed.`, confirm: deleting ? 'Deleting...' : 'Delete comment' } : null}
-      onClose={() => { if (!deleting) setConfirm(null); }}
-      onConfirm={removeComment}
+      dialog={confirm ? { title: confirm.action === 'delete' ? 'Delete this comment?' : moderationActions[confirm.action].title, text: confirm.action === 'delete' ? `The comment by ${confirm.comment.username || 'this member'} will be permanently removed.` : moderationActions[confirm.action].text, confirm: submitting ? 'Saving...' : confirm.action === 'delete' ? 'Delete comment' : moderationActions[confirm.action].label, confirmClass: confirm.action === 'delete' ? 'danger' : moderationActions[confirm.action].confirmClass } : null}
+      onClose={() => { if (!submitting) setConfirm(null); }}
+      onConfirm={submitModeration}
     />
     <Toast message={toast} onDismiss={() => setToast('')} />
     {preview && <span className="comment-admin-preview-marker">Preview data</span>}
