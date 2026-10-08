@@ -7,7 +7,7 @@ import CommunitySideNav from '../community/CommunitySideNav';
 import RestaurantRecommendations from '../community/RestaurantRecommendations';
 import { getPost } from '../../services/communityApi';
 import CommentSection from './CommentSection';
-import { formatPostDate } from '../../utils/content';
+import { formatPostDate, extractStoryText } from '../../utils/content';
 import VoteButton from './VoteButton';
 import '../../styles/feed-content-detail.css';
 
@@ -81,7 +81,7 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
         : <>
           <section className="detail-hero">
             <div className="detail-hero-copy"><span>{detail.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span>{detail.title && <h1 id="nb-content-title">{detail.title}</h1>}
-              {detail.description !== detail.body && <p>{detail.description}</p>}
+              {detail.description !== detail.body && <p>{extractStoryText(detail.description)}</p>}
               <div className="detail-author">{detail.avatar && <img src={detail.avatar} alt=""/>}<div><b>{detail.author || 'NutriBot community'}</b><small>{detail.createdAt && <time dateTime={detail.createdAt}>{formatPostDate(detail.createdAt)}</time>}</small></div></div>
             </div>
             {(detail.image || detail.videoUrl) && <div className="detail-media">{detail.type === 'video' && detail.videoUrl
@@ -98,7 +98,7 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
           </section>}
           {(detail.cleanBody || detail.body || detail.description) && <article ref={story} className="nb-content-body" tabIndex="-1">
             <div className="detail-section-head"><h2>{detail.type === 'video' ? 'About this video' : 'The story'}</h2></div>
-            {String(detail.cleanBody || detail.body || detail.description)
+            {String(extractStoryText(detail.cleanBody || detail.body || detail.description))
               .split(/\n\n+/)
               .filter(Boolean)
               .map((paragraph, index) => (

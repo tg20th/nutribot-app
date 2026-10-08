@@ -6,6 +6,7 @@ import ImageWithFallback from './ImageWithFallback';
 import LoginRequiredModal from './LoginRequiredModal';
 import { googleAuthUrl } from '../services/contentApi';
 import { isAuthenticated } from '../utils/auth';
+import { extractStoryText } from '../utils/content';
 
 export default function ContentCard({ post, onPlay }) {
   const [liked, setLiked] = useState(false);
@@ -37,7 +38,7 @@ export default function ContentCard({ post, onPlay }) {
       <span className="content-type">{post.type}</span>
       <h3>{isVideo ? post.title : <Link to={blogHref(post)}>{post.title}</Link>}</h3>
       <div className="author">{post.avatar ? <ImageWithFallback src={post.avatar} alt=""/> : <span className="avatar-fallback">{post.author?.slice(0, 1)}</span>}<span><b>{post.author}</b><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></span></div>
-      <p>{post.description}</p>
+      <p>{extractStoryText(post.description)}</p>
       <div className="card-footer"><button type="button" onClick={handleLike} className={liked ? 'is-active' : ''} aria-label={liked ? `Unlike, ${post.likes} likes` : `Like, ${post.likes} likes`}><Heart size={17} fill={liked ? 'currentColor' : 'none'}/>{post.likes}</button><button type="button" onClick={handleComment} aria-label={`${post.comments} comments`}><MessageCircle size={17}/>{post.comments}</button></div>
     </div>
     {showLoginModal && <LoginRequiredModal onClose={() => setShowLoginModal(false)} onAuthenticated={() => setShowLoginModal(false)} onGoogle={() => window.location.assign(googleAuthUrl())}/>}
