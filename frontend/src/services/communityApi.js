@@ -221,6 +221,16 @@ export const appendUniquePersonalizedPosts = (existingPosts, nextPosts) => {
   })];
 };
 
+export const contentIdOf = (post = {}) => post.contentId ?? post.id;
+
+// This only changes the client's first render after publishing. The backend
+// remains the source of truth for the ranked snapshot and cursor pagination.
+export const prioritizePersonalizedPost = (posts, priorityPost) => {
+  const priorityId = contentIdOf(priorityPost);
+  if (priorityId == null) return posts;
+  return [priorityPost, ...posts.filter((post) => String(contentIdOf(post)) !== String(priorityId))];
+};
+
 export async function getPersonalizedPostsPage({ cursor, signal, limit = 20 } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set('cursor', cursor);
