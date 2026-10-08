@@ -280,7 +280,7 @@ Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/c
   "success": true,
   "message": "Success",
   "data": [
-    { "dishId": 5, "name": "Yến mạch hoa quả hạt chia", "calories": 350, "proteinG": 12.5, "imageUrl": "https://example.com/oats.jpg" }
+    { "dishId": 5, "name": "Yến mạch hoa quả hạt chia", "calories": 350, "proteinG": 12.5, "carbsG": 45.0, "healthyFatsG": 10.0, "imageUrl": "https://example.com/oats.jpg" }
   ],
   "timestamp": "2026-09-27T12:00:00Z"
 }
@@ -313,10 +313,14 @@ Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/c
             "dishName": "Yến mạch hoa quả hạt chia",
             "calories": 350,
             "proteinG": 12.5,
+            "carbsG": 45.0,
+            "healthyFatsG": 10.0,
             "imageUrl": "https://example.com/oats.jpg",
             "servings": 1.0,
             "notes": "Ăn kèm sữa hạnh nhân",
-            "totalCalories": 350
+            "totalCalories": 350,
+            "totalCarbsG": 45.0,
+            "totalHealthyFatsG": 10.0
           }
         ]
       }
@@ -330,11 +334,20 @@ Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/c
       { "dayOfWeek": 6, "totalCalories": 0 },
       { "dayOfWeek": 7, "totalCalories": 0 }
     ],
-    "totalCalories": 350
+    "totalCalories": 350,
+    "nutritionSummary": {
+      "status": "AVAILABLE",
+      "actual": { "calories": 350, "proteinG": 12.5, "carbsG": 45.0, "healthyFatsG": 10.0 },
+      "target": { "calories": 12600, "proteinG": 630, "carbsG": 1575, "healthyFatsG": 350 },
+      "percentage": { "calories": 2.8, "proteinG": 2.0, "carbsG": 2.9, "healthyFatsG": 2.9 },
+      "missingFields": []
+    }
   },
   "timestamp": "2026-09-27T12:00:00Z"
 }
 ```
+- `nutritionSummary` trả **phẳng** (không lồng `summary`): `actual` là **tổng cả tuần**, `target` là mục tiêu **nhân 7** (tuần) tính từ Health Profile, `percentage` = `actual / target × 100`.
+- `status`: `AVAILABLE` (đủ 4 chỉ số), `PARTIAL` (thiếu macro do món chưa có dữ liệu), `EMPTY_MENU`, `PROFILE_INCOMPLETE` (thiếu hồ sơ — khi đó `target`/`percentage` là `null` và `missingFields` liệt kê field thiếu).
 
 ### 5.3. Tạo thực đơn tuần
 - **Endpoint:** `POST /api/v1/weekly-menus` (201 Created)
@@ -476,23 +489,46 @@ Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/c
 
 - **URL nội bộ:** `POST http://ai-service:8000/api/ai/generate-meal-plan`
 - API public ở mục 7.1 luôn đi qua Spring Boot; trình duyệt không gọi FastAPI trực tiếp.
-- Spring Boot lấy BMI và dị ứng đã lưu trong hồ sơ, hợp nhất chúng với `excludedAllergies`, rồi chuyển payload camelCase dưới đây sang FastAPI:
+- FastAPI dùng **planner tất định (OR-Tools CP-SAT)** — không gọi Gemini, không lưu dữ liệu. Spring Boot chuyển payload camelCase (`DeterministicPlannerRequest`) gồm chế độ ăn, ID nguyên liệu dị ứng, mục tiêu dinh dưỡng và danh mục món canonical:
 
 ```json
 {
-  "targetCalories": 1800,
-  "healthGoal": "maintain_weight",
-  "availableIngredients": ["đậu phụ", "nấm rơm"],
-  "excludedAllergies": ["đậu phộng"],
-  "availableDishes": [
-    { "dishId": 5, "name": "Yến mạch hoa quả", "calories": 350, "proteinG": 12.5 }
-  ],
-  "bmi": 20.2
+  "vegetarianType": "LACTO_OVO",
+  "allergyIngredientIds": [12, 34],
+  "nutritionTarget": { "calories": 1800, "proteinG": 90, "carbsG": 210, "fatG": 60, "estimated": true },
+  "canonicalDishes": [
+    {
+      "dishId": 5, "name": "Yến mạch hoa quả", "description": null,
+      "imageUrl": "https://example.com/oats.jpg", "categoryId": 2,
+      "servingSize": 100, "servingUnit": "g",
+      "calories": 350, "proteinG": 12.5, "carbsG": 45, "healthyFatsG": 10,
+      "vegetarianType": "LACTO_OVO", "isActive": true,
+      "ingredients": [ { "ingredientId": 3, "name": "Yến mạch" } ]
+    }
+  ]
 }
 ```
 
-- FastAPI chỉ chọn `dishId` thuộc `availableDishes`, trả `dishId` và `servings` cho mỗi bữa, và kiểm tra lại mọi ID thuộc danh mục được phép.
-- Spring Boot xác minh ID lần nữa rồi bổ sung tên, calo, protein và ảnh chính thức từ DB trước khi trả preview theo `ApiResponse<T>`.
+- Planner chọn `dishId` duy nhất thuộc `canonicalDishes` sao cho **mỗi ngày** calo ±10% và protein/carbs/fat ±20% so với `nutritionTarget` (mục tiêu **hàng ngày**), kèm ràng buộc lặp món, đa dạng món và lọc dị ứng/chế độ ăn trước khi giải. Catalog demo (60 món) không thỏa mọi mục tiêu ở ngưỡng chặt này, nên service thử lần lượt 3 cấp độ nới lỏng: ±10/±20% (distinct 14, lặp ≤2/tuần) → ±15/±30% (distinct 10, lặp ≤3) → ±20/±40% (distinct 8, lặp ≤4); chỉ trả `INFEASIBLE` khi cả 3 cấp đều bất khả thi. Khi dùng cấp nới lỏng, response đánh dấu `executionMetadata.policyRelaxed: true`.
+- **Response của FastAPI:**
+```json
+{
+  "status": "OPTIMAL",
+  "days": [
+    {
+      "day": "MONDAY",
+      "meals": [ { "slot": "BREAKFAST", "dishId": 5 }, { "slot": "LUNCH", "dishId": 8 }, { "slot": "DINNER", "dishId": 12 } ],
+      "nutritionTotal": { "calories": 1780, "proteinG": 91, "carbsG": 205, "fatG": 59 },
+      "deviation": { "calories": -20, "proteinG": 1, "carbsG": -5, "fatG": -1 }
+    }
+  ],
+  "weeklySummary": { "distinctDishCount": 14, "dishUsageCounts": { "5": 2 } },
+  "reasonCodes": [],
+  "executionMetadata": { "plannerVersion": "v1", "contractVersion": "v2", "greedyHintUsed": true, "policyRelaxed": false }
+}
+```
+- Trạng thái khác: `INFEASIBLE`, `TIME_LIMIT_REACHED`, `VALIDATION_FAILED`, `INVALID_INPUT` (kèm `reasonCodes`). `executionMetadata` là thông tin chẩn đoán tùy chọn, tích hợp không bắt buộc.
+- Spring Boot chỉ giữ `days[].day` + `meals[].slot/dishId`, xác minh ID lần nữa rồi bổ sung `dishName`, `calories`, `proteinG`, `carbsG`, `healthyFatsG`, `imageUrl` chính thức từ DB (dùng lại `nutritionTarget` đã tính) trước khi trả preview theo `ApiResponse<T>`.
 - `weeklyPlan` luôn dùng nhãn tiếng Anh theo đúng thứ tự Monday đến Sunday; thứ tự này được dùng để gán ngày khi lưu menu.
 
 ### 7.1. API public
@@ -501,31 +537,32 @@ Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/c
 - **Request Body:**
 ```json
 {
-  "targetCalories": 1800,
-  "healthGoal": "lose_weight",
-  "availableIngredients": ["đậu phụ", "nấm rơm", "cà chua", "rau cải"],
+  "vegetarianType": "LACTO_OVO",
   "excludedAllergies": ["đậu phộng"]
 }
 ```
+- Các field tùy chọn khác (`healthGoal`, `availableIngredients`, `nutritionTarget`) vẫn được DTO chấp nhận nhưng planner hiện **không sử dụng**: mục tiêu dinh dưỡng luôn được Backend tính lại từ Health Profile (`NutritionTargetService`), còn `excludedAllergies` được đối chiếu sang ID nguyên liệu (tên không khớp danh mục sẽ bị bỏ qua).
 - **Response (200 OK - Kế hoạch 7 ngày xem trước):**
 ```json
 {
   "success": true,
   "message": "AI đã tạo thực đơn thành công",
   "data": {
-    "suggestedMenuTitle": "Thực đơn chay giảm cân thanh đạm 7 ngày",
-    "estimatedDailyCalories": 1750,
+    "suggestedMenuTitle": "Thực đơn tuần lacto-ovo",
+    "estimatedDailyCalories": 1800,
+    "nutritionTarget": { "estimated": true, "calories": 1800, "proteinG": 90, "carbsG": 210, "healthyFatsG": 60 },
     "weeklyPlan": [
       {
         "day": "Monday",
-        "breakfast": { "dishId": 5, "dishName": "Yến mạch hoa quả", "calories": 350, "proteinG": 12.5, "servings": 1 },
-        "lunch": { "dishId": 8, "dishName": "Đậu phụ sốt cà chua", "calories": 420, "proteinG": 24, "servings": 1 },
-        "dinner": { "dishId": 12, "dishName": "Canh rau củ", "calories": 300, "proteinG": 9, "servings": 1 }
+        "breakfast": { "dishId": 5, "dishName": "Yến mạch hoa quả", "calories": 350, "proteinG": 12.5, "carbsG": 45, "healthyFatsG": 10, "imageUrl": "https://example.com/oats.jpg", "servings": 1 },
+        "lunch": { "dishId": 8, "dishName": "Đậu phụ sốt cà chua", "calories": 420, "proteinG": 24, "carbsG": 30, "healthyFatsG": 18, "imageUrl": "https://example.com/tofu.jpg", "servings": 1 },
+        "dinner": { "dishId": 12, "dishName": "Canh rau củ", "calories": 300, "proteinG": 9, "carbsG": 28, "healthyFatsG": 8, "imageUrl": "https://example.com/soup.jpg", "servings": 1 }
       }
     ]
   }
 }
 ```
+- `nutritionTarget` là mục tiêu **hàng ngày** do Backend tính từ Health Profile; Frontend hiển thị nó trong preview để đối chiếu với trung bình 7 ngày của `weeklyPlan`.
 
 ---
 

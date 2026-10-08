@@ -10,6 +10,8 @@ public class MealPlanDishResponse {
     private String dishName;
     private Integer calories;
     private BigDecimal proteinG;
+    private BigDecimal carbsG;
+    private BigDecimal healthyFatsG;
     private String imageUrl;
     private BigDecimal servings;
 }

@@ -53,6 +53,21 @@ public class Dish {
     @Column(name = "protein_g", precision = 6, scale = 2)
     private BigDecimal proteinG;
 
+    @Column(name = "carbs_g", precision = 6, scale = 2)
+    private BigDecimal carbsG;
+
+    @Column(name = "healthy_fats_g", precision = 6, scale = 2)
+    private BigDecimal healthyFatsG;
+
+    @Column(name = "serving_size", precision = 8, scale = 2)
+    private BigDecimal servingSize;
+
+    @Column(name = "serving_unit", length = 30)
+    private String servingUnit;
+
+    @Column(name = "vegetarian_type", length = 30)
+    private String vegetarianType;
+
     @Column(name = "is_active", nullable = false)
     @Builder.Default
     private Boolean active = true;

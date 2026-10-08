@@ -58,10 +58,13 @@ public class NutritionTargetService {
         BigDecimal bmr = calculateBmr(profile);
         BigDecimal tdee = bmr.multiply(DEFAULT_ACTIVITY_FACTOR);
         BigDecimal calorieTarget = adjustForGoal(tdee, profile.getHealthGoal());
-        int calories = calorieTarget.setScale(0, RoundingMode.HALF_UP).intValue();
+        int rawCalories = calorieTarget.setScale(0, RoundingMode.HALF_UP).intValue();
+        // Áp dụng mức calo sàn an toàn (1500 kcal cho nam, 1200 kcal cho nữ)
+        int minCalories = isMale(profile.getGender()) ? 1500 : 1200;
+        int calories = Math.max(rawCalories, minCalories);
 
-        int proteinG = calculateProtein(profile.getWeightKg(), profile.getHealthGoal());
-        int fatG = calculateFat(calories);
+        int proteinG = calculateProtein(profile.getWeightKg(), profile.getHealthGoal(), profile.getVegetarianType());
+        int fatG = calculateFat(calories, profile.getVegetarianType(), profile.getHealthGoal());
         int carbsG = calculateCarbs(calories, proteinG, fatG);
 
         return NutritionTargetResponse.builder()
@@ -132,7 +135,8 @@ public class NutritionTargetService {
     }
 
     private BigDecimal adjustForGoal(BigDecimal tdee, String healthGoal) {
-        BigDecimal adjustment = switch (healthGoal) {
+        if (healthGoal == null) return tdee;
+        BigDecimal adjustment = switch (healthGoal.toLowerCase()) {
             case "lose_weight" -> LOSS_FACTOR;
             case "gain_muscle" -> GAIN_FACTOR;
             default -> MAINTAIN_FACTOR;
@@ -140,18 +144,28 @@ public class NutritionTargetService {
         return tdee.add(adjustment);
     }
 
-    private int calculateProtein(BigDecimal weightKg, String healthGoal) {
-        BigDecimal factor = switch (healthGoal) {
-            case "gain_muscle" -> PROTEIN_FACTOR_GAIN;
-            case "lose_weight" -> PROTEIN_FACTOR_LOSE;
-            default -> PROTEIN_FACTOR_MAINTAIN;
+    private int calculateProtein(BigDecimal weightKg, String healthGoal, String vegetarianType) {
+        BigDecimal factor = switch (healthGoal != null ? healthGoal.toLowerCase() : "") {
+            case "gain_muscle" -> new BigDecimal("1.8");
+            case "lose_weight" -> new BigDecimal("1.5");
+            default -> new BigDecimal("1.2");
         };
+        // Đạm thực vật có tỉ lệ hấp thu thấp hơn (~10-15%), tăng thêm cho thuần chay VEGAN
+        if ("VEGAN".equalsIgnoreCase(vegetarianType)) {
+            factor = factor.multiply(new BigDecimal("1.10"));
+        }
         return weightKg.multiply(factor).setScale(0, RoundingMode.HALF_UP).intValue();
     }
 
-    private int calculateFat(int calories) {
+    private int calculateFat(int calories, String vegetarianType, String healthGoal) {
+        BigDecimal ratio = "VEGAN".equalsIgnoreCase(vegetarianType)
+                ? new BigDecimal("0.22")
+                : new BigDecimal("0.25");
+        if ("lose_weight".equalsIgnoreCase(healthGoal)) {
+            ratio = ratio.subtract(new BigDecimal("0.03"));
+        }
         return BigDecimal.valueOf(calories)
-                .multiply(FAT_RATIO)
+                .multiply(ratio)
                 .divide(BigDecimal.valueOf(FAT_CALORIES_PER_GRAM), 0, RoundingMode.HALF_UP)
                 .intValue();
     }
