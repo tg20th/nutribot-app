@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { CheckCircle2, ChevronLeft, ChevronRight, Download, Loader2, Plus, RefreshCw, Repeat2, Save, ShoppingBasket, Sparkles, Trash2, WifiOff, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Download, Info, LayoutGrid, List, Loader2, Plus, RefreshCw, Repeat2, Save, ShoppingBasket, Sparkles, Trash2, WifiOff, X } from 'lucide-react';
 import MemberPageLayout from '../layouts/MemberPageLayout';
 import MealEditorDialog from '../components/community/MealEditorDialog';
-import MealPlanAssistant from '../components/community/MealPlanAssistant';
 import DishDetailModal from '../components/community/DishDetailModal';
 import MenuPreviewModal from '../components/menu/MenuPreviewModal';
 import ImageWithFallback from '../components/ImageWithFallback';
@@ -18,10 +16,23 @@ import { createLocalMeal, MEAL_SLOTS, normalizeDishCatalog, normalizeWeeklyMenu,
 import NutritionOverflowDialog from '../components/dialog/NutritionOverflowDialog';
 import ServiceUnavailableDialog from '../components/dialog/ServiceUnavailableDialog';
 import PlanExistsDialog from '../components/dialog/PlanExistsDialog';
-
+import { mealSlotApiValue } from '../utils/weeklyMenuModel';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
 gsap.registerPlugin(ScrollTrigger);
 
 const storageKey = (startDate) => `nutribot-weekly-menu-${startDate}`;
+
+const selectedIndexForWeek = (weekStart) => {
+  const start = new Date(`${weekStart}T12:00:00`);
+  const today = new Date(`${toIsoDate(new Date())}T12:00:00`);
+  const difference = Math.round((today.getTime() - start.getTime()) / 86400000);
+  return difference >= 0 && difference < 7 ? difference : 0;
+};
+
+const formatNumber = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue.toLocaleString() : '—';
+};
 
 const isProfileIncompleteError = (error) => {
   const payload = error?.payload?.data ?? error?.payload ?? {};
@@ -49,10 +60,10 @@ const menuPayload = (menu) => ({
 
 export default function WeeklyMealPlannerPage() {
   const page = useRef(null);
-  const [query, setQuery] = useState('');
   const [communityUser, setCommunityUser] = useState({});
   const [plannerProfile, setPlannerProfile] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [profileLoadFailed, setProfileLoadFailed] = useState(false);
   const [showProfileReadinessModal, setShowProfileReadinessModal] = useState(false);
   const plannerRequest = useRef(0);
   const [weekStart, setWeekStart] = useState(() => toIsoDate(startOfWeek()));
@@ -67,11 +78,16 @@ export default function WeeklyMealPlannerPage() {
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [aiPreview, setAiPreview] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [menuLoadFailed, setMenuLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savingAiPreview, setSavingAiPreview] = useState(false);
   const [aiSaveError, setAiSaveError] = useState('');
   const aiSaveRequest = useRef(false);
   const [notice, setNotice] = useState(null);
+  const [selectedDayIndex, setSelectedDayIndex] = useState(() => selectedIndexForWeek(toIsoDate(startOfWeek())));
+  const [viewMode, setViewMode] = useState('image');
+  const [collapsedSlots, setCollapsedSlots] = useState({});
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showServiceUnavailableDialog, setShowServiceUnavailableDialog] = useState(false);
   const [serviceUnavailableDraftExists, setServiceUnavailableDraftExists] = useState(false);
   const [showPlanExistsDialog, setShowPlanExistsDialog] = useState(false);
@@ -80,12 +96,15 @@ export default function WeeklyMealPlannerPage() {
 
   const loadWeek = useCallback(async (startDate, signal) => {
     setLoading(true);
+    setMenuLoadFailed(false);
     setNotice(null);
     try {
       const weeklyMenu = await getCurrentWeeklyMenu(signal, startDate);
       setMenu(normalizeWeeklyMenu(weeklyMenu, startDate));
+      setHasUnsavedChanges(false);
     } catch (error) {
       if (error?.name === 'AbortError') return;
+      setMenuLoadFailed(true);
       const draft = readDraft(startDate);
       setMenu(normalizeWeeklyMenu(draft ?? {}, startDate));
       if (draft) {
@@ -102,7 +121,7 @@ export default function WeeklyMealPlannerPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([getMyProfile(controller.signal), getHealthProfile(controller.signal)]).then(([profile, health]) => { setCommunityUser(profile); setPlannerProfile({ ...profile, ...health }); }).catch(() => setPlannerProfile(null)).finally(() => { if (!controller.signal.aborted) setProfileLoading(false); });
+    Promise.all([getMyProfile(controller.signal), getHealthProfile(controller.signal)]).then(([profile, health]) => { setCommunityUser(profile); setPlannerProfile({ ...profile, ...health }); setProfileLoadFailed(false); }).catch(() => { if (!controller.signal.aborted) { setPlannerProfile(null); setProfileLoadFailed(true); } }).finally(() => { if (!controller.signal.aborted) setProfileLoading(false); });
     getWeeklyMenuDishes(controller.signal).then((items) => {
       setDishes(normalizeDishCatalog(items));
       setDishError(false);
@@ -120,18 +139,29 @@ export default function WeeklyMealPlannerPage() {
   }, [loadWeek, weekStart]);
 
   useEffect(() => {
+    setSelectedDayIndex(selectedIndexForWeek(weekStart));
+  }, [weekStart]);
+
+  useEffect(() => {
     if (!loading && menu.startDate === weekStart) localStorage.setItem(storageKey(weekStart), JSON.stringify(serializeMenu(menu)));
   }, [loading, menu, weekStart]);
 
+  useEffect(() => {
+    if (!notice || notice.type === 'saving') return undefined;
+    const timer = window.setTimeout(() => setNotice(null), 3600);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    if (!dishError) return undefined;
+    const timer = window.setTimeout(() => setDishError(false), 3600);
+    return () => window.clearTimeout(timer);
+  }, [dishError]);
+
   useGSAP(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
-    const intro = gsap.timeline({ defaults: { ease: 'power3.out' } });
-    intro.from('.planner-hero-copy > *', { y: 22, opacity: 0, duration: .65, stagger: .08 })
-      .from('.planner-hero-image', { scale: .9, opacity: 0, duration: .8 }, '-=.45')
-      .from('.planner-overview > *', { y: 14, opacity: 0, duration: .45, stagger: .07 }, '-=.3');
-    gsap.to('.planner-scrub-word', { opacity: 1, stagger: .08, ease: 'none', scrollTrigger: { trigger: '.planner-content-heading', start: 'top 85%', end: 'bottom 52%', scrub: true } });
-    gsap.utils.toArray('.planner-day').forEach((card) => gsap.fromTo(card, { scale: .97, opacity: .4 }, { scale: 1, opacity: 1, ease: 'power2.out', scrollTrigger: { trigger: card, start: 'top 92%', end: 'top 60%', scrub: true } }));
-  }, { scope: page, dependencies: [weekStart] });
+    return gsap.fromTo('.planner-daily-workspace > *', { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: .28, stagger: .035, ease: 'power2.out', clearProps: 'all' });
+  }, { scope: page, dependencies: [selectedDayIndex, viewMode, loading] });
 
   useGSAP(() => {
     if (!aiPreview || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
@@ -144,6 +174,28 @@ export default function WeeklyMealPlannerPage() {
     return [['height_cm', plannerProfile.heightCm ?? plannerProfile.height_cm], ['weight_kg', plannerProfile.weightKg ?? plannerProfile.weight_kg], ['date_of_birth', plannerProfile.dateOfBirth ?? plannerProfile.date_of_birth], ['gender', plannerProfile.gender], ['health_goal', plannerProfile.healthGoal ?? plannerProfile.health_goal], ['vegetarian_type', plannerProfile.vegetarianType ?? plannerProfile.vegetarian_type]].filter(([, value]) => value == null || value === '').map(([name]) => name);
   }, [plannerProfile]);
   const plannerReady = !profileLoading && !missingProfileFields.length;
+  const selectedDay = plannerDays[selectedDayIndex] ?? plannerDays[0] ?? null;
+  const hasMeals = plannerDays.some((day) => day.meals.length > 0);
+  const dailyNutritionMetrics = useMemo(() => {
+    if (!selectedDay) return [];
+    return [
+      { label: 'Calories', actual: selectedDay.calorieActual, target: selectedDay.calorieGoal, unit: 'kcal' },
+      { label: 'Protein', actual: selectedDay.proteinActual, target: selectedDay.proteinGoal, unit: 'g' },
+      { label: 'Carbs', actual: selectedDay.carbsActual, target: selectedDay.carbsGoal, unit: 'g' },
+      { label: 'Fat', actual: selectedDay.fatsActual, target: selectedDay.fatsGoal, unit: 'g' }
+    ].map((metric) => {
+      const actual = Number(metric.actual) || 0;
+      const target = Number(metric.target);
+      const hasTarget = Number.isFinite(target) && target > 0;
+      return { ...metric, actual, target: hasTarget ? target : null, progress: hasTarget ? Math.min(100, (actual / target) * 100) : 0 };
+    });
+  }, [selectedDay]);
+  const hasAllNutritionTargets = dailyNutritionMetrics.length === 4 && dailyNutritionMetrics.every((metric) => metric.target != null);
+  const backendMarksProfileIncomplete = menu.nutritionSummary?.status === 'PROFILE_INCOMPLETE';
+  const requiresHealthProfile = !loading && !profileLoading && !menuLoadFailed && !profileLoadFailed && (backendMarksProfileIncomplete || !plannerReady || !hasAllNutritionTargets);
+  const nutritionDataUnavailable = !loading && !profileLoading && !requiresHealthProfile && (!hasAllNutritionTargets || menuLoadFailed || profileLoadFailed);
+  const nutritionLoading = loading || profileLoading;
+  const selectedDayFullLabel = selectedDay ? new Date(`${selectedDay.isoDate}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : '';
   const heroMeal = plannerDays.flatMap((day) => day.meals).find(Boolean);
   const groceryItems = useMemo(() => plannerDays.flatMap((day) => day.meals.map((meal) => ({ ...meal, day: day.label }))), [plannerDays]);
 
@@ -165,6 +217,13 @@ export default function WeeklyMealPlannerPage() {
   const submitMeal = async ({ dish, servings, notes, isAddMode }) => {
     const dayIndex = editor.dayIndex;
     const slot = editor.slot;
+
+    // The current API replaces the items in an occupied slot. Do not pretend an
+    // append succeeded while it would silently discard the user's existing dish.
+    if (isAddMode && menu.days[dayIndex]?.meals.some((meal) => meal.slot === slot)) {
+      setNotice({ type: 'offline', text: 'This API currently supports one dish per meal. Adding another dish would replace the existing one, so no change was made.' });
+      return;
+    }
 
     // Create new local meal entry
     const newMeal = createLocalMeal(dish, slot, servings, notes, false);
@@ -190,6 +249,7 @@ export default function WeeklyMealPlannerPage() {
 
     // No overflow — proceed with add/replace
     setEditor(null);
+    setHasUnsavedChanges(true);
     setNotice({ type: 'saving', text: 'Saving your meal...' });
 
     try {
@@ -198,7 +258,7 @@ export default function WeeklyMealPlannerPage() {
         // ADD mode: use addWeeklyMenuItem API to append
         await addWeeklyMenuItem(menuId, {
           dayOfWeek: dayIndex + 1,
-          mealType: slot.toLowerCase(),
+          mealType: mealSlotApiValue(slot),
           dishId: dish.dishId,
           servings,
           notes
@@ -217,13 +277,14 @@ export default function WeeklyMealPlannerPage() {
           ...menuPayload(nextMenu),
           meals: nextMenu.days.flatMap((day) => day.meals.map((item) => ({
             dayOfWeek: day.dayOfWeek,
-            mealType: item.slot.toLowerCase(),
+            mealType: mealSlotApiValue(item.slot),
             dishId: item.dishId,
             servings: item.servings,
             notes: item.notes
           })))
         });
         setMenu(normalizeWeeklyMenu(savedMenu, weekStart));
+        setHasUnsavedChanges(false);
       }
       setNotice({ type: 'success', text: `${isAddMode ? 'Added' : 'Replaced'} ${dish.name} in ${editor.day.label}.` });
     } catch {
@@ -233,6 +294,7 @@ export default function WeeklyMealPlannerPage() {
 
   const removeMeal = async (dayIndex, meal) => {
     setMenu((current) => recalculateMenu({ ...current, days: current.days.map((day, index) => index === dayIndex ? { ...day, meals: day.meals.filter((item) => item.key !== meal.key) } : day) }));
+    setHasUnsavedChanges(true);
     if (!menu.menuId || !meal.itemId) {
       setNotice({ type: 'success', text: `${meal.name} was removed from your local draft.` });
       return;
@@ -310,8 +372,9 @@ export default function WeeklyMealPlannerPage() {
     setSaving(true);
     try {
       const id = menu.menuId ?? await ensureMenu();
-      const savedMenu = await updateWeeklyMenu(id, { ...menuPayload(menu), meals: plannerDays.flatMap((day) => day.meals.map((meal) => ({ dayOfWeek: day.dayOfWeek, mealType: meal.slot.toLowerCase(), dishId: meal.dishId, servings: meal.servings, notes: meal.notes }))) });
+      const savedMenu = await updateWeeklyMenu(id, { ...menuPayload(menu), meals: plannerDays.flatMap((day) => day.meals.map((meal) => ({ dayOfWeek: day.dayOfWeek, mealType: mealSlotApiValue(meal.slot), dishId: meal.dishId, servings: meal.servings, notes: meal.notes }))) });
       setMenu(normalizeWeeklyMenu(savedMenu, weekStart));
+      setHasUnsavedChanges(false);
       setNotice({ type: 'success', text: 'Your weekly plan is saved.' });
     } catch {
       localStorage.setItem(storageKey(weekStart), JSON.stringify(serializeMenu(menu)));
@@ -319,24 +382,6 @@ export default function WeeklyMealPlannerPage() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const exportPlan = () => {
-    const rows = [['Day', 'Date', 'Meal', 'Dish', 'Calories', 'Protein (g)', 'Carbs (g)', 'Fat (g)', 'Servings', 'Notes']];
-    plannerDays.forEach((day) => day.meals.forEach((meal) => {
-      const servings = Number(meal.servings ?? 1) || 1;
-      const carbs = Number.isFinite(Number(meal.carbsG)) ? Math.round(Number(meal.carbsG) * servings * 10) / 10 : '';
-      const fats = Number.isFinite(Number(meal.healthyFatsG)) ? Math.round(Number(meal.healthyFatsG) * servings * 10) / 10 : '';
-      rows.push([day.label, day.isoDate, meal.slot, meal.name, meal.kcal, meal.protein, carbs, fats, meal.servings, meal.notes]);
-    }));
-    const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `nutribot-meal-plan-${menu.startDate}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-    setNotice({ type: 'success', text: 'Your meal plan was exported as a CSV file.' });
   };
 
   const generateAiPlan = async (event) => {
@@ -373,6 +418,7 @@ export default function WeeklyMealPlannerPage() {
       setShowProfileReadinessModal(true);
       return;
     }
+    if (hasUnsavedChanges && !window.confirm('You have unsaved changes. Generating a new plan can replace your draft when applied. Continue?')) return;
     if (menu.menuId) {
       setShowPlanExistsDialog(true);
       return;
@@ -440,53 +486,29 @@ export default function WeeklyMealPlannerPage() {
         })
       }));
     setAiPreview(null);
+    setHasUnsavedChanges(true);
     setNotice({ type: 'success', text: aiPreview.suggestedMenuTitle ? `AI plan applied: ${aiPreview.suggestedMenuTitle}` : 'Your AI weekly plan is ready to review.' });
   };
 
   return <><MemberPageLayout className="planner-page">
-      <div className="community-layout" ref={page}>
-        <main className="community-feed planner-main">
-          <header className="planner-hero">
-            <div className="planner-hero-copy">
-              <div className="planner-person">
-                {communityUser.avatarUrl && <ImageWithFallback src={communityUser.avatarUrl} alt=""/>}
-                <span>Curated for {communityUser.fullName ?? communityUser.name ?? 'you'}</span>
-              </div>
-              <h1>Plan a week that feels <span className="planner-inline-image" aria-hidden="true"/> good to keep.</h1>
-              <p>Build breakfast, lunch, and dinner around your goals, then adjust the plan whenever real life changes.</p>
-              <div className="planner-top-actions">
-                <button type="button" className="planner-btn-ai" onClick={requestMealPlanGeneration} disabled={profileLoading}><Sparkles size={15}/> Generate Meal Plan</button>
-                <button type="button" className="planner-btn-primary" onClick={() => loadWeek(weekStart)} disabled={loading}><RefreshCw size={15} className={loading ? 'is-spinning' : ''}/> Refresh this week</button>
-                <button type="button" className="planner-btn-ghost" onClick={() => setShowGrocery(true)}><ShoppingBasket size={15}/> Meal list <span>{groceryItems.length}</span></button>
-              </div>
-            </div>
-            <div className="planner-hero-image" aria-hidden="true">
-              <ImageWithFallback src={heroMeal?.image ?? freshProduce} alt="" fallbackSrc={freshProduce}/>
-              <div><Sparkles size={15}/><span>Balanced, not rigid</span></div>
+      <div className="planner-workspace" ref={page}>
+        <main className="planner-main">
+          <header className="planner-header">
+            <div><h1>Weekly Meal Planner</h1><p>Plan your meals, stay consistent with your goals.</p></div>
+            <div className="planner-week-nav" aria-label="Change week">
+              <span>{menu.week.range}</span>
+              <button type="button" aria-label="Previous week" onClick={() => setWeekStart((current) => shiftWeek(current, -1))}><ChevronLeft size={18}/></button>
+              <button type="button" aria-label="Next week" onClick={() => setWeekStart((current) => shiftWeek(current, 1))}><ChevronRight size={18}/></button>
             </div>
           </header>
 
-          <section className="planner-overview" aria-label="Week overview">
-            <div className="planner-week-nav">
-              <button type="button" aria-label="Previous week" onClick={() => setWeekStart((current) => shiftWeek(current, -1))}><ChevronLeft size={15}/></button>
-              <div><span>Your week</span><b>{menu.week.range}</b></div>
-              <button type="button" aria-label="Next week" onClick={() => setWeekStart((current) => shiftWeek(current, 1))}><ChevronRight size={15}/></button>
-            </div>
-            <div className="planner-week-avg">
-              <span>Daily rhythm</span>
-              <p>{menu.week.avgCalories != null && menu.week.avgProtein != null
-                ? <><b>{menu.week.avgCalories.toLocaleString()}</b> kcal <i/> <b>{menu.week.avgProtein}g</b> protein <i/> <b>{menu.week.avgCarbs ?? 0}g</b> carbs <i/> <b>{menu.week.avgFats ?? 0}g</b> fat</>
-                : 'Nutrition summary unavailable'}</p>
-            </div>
-          </section>
-
-          {notice && <div className={`planner-notice is-${notice.type}`} role="status">
+          {notice && <div className={`planner-toast is-${notice.type}`} role={notice.type === 'offline' ? 'alert' : 'status'}>
             {notice.type === 'offline' ? <WifiOff size={15}/> : notice.type === 'saving' ? <Loader2 size={15} className="is-spinning"/> : <CheckCircle2 size={15}/>}
             <span>{notice.text}</span><button type="button" onClick={() => setNotice(null)} aria-label="Dismiss message"><X size={14}/></button>
           </div>}
-          {dishError && <div className="planner-notice is-offline" role="status"><WifiOff size={15}/><span>The database dish catalog is not available. NB-41 no longer uses sample dishes; adding a meal will be enabled when the backend exposes the dish list endpoint.</span><button type="button" onClick={() => setDishError(false)} aria-label="Dismiss message"><X size={14}/></button></div>}
+          {dishError && <div className="planner-toast is-offline" role="alert"><WifiOff size={15}/><span>The dish catalog is unavailable, so a dish cannot be added yet.</span><button type="button" onClick={() => setDishError(false)} aria-label="Dismiss message"><X size={14}/></button></div>}
 
-          <div className="planner-content-heading">
+          {false && <><div className="planner-content-heading">
             <div><span>Your menu</span><h2>Meals with room to move.</h2></div>
             <p>{['Add,', 'swap,', 'and shape this week your way.'].map((word) => <span className="planner-scrub-word" key={word}>{word} </span>)}</p>
           </div>
@@ -495,7 +517,7 @@ export default function WeeklyMealPlannerPage() {
             {plannerDays.map((day, dayIndex) => <article className={`planner-day${day.status === 'Today' ? ' is-today' : ''}`} key={day.isoDate}>
               <header>
                 <div className="planner-day-label"><b>{day.label}</b><span>{day.date}</span>{day.status === 'Today' && <em className="planner-badge">Today</em>}</div>
-                <div className="planner-day-meta">{day.calorieActual.toLocaleString()} / {day.calorieGoal != null ? day.calorieGoal.toLocaleString() : '—'} kcal · {day.proteinActual}g / {day.proteinGoal != null ? `${day.proteinGoal}g` : '—'} protein · {day.carbsActual ?? 0}g / {day.carbsGoal != null ? `${day.carbsGoal}g` : '—'} carbs · {day.fatsActual ?? 0}g / {day.fatsGoal != null ? `${day.fatsGoal}g` : '—'} fat</div>
+                <div className="planner-day-meta">{formatNumber(day.calorieActual)} / {formatNumber(day.calorieGoal)} kcal · {day.proteinActual}g / {day.proteinGoal != null ? `${day.proteinGoal}g` : '—'} protein · {day.carbsActual ?? 0}g / {day.carbsGoal != null ? `${day.carbsGoal}g` : '—'} carbs · {day.fatsActual ?? 0}g / {day.fatsGoal != null ? `${day.fatsGoal}g` : '—'} fat</div>
               </header>
               <div className="planner-meals">
                 {MEAL_SLOTS.map((slot) => {
@@ -527,9 +549,51 @@ export default function WeeklyMealPlannerPage() {
               <button type="button" className="planner-btn-ghost" onClick={exportPlan}><Download size={15}/> Export CSV</button>
               <button type="button" className="planner-btn-primary" onClick={savePlan} disabled={saving}>{saving ? <Loader2 size={15} className="is-spinning"/> : null}{saving ? 'Saving...' : 'Save plan'}</button>
             </div>
-          </footer>
+          </footer></>}
+
+          {loading ? <div className="planner-loading"><Loader2 className="is-spinning"/><span>Loading your weekly plan…</span></div> : !hasMeals ? <section className="planner-empty-state" aria-labelledby="empty-plan-title">
+            <div className="planner-empty-icon"><Sparkles size={24}/></div>
+            <p>YOUR MEAL PLAN</p><h2 id="empty-plan-title">Start a balanced week.</h2>
+            <span>Create a personalized plan with AI or add your first dish manually.</span>
+            <div><button type="button" className="planner-btn-primary" onClick={requestMealPlanGeneration} disabled={profileLoading}><Sparkles size={16}/> Generate with AI</button><button type="button" className="planner-btn-ghost" onClick={() => openEditor(plannerDays[0], MEAL_SLOTS[0])} disabled={!plannerDays.length}><Plus size={16}/> Add a dish manually</button></div>
+          </section> : <>
+            <section className="planner-toolbar" aria-label="Select a day and view mode">
+              <div className="planner-day-tabs" role="tablist" aria-label="Days of the week">
+                {plannerDays.map((day, index) => <button type="button" role="tab" aria-selected={index === selectedDayIndex} className={index === selectedDayIndex ? 'is-active' : ''} key={day.isoDate} onClick={() => setSelectedDayIndex(index)}><b>{day.label.slice(0, 3)}</b><span>{new Date(`${day.isoDate}T12:00:00`).getDate()}</span></button>)}
+              </div>
+              <div className="planner-view-toggle" aria-label="View mode">
+                <button type="button" className={viewMode === 'image' ? 'is-active' : ''} onClick={() => setViewMode('image')} aria-pressed={viewMode === 'image'}><LayoutGrid size={15}/> Image</button>
+                <button type="button" className={viewMode === 'list' ? 'is-active' : ''} onClick={() => setViewMode('list')} aria-pressed={viewMode === 'list'}><List size={15}/> List</button>
+              </div>
+            </section>
+            {selectedDay && <section className="planner-daily-workspace" key={`${selectedDay.isoDate}-${viewMode}`} aria-label={`${selectedDay.label} meal plan`}>
+              <div className="planner-day-title"><div><h2>{selectedDayFullLabel}</h2></div><div className="planner-day-utilities"><div className="planner-view-toggle" aria-label="View mode"><button type="button" className={viewMode === 'image' ? 'is-active' : ''} onClick={() => setViewMode('image')} aria-pressed={viewMode === 'image'}><LayoutGrid size={15}/> Image</button><button type="button" className={viewMode === 'list' ? 'is-active' : ''} onClick={() => setViewMode('list')} aria-pressed={viewMode === 'list'}><List size={15}/> List</button></div></div></div>
+              {nutritionLoading ? <section className="planner-nutrition-unavailable" role="status"><Loader2 size={17} className="is-spinning"/><span>Loading nutrition targets…</span></section> : requiresHealthProfile ? <section className="planner-profile-callout" aria-label="Health Profile needed"><Info size={18}/><div><b>Personalize your nutrition tracking</b><span>Complete your Health Profile to unlock personalized nutrition targets and track your progress.</span></div><a href="/profile/health">Complete Profile <span aria-hidden="true">→</span></a></section> : nutritionDataUnavailable ? <section className="planner-nutrition-unavailable" role="status"><Info size={17}/><span>Nutrition targets are temporarily unavailable. Please try again shortly.</span></section> : <section className="planner-nutrition-summary" aria-label="Daily nutrition summary"><div className="planner-nutrition-heading"><div><b>Daily Nutrition</b><span>Personalized targets</span></div></div>{dailyNutritionMetrics.map((metric) => <div className="planner-nutrition-metric" key={metric.label}><div><span>{metric.label}</span><b>{formatNumber(metric.actual)} <small>/ {formatNumber(metric.target)} {metric.unit}</small></b></div><span className="planner-nutrition-progress" aria-label={`${metric.label}: ${metric.actual} ${metric.unit}`}><i style={{ width: `${metric.progress}%` }}/></span></div>)}</section>}
+              <div className="planner-meal-sections">
+                {MEAL_SLOTS.map((slot) => {
+                  const slotMeals = selectedDay.meals.filter((item) => item.slot === slot);
+                  const slotCalories = slotMeals.reduce((total, meal) => total + (Number(meal.kcal) || 0), 0);
+                  const collapseKey = `${selectedDay.isoDate}-${slot}`;
+                  const isCollapsed = Boolean(collapsedSlots[collapseKey]);
+                  return <section className={`planner-meal-section is-${viewMode}`} key={slot}>
+                    <header><button type="button" className="planner-meal-section-toggle" onClick={() => setCollapsedSlots((current) => ({ ...current, [collapseKey]: !current[collapseKey] }))} aria-expanded={!isCollapsed}><ChevronDown size={17}/><span>{slot}</span></button><div className="planner-meal-section-actions"><p>{slotMeals.length} {slotMeals.length === 1 ? 'dish' : 'dishes'} <i/> {formatNumber(slotCalories)} kcal</p></div></header>
+                    {!isCollapsed && <div className={`planner-dish-grid is-${viewMode}`}>
+                      {slotMeals.map((meal) => <article className="planner-dish-card" key={meal.key}>
+                        {viewMode === 'image' && <button type="button" className="planner-dish-image" onClick={() => setDetailMeal(meal)} aria-label={`View ${meal.name} details`}><ImageWithFallback src={meal.image} alt="" fallbackSrc={freshProduce}/></button>}
+                        <div className="planner-dish-body">
+                          <button type="button" className="planner-dish-content" onClick={() => setDetailMeal(meal)} aria-label={`View ${meal.name} details`}><b>{meal.name}</b><span>{meal.kcal} kcal</span><small>P {meal.protein}g <i/> C {Math.round((Number(meal.carbsG) || 0) * meal.servings)}g <i/> F {Math.round((Number(meal.healthyFatsG) || 0) * meal.servings)}g</small></button>
+                          <div className="planner-dish-actions"><button type="button" onClick={() => openEditor(selectedDay, slot, meal)} aria-label={`Replace ${meal.name}`}><Repeat2 size={14}/></button><button type="button" onClick={() => setPendingMealRemoval({ dayIndex: selectedDayIndex, meal })} aria-label={`Delete ${meal.name}`}><Trash2 size={14}/></button></div>
+                        </div>
+                      </article>)}
+                      <button type="button" className="planner-add-meal" onClick={() => openEditor(selectedDay, slot)}><Plus size={19}/><b>Add dish</b><small>{slot}</small></button>
+                    </div>}
+                  </section>;
+                })}
+              </div>
+            </section>}
+            <footer className="planner-actions-footer"><button type="button" className="planner-btn-ghost" onClick={requestMealPlanGeneration}><RefreshCw size={15}/> Regenerate</button><button type="button" className="planner-btn-primary" onClick={savePlan} disabled={saving}>{saving && <Loader2 size={15} className="is-spinning"/>}<Save size={15}/>{saving ? 'Saving…' : 'Save Plan'}</button></footer>
+          </>}
         </main>
-        <MealPlanAssistant nutritionSummary={menu.nutritionSummary}/>
       </div>
   </MemberPageLayout>
 
