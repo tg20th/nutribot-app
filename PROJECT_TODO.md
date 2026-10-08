@@ -70,10 +70,10 @@
   - *Mô tả:* Tạo Entity `UserProfile`, `Ingredient` map bảng `user_profiles`, `ingredients`, bảng trung gian `user_allergies`.
   - *File cần tạo:* `entity/UserProfile.java`, `entity/Ingredient.java`, `repository/UserProfileRepository.java`, `repository/IngredientRepository.java`.
   - *Blocked by:* Không có.
-- [ ] **#8 [BE] User Profile GET/UPDATE APIs**
-  - *Mô tả:* API `GET /api/v1/users/profile` và `PUT /api/v1/users/profile` xem/sửa thông tin cá nhân cơ bản.
-  - *File cần tạo:* `service/UserProfileService.java`, `controller/UserProfileController.java`.
-  - *Blocked by:* `#11`.
+- [x] **#8 [BE] User Profile GET/UPDATE APIs & OAuth Password Setup** ✅
+  - *Mô tả:* API `GET /api/v1/users/profile` và `PUT /api/v1/users/profile` xem/sửa thông tin cá nhân cơ bản. Endpoint `PUT /api/v1/users/profile/password` hỗ trợ phân biệt linh hoạt giữa Đổi mật khẩu (cho tài khoản có pass) và Thiết lập mật khẩu (cho tài khoản Google OAuth chưa có pass).
+  - *File đã tạo/cập nhật:* `service/UserProfileService.java`, `controller/UserProfileController.java`, `dto/request/PasswordUpdateRequest.java`, `dto/response/UserProfileResponse.java`, `entity/User.java`, `sql/add_auth_provider_and_has_password_to_users.sql`, `service/UserProfileServiceTest.java`.
+  - *Blocked by:* `#11` ✅.
 - [x] **#10 [BE] Health Profile & Automatic BMI Calculation**
   - *Mô tả:* API `PUT /api/v1/users/profile/health` cập nhật chiều cao, cân nặng, danh sách dị ứng; tự động tính $BMI = weight / (height^2)$ và phân loại thể trạng.
   - *File cần tạo:* `dto/request/HealthProfileUpdateRequest.java`, bổ sung logic tính toán trong `UserProfileServiceImpl.java`.

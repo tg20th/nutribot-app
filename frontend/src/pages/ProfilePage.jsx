@@ -11,14 +11,12 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
-  Leaf,
   LoaderCircle,
   LockKeyhole,
   Mail,
   ImageUp,
   RotateCcw,
   Save,
-  ShieldCheck,
   Trash2,
   UserRound,
   X,
@@ -28,7 +26,7 @@ import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import AuthModal from '../components/AuthModal';
-import { deleteMyAvatar, getMyProfile, updateMyAvatar, updateMyProfile, verifyMyEmailChange } from '../services/profileApi';
+import { changeMyPassword, deleteMyAvatar, getMyProfile, updateMyAvatar, updateMyProfile, verifyMyEmailChange } from '../services/profileApi';
 import { getCurrentUserFromToken } from '../utils/auth';
 import freshProduce from '../assets/fresh-produce.jpg';
 import '../styles/profile.css';
@@ -59,27 +57,6 @@ const getTrustedAvatarUrl = (value) => {
     return '';
   }
 };
-
-const PROFILE_GUIDE = [
-  {
-    id: 'identity',
-    icon: UserRound,
-    title: 'Your identity',
-    copy: 'Use the name you want NutriBot to show across your personal experience.',
-  },
-  {
-    id: 'privacy',
-    icon: ShieldCheck,
-    title: 'Private by design',
-    copy: 'Your personal details are used to personalize your account and stay protected.',
-  },
-  {
-    id: 'next',
-    icon: Leaf,
-    title: 'Ready for nutrition',
-    copy: 'A complete profile makes your future health and meal settings easier to manage.',
-  },
-];
 
 const PROFILE_NOTES = [
   'A clear photo and short bio help your NutriBot space feel recognizably yours.',
@@ -113,6 +90,8 @@ const toFormProfile = (profile = {}, fallbackUser = {}) => ({
   bio: normalizeProfileText(profile.bio, 500),
   dateOfBirth: profile.dateOfBirth ? String(profile.dateOfBirth).slice(0, 10) : '',
   gender: normalizeGender(profile.gender),
+  hasPassword: profile.hasPassword !== undefined ? Boolean(profile.hasPassword) : true,
+  authProvider: profile.authProvider || 'LOCAL',
 });
 
 const getInitials = (profile) => {
@@ -148,14 +127,16 @@ const EMPTY_PASSWORD_FORM = {
   confirmPassword: '',
 };
 
-const validatePasswordChange = (passwords) => {
+const validatePasswordChange = (passwords, hasExistingPassword = true) => {
   const errors = {};
-  if (!passwords.currentPassword) errors.currentPassword = 'Please enter your current password.';
+  if (hasExistingPassword) {
+    if (!passwords.currentPassword) errors.currentPassword = 'Please enter your current password.';
+  }
   if (!passwords.newPassword) {
     errors.newPassword = 'Please enter a new password.';
   } else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(passwords.newPassword)) {
     errors.newPassword = 'Use 8+ characters with uppercase, lowercase, number, and special character (@$!%*?&).';
-  } else if (passwords.newPassword === passwords.currentPassword) {
+  } else if (hasExistingPassword && passwords.currentPassword && passwords.newPassword === passwords.currentPassword) {
     errors.newPassword = 'Your new password must be different from your current password.';
   }
   if (!passwords.confirmPassword) errors.confirmPassword = 'Please confirm your new password.';
@@ -166,6 +147,7 @@ const validatePasswordChange = (passwords) => {
 export default function ProfilePage() {
   const pageRef = useRef(null);
   const avatarInputRef = useRef(null);
+  const savingRef = useRef(false);
   const fallbackUser = useMemo(() => getCurrentUserFromToken() ?? { username: '', email: '' }, []);
   const [profile, setProfile] = useState(() => toFormProfile(EMPTY_PROFILE, fallbackUser));
   const [savedProfile, setSavedProfile] = useState(() => toFormProfile(EMPTY_PROFILE, fallbackUser));
@@ -180,7 +162,6 @@ export default function ProfilePage() {
   const [serverPendingEmail, setServerPendingEmail] = useState('');
   const [confirmedEmail, setConfirmedEmail] = useState('');
   const [notice, setNotice] = useState(null);
-  const [activeGuide, setActiveGuide] = useState('identity');
   const [activeNote, setActiveNote] = useState(0);
   const [headerQuery, setHeaderQuery] = useState('');
   const [avatarFile, setAvatarFile] = useState(null);
@@ -191,6 +172,7 @@ export default function ProfilePage() {
   const [passwordErrors, setPasswordErrors] = useState({});
   const [passwordVisibility, setPasswordVisibility] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -198,6 +180,7 @@ export default function ProfilePage() {
     setHasLoadedProfile(false);
     getMyProfile(controller.signal)
       .then((data) => {
+        if (controller.signal.aborted) return;
         const mapped = toFormProfile(data, fallbackUser);
         const editableProfile = { ...mapped, email: data.pendingEmail || mapped.email };
         setProfile(editableProfile);
@@ -208,12 +191,11 @@ export default function ProfilePage() {
         publishProfileUpdate(editableProfile);
       })
       .catch((error) => {
-        if (error?.name !== 'AbortError') {
-          const emptyProfile = toFormProfile(EMPTY_PROFILE);
-          setProfile(emptyProfile);
-          setSavedProfile(emptyProfile);
-          setNotice({ type: 'error', message: 'We could not load your saved profile. Please try again before making changes.' });
-        }
+        if (controller.signal.aborted || error?.name === 'AbortError') return;
+        const emptyProfile = toFormProfile(EMPTY_PROFILE);
+        setProfile(emptyProfile);
+        setSavedProfile(emptyProfile);
+        setNotice({ type: 'error', message: 'We could not load your saved profile. Please try again before making changes.' });
       })
       .finally(() => {
         if (!controller.signal.aborted) setIsLoading(false);
@@ -224,6 +206,12 @@ export default function ProfilePage() {
   useEffect(() => () => {
     if (avatarPreview) URL.revokeObjectURL(avatarPreview);
   }, [avatarPreview]);
+
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timeoutId = window.setTimeout(() => setNotice((current) => current === notice ? null : current), 3500);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   useGSAP(() => {
     const media = gsap.matchMedia();
@@ -286,6 +274,10 @@ export default function ProfilePage() {
   const completion = [profile.fullName, profile.email, profile.dateOfBirth, profile.gender, profile.bio].filter(Boolean).length * 20;
   const visibleAvatar = avatarPreview || (!avatarRemoved ? profile.avatarUrl : '');
 
+  const scrollToSaveFeedback = () => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'smooth' })));
+  };
+
   const updateField = (event) => {
     const { name, value } = event.target;
     setProfile((current) => ({ ...current, [name]: value }));
@@ -335,14 +327,16 @@ export default function ProfilePage() {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!hasLoadedProfile) return;
+    if (!hasLoadedProfile || savingRef.current) return;
     const nextErrors = validateProfile(profile);
     if (Object.keys(nextErrors).length) {
       setErrors(nextErrors);
       setNotice({ type: 'error', message: 'Please review the highlighted fields before saving.' });
+      scrollToSaveFeedback();
       return;
     }
 
+    savingRef.current = true;
     setIsSaving(true);
     setNotice(null);
     try {
@@ -385,7 +379,9 @@ export default function ProfilePage() {
     } catch (error) {
       setNotice({ type: 'error', message: error?.message || 'We could not save your changes. Please try again.' });
     } finally {
+      savingRef.current = false;
       setIsSaving(false);
+      scrollToSaveFeedback();
     }
   };
 
@@ -419,16 +415,43 @@ export default function ProfilePage() {
     if (notice?.type === 'info') setNotice(null);
   };
 
-  const handlePasswordSubmit = (event) => {
+  const handlePasswordSubmit = async (event) => {
     event.preventDefault();
-    const nextErrors = validatePasswordChange(passwordForm);
+    const hasExistingPassword = Boolean(profile.hasPassword);
+    const nextErrors = validatePasswordChange(passwordForm, hasExistingPassword);
     if (Object.keys(nextErrors).length) {
       setPasswordErrors(nextErrors);
       setNotice({ type: 'error', message: 'Please review the password requirements below.' });
       return;
     }
-    // A password-change API is not available yet. Do not simulate a successful change.
-    setNotice({ type: 'info', message: 'Password changes are not available yet. Your password has not been changed.' });
+
+    try {
+      setIsSavingPassword(true);
+      const payload = {
+        currentPassword: hasExistingPassword ? passwordForm.currentPassword : null,
+        newPassword: passwordForm.newPassword,
+        confirmPassword: passwordForm.confirmPassword,
+      };
+      await changeMyPassword(payload);
+      setProfile((current) => ({ ...current, hasPassword: true }));
+      setSavedProfile((current) => ({ ...current, hasPassword: true }));
+      setIsPasswordDialogOpen(false);
+      setPasswordForm(EMPTY_PASSWORD_FORM);
+      setPasswordErrors({});
+      setNotice({
+        type: 'success',
+        message: hasExistingPassword
+          ? 'Your password has been changed successfully.'
+          : 'Password set successfully! You can now log in with Google or your password.',
+      });
+    } catch (error) {
+      setNotice({
+        type: 'error',
+        message: error?.message || 'Could not update your password. Please try again.',
+      });
+    } finally {
+      setIsSavingPassword(false);
+    }
   };
 
   const openPasswordDialog = () => {
@@ -474,6 +497,7 @@ export default function ProfilePage() {
             <div className={`nb-profile-notice nb-profile-notice--${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>
               {notice.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
               <span>{notice.message}</span>
+              <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss notification"><X size={16} /></button>
             </div>
           )}
 
@@ -541,10 +565,21 @@ export default function ProfilePage() {
                     <span>Password</span>
                     <div className="is-readonly nb-profile-password-summary">
                       <LockKeyhole size={17} />
-                      <input value="••••••••••••" readOnly aria-readonly="true" aria-label="Password is hidden" />
-                      <button type="button" onClick={openPasswordDialog}>Change password</button>
+                      <input
+                        value={profile.hasPassword ? '••••••••••••' : 'Chưa thiết lập (Google)'}
+                        readOnly
+                        aria-readonly="true"
+                        aria-label={profile.hasPassword ? 'Password is hidden' : 'No password set yet'}
+                      />
+                      <button type="button" onClick={openPasswordDialog}>
+                        {profile.hasPassword ? 'Change password' : 'Set a password'}
+                      </button>
                     </div>
-                    <em>Your password is hidden for your security.</em>
+                    <em>
+                      {profile.hasPassword
+                        ? 'Your password is hidden for your security.'
+                        : 'Set a password to also log in with your username or email.'}
+                    </em>
                   </label>
 
                   <label className="nb-profile-field">
@@ -602,17 +637,6 @@ export default function ProfilePage() {
             </aside>
           </div>
 
-          <section className="nb-profile-guide" aria-label="Profile guide">
-            {PROFILE_GUIDE.map(({ id, icon: Icon, title, copy }) => {
-              const isActive = activeGuide === id;
-              return (
-                <button key={id} type="button" className={isActive ? 'is-active' : ''} onMouseEnter={() => setActiveGuide(id)} onFocus={() => setActiveGuide(id)} onClick={() => setActiveGuide(id)} aria-expanded={isActive}>
-                  <Icon size={21} />
-                  <span><b>{title}</b>{isActive && <small>{copy}</small>}</span>
-                </button>
-              );
-            })}
-          </section>
         </main>
       </div>
       {isAvatarViewerOpen && visibleAvatar && (
@@ -632,6 +656,7 @@ export default function ProfilePage() {
             purpose: 'emailChange',
             expirationSeconds: 30 * 60,
             onVerify: handleEmailVerification,
+            onVerified: () => { setHasDismissedEmailVerification(false); setIsEmailVerificationOpen(false); },
             onResend: resendEmailVerification,
             onBack: () => { setHasDismissedEmailVerification(true); setIsEmailVerificationOpen(false); },
           }}
@@ -641,15 +666,21 @@ export default function ProfilePage() {
         <div className="nb-password-dialog-backdrop" role="presentation" onClick={() => setIsPasswordDialogOpen(false)}>
           <form className="nb-password-dialog" role="dialog" aria-modal="true" aria-labelledby="change-password-title" onSubmit={handlePasswordSubmit} onClick={(event) => event.stopPropagation()} noValidate>
             <header>
-              <div><p>Account security</p><h2 id="change-password-title">Change password</h2></div>
-              <button type="button" onClick={() => setIsPasswordDialogOpen(false)} aria-label="Close change password"><X size={20} /></button>
+              <div><p>Account security</p><h2 id="change-password-title">{profile.hasPassword ? 'Change password' : 'Set a password'}</h2></div>
+              <button type="button" onClick={() => setIsPasswordDialogOpen(false)} aria-label="Close dialog"><X size={20} /></button>
             </header>
             <div className="nb-password-dialog__fields">
-              {[
-                ['currentPassword', 'Current password', 'current-password'],
-                ['newPassword', 'New password', 'new-password'],
-                ['confirmPassword', 'Confirm new password', 'new-password'],
-              ].map(([name, label, autoComplete]) => (
+              {(profile.hasPassword
+                ? [
+                    ['currentPassword', 'Current password', 'current-password'],
+                    ['newPassword', 'New password', 'new-password'],
+                    ['confirmPassword', 'Confirm new password', 'new-password'],
+                  ]
+                : [
+                    ['newPassword', 'New password', 'new-password'],
+                    ['confirmPassword', 'Confirm new password', 'new-password'],
+                  ]
+              ).map(([name, label, autoComplete]) => (
                 <label className="nb-profile-field" key={name}>
                   <span>{label}</span>
                   <div className="nb-password-input"><LockKeyhole size={17} /><input name={name} type={passwordVisibility[name] ? 'text' : 'password'} value={passwordForm[name]} onChange={updatePasswordField} autoComplete={autoComplete} aria-invalid={Boolean(passwordErrors[name])} aria-describedby={passwordErrors[name] ? `${name}-error` : undefined} /><button type="button" onClick={() => setPasswordVisibility((current) => ({ ...current, [name]: !current[name] }))} aria-label={passwordVisibility[name] ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}>{passwordVisibility[name] ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>
@@ -658,7 +689,15 @@ export default function ProfilePage() {
               ))}
               <p className="nb-password-hint">Use at least 8 characters, including uppercase, lowercase, a number, and one of @$!%*?&.</p>
             </div>
-            <footer><button type="button" className="nb-profile-button nb-profile-button--secondary" onClick={() => setIsPasswordDialogOpen(false)}>Cancel</button><button type="submit" className="nb-profile-button nb-profile-button--primary">Change password</button></footer>
+            <footer>
+              <button type="button" className="nb-profile-button nb-profile-button--secondary" onClick={() => setIsPasswordDialogOpen(false)} disabled={isSavingPassword}>Cancel</button>
+              <button type="submit" className="nb-profile-button nb-profile-button--primary" disabled={isSavingPassword}>
+                {isSavingPassword ? <LoaderCircle size={17} className="nb-profile-spinner" /> : null}
+                {isSavingPassword
+                  ? (profile.hasPassword ? 'Changing...' : 'Setting...')
+                  : (profile.hasPassword ? 'Change password' : 'Set password')}
+              </button>
+            </footer>
           </form>
         </div>
       )}
