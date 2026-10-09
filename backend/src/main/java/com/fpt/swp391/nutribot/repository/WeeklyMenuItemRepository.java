@@ -11,6 +11,4 @@ public interface WeeklyMenuItemRepository extends JpaRepository<WeeklyMenuItem, 
     List<WeeklyMenuItem> findByDailyMenu_MealIdIn(Collection<Integer> mealIds);
 
     boolean existsByDailyMenuMealIdAndDishDishId(Integer mealId, Integer dishId);
-
-    List<WeeklyMenuItem> findByDailyMenuMealId(Integer mealId);
 }

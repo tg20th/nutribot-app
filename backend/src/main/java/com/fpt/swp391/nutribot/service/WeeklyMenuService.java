@@ -264,7 +264,7 @@ public class WeeklyMenuService {
             throw new BadRequestException("Danh sách món ăn có món không tồn tại hoặc không hoạt động");
         }
 
-        Set<String> slots = new HashSet<>();
+        Set<String> slotDishKeys = new HashSet<>();
         Map<String, String> normalizedMealTypes = new HashMap<>();
         for (WeeklyMenuItemCreateRequest item : requestedItems) {
             String mealType = item.getMealType().trim().toLowerCase(Locale.ROOT);
@@ -275,8 +275,8 @@ public class WeeklyMenuService {
                 throw new BadRequestException("Không thể lưu món ăn chưa có dữ liệu calo");
             }
             String slotKey = item.getDayOfWeek() + ":" + mealType;
-            if (!slots.add(slotKey)) {
-                throw new BadRequestException("Có nhiều hơn một món trong cùng một bữa: " + slotKey);
+            if (!slotDishKeys.add(slotKey + ":" + item.getDishId())) {
+                throw new BadRequestException("Món ăn đã có trong bữa này: " + slotKey);
             }
             normalizedMealTypes.put(slotKey, mealType);
         }
@@ -354,7 +354,7 @@ public class WeeklyMenuService {
                 .notes(request.getNotes())
                 .build());
 
-        List<String> warnings = buildMealWarnings(username, meal, item);
+        List<String> warnings = buildDayWarnings(username, menu, request.getDayOfWeek(), item);
         return new AddMealResult(toItemResponse(item, new long[7]), warnings);
     }
 
@@ -403,6 +403,8 @@ public class WeeklyMenuService {
                             .add(item));
         }
 
+        Map<Integer, List<String>> dayWarnings = buildDayWarnings(username, dailyMenus, itemsByMeal);
+
         long[] dailyTotals = new long[7];
         List<WeeklyMenuResponse.MealResponse> meals = dailyMenus.stream().map(meal -> {
             List<WeeklyMenuItem> mealItems = itemsByMeal.getOrDefault(meal.getMealId(), List.of());
@@ -414,7 +416,7 @@ public class WeeklyMenuService {
                     .dayOfWeek(meal.getDayOfWeek())
                     .mealType(meal.getMealType())
                     .items(items)
-                    .overTargetNutrients(buildMealWarnings(username, meal, mealItems))
+                    .overTargetNutrients(dayWarnings.getOrDefault(meal.getDayOfWeek(), List.of()))
                     .build();
         }).toList();
 
@@ -656,44 +658,64 @@ public class WeeklyMenuService {
         return false;
     }
 
-    private List<String> buildMealWarnings(String username, DailyMenu meal, WeeklyMenuItem newItem) {
-        List<WeeklyMenuItem> allItems = new ArrayList<>(weeklyMenuItemRepository.findByDailyMenuMealId(meal.getMealId()));
-        if (newItem != null && allItems.stream().noneMatch(i -> i.getItemId().equals(newItem.getItemId()))) {
-            allItems.add(newItem);
+    private List<String> buildDayWarnings(String username, WeeklyMenu menu, Integer dayOfWeek, WeeklyMenuItem pendingItem) {
+        List<WeeklyMenuItem> dayItems = new ArrayList<>();
+        List<DailyMenu> dayMeals = dailyMenuRepository
+                .findByWeeklyMenuMenuIdOrderByDayOfWeekAscMealTypeAsc(menu.getMenuId()).stream()
+                .filter(meal -> meal.getDayOfWeek().equals(dayOfWeek))
+                .toList();
+        if (!dayMeals.isEmpty()) {
+            dayItems.addAll(weeklyMenuItemRepository.findByDailyMenu_MealIdIn(
+                    dayMeals.stream().map(DailyMenu::getMealId).toList()));
         }
-        return buildMealWarnings(username, meal, allItems);
+        if (pendingItem != null && (pendingItem.getItemId() == null
+                || dayItems.stream().noneMatch(item -> item.getItemId().equals(pendingItem.getItemId())))) {
+            dayItems.add(pendingItem);
+        }
+        return buildDayWarnings(username, dayItems);
     }
 
-    private List<String> buildMealWarnings(String username, DailyMenu meal, List<WeeklyMenuItem> allItems) {
-        List<String> warnings = new ArrayList<>();
-        long mealCalories = 0;
-        BigDecimal mealProtein = BigDecimal.ZERO;
-        BigDecimal mealCarbs = BigDecimal.ZERO;
-        BigDecimal mealFats = BigDecimal.ZERO;
-        boolean hasProtein = false, hasCarbs = false, hasFats = false;
+    private Map<Integer, List<String>> buildDayWarnings(
+            String username,
+            List<DailyMenu> dailyMenus,
+            Map<Integer, List<WeeklyMenuItem>> itemsByMeal) {
+        Map<Integer, List<String>> warningsByDay = new HashMap<>();
+        for (DailyMenu meal : dailyMenus) {
+            int dayOfWeek = meal.getDayOfWeek();
+            if (warningsByDay.containsKey(dayOfWeek)) continue;
+            List<WeeklyMenuItem> dayItems = dailyMenus.stream()
+                    .filter(dayMeal -> dayMeal.getDayOfWeek() == dayOfWeek)
+                    .flatMap(dayMeal -> itemsByMeal.getOrDefault(dayMeal.getMealId(), List.of()).stream())
+                    .toList();
+            warningsByDay.put(dayOfWeek, buildDayWarnings(username, dayItems));
+        }
+        return warningsByDay;
+    }
 
-        for (WeeklyMenuItem item : allItems) {
+    private List<String> buildDayWarnings(String username, List<WeeklyMenuItem> dayItems) {
+        List<String> warnings = new ArrayList<>();
+        long dayCalories = 0;
+        BigDecimal dayProtein = BigDecimal.ZERO;
+        boolean hasProtein = false;
+
+        for (WeeklyMenuItem item : dayItems) {
             BigDecimal servings = item.getServings() == null ? BigDecimal.ONE : item.getServings();
             Integer cal = item.getDish().getCalories();
-            if (cal != null) mealCalories += Math.round((long) cal * servings.doubleValue());
+            if (cal != null) dayCalories += Math.round((long) cal * servings.doubleValue());
             BigDecimal protein = item.getDish().getProteinG();
-            if (protein != null) { mealProtein = mealProtein.add(protein.multiply(servings)); hasProtein = true; }
-            BigDecimal carbs = item.getDish().getCarbsG();
-            if (carbs != null) { mealCarbs = mealCarbs.add(carbs.multiply(servings)); hasCarbs = true; }
-            BigDecimal fats = item.getDish().getHealthyFatsG();
-            if (fats != null) { mealFats = mealFats.add(fats.multiply(servings)); hasFats = true; }
+            if (protein != null) { dayProtein = dayProtein.add(protein.multiply(servings)); hasProtein = true; }
         }
 
-        int dailyTarget = getDailyCalorieTarget(username);
-        if (mealCalories > dailyTarget) {
-            long over = mealCalories - dailyTarget;
-            warnings.add("Bữa ăn vượt " + over + " kcal (target: " + dailyTarget + " kcal)");
+        int dailyCalorieTarget = getDailyCalorieTarget(username);
+        if (dayCalories > dailyCalorieTarget) {
+            warnings.add("Tổng calo trong ngày vượt " + (dayCalories - dailyCalorieTarget)
+                    + " kcal (target: " + dailyCalorieTarget + " kcal)");
         }
 
-        int proteinTarget = getDailyProteinTarget(username);
-        if (hasProtein && mealProtein.doubleValue() > proteinTarget) {
-            double over = mealProtein.doubleValue() - proteinTarget;
-            warnings.add("Bữa ăn vượt protein: " + Math.round(over) + "g (target: " + proteinTarget + "g)");
+        int dailyProteinTarget = getDailyProteinTarget(username);
+        if (hasProtein && dayProtein.doubleValue() > dailyProteinTarget) {
+            warnings.add("Tổng protein trong ngày vượt " + Math.round(dayProtein.doubleValue() - dailyProteinTarget)
+                    + "g (target: " + dailyProteinTarget + "g)");
         }
 
         return warnings;

@@ -214,16 +214,28 @@ export default function WeeklyMealPlannerPage() {
     return id;
   };
 
+  const persistAddMeal = async (newMeal, dayIndex, slot, dayLabel) => {
+    setHasUnsavedChanges(true);
+    setNotice({ type: 'saving', text: 'Saving your meal...' });
+    try {
+      const menuId = await ensureMenu();
+      await addWeeklyMenuItem(menuId, {
+        dayOfWeek: dayIndex + 1,
+        mealType: mealSlotApiValue(slot),
+        dishId: newMeal.dishId,
+        servings: newMeal.servings,
+        notes: newMeal.notes
+      });
+      await loadWeek(weekStart);
+      setNotice({ type: 'success', text: `Added ${newMeal.name} in ${dayLabel}.` });
+    } catch {
+      setNotice({ type: 'offline', text: 'The backend could not save this change. It is stored in your local draft.' });
+    }
+  };
+
   const submitMeal = async ({ dish, servings, notes, isAddMode }) => {
     const dayIndex = editor.dayIndex;
     const slot = editor.slot;
-
-    // The current API replaces the items in an occupied slot. Do not pretend an
-    // append succeeded while it would silently discard the user's existing dish.
-    if (isAddMode && menu.days[dayIndex]?.meals.some((meal) => meal.slot === slot)) {
-      setNotice({ type: 'offline', text: 'This API currently supports one dish per meal. Adding another dish would replace the existing one, so no change was made.' });
-      return;
-    }
 
     // Create new local meal entry
     const newMeal = createLocalMeal(dish, slot, servings, notes, false);
@@ -247,46 +259,40 @@ export default function WeeklyMealPlannerPage() {
       return;
     }
 
-    // No overflow — proceed with add/replace
     setEditor(null);
+
+    // ADD mode: append via addWeeklyMenuItem API
+    if (isAddMode) {
+      await persistAddMeal(newMeal, dayIndex, slot, editor.day.label);
+      return;
+    }
+
+    // REPLACE mode: update via updateWeeklyMenu (sends full menu)
     setHasUnsavedChanges(true);
     setNotice({ type: 'saving', text: 'Saving your meal...' });
 
     try {
       const menuId = await ensureMenu();
-      if (isAddMode) {
-        // ADD mode: use addWeeklyMenuItem API to append
-        await addWeeklyMenuItem(menuId, {
-          dayOfWeek: dayIndex + 1,
-          mealType: mealSlotApiValue(slot),
-          dishId: dish.dishId,
-          servings,
-          notes
-        });
-        await loadWeek(weekStart);
-      } else {
-        // REPLACE mode: update via updateWeeklyMenu (sends full menu)
-        const nextMenu = recalculateMenu({
-          ...menu,
-          days: menu.days.map((day, index) => index !== dayIndex ? day : {
-            ...day,
-            meals: day.meals.map((meal) => meal.key === editor.meal.key ? newMeal : meal)
-          })
-        });
-        const savedMenu = await updateWeeklyMenu(menuId, {
-          ...menuPayload(nextMenu),
-          meals: nextMenu.days.flatMap((day) => day.meals.map((item) => ({
-            dayOfWeek: day.dayOfWeek,
-            mealType: mealSlotApiValue(item.slot),
-            dishId: item.dishId,
-            servings: item.servings,
-            notes: item.notes
-          })))
-        });
-        setMenu(normalizeWeeklyMenu(savedMenu, weekStart));
-        setHasUnsavedChanges(false);
-      }
-      setNotice({ type: 'success', text: `${isAddMode ? 'Added' : 'Replaced'} ${dish.name} in ${editor.day.label}.` });
+      const nextMenu = recalculateMenu({
+        ...menu,
+        days: menu.days.map((day, index) => index !== dayIndex ? day : {
+          ...day,
+          meals: day.meals.map((meal) => meal.key === editor.meal.key ? newMeal : meal)
+        })
+      });
+      const savedMenu = await updateWeeklyMenu(menuId, {
+        ...menuPayload(nextMenu),
+        meals: nextMenu.days.flatMap((day) => day.meals.map((item) => ({
+          dayOfWeek: day.dayOfWeek,
+          mealType: mealSlotApiValue(item.slot),
+          dishId: item.dishId,
+          servings: item.servings,
+          notes: item.notes
+        })))
+      });
+      setMenu(normalizeWeeklyMenu(savedMenu, weekStart));
+      setHasUnsavedChanges(false);
+      setNotice({ type: 'success', text: `Replaced ${dish.name} in ${editor.day.label}.` });
     } catch {
       setNotice({ type: 'offline', text: 'The backend could not save this change. It is stored in your local draft.' });
     }
@@ -315,16 +321,16 @@ export default function WeeklyMealPlannerPage() {
     await removeMeal(dayIndex, meal);
   };
 
-  const confirmOverflowKeep = () => {
+  const confirmOverflowKeep = async () => {
     if (!pendingOverflowMeal || !pendingNutritionOverflow) return;
     const { newMeal, isAddMode, oldMealKey, editor: storedEditor } = pendingOverflowMeal;
     const dayIndex = storedEditor.dayIndex;
     setPendingOverflowMeal(null);
     setPendingNutritionOverflow(null);
 
+    // ADD mode: keep the dish anyway and append it
     if (isAddMode) {
-      // ADD mode: reopen editor so user picks a different dish
-      setEditor({ day: storedEditor.day, dayIndex, slot: storedEditor.slot, meal: null });
+      await persistAddMeal(newMeal, dayIndex, storedEditor.slot, storedEditor.day.label);
       return;
     }
 
