@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, MessageCircle, MoreHorizontal, Play } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import ImageWithFallback from '../ImageWithFallback';
 import PostDiscussionModal from '../content/PostDiscussionModal';
 import VoteButton from '../content/VoteButton';
@@ -22,8 +22,8 @@ export default function CommunityPostCard({ post: sourcePost, interactionApi = {
   const captionPreviewLength = 280;
   const captionIsLong = caption.length > captionPreviewLength;
   const visibleCaption = captionExpanded || !captionIsLong ? caption : `${caption.slice(0, captionPreviewLength).trimEnd()}…`;
-  const openPost = (focus = 'top') => { setFocusComments(focus === 'comments'); setFocusCaption(focus === 'caption'); setCommentsOpen(true); };
-  const closePost = () => { setCommentsOpen(false); setFocusComments(false); setFocusCaption(false); setVoteRevision((value) => value + 1); };
+  const openPost = useCallback((focus = 'top') => { setFocusComments(focus === 'comments'); setFocusCaption(focus === 'caption'); setCommentsOpen(true); }, []);
+  const closePost = useCallback(() => { setCommentsOpen(false); setFocusComments(false); setFocusCaption(false); setVoteRevision((value) => value + 1); }, []);
   const openFromCard = (event) => {
     if (event.target.closest('button, a, input, textarea, select')) return;
     openPost();
@@ -59,7 +59,7 @@ export default function CommunityPostCard({ post: sourcePost, interactionApi = {
     <div className="community-post-footer" onClick={(event) => event.stopPropagation()}>
       <VoteButton key={voteRevision} contentId={post.id} compact loadVote={interactionApi.loadVote} submitVote={interactionApi.submitVote}/>
       <button type="button" aria-label="Comments" aria-haspopup="dialog" aria-expanded={commentsOpen} onClick={() => openPost('comments')}>
-        <MessageCircle size={18}/><span>Comments</span><small aria-hidden="true">{post.comments ?? 0}</small></button>
+        <MessageCircle size={18}/><small aria-hidden="true">{post.comments ?? 0}</small></button>
     </div>
 
     {commentsOpen && (fullPageDetail
