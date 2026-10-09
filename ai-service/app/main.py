@@ -20,6 +20,7 @@ from app.schemas.deterministic_planner import DeterministicPlannerRequest
 from app.services.meal_planner_service import MealPlannerService
 from app.schemas.nutrition import NutritionCalculationRequest, NutritionCalculationResponse
 from app.services.nutrition_service import NutritionCalculationService
+from app.schemas.image_verification import ImageRelevanceRequest, ImageRelevanceResponse
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,18 @@ def create_app(
     @application.post("/api/ai/calculate-nutrition", response_model=NutritionCalculationResponse, tags=["Nutrition"])
     async def calculate_nutrition(request: NutritionCalculationRequest) -> NutritionCalculationResponse:
         return await NutritionCalculationService(application.state.gemini_service).calculate(request)
+
+    @application.post(
+        "/api/ai/verify-image-relevance",
+        response_model=ImageRelevanceResponse,
+        tags=["Moderation"],
+        summary="Xác minh tính liên quan giữa ảnh và món ăn / caption",
+    )
+    async def verify_image_relevance(
+        request: ImageRelevanceRequest,
+        service: GeminiService = Depends(_get_gemini_service),
+    ) -> ImageRelevanceResponse:
+        return await service.verify_image_relevance(request)
 
     return application
 
