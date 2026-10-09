@@ -25,6 +25,25 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiService:
+    def __init__(self, settings: Settings, client: Any | None = None) -> None:
+        self._settings = settings
+        self._client = client
+
+    def _get_client(self) -> Any:
+        if self._client is not None:
+            return self._client
+        if not self._settings.gemini_configured:
+            raise AIConfigurationError(
+                "AI service chưa được cấu hình GEMINI_API_KEY"
+            )
+        self._client = genai.Client(
+            api_key=self._settings.gemini_api_key,
+            http_options=types.HttpOptions(
+                timeout=int(self._settings.gemini_timeout_seconds * 1_000)
+            ),
+        )
+        return self._client
+
     @property
     def model_name(self): return self._settings.gemini_model
 
@@ -77,6 +96,11 @@ class GeminiService:
             "   - Set decision='APPROVE' with confidence >= 0.95 and categories=['SAFE'] for genuine healthy vegetarian recipes, salads, tofu dishes, or nutrition guides. "
             "   - Set decision='REJECT' ONLY when clear prohibited items (real animal meat/seafood, NSFW, spam, dangerous medical cure claims) are detected. "
             "   - Set decision='NEEDS_REVIEW' only when genuine ambiguity exists. "
+            "4. IMAGE-CONTENT RELEVANCE: "
+            "   - If a thumbnail image is present, check whether the image shows food, ingredients, or a culinary dish RELEVANT to the recipe/caption in the title, description, or body. "
+            "   - If the image depicts completely unrelated objects (e.g., electronic gadgets, vehicles, random memes, unrelated animals, unrelated selfies) or a completely conflicting dish, flag UNRELATED_IMAGE or OFF_TOPIC. "
+            "   - Set decision='REJECT' (if blatantly unrelated non-food spam/objects) or decision='NEEDS_REVIEW' with a clear explanation in 'reason' in Vietnamese (e.g. 'Ảnh thumbnail không liên quan đến món ăn trong bài viết'). "
+            "   - If the image depicts the described dish, matching ingredients, or a plausible variation/serving of the food, it is SAFE and relevant. "
             "Return structured JSON matching ModelModeration schema. "
             f"Content: {request.model_dump_json()}"
         )
@@ -86,24 +110,80 @@ class GeminiService:
         response = await self._generate_with_fallback(client, contents, config)
         parsed = getattr(response, "parsed", None)
         return (parsed if isinstance(parsed, ModelModeration) else ModelModeration.model_validate(parsed if parsed is not None else getattr(response, "text", None))).model_dump()
-    def __init__(self, settings: Settings, client: Any | None = None) -> None:
-        self._settings = settings
-        self._client = client
 
-    def _get_client(self) -> Any:
-        if self._client is not None:
-            return self._client
-        if not self._settings.gemini_configured:
-            raise AIConfigurationError(
-                "AI service chưa được cấu hình GEMINI_API_KEY"
+    async def verify_image_relevance(self, request):
+        """Verify whether an image matches the food/recipe caption and context."""
+        from app.schemas.image_verification import ImageRelevanceRequest, ImageRelevanceResponse
+        import httpx
+        client = self._get_client()
+
+        image_url = request.image_url.strip()
+        image_part = None
+        try:
+            async with httpx.AsyncClient(timeout=6.0) as http_client:
+                resp = await http_client.get(image_url)
+                if resp.status_code == 200:
+                    mime = resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+                    if not mime.startswith("image/"):
+                        mime = "image/jpeg"
+                    image_part = types.Part.from_bytes(data=resp.content, mime_type=mime)
+                else:
+                    return ImageRelevanceResponse(
+                        is_relevant=False,
+                        confidence=0.0,
+                        detected_dish="Không thể tải ảnh",
+                        match_status="UNRECOGNIZED",
+                        reason=f"Không thể tải ảnh từ URL (HTTP {resp.status_code})",
+                        is_food=False,
+                        is_vegetarian=None,
+                    )
+        except Exception as e:
+            return ImageRelevanceResponse(
+                is_relevant=False,
+                confidence=0.0,
+                detected_dish="Lỗi kết nối",
+                match_status="UNRECOGNIZED",
+                reason=f"Lỗi kết nối khi tải ảnh: {str(e)}",
+                is_food=False,
+                is_vegetarian=None,
             )
-        self._client = genai.Client(
-            api_key=self._settings.gemini_api_key,
-            http_options=types.HttpOptions(
-                timeout=int(self._settings.gemini_timeout_seconds * 1_000)
-            ),
+
+        ingredients_text = ", ".join(request.recipe_ingredients) if request.recipe_ingredients else "Không có danh sách cụ thể"
+        prompt_text = (
+            "You are an expert culinary and nutrition AI vision evaluator for NutriBot. "
+            "Task: Determine if the provided image is RELEVANT to the recipe, caption, and dish described in the text. "
+            "\nContext from user:\n"
+            f"- Title: {request.title or 'Không có'}\n"
+            f"- Caption / Description: {request.caption}\n"
+            f"- Key ingredients: {ingredients_text}\n\n"
+            "Evaluation Criteria:\n"
+            "1. Food Detection: Is the image genuinely a food, beverage, ingredient, or culinary dish (is_food=true)? "
+            "   If it depicts non-food objects (e.g. cars, smartphones, memes, screenshots, clothes, unrelated people), set is_food=false, is_relevant=false, match_status='MISMATCH'.\n"
+            "2. Dish / Ingredient Matching:\n"
+            "   - 'MATCH': The dish in the image clearly represents the dish/recipe described in the caption or contains primary ingredients of the recipe.\n"
+            "   - 'PARTIAL_MATCH': The dish belongs to the same family or cuisine (e.g. salad vs salad bowl, noodle soup, general vegetarian plate) or shares key components, even if minor garnishes differ.\n"
+            "   - 'MISMATCH': The image shows an entirely different dish or non-food item (e.g. caption describes a fruit salad or smoothie, but image is pizza or steak, or non-food).\n"
+            "3. Vegetarian Check (is_vegetarian):\n"
+            "   - Plant foods, vegetables, fruits, tofu, mushrooms, grains, nuts, dairy (milk/cheese), and eggs are 100% vegetarian on NutriBot.\n"
+            "   - Meat, poultry, fish, seafood are NOT vegetarian.\n"
+            "4. Reason: Provide a clear, natural, helpful explanation in Vietnamese (Tiếng Việt) explaining what is detected in the image and why it matches or mismatches the caption.\n\n"
+            "Return JSON matching the ImageRelevanceResponse schema."
         )
-        return self._client
+
+        contents = [prompt_text, image_part]
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=ImageRelevanceResponse,
+            temperature=0.1,
+        )
+        response = await self._generate_with_fallback(client, contents, config)
+        parsed = getattr(response, "parsed", None)
+        if isinstance(parsed, ImageRelevanceResponse):
+            return parsed
+        if parsed is not None:
+            return ImageRelevanceResponse.model_validate(parsed)
+        text_content = getattr(response, "text", None)
+        return ImageRelevanceResponse.model_validate_json(text_content)
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
         client = self._get_client()
