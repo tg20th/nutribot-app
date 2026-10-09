@@ -171,7 +171,7 @@ export default function CommunityFeedPage() {
             <article className="discover-note"><span>Today&apos;s mood</span><b>Bright,<br/>fresh,<br/>uncomplicated.</b><small>Curated for your table</small></article>
             <article className="discover-feature discover-feature--small group"><img src={discoverPosts[1].image} alt={discoverPosts[1].title}/><div><span>READ &amp; SAVE</span><h2>{discoverPosts[1].title}</h2></div></article>
           </section>}
-          <div className="feed-stream-heading"><div><span>The community stream</span><h2>What&apos;s nourishing people now</h2></div><p>Stories and videos, all in one thoughtful place.</p></div>
+          <div className="feed-stream-heading"><div><span>The community stream</span><h2>What&apos;s nourishing people now</h2></div></div>
           <CommunityComposer onOpen={openComposer} profile={profile}/>
           <CommunityFilters filters={filters} active={filter} onChange={setFilter}/>
           {loading ? <div className="feed-skeleton-list" role="status" aria-label="Loading community posts" aria-busy="true">
