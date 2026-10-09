@@ -16,6 +16,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
@@ -24,6 +25,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
@@ -36,6 +38,7 @@ public class ChatbotGatewayService {
     private static final int CB_FAILURE_THRESHOLD = 3;
     private static final Duration CB_WINDOW = Duration.ofSeconds(30);
     private static final Duration CB_COOLDOWN = Duration.ofSeconds(30);
+    private static final int MAX_AI_HISTORY = 6;
 
     private final RestClient aiClient;
     private final GuestRateLimitFilter rateLimitFilter;
@@ -45,13 +48,15 @@ public class ChatbotGatewayService {
     private Instant failureWindowStart;
     private Instant lastFailureAt;
     private final Object cbLock = new Object();
+    private final AtomicLong fallbackCount = new AtomicLong();
 
     public ChatbotGatewayService(
             @Value("${ai-service.base-url:http://localhost:8000}") String aiServiceBaseUrl,
             GuestRateLimitFilter rateLimitFilter) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(3));
-        requestFactory.setReadTimeout(Duration.ofSeconds(35));
+        // Two bounded Gemini attempts (primary + fallback) must complete before this deadline.
+        requestFactory.setReadTimeout(Duration.ofSeconds(32));
 
         this.aiClient = RestClient.builder()
                 .baseUrl(aiServiceBaseUrl.replaceAll("/$", ""))
@@ -84,6 +89,7 @@ public class ChatbotGatewayService {
             return fallback(quotaKey, guest, correlationId);
         }
 
+        Instant startedAt = Instant.now();
         try {
             Map<String, Object> aiRequest = new LinkedHashMap<>();
             aiRequest.put("message", message.trim());
@@ -106,14 +112,26 @@ public class ChatbotGatewayService {
             recordAiSuccess();
             if (quotaKey != null) rateLimitFilter.consumeReservedTurn(quotaKey);
             Integer remaining = guest ? rateLimitFilter.remainingForKey(quotaKey) : null;
-            log.info("[{}] Gateway: AI success, replyLen={}", correlationId, response.reply().length());
+            log.info("[{}] Gateway: route=AI latencyMs={}", correlationId,
+                    Duration.between(startedAt, Instant.now()).toMillis());
             return new ChatbotReply(response.reply(), safeRecommendations(response.recommendations()), remaining, false);
         } catch (RestClientException exception) {
             recordAiFailure();
             if (quotaKey != null) rateLimitFilter.releaseReservedTurn(quotaKey);
-            log.warn("[{}] Gateway: AI call failed, returning fallback: {}", correlationId, exception.getMessage());
+            String errorCode = exception instanceof RestClientResponseException responseException
+                    ? String.valueOf(responseException.getStatusCode().value()) : exception.getClass().getSimpleName();
+            log.warn("[{}] Gateway: route=AI errorCode={} latencyMs={}, returning fallback",
+                    correlationId, errorCode, Duration.between(startedAt, Instant.now()).toMillis());
             return fallback(quotaKey, guest, correlationId);
         }
+    }
+
+    /** Completes a deterministic backend response while preserving guest quota semantics. */
+    public ChatbotReply completeFastPath(HttpServletRequest httpRequest, boolean guest, String reply) {
+        String quotaKey = guest ? (String) httpRequest.getAttribute("guestQuotaKey") : null;
+        if (quotaKey != null) rateLimitFilter.consumeReservedTurn(quotaKey);
+        Integer remaining = guest && quotaKey != null ? rateLimitFilter.remainingForKey(quotaKey) : null;
+        return new ChatbotReply(reply, List.of(), remaining, false);
     }
 
     private boolean canAttemptAiCall() {
@@ -171,6 +189,8 @@ public class ChatbotGatewayService {
 
     private ChatbotReply fallback(String quotaKey, boolean guest, String correlationId) {
         Integer remaining = guest && quotaKey != null ? rateLimitFilter.remainingForKey(quotaKey) : null;
+        long totalFallbacks = fallbackCount.incrementAndGet();
+        log.warn("[{}] Gateway: fallbackCount={}", correlationId, totalFallbacks);
         return new ChatbotReply(
                 "NutriBot is temporarily unavailable. Please try again shortly.",
                 List.of(),
@@ -196,7 +216,8 @@ public class ChatbotGatewayService {
 
     private List<Map<String, String>> toAiHistory(List<ConversationTurn> conversationHistory) {
         if (conversationHistory == null) return List.of();
-        return conversationHistory.stream()
+        int start = Math.max(0, conversationHistory.size() - MAX_AI_HISTORY);
+        return conversationHistory.subList(start, conversationHistory.size()).stream()
                 .map(turn -> Map.of("sender", turn.sender(), "content", turn.content()))
                 .toList();
     }

@@ -17,8 +17,8 @@ class Settings:
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.8-flash"
     gemini_fallback_model: str | None = "gemini-3.5-flash-lite"
-    gemini_timeout_seconds: float = 30.0
-    max_history_messages: int = 12
+    gemini_timeout_seconds: float = 14.0
+    max_history_messages: int = 6
 
     @property
     def gemini_configured(self) -> bool:
@@ -36,8 +36,8 @@ class Settings:
                 os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite").strip()
                 or None
             ),
-            gemini_timeout_seconds=_positive_float("GEMINI_TIMEOUT_SECONDS", 30.0),
-            max_history_messages=_positive_int("MAX_HISTORY_MESSAGES", 12),
+            gemini_timeout_seconds=_positive_float("GEMINI_TIMEOUT_SECONDS", 14.0),
+            max_history_messages=_positive_int("MAX_HISTORY_MESSAGES", 6),
         )
 
 

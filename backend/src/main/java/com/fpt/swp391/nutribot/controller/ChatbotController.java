@@ -11,7 +11,9 @@ import com.fpt.swp391.nutribot.repository.ChatMessageRepository;
 import com.fpt.swp391.nutribot.service.ChatHistoryService;
 import com.fpt.swp391.nutribot.service.ChatbotGatewayService;
 import com.fpt.swp391.nutribot.service.ChatbotGatewayService.ConversationTurn;
-import com.fpt.swp391.nutribot.service.HealthProfileService;
+import com.fpt.swp391.nutribot.service.ChatbotHealthProfileCache;
+import com.fpt.swp391.nutribot.service.ChatbotIntentRouter;
+import lombok.extern.slf4j.Slf4j;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
@@ -29,17 +31,21 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/v1/chatbot")
 @RequiredArgsConstructor
+@Slf4j
 public class ChatbotController {
 
-    private static final int MAX_AI_HISTORY = 50;
+    private static final int MAX_AI_HISTORY = 6;
+    private static final int MAX_CONVERSATION_HISTORY = 50;
 
     private final ChatbotGatewayService chatbotGatewayService;
     private final ChatHistoryService chatHistoryService;
-    private final HealthProfileService healthProfileService;
+    private final ChatbotHealthProfileCache chatbotHealthProfileCache;
+    private final ChatbotIntentRouter chatbotIntentRouter;
     private final ChatMessageRepository chatMessageRepository;
 
     @PostMapping("/query")
@@ -57,6 +63,7 @@ public class ChatbotController {
                 ? List.of()
                 : request.conversationHistory();
         Map<String, Object> userContext = null;
+        HealthProfileResponse profile = null;
 
         if (!guest) {
             String username = authentication.getName();
@@ -73,19 +80,21 @@ public class ChatbotController {
             }
 
             history = loadMemberHistory(username, memberSessionId);
-            userContext = loadMemberHealthContext(username);
+            profile = chatbotHealthProfileCache.get(username);
+            userContext = toHealthContext(profile);
             saveMessage(username, memberSessionId, "USER", request.message(), request.idempotencyKey());
         }
 
         String aiSessionId = guest ? request.sessionId() : memberSessionId.toString();
+        Optional<String> fastReply = chatbotIntentRouter.route(request.message(), profile, guest);
         ChatbotGatewayService.ChatbotReply reply;
-        reply = chatbotGatewayService.getReply(
-                httpRequest,
-                aiSessionId,
-                request.message(),
-                guest,
-                userContext,
-                history);
+        if (fastReply.isPresent()) {
+            reply = chatbotGatewayService.completeFastPath(httpRequest, guest, fastReply.get());
+        } else {
+            reply = chatbotGatewayService.getReply(
+                    httpRequest, aiSessionId, request.message(), guest, userContext, history);
+        }
+        log.info("Chatbot route={}", fastReply.isPresent() ? "FAST" : "AI");
 
         String assistantContent = toStoredAssistantContent(reply);
         LocalDateTime createdAt = null;
@@ -129,11 +138,12 @@ public class ChatbotController {
                 .toList();
     }
 
-    private Map<String, Object> loadMemberHealthContext(String username) {
-        HealthProfileResponse profile = healthProfileService.getHealthProfile(username);
+    private Map<String, Object> toHealthContext(HealthProfileResponse profile) {
         Map<String, Object> context = new HashMap<>();
         if (profile.bmi() != null) context.put("bmi", profile.bmi());
-        if (profile.allergies() != null) context.put("allergies", profile.allergies());
+        if (profile.allergies() != null && !profile.allergies().isEmpty()) context.put("allergies", profile.allergies());
+        if (profile.vegetarianType() != null && !profile.vegetarianType().isBlank()) context.put("vegetarian_type", profile.vegetarianType());
+        if (profile.healthGoal() != null && !profile.healthGoal().isBlank()) context.put("health_goal", profile.healthGoal());
         return context;
     }
 
@@ -164,7 +174,7 @@ public class ChatbotController {
             @Size(max = 100, message = "Session ID cannot exceed 100 characters.") String sessionId,
             @jakarta.validation.constraints.NotBlank(message = "Message is required.")
             @Size(max = 2_000, message = "Message cannot exceed 2000 characters.") String message,
-            @Size(max = MAX_AI_HISTORY, message = "Conversation history cannot exceed 50 messages.")
+            @Size(max = MAX_CONVERSATION_HISTORY, message = "Conversation history cannot exceed 50 messages.")
             List<@Valid ConversationTurn> conversationHistory,
             @Size(max = 100, message = "Idempotency key cannot exceed 100 characters.") String idempotencyKey) { }
 

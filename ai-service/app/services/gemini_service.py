@@ -1,6 +1,7 @@
 """Tích hợp Google Gemini bằng SDK google-genai."""
 
 import logging
+import time
 from typing import Any
 
 from google import genai
@@ -199,9 +200,17 @@ class GeminiService:
             response_schema=GeminiChatResult,
         )
 
+        started_at = time.perf_counter()
         try:
             response = await self._generate_with_fallback(client, prompt, config)
             result = self._parse_response(response)
+            usage = getattr(response, "usage_metadata", None)
+            token_usage = getattr(usage, "total_token_count", None) if usage else None
+            logger.info(
+                "Gemini chat latency_ms=%d token_usage=%s",
+                (time.perf_counter() - started_at) * 1000,
+                token_usage if token_usage is not None else "unavailable",
+            )
             return ChatResponse.model_validate(result.model_dump())
         except AIProviderUnavailableError:
             raise
@@ -254,7 +263,8 @@ class GeminiService:
             )
         except errors.APIError as exc:
             fallback_model = self._settings.gemini_fallback_model
-            transient_statuses = {429, 500, 502, 503, 504}
+            # A 429 is an exhausted quota: retrying only adds latency.
+            transient_statuses = {500, 502, 503, 504}
             if (
                 exc.code not in transient_statuses
                 or not fallback_model
