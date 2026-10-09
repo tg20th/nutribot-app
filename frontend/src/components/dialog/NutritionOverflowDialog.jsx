@@ -1,40 +1,33 @@
-import { AlertTriangle, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 export default function NutritionOverflowDialog({ overflow, isAddMode, onKeep, onCancel }) {
   if (!overflow) return null;
   const { details } = overflow;
+  const metrics = [
+    { label: 'Calories', value: details.calorie, unit: 'kcal' },
+    { label: 'Protein', value: details.protein, unit: 'g' },
+    { label: 'Carbs', value: details.carbs, unit: 'g' },
+    { label: 'Fat', value: details.fats, unit: 'g' }
+  ];
+
   return (
     <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
       <section className="meal-dialog nutrition-overflow-dialog" role="alertdialog" aria-modal="true" aria-labelledby="overflow-title" aria-describedby="overflow-description">
         <header>
-          <div><AlertTriangle size={20} color="var(--color-warning, #f59e0b)"/><h2 id="overflow-title">Nutrition Target Exceeded</h2></div>
+          <h2 id="overflow-title">Nutrition Target Exceeded</h2>
           <button type="button" className="meal-dialog-close" onClick={onCancel} aria-label="Close"><X size={18}/></button>
         </header>
         <div className="overflow-body">
-          <p id="overflow-description">Adding this dish will exceed your daily nutrition targets.</p>
-          <div className="overflow-metrics">
-            <div className="overflow-row">
-              <span>Calories</span>
-              <span><b>{details.calorie.actual}</b> / {details.calorie.goal} kcal <em>exceeded by {details.calorie.excess}</em></span>
-            </div>
-            {details.protein && (
-              <div className="overflow-row">
-                <span>Protein</span>
-                <span><b>{details.protein.actual}</b> / {details.protein.goal}g <em>exceeded by {details.protein.excess}g</em></span>
+          <p id="overflow-description">This dish goes over your daily target.</p>
+          <div className="overflow-metrics" aria-label="Nutrition target comparison">
+            {metrics.map(({ label, value, unit }) => (
+              <div className={`overflow-row${value ? ' is-exceeded' : ''}`} key={label}>
+                <span>{label}</span>
+                {value ? (
+                  <span className="overflow-values"><b>{value.actual}</b> / {value.goal} {unit}<em>+{value.excess} {unit}</em></span>
+                ) : <span className="overflow-within">Within target</span>}
               </div>
-            )}
-            {details.carbs && (
-              <div className="overflow-row">
-                <span>Carbs</span>
-                <span><b>{details.carbs.actual}</b> / {details.carbs.goal}g <em>exceeded by {details.carbs.excess}g</em></span>
-              </div>
-            )}
-            {details.fats && (
-              <div className="overflow-row">
-                <span>Fat</span>
-                <span><b>{details.fats.actual}</b> / {details.fats.goal}g <em>exceeded by {details.fats.excess}g</em></span>
-              </div>
-            )}
+            ))}
           </div>
         </div>
         <footer>
