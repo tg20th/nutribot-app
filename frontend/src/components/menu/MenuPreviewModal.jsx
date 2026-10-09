@@ -1,73 +1,26 @@
-import { Fragment } from 'react';
-import { AlertTriangle, CheckCircle2, Loader2, Save, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronDown, Loader2, Sparkles, X } from 'lucide-react';
 
 const MEALS = [['breakfast', 'Breakfast'], ['lunch', 'Lunch'], ['dinner', 'Dinner']];
 
-const NUTRIENTS = [
-  { key: 'calories', label: 'Calories', unit: 'kcal' },
-  { key: 'proteinG', label: 'Protein', unit: 'g' },
-  { key: 'carbsG', label: 'Carbs', unit: 'g' },
-  { key: 'healthyFatsG', label: 'Healthy fats', unit: 'g' }
-];
-
-const nutrition = (value, unit) =>
-  value != null && Number.isFinite(Number(value)) ? `${Math.round(Number(value))}${unit}` : 'Unknown';
-
-const weeklyTotals = (weeklyPlan = []) => NUTRIENTS.reduce((totals, { key }) => {
-  let sum = 0;
-  let known = true;
-  weeklyPlan.forEach((day) => {
-    MEALS.forEach(([field]) => {
-      const meal = day[field];
-      const raw = meal?.[key];
-      const value = Number(raw);
-      if (raw == null || !Number.isFinite(value)) {
-        known = false;
-        return;
-      }
-      sum += value * (Number(meal?.servings ?? 1) || 1);
-    });
-  });
-  totals[key] = known ? sum : null;
-  return totals;
-}, {});
-
-const round1 = (value) => Math.round(value * 10) / 10;
-
-export default function MenuPreviewModal({ preview, dishes, isSaving, saveError, onClose, onSave, onUse, onReplace }) {
-  const unresolved = preview.weeklyPlan.some((day) => MEALS.some(([field]) => !Number.isInteger(day[field]?.dishId)));
-  const totals = weeklyTotals(preview.weeklyPlan);
-  const target = preview.nutritionTarget ?? null;
+export default function MenuPreviewModal({ preview, isSaving, saveError, onDismissError, onClose, onSave, onRequestReplace }) {
+  const [expandedDay, setExpandedDay] = useState(null);
+  const calories = Math.round(preview.weeklyPlan.reduce((total, day) => total + MEALS.reduce((sum, [field]) => sum + ((Number(day[field]?.calories) || 0) * (Number(day[field]?.servings) || 1)), 0), 0) / 7);
+  const target = Number(preview.nutritionTarget?.calories);
+  const onTarget = Number.isFinite(target) && target > 0 && calories <= target;
+  useEffect(() => {
+    if (!saveError) return undefined;
+    const timer = window.setTimeout(onDismissError, 4000);
+    return () => window.clearTimeout(timer);
+  }, [saveError, onDismissError]);
 
   return <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !isSaving && onClose()}>
     <section className="meal-dialog ai-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-preview-title">
-      <header><div><span>Unsaved AI preview</span><h2 id="ai-preview-title">{preview.suggestedMenuTitle || 'Your seven-day menu'}</h2><p>This preview has not been saved. Choose a catalog dish to replace any meal before saving.</p></div><button type="button" className="meal-dialog-close" onClick={onClose} disabled={isSaving} aria-label="Close meal preview"><X size={18}/></button></header>
-      <div className="ai-preview-summary">
-        {NUTRIENTS.map(({ key, label, unit }) => {
-          const weeklyValue = totals[key];
-          const daily = weeklyValue != null ? round1(weeklyValue / 7) : null;
-          const dailyTarget = Number(target?.[key]);
-          const hasTarget = target != null && Number.isFinite(dailyTarget) && dailyTarget > 0;
-          return <Fragment key={key}>
-            <span>{label}</span>
-            <b>{daily == null
-              ? 'Unknown'
-              : hasTarget
-                ? `${daily}${unit} / day · target ${Math.round(dailyTarget)}${unit}`
-                : `${daily}${unit} / day`}</b>
-          </Fragment>;
-        })}
-        <small>Daily average of the suggested seven-day plan · targets come from your Health Profile.</small>
-      </div>
-      <div className="ai-preview-days">{preview.weeklyPlan.slice(0, 7).map((day, dayIndex) => <article key={`${day.day}-${dayIndex}`}><header><span>{String(dayIndex + 1).padStart(2, '0')}</span><b>{day.day || `Day ${dayIndex + 1}`}</b></header><div className="ai-preview-meals">{MEALS.map(([field, label]) => {
-        const meal = day[field] ?? {};
-        const canonical = Number.isInteger(meal.dishId);
-        return <label key={field}><span>{label}</span><select value={canonical ? String(meal.dishId) : ''} onChange={(event) => { const dish = dishes.find((item) => String(item.dishId) === event.target.value); if (dish) onReplace(dayIndex, field, dish); }} disabled={isSaving}><option value="">{canonical ? meal.dishName : 'Custom or unresolved suggestion'}</option>{dishes.map((dish) => <option key={dish.dishId} value={dish.dishId}>{dish.name}</option>)}</select><small>{canonical
-          ? [`${nutrition(meal.calories, ' kcal')}`, `${nutrition(meal.proteinG, 'g protein')}`, `${nutrition(meal.carbsG, 'g carbs')}`, `${nutrition(meal.healthyFatsG, 'g fat')}`].join(' · ')
-          : 'Custom text cannot be saved until replaced with a catalog dish.'}</small></label>;
-      })}</div></article>)}</div>
-      {(unresolved || saveError) && <div className="ai-preview-warning" role="alert"><AlertTriangle size={16}/><span>{saveError || 'Replace every unresolved suggestion with a valid catalog dish before saving.'}</span></div>}
-      <footer><button type="button" className="planner-btn-ghost" onClick={onClose} disabled={isSaving}>Edit request</button><button type="button" className="planner-btn-ghost" onClick={onSave} disabled={isSaving || unresolved}>{isSaving ? <><Loader2 size={15} className="is-spinning"/> Saving...</> : <><Save size={15}/> Save to my plans</>}</button><button type="button" className="planner-btn-primary" onClick={onUse} disabled={isSaving || unresolved}><CheckCircle2 size={15}/> Use this plan</button></footer>
+      <header className="ai-preview-header"><div><span><Sparkles size={12}/> AI MEAL PLANNER</span><h2 id="ai-preview-title">Your weekly menu</h2><p>{preview.vegetarianType || preview.dietaryGoal || 'Personalized menu'} · 7 days</p></div><div><em>Preview</em><button type="button" className="meal-dialog-close" onClick={onClose} disabled={isSaving} aria-label="Close meal preview"><X size={18}/></button></div></header>
+      <div className="ai-preview-summary"><div><span>DAILY AVERAGE</span><b>{calories.toLocaleString()} <small>/ {Number.isFinite(target) ? Math.round(target).toLocaleString() : '—'} kcal</small></b></div>{onTarget && <strong>On target</strong>}</div>
+      <div className="ai-preview-days">{preview.weeklyPlan.slice(0, 7).map((day, dayIndex) => { const open = expandedDay === dayIndex; const names = MEALS.map(([field]) => day[field]?.dishName || 'Unresolved dish').join(' · '); return <article className={open ? 'is-open' : ''} key={`${day.day}-${dayIndex}`}><button type="button" className="ai-preview-day-toggle" onClick={() => setExpandedDay(open ? null : dayIndex)} aria-expanded={open}><span>{String(dayIndex + 1).padStart(2, '0')}</span><b>{day.day || `Day ${dayIndex + 1}`}</b><div><strong>{names}</strong><small>Breakfast · Lunch · Dinner</small></div><ChevronDown size={16}/></button>{open && <div className="ai-preview-day-meals">{MEALS.map(([field, label]) => <div key={field}><span>{label}</span><b>{day[field]?.dishName || 'Unresolved dish'}</b><button type="button" onClick={() => onRequestReplace(dayIndex, field, label)} disabled={isSaving}>Replace</button></div>)}</div>}</article>; })}</div>
+      {saveError && <div className="ai-preview-error" role="alert"><span>{saveError}</span><button type="button" onClick={onDismissError} aria-label="Dismiss warning"><X size={15}/></button></div>}
+      <footer><button type="button" className="planner-btn-ghost" onClick={() => setExpandedDay(null)} disabled={isSaving}>Collapse all</button><button type="button" className="planner-btn-primary" onClick={onSave} disabled={isSaving}>{isSaving ? <><Loader2 size={15} className="is-spinning"/> Saving...</> : 'Save meal plan'}</button></footer>
     </section>
   </div>;
 }
