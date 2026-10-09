@@ -71,6 +71,7 @@ const normalizeDish = (dish, index = 0) => ({
   protein: Number(dish.protein ?? dish.proteinG ?? dish.protein_g ?? 0),
   carbsG: Number(dish.carbsG ?? dish.carbs ?? dish.carbs_g ?? 0),
   healthyFatsG: Number(dish.healthyFatsG ?? dish.fatG ?? dish.fat ?? dish.healthy_fats_g ?? 0),
+  vegetarianType: dish.vegetarianType ?? dish.vegetarian_type ?? null,
   image: dish.image ?? dish.imageUrl ?? dish.image_url ?? IMAGE_POOL[index % IMAGE_POOL.length]
 });
 
