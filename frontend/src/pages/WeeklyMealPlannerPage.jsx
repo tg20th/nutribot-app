@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Loader2, Plus, RefreshCw, Repeat2, Save, Sparkles, Trash2, WifiOff, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Download, Info, Loader2, Plus, RefreshCw, Repeat2, Save, Sparkles, Trash2, WifiOff, X } from 'lucide-react';
 import MemberPageLayout from '../layouts/MemberPageLayout';
 import MealEditorDialog from '../components/community/MealEditorDialog';
 import DishDetailModal from '../components/community/DishDetailModal';
@@ -21,6 +21,14 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 gsap.registerPlugin(ScrollTrigger);
 
 const storageKey = (startDate) => `nutribot-weekly-menu-${startDate}`;
+
+const isDietCompatible = (profileType, dishType) => {
+  const profile = String(profileType ?? '').toUpperCase();
+  const dish = String(dishType ?? '').toUpperCase();
+  if (!profile || !dish) return true;
+  const allowed = { VEGAN: ['VEGAN'], LACTO: ['VEGAN', 'LACTO'], OVO: ['VEGAN', 'OVO'], LACTO_OVO: ['VEGAN', 'LACTO', 'OVO', 'LACTO_OVO'] };
+  return (allowed[profile] ?? [profile]).includes(dish);
+};
 
 const selectedIndexForWeek = (weekStart) => {
   const start = new Date(`${weekStart}T12:00:00`);
@@ -77,6 +85,7 @@ export default function WeeklyMealPlannerPage() {
   const [showAiGenerator, setShowAiGenerator] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [aiPreview, setAiPreview] = useState(null);
+  const [previewReplaceTarget, setPreviewReplaceTarget] = useState(null);
   const [loading, setLoading] = useState(true);
   const [menuLoadFailed, setMenuLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -233,10 +242,28 @@ export default function WeeklyMealPlannerPage() {
     }
   };
 
-  const submitMeal = async ({ dish, servings, notes, isAddMode }) => {
+  const submitMeal = async ({ dish, dishes: selectedDishes = [], servings = 1, notes = '', isAddMode }) => {
     const dayIndex = editor.dayIndex;
     const slot = editor.slot;
 
+    if (isAddMode && selectedDishes.length > 1) {
+      setEditor(null);
+      setHasUnsavedChanges(true);
+      setNotice({ type: 'saving', text: 'Saving your dishes...' });
+      try {
+        const menuId = await ensureMenu();
+        await Promise.all(selectedDishes.map((selectedDish) => addWeeklyMenuItem(menuId, {
+          dayOfWeek: dayIndex + 1, mealType: mealSlotApiValue(slot), dishId: selectedDish.dishId, servings: 1, notes: ''
+        })));
+        await loadWeek(weekStart);
+        setNotice({ type: 'success', text: `Added ${selectedDishes.length} dishes in ${editor.day.label}.` });
+      } catch {
+        setNotice({ type: 'offline', text: 'The backend could not save all selected dishes. Please refresh and try again.' });
+      }
+      return;
+    }
+    if (isAddMode) dish = selectedDishes[0] ?? dish;
+    if (!dish) return;
     // Create new local meal entry
     const newMeal = createLocalMeal(dish, slot, servings, notes, false);
 
@@ -404,7 +431,7 @@ export default function WeeklyMealPlannerPage() {
       if (!Array.isArray(result.weeklyPlan) || result.weeklyPlan.length !== 7) throw new Error('The planner did not return a valid seven-day meal plan.');
       if (requestId !== plannerRequest.current) return;
       setShowAiGenerator(false);
-      setAiPreview(result);
+      setAiPreview({ ...result, vegetarianType: plannerProfile.vegetarianType ?? plannerProfile.vegetarian_type ?? null });
     } catch (error) {
       if (requestId !== plannerRequest.current) return;
       if (isProfileIncompleteError(error)) {
@@ -433,12 +460,17 @@ export default function WeeklyMealPlannerPage() {
   };
 
   const replacePreviewMeal = (dayIndex, field, dish) => {
-    setAiPreview((current) => current && ({ ...current, weeklyPlan: current.weeklyPlan.map((day, index) => index !== dayIndex ? day : ({ ...day, [field]: { dishId: dish.dishId, dishName: dish.name, calories: dish.calories, proteinG: dish.protein, carbsG: dish.carbsG, healthyFatsG: dish.healthyFatsG, imageUrl: dish.image, servings: day[field]?.servings ?? 1 } })) }));
+    setAiPreview((current) => current && ({ ...current, weeklyPlan: current.weeklyPlan.map((day, index) => index !== dayIndex ? day : ({ ...day, [field]: { dishId: dish.dishId, dishName: dish.name, calories: dish.calories, proteinG: dish.protein, carbsG: dish.carbsG, healthyFatsG: dish.healthyFatsG, vegetarianType: dish.vegetarianType, imageUrl: dish.image, servings: day[field]?.servings ?? 1 } })) }));
     setAiSaveError('');
   };
 
   const persistAiPreview = async () => {
     if (!aiPreview || aiSaveRequest.current) return;
+    const incompatibleMeal = aiPreview.weeklyPlan.flatMap((day) => ['breakfast', 'lunch', 'dinner'].map((field) => day[field])).find((meal) => !isDietCompatible(aiPreview.vegetarianType, meal?.vegetarianType ?? dishes.find((dish) => String(dish.dishId) === String(meal?.dishId))?.vegetarianType));
+    if (incompatibleMeal) {
+      setAiSaveError(`Dish “${incompatibleMeal.dishName}” is not compatible with your ${aiPreview.vegetarianType} diet. Replace it before saving.`);
+      return;
+    }
     aiSaveRequest.current = true;
     setSavingAiPreview(true);
     setAiSaveError('');
@@ -677,7 +709,10 @@ export default function WeeklyMealPlannerPage() {
       </section>
     </div>}
     {aiPreview && (
-      <MenuPreviewModal preview={aiPreview} dishes={dishes} isSaving={savingAiPreview} saveError={aiSaveError} onClose={() => setAiPreview(null)} onSave={persistAiPreview} onUse={applyAiPreview} onReplace={replacePreviewMeal}/>
+      <MenuPreviewModal preview={aiPreview} isSaving={savingAiPreview} saveError={aiSaveError} onDismissError={() => setAiSaveError('')} onClose={() => setAiPreview(null)} onSave={persistAiPreview} onRequestReplace={(dayIndex, field, label) => setPreviewReplaceTarget({ dayIndex, field, label })}/>
+    )}
+    {previewReplaceTarget && aiPreview && (
+      <MealEditorDialog editor={{ day: { label: aiPreview.weeklyPlan[previewReplaceTarget.dayIndex]?.day || `Day ${previewReplaceTarget.dayIndex + 1}`, meals: [] }, slot: previewReplaceTarget.label, meal: { dishId: null } }} dishes={dishes} onClose={() => setPreviewReplaceTarget(null)} onSubmit={({ dish }) => { if (dish && !isDietCompatible(aiPreview.vegetarianType, dish.vegetarianType)) { setAiSaveError(`Dish “${dish.name}” is not compatible with your ${aiPreview.vegetarianType} diet.`); } else if (dish) { replacePreviewMeal(previewReplaceTarget.dayIndex, previewReplaceTarget.field, dish); } setPreviewReplaceTarget(null); }}/>
     )}
     {showServiceUnavailableDialog && (
       <ServiceUnavailableDialog
