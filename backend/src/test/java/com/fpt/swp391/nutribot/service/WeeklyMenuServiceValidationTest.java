@@ -1,10 +1,12 @@
 package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.request.WeeklyMenuAiSaveRequest;
+import com.fpt.swp391.nutribot.dto.request.WeeklyMenuItemCreateRequest;
 import com.fpt.swp391.nutribot.dto.response.MealPlanDayResponse;
 import com.fpt.swp391.nutribot.dto.response.MealPlanDishResponse;
 import com.fpt.swp391.nutribot.dto.response.MealPlanGenerateResponse;
 import com.fpt.swp391.nutribot.dto.response.NutritionTargetResponse;
+import com.fpt.swp391.nutribot.entity.DailyMenu;
 import com.fpt.swp391.nutribot.entity.Dish;
 import com.fpt.swp391.nutribot.entity.Ingredient;
 import com.fpt.swp391.nutribot.entity.Recipe;
@@ -12,6 +14,7 @@ import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.entity.UserAllergy;
 import com.fpt.swp391.nutribot.entity.UserProfile;
 import com.fpt.swp391.nutribot.entity.WeeklyMenu;
+import com.fpt.swp391.nutribot.entity.WeeklyMenuItem;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.repository.DailyMenuRepository;
 import com.fpt.swp391.nutribot.repository.DishRepository;
@@ -450,6 +453,66 @@ class WeeklyMenuServiceValidationTest {
             weeklyMenuService.saveAiGeneratedMenu("testuser", req);
 
             verify(weeklyMenuRepository).save(any(WeeklyMenu.class));
+        }
+    }
+
+    // ===================== DAY-LEVEL WARNING TESTS =====================
+
+    @Nested
+    @DisplayName("Day-level nutrition warning")
+    class DailyWarningValidation {
+
+        @Test
+        @DisplayName("Adding a dish warns using the whole-day total, not just the meal")
+        void addItemWarnsUsingWholeDayTotal() {
+            User user = mockUser();
+
+            WeeklyMenu menu = WeeklyMenu.builder()
+                    .menuId(100)
+                    .user(user)
+                    .startDate(LocalDate.now().with(java.time.DayOfWeek.MONDAY))
+                    .endDate(LocalDate.now().with(java.time.DayOfWeek.MONDAY).plusDays(6))
+                    .build();
+            when(weeklyMenuRepository.findByMenuIdAndUserUserId(100, 1)).thenReturn(Optional.of(menu));
+
+            Dish existingDish = Dish.builder()
+                    .dishId(1).name("Cơm").active(true).calories(400).proteinG(new BigDecimal("10")).build();
+            Dish newDish = Dish.builder()
+                    .dishId(2).name("Bò").active(true).calories(900).proteinG(new BigDecimal("20")).build();
+            when(dishRepository.findByDishIdAndActiveTrue(2)).thenReturn(Optional.of(newDish));
+
+            DailyMenu lunch = DailyMenu.builder()
+                    .mealId(50).weeklyMenu(menu).dayOfWeek(2).mealType("lunch").build();
+            when(dailyMenuRepository.findByWeeklyMenuMenuIdAndDayOfWeekAndMealType(100, 2, "lunch"))
+                    .thenReturn(Optional.of(lunch));
+            when(weeklyMenuItemRepository.existsByDailyMenuMealIdAndDishDishId(50, 2)).thenReturn(false);
+
+            WeeklyMenuItem existingItem = WeeklyMenuItem.builder()
+                    .itemId(7).dailyMenu(lunch).dish(existingDish).servings(BigDecimal.ONE).build();
+            WeeklyMenuItem savedItem = WeeklyMenuItem.builder()
+                    .itemId(8).dailyMenu(lunch).dish(newDish).servings(BigDecimal.ONE).build();
+            when(weeklyMenuItemRepository.save(any(WeeklyMenuItem.class))).thenReturn(savedItem);
+
+            when(dailyMenuRepository.findByWeeklyMenuMenuIdOrderByDayOfWeekAscMealTypeAsc(100))
+                    .thenReturn(List.of(lunch));
+            when(weeklyMenuItemRepository.findByDailyMenu_MealIdIn(List.of(50)))
+                    .thenReturn(List.of(existingItem));
+
+            when(nutritionTargetService.getMissingFields("testuser")).thenReturn(List.of());
+            when(nutritionTargetService.calculateTarget("testuser"))
+                    .thenReturn(new NutritionTargetResponse(true, 1000, 100, 250, 65));
+
+            WeeklyMenuItemCreateRequest request = WeeklyMenuItemCreateRequest.builder()
+                    .dayOfWeek(2).mealType("lunch").dishId(2)
+                    .servings(BigDecimal.ONE).build();
+
+            WeeklyMenuService.AddMealResult result = weeklyMenuService.addWeeklyMenuItem("testuser", 100, request);
+
+            // 400 (existing) + 900 (new) = 1300 > 1000 daily target -> over by 300
+            assertThat(result.warnings())
+                    .anyMatch(warning -> warning.contains("vượt 300 kcal"));
+            assertThat(result.warnings())
+                    .allMatch(warning -> warning.contains("Tổng"));
         }
     }
 }

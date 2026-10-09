@@ -60,6 +60,8 @@ public class WeeklyMenuService {
     private final RecipeIngredientRepository recipeIngredientRepository;
     private final NutritionTargetService nutritionTargetService;
 
+    public record AddMealResult(WeeklyMenuResponse.ItemResponse item, List<String> warnings) {}
+
     @Transactional(readOnly = true)
     public List<DishOptionResponse> getDishCatalog() {
         return dishRepository.findAllByActiveTrueAndCaloriesIsNotNullAndProteinGIsNotNullOrderByNameAsc().stream()
@@ -262,7 +264,7 @@ public class WeeklyMenuService {
             throw new BadRequestException("Danh sách món ăn có món không tồn tại hoặc không hoạt động");
         }
 
-        Set<String> slots = new HashSet<>();
+        Set<String> slotDishKeys = new HashSet<>();
         Map<String, String> normalizedMealTypes = new HashMap<>();
         for (WeeklyMenuItemCreateRequest item : requestedItems) {
             String mealType = item.getMealType().trim().toLowerCase(Locale.ROOT);
@@ -273,8 +275,8 @@ public class WeeklyMenuService {
                 throw new BadRequestException("Không thể lưu món ăn chưa có dữ liệu calo");
             }
             String slotKey = item.getDayOfWeek() + ":" + mealType;
-            if (!slots.add(slotKey)) {
-                throw new BadRequestException("Có nhiều hơn một món trong cùng một bữa: " + slotKey);
+            if (!slotDishKeys.add(slotKey + ":" + item.getDishId())) {
+                throw new BadRequestException("Món ăn đã có trong bữa này: " + slotKey);
             }
             normalizedMealTypes.put(slotKey, mealType);
         }
@@ -315,7 +317,7 @@ public class WeeklyMenuService {
     }
 
     @Transactional
-    public WeeklyMenuResponse.ItemResponse addWeeklyMenuItem(
+    public AddMealResult addWeeklyMenuItem(
             String username,
             Integer menuId,
             WeeklyMenuItemCreateRequest request) {
@@ -344,12 +346,6 @@ public class WeeklyMenuService {
         if (weeklyMenuItemRepository.existsByDailyMenuMealIdAndDishDishId(meal.getMealId(), dish.getDishId())) {
             throw new BadRequestException("Món ăn đã có trong bữa này");
         }
-        // Upsert: replace existing item in this slot with the new dish
-        List<WeeklyMenuItem> existingItems = weeklyMenuItemRepository.findByDailyMenuMealId(meal.getMealId());
-        if (!existingItems.isEmpty()) {
-            weeklyMenuItemRepository.deleteAll(existingItems);
-            weeklyMenuItemRepository.flush();
-        }
 
         WeeklyMenuItem item = weeklyMenuItemRepository.save(WeeklyMenuItem.builder()
                 .dailyMenu(meal)
@@ -357,7 +353,9 @@ public class WeeklyMenuService {
                 .servings(request.getServings())
                 .notes(request.getNotes())
                 .build());
-        return toItemResponse(item, new long[7]);
+
+        List<String> warnings = buildDayWarnings(username, menu, request.getDayOfWeek(), item);
+        return new AddMealResult(toItemResponse(item, new long[7]), warnings);
     }
 
     @Transactional
@@ -405,10 +403,12 @@ public class WeeklyMenuService {
                             .add(item));
         }
 
+        Map<Integer, List<String>> dayWarnings = buildDayWarnings(username, dailyMenus, itemsByMeal);
+
         long[] dailyTotals = new long[7];
         List<WeeklyMenuResponse.MealResponse> meals = dailyMenus.stream().map(meal -> {
-            List<WeeklyMenuResponse.ItemResponse> items = itemsByMeal
-                    .getOrDefault(meal.getMealId(), List.of()).stream()
+            List<WeeklyMenuItem> mealItems = itemsByMeal.getOrDefault(meal.getMealId(), List.of());
+            List<WeeklyMenuResponse.ItemResponse> items = mealItems.stream()
                     .map(item -> toItemResponse(item, dailyTotals))
                     .toList();
             return WeeklyMenuResponse.MealResponse.builder()
@@ -416,6 +416,7 @@ public class WeeklyMenuService {
                     .dayOfWeek(meal.getDayOfWeek())
                     .mealType(meal.getMealType())
                     .items(items)
+                    .overTargetNutrients(dayWarnings.getOrDefault(meal.getDayOfWeek(), List.of()))
                     .build();
         }).toList();
 
@@ -655,5 +656,88 @@ public class WeeklyMenuService {
         if (user.equals("OVO")) return dish.equals("VEGAN") || dish.equals("OVO");
         if (user.equals("LACTO_OVO")) return true; // accepts all
         return false;
+    }
+
+    private List<String> buildDayWarnings(String username, WeeklyMenu menu, Integer dayOfWeek, WeeklyMenuItem pendingItem) {
+        List<WeeklyMenuItem> dayItems = new ArrayList<>();
+        List<DailyMenu> dayMeals = dailyMenuRepository
+                .findByWeeklyMenuMenuIdOrderByDayOfWeekAscMealTypeAsc(menu.getMenuId()).stream()
+                .filter(meal -> meal.getDayOfWeek().equals(dayOfWeek))
+                .toList();
+        if (!dayMeals.isEmpty()) {
+            dayItems.addAll(weeklyMenuItemRepository.findByDailyMenu_MealIdIn(
+                    dayMeals.stream().map(DailyMenu::getMealId).toList()));
+        }
+        if (pendingItem != null && (pendingItem.getItemId() == null
+                || dayItems.stream().noneMatch(item -> item.getItemId().equals(pendingItem.getItemId())))) {
+            dayItems.add(pendingItem);
+        }
+        return buildDayWarnings(username, dayItems);
+    }
+
+    private Map<Integer, List<String>> buildDayWarnings(
+            String username,
+            List<DailyMenu> dailyMenus,
+            Map<Integer, List<WeeklyMenuItem>> itemsByMeal) {
+        Map<Integer, List<String>> warningsByDay = new HashMap<>();
+        for (DailyMenu meal : dailyMenus) {
+            int dayOfWeek = meal.getDayOfWeek();
+            if (warningsByDay.containsKey(dayOfWeek)) continue;
+            List<WeeklyMenuItem> dayItems = dailyMenus.stream()
+                    .filter(dayMeal -> dayMeal.getDayOfWeek() == dayOfWeek)
+                    .flatMap(dayMeal -> itemsByMeal.getOrDefault(dayMeal.getMealId(), List.of()).stream())
+                    .toList();
+            warningsByDay.put(dayOfWeek, buildDayWarnings(username, dayItems));
+        }
+        return warningsByDay;
+    }
+
+    private List<String> buildDayWarnings(String username, List<WeeklyMenuItem> dayItems) {
+        List<String> warnings = new ArrayList<>();
+        long dayCalories = 0;
+        BigDecimal dayProtein = BigDecimal.ZERO;
+        boolean hasProtein = false;
+
+        for (WeeklyMenuItem item : dayItems) {
+            BigDecimal servings = item.getServings() == null ? BigDecimal.ONE : item.getServings();
+            Integer cal = item.getDish().getCalories();
+            if (cal != null) dayCalories += Math.round((long) cal * servings.doubleValue());
+            BigDecimal protein = item.getDish().getProteinG();
+            if (protein != null) { dayProtein = dayProtein.add(protein.multiply(servings)); hasProtein = true; }
+        }
+
+        int dailyCalorieTarget = getDailyCalorieTarget(username);
+        if (dayCalories > dailyCalorieTarget) {
+            warnings.add("Tổng calo trong ngày vượt " + (dayCalories - dailyCalorieTarget)
+                    + " kcal (target: " + dailyCalorieTarget + " kcal)");
+        }
+
+        int dailyProteinTarget = getDailyProteinTarget(username);
+        if (hasProtein && dayProtein.doubleValue() > dailyProteinTarget) {
+            warnings.add("Tổng protein trong ngày vượt " + Math.round(dayProtein.doubleValue() - dailyProteinTarget)
+                    + "g (target: " + dailyProteinTarget + "g)");
+        }
+
+        return warnings;
+    }
+
+    private int getDailyCalorieTarget(String username) {
+        try {
+            List<String> missing = nutritionTargetService.getMissingFields(username);
+            if (!missing.isEmpty()) return 2000;
+            NutritionTargetResponse target = nutritionTargetService.calculateTarget(username);
+            return target.calories();
+        } catch (Exception e) {
+            return 2000;
+        }
+    }
+
+    private int getDailyProteinTarget(String username) {
+        try {
+            NutritionTargetResponse target = nutritionTargetService.calculateTarget(username);
+            return target.proteinG();
+        } catch (Exception e) {
+            return 100;
+        }
     }
 }

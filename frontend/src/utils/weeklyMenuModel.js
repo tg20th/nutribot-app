@@ -215,6 +215,7 @@ export const recalculateMenu = (menu) => {
   const dailyTarget = (key) => nutritionSummary.target?.[key] != null
     ? Math.round(Number(nutritionSummary.target[key]) / 7)
     : null;
+  const calorieGoal = dailyTarget('calories');
   const proteinGoal = dailyTarget('proteinG');
   const carbsGoal = dailyTarget('carbsG');
   const fatsGoal = dailyTarget('healthyFatsG');
@@ -223,6 +224,7 @@ export const recalculateMenu = (menu) => {
     ...menu,
     days: days.map((day) => ({
       ...day,
+      calorieGoal: calorieGoal ?? day.calorieGoal ?? null,
       proteinGoal: proteinGoal ?? day.proteinGoal ?? null,
       carbsGoal: carbsGoal ?? day.carbsGoal ?? null,
       fatsGoal: fatsGoal ?? day.fatsGoal ?? null
