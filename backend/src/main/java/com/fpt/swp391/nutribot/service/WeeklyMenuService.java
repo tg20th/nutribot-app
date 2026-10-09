@@ -60,6 +60,8 @@ public class WeeklyMenuService {
     private final RecipeIngredientRepository recipeIngredientRepository;
     private final NutritionTargetService nutritionTargetService;
 
+    public record AddMealResult(WeeklyMenuResponse.ItemResponse item, List<String> warnings) {}
+
     @Transactional(readOnly = true)
     public List<DishOptionResponse> getDishCatalog() {
         return dishRepository.findAllByActiveTrueAndCaloriesIsNotNullAndProteinGIsNotNullOrderByNameAsc().stream()
@@ -315,7 +317,7 @@ public class WeeklyMenuService {
     }
 
     @Transactional
-    public WeeklyMenuResponse.ItemResponse addWeeklyMenuItem(
+    public AddMealResult addWeeklyMenuItem(
             String username,
             Integer menuId,
             WeeklyMenuItemCreateRequest request) {
@@ -344,12 +346,6 @@ public class WeeklyMenuService {
         if (weeklyMenuItemRepository.existsByDailyMenuMealIdAndDishDishId(meal.getMealId(), dish.getDishId())) {
             throw new BadRequestException("Món ăn đã có trong bữa này");
         }
-        // Upsert: replace existing item in this slot with the new dish
-        List<WeeklyMenuItem> existingItems = weeklyMenuItemRepository.findByDailyMenuMealId(meal.getMealId());
-        if (!existingItems.isEmpty()) {
-            weeklyMenuItemRepository.deleteAll(existingItems);
-            weeklyMenuItemRepository.flush();
-        }
 
         WeeklyMenuItem item = weeklyMenuItemRepository.save(WeeklyMenuItem.builder()
                 .dailyMenu(meal)
@@ -357,7 +353,9 @@ public class WeeklyMenuService {
                 .servings(request.getServings())
                 .notes(request.getNotes())
                 .build());
-        return toItemResponse(item, new long[7]);
+
+        List<String> warnings = buildMealWarnings(username, meal, item);
+        return new AddMealResult(toItemResponse(item, new long[7]), warnings);
     }
 
     @Transactional
@@ -407,8 +405,8 @@ public class WeeklyMenuService {
 
         long[] dailyTotals = new long[7];
         List<WeeklyMenuResponse.MealResponse> meals = dailyMenus.stream().map(meal -> {
-            List<WeeklyMenuResponse.ItemResponse> items = itemsByMeal
-                    .getOrDefault(meal.getMealId(), List.of()).stream()
+            List<WeeklyMenuItem> mealItems = itemsByMeal.getOrDefault(meal.getMealId(), List.of());
+            List<WeeklyMenuResponse.ItemResponse> items = mealItems.stream()
                     .map(item -> toItemResponse(item, dailyTotals))
                     .toList();
             return WeeklyMenuResponse.MealResponse.builder()
@@ -416,6 +414,7 @@ public class WeeklyMenuService {
                     .dayOfWeek(meal.getDayOfWeek())
                     .mealType(meal.getMealType())
                     .items(items)
+                    .overTargetNutrients(buildMealWarnings(username, meal, mealItems))
                     .build();
         }).toList();
 
@@ -655,5 +654,68 @@ public class WeeklyMenuService {
         if (user.equals("OVO")) return dish.equals("VEGAN") || dish.equals("OVO");
         if (user.equals("LACTO_OVO")) return true; // accepts all
         return false;
+    }
+
+    private List<String> buildMealWarnings(String username, DailyMenu meal, WeeklyMenuItem newItem) {
+        List<WeeklyMenuItem> allItems = new ArrayList<>(weeklyMenuItemRepository.findByDailyMenuMealId(meal.getMealId()));
+        if (newItem != null && allItems.stream().noneMatch(i -> i.getItemId().equals(newItem.getItemId()))) {
+            allItems.add(newItem);
+        }
+        return buildMealWarnings(username, meal, allItems);
+    }
+
+    private List<String> buildMealWarnings(String username, DailyMenu meal, List<WeeklyMenuItem> allItems) {
+        List<String> warnings = new ArrayList<>();
+        long mealCalories = 0;
+        BigDecimal mealProtein = BigDecimal.ZERO;
+        BigDecimal mealCarbs = BigDecimal.ZERO;
+        BigDecimal mealFats = BigDecimal.ZERO;
+        boolean hasProtein = false, hasCarbs = false, hasFats = false;
+
+        for (WeeklyMenuItem item : allItems) {
+            BigDecimal servings = item.getServings() == null ? BigDecimal.ONE : item.getServings();
+            Integer cal = item.getDish().getCalories();
+            if (cal != null) mealCalories += Math.round((long) cal * servings.doubleValue());
+            BigDecimal protein = item.getDish().getProteinG();
+            if (protein != null) { mealProtein = mealProtein.add(protein.multiply(servings)); hasProtein = true; }
+            BigDecimal carbs = item.getDish().getCarbsG();
+            if (carbs != null) { mealCarbs = mealCarbs.add(carbs.multiply(servings)); hasCarbs = true; }
+            BigDecimal fats = item.getDish().getHealthyFatsG();
+            if (fats != null) { mealFats = mealFats.add(fats.multiply(servings)); hasFats = true; }
+        }
+
+        int dailyTarget = getDailyCalorieTarget(username);
+        if (mealCalories > dailyTarget) {
+            long over = mealCalories - dailyTarget;
+            warnings.add("Bữa ăn vượt " + over + " kcal (target: " + dailyTarget + " kcal)");
+        }
+
+        int proteinTarget = getDailyProteinTarget(username);
+        if (hasProtein && mealProtein.doubleValue() > proteinTarget) {
+            double over = mealProtein.doubleValue() - proteinTarget;
+            warnings.add("Bữa ăn vượt protein: " + Math.round(over) + "g (target: " + proteinTarget + "g)");
+        }
+
+        return warnings;
+    }
+
+    private int getDailyCalorieTarget(String username) {
+        try {
+            List<String> missing = nutritionTargetService.getMissingFields(username);
+            if (!missing.isEmpty()) return 2000;
+            NutritionTargetResponse target = nutritionTargetService.calculateTarget(username);
+            return target.calories();
+        } catch (Exception e) {
+            return 2000;
+        }
+    }
+
+    private int getDailyProteinTarget(String username) {
+        try {
+            NutritionTargetResponse target = nutritionTargetService.calculateTarget(username);
+            return target.proteinG();
+        } catch (Exception e) {
+            return 100;
+        }
     }
 }
