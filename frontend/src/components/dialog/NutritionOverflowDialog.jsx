@@ -33,7 +33,7 @@ export default function NutritionOverflowDialog({ overflow, isAddMode, onKeep, o
         <footer>
           <button type="button" className="planner-btn-ghost" onClick={onCancel}>Cancel</button>
           <button type="button" className="planner-btn-primary overflow-confirm-btn" onClick={onKeep}>
-            {isAddMode ? 'Choose Another Dish' : 'Keep Replacement'}
+            {isAddMode ? 'Keep anyway' : 'Keep Replacement'}
           </button>
         </footer>
       </section>

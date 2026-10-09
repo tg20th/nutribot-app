@@ -7,6 +7,7 @@ import com.fpt.swp391.nutribot.dto.request.WeeklyMenuUpdateRequest;
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
 import com.fpt.swp391.nutribot.dto.response.WeeklyMenuResponse;
 import com.fpt.swp391.nutribot.service.WeeklyMenuService;
+import com.fpt.swp391.nutribot.service.WeeklyMenuService.AddMealResult;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -61,7 +62,7 @@ public class WeeklyMenuController {
     }
 
     @PostMapping("/{menuId}/items")
-    public ResponseEntity<ApiResponse<WeeklyMenuResponse.ItemResponse>> addWeeklyMenuItem(
+    public ResponseEntity<ApiResponse<WeeklyMenuService.AddMealResult>> addWeeklyMenuItem(
             Principal principal,
             @PathVariable Integer menuId,
             @Valid @RequestBody WeeklyMenuItemCreateRequest request) {

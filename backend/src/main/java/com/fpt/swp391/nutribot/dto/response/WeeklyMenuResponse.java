@@ -34,6 +34,8 @@ public class WeeklyMenuResponse {
         private Integer dayOfWeek;
         private String mealType;
         private List<ItemResponse> items;
+        @Builder.Default
+        private List<String> overTargetNutrients = List.of();
     }
 
     @Data
