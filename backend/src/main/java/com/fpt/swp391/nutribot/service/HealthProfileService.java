@@ -13,6 +13,9 @@ import com.fpt.swp391.nutribot.repository.IngredientRepository;
 import com.fpt.swp391.nutribot.repository.UserProfileRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import com.fpt.swp391.nutribot.config.CacheConfig;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +35,7 @@ public class HealthProfileService {
     private final IngredientRepository ingredientRepository;
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = CacheConfig.HEALTH_PROFILE_CACHE, key = "#username")
     public HealthProfileResponse getHealthProfile(String username) {
         User user = findUser(username);
         UserProfile profile = userProfileRepository.findById(user.getUserId()).orElse(null);
@@ -51,6 +55,7 @@ public class HealthProfileService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = CacheConfig.HEALTH_PROFILE_CACHE, key = "#username")
     public HealthProfileResponse updateHealthProfile(String username, HealthProfileUpdateRequest request) {
         // Share the per-user lock with generic profile writes so concurrent
         // first-time creation cannot insert duplicate user_profiles rows.
