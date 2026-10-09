@@ -62,3 +62,24 @@ it('closes detail dialog on popstate (browser back) so user stays on feed', asyn
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 });
+
+it('reopens detail dialog when user clicks the post again after closing', async () => {
+  const post = { id: 19, title: 'Breakfast idea', type: 'blog', author: 'Truong' };
+  render(<CommunityPostCard fullPageDetail post={post} interactionApi={interactionApi} loadPost={async () => ({ ...post, body: 'Breakfast story' })}/>);
+
+  // First click: opens
+  fireEvent.click(screen.getByRole('button', { name: 'Breakfast idea' }));
+  expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  expect(await screen.findByText('Breakfast story')).toBeInTheDocument();
+
+  // Close via back button
+  fireEvent.click(screen.getByRole('button', { name: 'Back to blog' }));
+  await waitFor(() => {
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  // Second click on the same post: must reopen successfully and stay open!
+  fireEvent.click(screen.getByRole('button', { name: 'Breakfast idea' }));
+  expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  expect(await screen.findByText('Breakfast story')).toBeInTheDocument();
+});

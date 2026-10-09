@@ -28,6 +28,10 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
     nutrition.fat && { label: 'Healthy fats', value: nutrition.fat },
   ].filter(Boolean) : [];
   const closedByPopstateRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.history?.pushState && post?.id) {
@@ -40,7 +44,7 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
 
     const handlePopState = () => {
       closedByPopstateRef.current = true;
-      onClose();
+      onCloseRef.current();
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -55,13 +59,13 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
         }
       }
     };
-  }, [post?.id, onClose]);
+  }, [post?.id]);
 
   useEffect(() => {
-    if (!closedByPopstateRef.current && location.key !== openedAt.current) {
-      onClose();
+    if (!closedByPopstateRef.current && location.pathname !== '/home' && location.key !== openedAt.current) {
+      onCloseRef.current();
     }
-  }, [location.key, onClose]);
+  }, [location.key, location.pathname]);
 
   const handleBack = () => {
     if (!closedByPopstateRef.current && window.history?.state?.feedDetailModal) {
@@ -72,7 +76,7 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
         // ignore
       }
     }
-    onClose();
+    onCloseRef.current();
   };
 
   useEffect(() => {
