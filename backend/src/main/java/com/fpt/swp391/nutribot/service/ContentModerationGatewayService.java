@@ -111,6 +111,64 @@ public class ContentModerationGatewayService {
         return moderateContent(contentId, contentType, title, description, body, category, tags, null, null);
     }
 
+    /**
+     * Xác minh ảnh có liên quan đến món ăn trong caption/nội dung bài viết hay không.
+     *
+     * @param imageUrl          URL của ảnh cần kiểm tra
+     * @param caption           Nội dung caption hoặc mô tả món ăn
+     * @param title             Tiêu đề bài viết (nếu có)
+     * @param recipeIngredients Danh sách nguyên liệu chính (nếu có)
+     * @return ImageRelevanceResult kết quả phân tích mức độ liên quan
+     */
+    public ImageRelevanceResult verifyImageRelevance(
+            String imageUrl,
+            String caption,
+            String title,
+            java.util.List<String> recipeIngredients) {
+        if (imageUrl == null || imageUrl.isBlank()) {
+            return new ImageRelevanceResult(false, 0.0, "Không có URL ảnh", "MISMATCH", "URL ảnh rỗng", false, null);
+        }
+        try {
+            Map<String, Object> request = new LinkedHashMap<>();
+            request.put("image_url", imageUrl.trim());
+            request.put("caption", caption != null && !caption.isBlank() ? caption : (title != null ? title : "Món ăn"));
+            if (title != null && !title.isBlank()) {
+                request.put("title", title);
+            }
+            request.put("recipe_ingredients", recipeIngredients != null ? recipeIngredients : java.util.List.of());
+
+            String requestBody = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(request);
+
+            AiImageRelevanceResponse response = aiClient.post()
+                    .uri("/api/ai/verify-image-relevance")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(requestBody.getBytes(StandardCharsets.UTF_8))
+                    .retrieve()
+                    .body(AiImageRelevanceResponse.class);
+
+            if (response == null) {
+                log.warn("AI image relevance verification returned null response");
+                return new ImageRelevanceResult(false, 0.0, "Không xác định", "UNRECOGNIZED", "AI không trả về dữ liệu", false, null);
+            }
+
+            return new ImageRelevanceResult(
+                    response.isRelevant() != null && response.isRelevant(),
+                    response.confidence() != null ? response.confidence() : 0.0,
+                    response.detectedDish() != null ? response.detectedDish() : "Không xác định",
+                    response.matchStatus() != null ? response.matchStatus() : "UNRECOGNIZED",
+                    response.reason() != null ? response.reason() : "",
+                    response.isFood() != null && response.isFood(),
+                    response.isVegetarian()
+            );
+        } catch (RestClientException ex) {
+            log.error("AI image relevance call failed: {}", ex.getMessage());
+            return new ImageRelevanceResult(false, 0.0, "Lỗi kết nối", "UNRECOGNIZED", "Không thể kết nối đến AI service", false, null);
+        } catch (Exception ex) {
+            log.error("Unexpected error during AI image relevance verification: {}", ex.getMessage());
+            return new ImageRelevanceResult(false, 0.0, "Lỗi hệ thống", "UNRECOGNIZED", "Lỗi xử lý xác minh ảnh: " + ex.getMessage(), false, null);
+        }
+    }
+
     public record ModerationResult(
             String decision,      // APPROVE, REJECT, NEEDS_REVIEW
             String reason,
@@ -118,10 +176,30 @@ public class ContentModerationGatewayService {
             java.util.List<String> categories
     ) {}
 
+    public record ImageRelevanceResult(
+            boolean isRelevant,
+            Double confidence,
+            String detectedDish,
+            String matchStatus, // MATCH, PARTIAL_MATCH, MISMATCH, UNRECOGNIZED
+            String reason,
+            boolean isFood,
+            Boolean isVegetarian
+    ) {}
+
     private record AiModerationResponse(
             String decision,
             String reason,
             Double confidence,
             java.util.List<String> categories
+    ) {}
+
+    private record AiImageRelevanceResponse(
+            @com.fasterxml.jackson.annotation.JsonProperty("is_relevant") Boolean isRelevant,
+            @com.fasterxml.jackson.annotation.JsonProperty("confidence") Double confidence,
+            @com.fasterxml.jackson.annotation.JsonProperty("detected_dish") String detectedDish,
+            @com.fasterxml.jackson.annotation.JsonProperty("match_status") String matchStatus,
+            @com.fasterxml.jackson.annotation.JsonProperty("reason") String reason,
+            @com.fasterxml.jackson.annotation.JsonProperty("is_food") Boolean isFood,
+            @com.fasterxml.jackson.annotation.JsonProperty("is_vegetarian") Boolean isVegetarian
     ) {}
 }
