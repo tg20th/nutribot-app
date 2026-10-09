@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
+from google.genai import errors
 
 from app.config import Settings
 from app.exceptions import AIProviderUnavailableError
@@ -64,3 +65,35 @@ def test_invalid_provider_response_is_controlled_error():
     service = GeminiService(Settings(gemini_api_key="test-key"), client=SimpleNamespace(aio=SimpleNamespace(models=InvalidModels())))
     with pytest.raises(AIProviderUnavailableError):
         asyncio.run(service.chat(ChatRequest(message="nutrition", session_id="s")))
+
+
+def test_429_does_not_retry_the_fallback_model():
+    class QuotaModels:
+        calls = 0
+
+        async def generate_content(self, **_kwargs):
+            self.calls += 1
+            raise errors.APIError(429, {"error": {"message": "quota"}})
+
+    models = QuotaModels()
+    service = GeminiService(Settings(gemini_api_key="test-key"), client=SimpleNamespace(aio=SimpleNamespace(models=models)))
+    with pytest.raises(AIProviderUnavailableError):
+        asyncio.run(service.chat(ChatRequest(message="nutrition", session_id="s")))
+    assert models.calls == 1
+
+
+def test_500_uses_one_fallback_attempt():
+    class TransientModels:
+        calls = 0
+
+        async def generate_content(self, **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise errors.APIError(500, {"error": {"message": "temporary"}})
+            return SimpleNamespace(parsed=GeminiChatResult(reply="Safe answer", recommendations=[]))
+
+    models = TransientModels()
+    service = GeminiService(Settings(gemini_api_key="test-key"), client=SimpleNamespace(aio=SimpleNamespace(models=models)))
+    response = asyncio.run(service.chat(ChatRequest(message="nutrition", session_id="s")))
+    assert response.reply == "Safe answer"
+    assert models.calls == 2
