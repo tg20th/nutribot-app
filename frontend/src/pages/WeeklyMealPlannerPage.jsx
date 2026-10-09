@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Download, Info, LayoutGrid, List, Loader2, Plus, RefreshCw, Repeat2, Save, ShoppingBasket, Sparkles, Trash2, WifiOff, X } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Loader2, Plus, RefreshCw, Repeat2, Save, Sparkles, Trash2, WifiOff, X } from 'lucide-react';
 import MemberPageLayout from '../layouts/MemberPageLayout';
 import MealEditorDialog from '../components/community/MealEditorDialog';
 import DishDetailModal from '../components/community/DishDetailModal';
@@ -85,7 +85,7 @@ export default function WeeklyMealPlannerPage() {
   const aiSaveRequest = useRef(false);
   const [notice, setNotice] = useState(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState(() => selectedIndexForWeek(toIsoDate(startOfWeek())));
-  const [viewMode, setViewMode] = useState('image');
+  const [viewMode, setViewMode] = useState('day');
   const [collapsedSlots, setCollapsedSlots] = useState({});
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showServiceUnavailableDialog, setShowServiceUnavailableDialog] = useState(false);
@@ -220,11 +220,6 @@ export default function WeeklyMealPlannerPage() {
 
     // The current API replaces the items in an occupied slot. Do not pretend an
     // append succeeded while it would silently discard the user's existing dish.
-    if (isAddMode && menu.days[dayIndex]?.meals.some((meal) => meal.slot === slot)) {
-      setNotice({ type: 'offline', text: 'This API currently supports one dish per meal. Adding another dish would replace the existing one, so no change was made.' });
-      return;
-    }
-
     // Create new local meal entry
     const newMeal = createLocalMeal(dish, slot, servings, notes, false);
 
@@ -494,11 +489,18 @@ export default function WeeklyMealPlannerPage() {
       <div className="planner-workspace" ref={page}>
         <main className="planner-main">
           <header className="planner-header">
-            <div><h1>Weekly Meal Planner</h1><p>Plan your meals, stay consistent with your goals.</p></div>
-            <div className="planner-week-nav" aria-label="Change week">
-              <span>{menu.week.range}</span>
-              <button type="button" aria-label="Previous week" onClick={() => setWeekStart((current) => shiftWeek(current, -1))}><ChevronLeft size={18}/></button>
-              <button type="button" aria-label="Next week" onClick={() => setWeekStart((current) => shiftWeek(current, 1))}><ChevronRight size={18}/></button>
+            <div className="planner-header-copy"><h1>Weekly Meal Planner</h1><p>Plan your meals, stay consistent with your goals.</p></div>
+            <div className="planner-header-controls">
+              <div className="planner-view-toggle planner-header-view-toggle" aria-label="Planner view">
+                <button type="button" className={viewMode === 'day' ? 'is-active' : ''} onClick={() => setViewMode('day')} aria-pressed={viewMode === 'day'}>Day</button>
+                <button type="button" className={viewMode === 'week' ? 'is-active' : ''} onClick={() => setViewMode('week')} aria-pressed={viewMode === 'week'}>Week</button>
+              </div>
+              <div className="planner-week-nav" aria-label="Change week">
+                <button type="button" aria-label="Previous week" onClick={() => setWeekStart((current) => shiftWeek(current, -1))}><ChevronLeft size={18}/></button>
+                <span>{menu.week.range}</span>
+                <button type="button" aria-label="Next week" onClick={() => setWeekStart((current) => shiftWeek(current, 1))}><ChevronRight size={18}/></button>
+                <button type="button" className="planner-today-button" onClick={() => setWeekStart(toIsoDate(startOfWeek()))}>Today</button>
+              </div>
             </div>
           </header>
 
@@ -557,17 +559,30 @@ export default function WeeklyMealPlannerPage() {
             <span>Create a personalized plan with AI or add your first dish manually.</span>
             <div><button type="button" className="planner-btn-primary" onClick={requestMealPlanGeneration} disabled={profileLoading}><Sparkles size={16}/> Generate with AI</button><button type="button" className="planner-btn-ghost" onClick={() => openEditor(plannerDays[0], MEAL_SLOTS[0])} disabled={!plannerDays.length}><Plus size={16}/> Add a dish manually</button></div>
           </section> : <>
-            <section className="planner-toolbar" aria-label="Select a day and view mode">
+            <section className="planner-toolbar" aria-label="Select a day">
+              {viewMode === 'day' && <>
               <div className="planner-day-tabs" role="tablist" aria-label="Days of the week">
                 {plannerDays.map((day, index) => <button type="button" role="tab" aria-selected={index === selectedDayIndex} className={index === selectedDayIndex ? 'is-active' : ''} key={day.isoDate} onClick={() => setSelectedDayIndex(index)}><b>{day.label.slice(0, 3)}</b><span>{new Date(`${day.isoDate}T12:00:00`).getDate()}</span></button>)}
               </div>
-              <div className="planner-view-toggle" aria-label="View mode">
-                <button type="button" className={viewMode === 'image' ? 'is-active' : ''} onClick={() => setViewMode('image')} aria-pressed={viewMode === 'image'}><LayoutGrid size={15}/> Image</button>
-                <button type="button" className={viewMode === 'list' ? 'is-active' : ''} onClick={() => setViewMode('list')} aria-pressed={viewMode === 'list'}><List size={15}/> List</button>
-              </div>
+              </>}
             </section>
-            {selectedDay && <section className="planner-daily-workspace" key={`${selectedDay.isoDate}-${viewMode}`} aria-label={`${selectedDay.label} meal plan`}>
-              <div className="planner-day-title"><div><h2>{selectedDayFullLabel}</h2></div><div className="planner-day-utilities"><div className="planner-view-toggle" aria-label="View mode"><button type="button" className={viewMode === 'image' ? 'is-active' : ''} onClick={() => setViewMode('image')} aria-pressed={viewMode === 'image'}><LayoutGrid size={15}/> Image</button><button type="button" className={viewMode === 'list' ? 'is-active' : ''} onClick={() => setViewMode('list')} aria-pressed={viewMode === 'list'}><List size={15}/> List</button></div></div></div>
+            {viewMode === 'week' ? <section className="planner-week-calendar" aria-label="Weekly meal calendar">
+              <div className="planner-week-calendar-corner" aria-hidden="true" />
+              {plannerDays.map((day) => <div className={`planner-week-calendar-day${day.status === 'Today' ? ' is-today' : ''}`} key={day.isoDate}><b>{day.label.slice(0, 3)}</b><span>{new Date(`${day.isoDate}T12:00:00`).getDate()}</span></div>)}
+              {MEAL_SLOTS.map((slot) => <div className="planner-week-calendar-row" key={slot}>
+                <div className="planner-week-calendar-slot" key={`${slot}-label`}>{slot === 'Snacks' ? 'Snack' : slot}</div>
+                {plannerDays.map((day) => {
+                  const slotMeals = day.meals.filter((meal) => meal.slot === slot);
+                  return <div className={`planner-week-calendar-cell${day.status === 'Today' ? ' is-today' : ''}`} key={`${day.isoDate}-${slot}`}>
+                    <div className="planner-week-calendar-meals">
+                      {slotMeals.map((meal) => <button type="button" className="planner-week-calendar-meal" key={meal.key} onClick={() => setDetailMeal(meal)} aria-label={`View details for ${meal.name}`}>{meal.name}</button>)}
+                    </div>
+                    <button type="button" className="planner-week-calendar-add" onClick={() => openEditor(day, slot)} aria-label={`Add a dish to ${slot.toLowerCase()} on ${day.label}`}>+</button>
+                  </div>;
+                })}
+              </div>)}
+            </section> : selectedDay && <section className="planner-daily-workspace" key={`${selectedDay.isoDate}-day`} aria-label={`${selectedDay.label} meal plan`}>
+              <div className="planner-day-title"><div><h2>{selectedDayFullLabel}</h2></div></div>
               {nutritionLoading ? <section className="planner-nutrition-unavailable" role="status"><Loader2 size={17} className="is-spinning"/><span>Loading nutrition targets…</span></section> : requiresHealthProfile ? <section className="planner-profile-callout" aria-label="Health Profile needed"><Info size={18}/><div><b>Personalize your nutrition tracking</b><span>Complete your Health Profile to unlock personalized nutrition targets and track your progress.</span></div><a href="/profile/health">Complete Profile <span aria-hidden="true">→</span></a></section> : nutritionDataUnavailable ? <section className="planner-nutrition-unavailable" role="status"><Info size={17}/><span>Nutrition targets are temporarily unavailable. Please try again shortly.</span></section> : <section className="planner-nutrition-summary" aria-label="Daily nutrition summary"><div className="planner-nutrition-heading"><div><b>Daily Nutrition</b><span>Personalized targets</span></div></div>{dailyNutritionMetrics.map((metric) => <div className="planner-nutrition-metric" key={metric.label}><div><span>{metric.label}</span><b>{formatNumber(metric.actual)} <small>/ {formatNumber(metric.target)} {metric.unit}</small></b></div><span className="planner-nutrition-progress" aria-label={`${metric.label}: ${metric.actual} ${metric.unit}`}><i style={{ width: `${metric.progress}%` }}/></span></div>)}</section>}
               <div className="planner-meal-sections">
                 {MEAL_SLOTS.map((slot) => {
@@ -575,11 +590,11 @@ export default function WeeklyMealPlannerPage() {
                   const slotCalories = slotMeals.reduce((total, meal) => total + (Number(meal.kcal) || 0), 0);
                   const collapseKey = `${selectedDay.isoDate}-${slot}`;
                   const isCollapsed = Boolean(collapsedSlots[collapseKey]);
-                  return <section className={`planner-meal-section is-${viewMode}`} key={slot}>
+                  return <section className="planner-meal-section is-image" key={slot}>
                     <header><button type="button" className="planner-meal-section-toggle" onClick={() => setCollapsedSlots((current) => ({ ...current, [collapseKey]: !current[collapseKey] }))} aria-expanded={!isCollapsed}><ChevronDown size={17}/><span>{slot}</span></button><div className="planner-meal-section-actions"><p>{slotMeals.length} {slotMeals.length === 1 ? 'dish' : 'dishes'} <i/> {formatNumber(slotCalories)} kcal</p></div></header>
-                    {!isCollapsed && <div className={`planner-dish-grid is-${viewMode}`}>
+                    {!isCollapsed && <div className="planner-dish-grid is-image">
                       {slotMeals.map((meal) => <article className="planner-dish-card" key={meal.key}>
-                        {viewMode === 'image' && <button type="button" className="planner-dish-image" onClick={() => setDetailMeal(meal)} aria-label={`View ${meal.name} details`}><ImageWithFallback src={meal.image} alt="" fallbackSrc={freshProduce}/></button>}
+                        <button type="button" className="planner-dish-image" onClick={() => setDetailMeal(meal)} aria-label={`View ${meal.name} details`}><ImageWithFallback src={meal.image} alt="" fallbackSrc={freshProduce}/></button>
                         <div className="planner-dish-body">
                           <button type="button" className="planner-dish-content" onClick={() => setDetailMeal(meal)} aria-label={`View ${meal.name} details`}><b>{meal.name}</b><span>{meal.kcal} kcal</span><small>P {meal.protein}g <i/> C {Math.round((Number(meal.carbsG) || 0) * meal.servings)}g <i/> F {Math.round((Number(meal.healthyFatsG) || 0) * meal.servings)}g</small></button>
                           <div className="planner-dish-actions"><button type="button" onClick={() => openEditor(selectedDay, slot, meal)} aria-label={`Replace ${meal.name}`}><Repeat2 size={14}/></button><button type="button" onClick={() => setPendingMealRemoval({ dayIndex: selectedDayIndex, meal })} aria-label={`Delete ${meal.name}`}><Trash2 size={14}/></button></div>
@@ -590,6 +605,18 @@ export default function WeeklyMealPlannerPage() {
                   </section>;
                 })}
               </div>
+            </section>}
+            {viewMode === 'week' && <section className="planner-week-calendar-mobile" aria-label="Weekly meal calendar">
+              {plannerDays.map((day) => <article className={day.status === 'Today' ? 'is-today' : ''} key={day.isoDate}>
+                <header><b>{day.label}</b><span>{day.date}</span></header>
+                {MEAL_SLOTS.map((slot) => {
+                  const slotMeals = day.meals.filter((meal) => meal.slot === slot);
+                  return <div className="planner-week-mobile-slot" key={slot}>
+                    <span>{slot === 'Snacks' ? 'Snack' : slot}</span>
+                    <div>{slotMeals.map((meal) => <button type="button" key={meal.key} onClick={() => setDetailMeal(meal)}>{meal.name}</button>)}<button type="button" className="planner-week-calendar-add" onClick={() => openEditor(day, slot)} aria-label={`Add a dish to ${slot.toLowerCase()} on ${day.label}`}>+</button></div>
+                  </div>;
+                })}
+              </article>)}
             </section>}
             <footer className="planner-actions-footer"><button type="button" className="planner-btn-ghost" onClick={requestMealPlanGeneration}><RefreshCw size={15}/> Regenerate</button><button type="button" className="planner-btn-primary" onClick={savePlan} disabled={saving}>{saving && <Loader2 size={15} className="is-spinning"/>}<Save size={15}/>{saving ? 'Saving…' : 'Save Plan'}</button></footer>
           </>}

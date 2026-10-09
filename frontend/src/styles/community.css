@@ -512,15 +512,55 @@
 /* Plan Exists Dialog */
 .plan-exists-dialog .plan-exists-body p{margin:0;font-size:12px;color:#65756c;line-height:1.5}
 /* Nutrition Overflow Dialog */
-.nutrition-overflow-dialog .overflow-body p{margin:0 0 14px;font-size:12px;color:#65756c}
-.nutrition-overflow-dialog .overflow-metrics{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-radius:12px;background:#fff8f0;border:1px solid #fde8c8}
-.nutrition-overflow-dialog .overflow-row{display:flex;justify-content:space-between;align-items:center;font-size:12px}
-.nutrition-overflow-dialog .overflow-row span{color:#65756c}
-.nutrition-overflow-dialog .overflow-row b{color:#33463b;font-weight:600}
-.nutrition-overflow-dialog .overflow-row em{color:#d97706;font-size:11px;font-style:normal}
-.nutrition-overflow-dialog .overflow-replace-btn{background:#fff!important;color:#224a38!important;border:1px solid #224a38!important}
-.nutrition-overflow-dialog .overflow-replace-btn:hover{background:#f0f5ef!important}
-.nutrition-overflow-dialog header>div{display:flex;align-items:center;gap:10px}
+.nutrition-overflow-dialog{width:min(100%,440px)}
+.nutrition-overflow-dialog>header{align-items:center;padding-bottom:16px}
+.nutrition-overflow-dialog .overflow-body{padding:18px 25px 20px}
+.nutrition-overflow-dialog .overflow-body p{margin:0 0 12px;font-size:12px;line-height:1.45;color:#65756c}
+.nutrition-overflow-dialog .overflow-metrics{display:grid;border-top:1px solid rgba(23,53,41,.1)}
+.nutrition-overflow-dialog .overflow-row{display:grid;grid-template-columns:minmax(76px,1fr) auto;align-items:center;gap:12px;min-height:37px;border-bottom:1px solid rgba(23,53,41,.08);font-size:11.5px;font-variant-numeric:tabular-nums}
+.nutrition-overflow-dialog .overflow-row>span:first-child{color:#65756c;font-weight:600}
+.nutrition-overflow-dialog .overflow-values{display:flex;align-items:baseline;justify-content:flex-end;gap:5px;white-space:nowrap;color:#65756c}
+.nutrition-overflow-dialog .overflow-values b{color:#33463b;font-weight:700}
+.nutrition-overflow-dialog .overflow-values em{margin-left:4px;color:#b55d22;font-size:10.5px;font-style:normal;font-weight:800}
+.nutrition-overflow-dialog .overflow-within{color:#7a887f;font-size:10.5px}
+.nutrition-overflow-dialog .overflow-row.is-exceeded{background:linear-gradient(90deg,transparent 62%,rgba(255,240,223,.62))}
+.nutrition-overflow-dialog>footer{padding-top:13px}
+@media(max-width:640px){.nutrition-overflow-dialog .overflow-body{padding:16px 18px 18px}.nutrition-overflow-dialog .overflow-row{grid-template-columns:minmax(66px,1fr) auto;gap:8px;font-size:11px}.nutrition-overflow-dialog .overflow-values{gap:3px}.nutrition-overflow-dialog .overflow-values em{margin-left:2px;font-size:10px}}
+
+/* Weekly calendar: a full-width companion to the existing Day view. */
+.planner-header-view-toggle{display:flex!important;align-self:center;margin-left:auto}
+.planner-today-button{width:auto!important;padding:0 11px!important;font-size:11px;font-weight:750}
+.planner-week-calendar{display:grid;grid-template-columns:72px repeat(7,minmax(0,1fr));border:1px solid #dfe6de;border-radius:12px;background:#fff;overflow:hidden}
+.planner-week-calendar-corner{min-height:56px;background:#f7f9f6;border-bottom:1px solid #dfe6de}
+.planner-week-calendar-day{display:flex;min-width:0;min-height:56px;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-bottom:1px solid #dfe6de;border-left:1px solid #e8ede7;color:#65746a}
+.planner-week-calendar-day b{font-size:10px;font-weight:750}.planner-week-calendar-day span{font-size:15px;font-weight:800;color:#18382d}.planner-week-calendar-day.is-today{background:#e8f0e9;color:#315c2b}.planner-week-calendar-day.is-today span{color:#173529}
+.planner-week-calendar-row{display:contents}.planner-week-calendar-slot{display:flex;align-items:center;padding:12px 10px;background:#f7f9f6;border-bottom:1px solid #e3e9e2;color:#52665d;font-size:10px;font-weight:800;letter-spacing:.025em}
+.planner-week-calendar-cell{position:relative;display:flex;min-width:0;min-height:104px;flex-direction:column;align-items:stretch;justify-content:flex-start;padding:8px 7px 25px;border-bottom:1px solid #e3e9e2;border-left:1px solid #e8ede7;background:#fff}.planner-week-calendar-cell.is-today{background:#fbfdfb}
+.planner-week-calendar-meals{display:flex;min-width:0;flex-direction:column;align-items:stretch;gap:4px}.planner-week-calendar-meal{display:block;width:100%;padding:5px 6px;border-radius:6px;background:#edf2ee;color:#274330;font-size:10px;font-weight:650;line-height:1.3;text-align:left;overflow-wrap:anywhere;transition:background .2s ease,color .2s ease}.planner-week-calendar-meal:hover,.planner-week-calendar-meal:focus-visible{background:#dbead9;color:#173529;outline:0}
+.planner-week-calendar-add{position:absolute;right:6px;bottom:5px;width:20px;height:20px;display:grid;place-items:center;padding:0;border-radius:50%;background:transparent;color:#52665d;font-size:16px;font-weight:500;line-height:1;transition:background .2s ease,color .2s ease}.planner-week-calendar-add:hover,.planner-week-calendar-add:focus-visible{background:#173529;color:#fff;outline:0}
+.planner-week-calendar-mobile{display:none}
+@media(max-width:760px){.planner-week-calendar{display:none}.planner-week-calendar-mobile{display:grid;gap:12px}.planner-week-calendar-mobile>article{overflow:hidden;border:1px solid #dfe6de;border-radius:11px;background:#fff}.planner-week-calendar-mobile>article.is-today{border-color:#9cb99f}.planner-week-calendar-mobile article>header{display:flex;align-items:baseline;gap:8px;padding:12px 14px;background:#f4f8f3;border-bottom:1px solid #e0e8df}.planner-week-calendar-mobile article>header b{color:#18382d;font-size:14px;font-weight:800}.planner-week-calendar-mobile article>header span{color:#65746a;font-size:11px}.planner-week-mobile-slot{display:grid;grid-template-columns:70px minmax(0,1fr);gap:9px;padding:10px 14px;border-bottom:1px solid #edf1ec}.planner-week-mobile-slot:last-child{border-bottom:0}.planner-week-mobile-slot>span{padding-top:4px;color:#65746a;font-size:10px;font-weight:750}.planner-week-mobile-slot>div{display:flex;min-width:0;flex-wrap:wrap;align-items:flex-start;gap:5px}.planner-week-mobile-slot button:not(.planner-week-calendar-add){padding:5px 7px;border-radius:6px;background:#edf2ee;color:#274330;font-size:11px;font-weight:650;line-height:1.3;text-align:left;overflow-wrap:anywhere}.planner-week-mobile-slot .planner-week-calendar-add{position:static;flex:none;width:22px;height:22px;background:#f1f5f0}.planner-week-mobile-slot .planner-week-calendar-add:hover{background:#173529;color:#fff}.planner-header-view-toggle{margin-left:0!important}.planner-today-button{display:none}}
+
+/* Weekly Planner header: two deliberate rows with shared control geometry. */
+.planner-header{display:grid!important;grid-template-columns:1fr;gap:20px;min-height:0!important;padding:0 0 18px!important}
+.planner-header-copy h1{margin:0}.planner-header-copy p{margin:6px 0 0}
+.planner-header-controls{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-top:14px;border-top:1px solid rgba(23,53,41,.1)}
+.planner-header .planner-header-view-toggle{height:38px!important;align-self:auto;margin:0!important;padding:3px!important;border:0!important;border-radius:10px!important;background:#eef3ed!important}
+.planner-header .planner-header-view-toggle button{height:32px;min-width:52px;padding:0 13px!important;border-radius:8px!important;color:#65746a!important;font-size:11px!important;font-weight:750!important}
+.planner-header .planner-header-view-toggle button.is-active{background:#fff!important;color:#173529!important;box-shadow:0 1px 3px rgba(23,53,41,.1)!important}
+.planner-header .planner-week-nav{display:flex!important;align-items:center;gap:5px;margin:0!important;padding:0!important;border:0!important}
+.planner-header .planner-week-nav span{order:2;margin:0 5px!important;color:#18382d!important;font-size:12px!important;font-weight:750!important;white-space:nowrap}
+.planner-header .planner-week-nav button{order:1;width:38px!important;height:38px!important;border:1px solid #dce4db!important;border-radius:9px!important;background:#fff!important;color:#18382d!important}
+.planner-header .planner-week-nav button:hover{border-color:#a8b9aa!important;background:#f3f7f2!important;color:#173529!important}
+.planner-header .planner-week-nav button:nth-of-type(2){order:3}.planner-header .planner-week-nav .planner-today-button{order:4;width:auto!important;min-width:60px;padding:0 12px!important;color:#315c2b!important;font-size:11px!important;font-weight:800!important}
+@media(max-width:760px){.planner-header .planner-week-nav .planner-today-button{display:grid;min-width:58px;padding:0 10px!important}}@media(max-width:640px){.planner-header{gap:16px}.planner-header-controls{align-items:flex-start;flex-wrap:wrap;gap:12px;padding-top:12px}.planner-header .planner-week-nav{width:100%;justify-content:flex-end}.planner-header .planner-week-nav span{flex:1;margin-right:auto!important;font-size:11px!important}.planner-header .planner-week-nav button{width:36px!important;height:36px!important}}
+
+/* Header controls share the planner's quiet, transparent resting state. */
+.planner-header .planner-header-view-toggle{background:transparent!important;border:0!important;box-shadow:none!important}
+.planner-header .planner-header-view-toggle button,.planner-header .planner-week-nav button{background:transparent!important;border:0!important;box-shadow:none!important;transition:background-color .18s ease,color .18s ease!important}
+.planner-header .planner-header-view-toggle button:hover,.planner-header .planner-week-nav button:hover{background:#edf2eb!important;color:#173529!important}
+.planner-header .planner-header-view-toggle button.is-active{background:#edf2eb!important;color:#173529!important;box-shadow:none!important}
+.planner-header .planner-header-view-toggle button:active,.planner-header .planner-week-nav button:active{background:#e1ebdf!important;transform:none!important}
 
 .grocery-dialog{width:min(100%,520px)}.grocery-list{padding:8px 25px 16px;overflow:auto}.grocery-list>div{display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid rgba(23,53,41,.08)}.grocery-list img{width:52px;height:44px;object-fit:cover;border-radius:9px}.grocery-list span{display:flex;flex-direction:column;gap:4px}.grocery-list b{font-size:12px;color:var(--community-ink)}.grocery-list small{font-size:10px;color:#748178}.grocery-list>p{margin:0;padding:44px 0;text-align:center;color:#748178;font-size:12px}
 
