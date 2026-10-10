@@ -106,7 +106,10 @@ Trước khi tạo Pull Request (PR) hoặc khi chuẩn bị đẩy code lên re
      ```bash
      git push --force-with-lease origin <tên_nhánh>
      ```
-5. **Tạo PR:** Lúc này PR vào `master` luôn đảm bảo trạng thái xanh *"Able to merge"* và không có conflict.
+5. **Chờ người dùng kiểm thử thực tế tại local (BẮT BUỘC):**
+   - Sau khi hoàn thành code và pass toàn bộ test case tại local, Agent **PHẢI** báo cáo người dùng test trực tiếp trên trình duyệt/ứng dụng thực tế.
+   - **TUYỆT ĐỐI KHÔNG TỰ Ý TẠO PR** khi người dùng chưa kiểm thử và chưa xác nhận đồng ý tạo PR.
+6. **Tạo PR:** Chỉ tạo PR khi người dùng đã test thực tế tại local và xác nhận OK. Lúc này PR vào `master` luôn đảm bảo trạng thái xanh *"Able to merge"* và không có conflict.
 
 ---
 
