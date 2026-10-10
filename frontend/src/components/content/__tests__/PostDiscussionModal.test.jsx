@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import CommunityPostCard from '../../community/CommunityPostCard';
 
 beforeEach(() => {
@@ -15,7 +16,7 @@ it('opens the full post from Comments with a footer composer and restores focus 
     loadComments: async () => ({ content: [], totalPages: 0, totalElements: 0 }),
     submitComment: async (_id, body) => ({ commentId: 1, userName: 'Khanh', body, replies: [] }),
   };
-  render(<CommunityPostCard post={post} interactionApi={interactionApi} loadPost={async () => ({ ...post, body: 'Full article content' })}/>);
+  render(<MemoryRouter><CommunityPostCard post={post} interactionApi={interactionApi} loadPost={async () => ({ ...post, body: 'Full article content' })}/></MemoryRouter>);
   const trigger = screen.getByRole('button', { name: 'Comments' });
   trigger.focus();
   fireEvent.click(trigger);
