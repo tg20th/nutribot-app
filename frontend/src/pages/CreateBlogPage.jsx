@@ -572,6 +572,9 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
           type: isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG,
           submitted: intent === 'submit',
           status: finalStatus,
+          createdContent: !isEditing && created?.contentId != null
+            ? { ...created, contentType: isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG, status: finalStatus }
+            : null,
         },
       });
     } catch (failure) {

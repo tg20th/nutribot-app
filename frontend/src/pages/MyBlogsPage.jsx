@@ -69,6 +69,12 @@ function minutesFromSeconds(value) {
   return Number.isFinite(Number(value)) && Number(value) > 0 ? String(Math.round(Number(value) / 60)) : '';
 }
 
+function mergeCreatedContent(items, createdContent) {
+  if (!createdContent?.contentId) return items;
+  const exists = items.some((item) => String(item.contentId) === String(createdContent.contentId));
+  return exists ? items : [createdContent, ...items];
+}
+
 function Thumbnail({ src, type }) {
   const [failed, setFailed] = useState(false);
   const Icon = type === 'video' ? Film : BookOpen;
@@ -263,10 +269,12 @@ export default function MyBlogsPage() {
     setError(null);
     Promise.all([getMyBlogs(page, PAGE_SIZE, controller.signal), getMyVideos(page, PAGE_SIZE, controller.signal)]).then(([blogs, videos]) => {
       if (controller.signal.aborted) return;
+      const apiContent = [...blogs.content.map((item) => ({ ...item, contentType: 'blog' })), ...videos.content.map((item) => ({ ...item, contentType: 'video' }))];
+      const content = mergeCreatedContent(apiContent, location.state?.createdContent)
+        .sort((left, right) => new Date(right.updatedAt ?? right.createdAt ?? 0) - new Date(left.updatedAt ?? left.createdAt ?? 0));
       const data = {
-        content: [...blogs.content.map((item) => ({ ...item, contentType: 'blog' })), ...videos.content.map((item) => ({ ...item, contentType: 'video' }))]
-          .sort((left, right) => new Date(right.updatedAt ?? right.createdAt ?? 0) - new Date(left.updatedAt ?? left.createdAt ?? 0)),
-        totalElements: blogs.totalElements + videos.totalElements,
+        content,
+        totalElements: Math.max(content.length, blogs.totalElements + videos.totalElements),
         totalPages: Math.max(blogs.totalPages, videos.totalPages),
       };
       const lastPage = Math.max(0, data.totalPages - 1);
