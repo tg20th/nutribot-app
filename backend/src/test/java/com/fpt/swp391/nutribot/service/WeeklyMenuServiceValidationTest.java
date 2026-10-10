@@ -1,11 +1,13 @@
 package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.request.WeeklyMenuAiSaveRequest;
+import com.fpt.swp391.nutribot.dto.request.WeeklyMenuCreateRequest;
 import com.fpt.swp391.nutribot.dto.request.WeeklyMenuItemCreateRequest;
 import com.fpt.swp391.nutribot.dto.response.MealPlanDayResponse;
 import com.fpt.swp391.nutribot.dto.response.MealPlanDishResponse;
 import com.fpt.swp391.nutribot.dto.response.MealPlanGenerateResponse;
 import com.fpt.swp391.nutribot.dto.response.NutritionTargetResponse;
+import com.fpt.swp391.nutribot.dto.response.WeeklyMenuResponse;
 import com.fpt.swp391.nutribot.entity.DailyMenu;
 import com.fpt.swp391.nutribot.entity.Dish;
 import com.fpt.swp391.nutribot.entity.Ingredient;
@@ -458,6 +460,136 @@ class WeeklyMenuServiceValidationTest {
 
     // ===================== DAY-LEVEL WARNING TESTS =====================
 
+    // ===================== MANUAL MENU VALIDATION TESTS =====================
+
+    @Nested
+    @DisplayName("Manual menu compatibility validation")
+    class ManualMenuValidation {
+
+        @Test
+        @DisplayName("creates a manual menu with incomplete nutrition profile")
+        void createWithIncompleteNutritionProfile_accepts() {
+            User user = mockUser();
+            LocalDate monday = LocalDate.now().with(java.time.DayOfWeek.MONDAY);
+            UserProfile profile = UserProfile.builder().user(user).vegetarianType("VEGAN").allergies(new HashSet<>()).build();
+            when(userProfileRepository.findById(1)).thenReturn(Optional.of(profile));
+            when(weeklyMenuRepository.save(any(WeeklyMenu.class))).thenAnswer(invocation -> {
+                WeeklyMenu saved = invocation.getArgument(0);
+                saved.setMenuId(100);
+                return saved;
+            });
+            when(dailyMenuRepository.findByWeeklyMenuMenuIdOrderByDayOfWeekAscMealTypeAsc(100)).thenReturn(List.of());
+            when(nutritionTargetService.getMissingFields("testuser"))
+                    .thenReturn(List.of("heightCm", "weightKg", "dateOfBirth", "healthGoal"));
+
+            WeeklyMenuCreateRequest request = WeeklyMenuCreateRequest.builder()
+                    .title("Manual week")
+                    .startDate(monday)
+                    .endDate(monday.plusDays(6))
+                    .build();
+
+            WeeklyMenuResponse response = weeklyMenuService.createWeeklyMenu("testuser", request);
+
+            assertThat(response.getMenuId()).isEqualTo(100);
+            assertThat(response.getNutritionSummary().getTarget()).isNull();
+            verify(nutritionTargetService, never()).calculateTarget("testuser");
+        }
+
+        private WeeklyMenu mockMenu(User user) {
+            WeeklyMenu menu = WeeklyMenu.builder()
+                    .menuId(100).user(user)
+                    .startDate(LocalDate.now().with(java.time.DayOfWeek.MONDAY))
+                    .endDate(LocalDate.now().with(java.time.DayOfWeek.MONDAY).plusDays(6))
+                    .build();
+            when(weeklyMenuRepository.findByMenuIdAndUserUserId(100, 1)).thenReturn(Optional.of(menu));
+            return menu;
+        }
+
+        @Test
+        @DisplayName("allows a manually selected dish outside the dietary preference")
+        void addIncompatibleDish_isSavedWithWarningOnly() {
+            User user = mockUser();
+            mockMenu(user);
+            Dish dish = Dish.builder().dishId(501).name("Lacto dish").active(true)
+                    .calories(300).vegetarianType("LACTO").build();
+            when(dishRepository.findByDishIdAndActiveTrue(501)).thenReturn(Optional.of(dish));
+            UserProfile profile = UserProfile.builder().user(user).vegetarianType("VEGAN").allergies(new HashSet<>()).build();
+            when(userProfileRepository.findById(1)).thenReturn(Optional.of(profile));
+            DailyMenu meal = DailyMenu.builder().mealId(51).weeklyMenu(mockMenu(user)).dayOfWeek(1).mealType("lunch").build();
+            when(dailyMenuRepository.findByWeeklyMenuMenuIdAndDayOfWeekAndMealType(100, 1, "lunch")).thenReturn(Optional.of(meal));
+            when(weeklyMenuItemRepository.existsByDailyMenuMealIdAndDishDishId(51, 501)).thenReturn(false);
+            WeeklyMenuItem saved = WeeklyMenuItem.builder().itemId(601).dailyMenu(meal).dish(dish).servings(BigDecimal.ONE).build();
+            when(weeklyMenuItemRepository.save(any(WeeklyMenuItem.class))).thenReturn(saved);
+            when(dailyMenuRepository.findByWeeklyMenuMenuIdOrderByDayOfWeekAscMealTypeAsc(100)).thenReturn(List.of(meal));
+            when(weeklyMenuItemRepository.findByDailyMenu_MealIdIn(List.of(51))).thenReturn(List.of(saved));
+            when(nutritionTargetService.getMissingFields("testuser")).thenReturn(List.of("heightCm"));
+
+            WeeklyMenuItemCreateRequest request = WeeklyMenuItemCreateRequest.builder()
+                    .dayOfWeek(1).mealType("lunch").dishId(501).servings(BigDecimal.ONE).build();
+
+            WeeklyMenuService.AddMealResult result = weeklyMenuService.addWeeklyMenuItem("testuser", 100, request);
+            verify(weeklyMenuItemRepository).save(any(WeeklyMenuItem.class));
+            assertThat(result).isNotNull();
+        }
+
+        @Test
+        @DisplayName("allows manual add with only dietary type and confirmed empty allergies")
+        void addWithIncompleteNutritionProfile_accepts() {
+            User user = mockUser();
+            WeeklyMenu menu = mockMenu(user);
+            Dish dish = Dish.builder().dishId(502).name("Vegan dish").active(true)
+                    .calories(300).proteinG(new BigDecimal("10")).vegetarianType("VEGAN").build();
+            when(dishRepository.findByDishIdAndActiveTrue(502)).thenReturn(Optional.of(dish));
+            UserProfile profile = UserProfile.builder().user(user).vegetarianType("VEGAN").allergies(new HashSet<>()).build();
+            when(userProfileRepository.findById(1)).thenReturn(Optional.of(profile));
+            DailyMenu meal = DailyMenu.builder().mealId(51).weeklyMenu(menu).dayOfWeek(1).mealType("lunch").build();
+            when(dailyMenuRepository.findByWeeklyMenuMenuIdAndDayOfWeekAndMealType(100, 1, "lunch")).thenReturn(Optional.of(meal));
+            when(weeklyMenuItemRepository.existsByDailyMenuMealIdAndDishDishId(51, 502)).thenReturn(false);
+            WeeklyMenuItem saved = WeeklyMenuItem.builder().itemId(601).dailyMenu(meal).dish(dish).servings(BigDecimal.ONE).build();
+            when(weeklyMenuItemRepository.save(any(WeeklyMenuItem.class))).thenReturn(saved);
+            when(dailyMenuRepository.findByWeeklyMenuMenuIdAndDayOfWeekAndMealType(100, 1, "lunch")).thenReturn(Optional.of(meal));
+            when(dailyMenuRepository.findByWeeklyMenuMenuIdOrderByDayOfWeekAscMealTypeAsc(100)).thenReturn(List.of(meal));
+            when(weeklyMenuItemRepository.findByDailyMenu_MealIdIn(List.of(51))).thenReturn(List.of(saved));
+            when(nutritionTargetService.getMissingFields("testuser")).thenReturn(List.of("heightCm", "weightKg", "healthGoal"));
+            WeeklyMenuItemCreateRequest request = WeeklyMenuItemCreateRequest.builder()
+                    .dayOfWeek(1).mealType("lunch").dishId(502).servings(BigDecimal.ONE).build();
+
+            WeeklyMenuService.AddMealResult result = weeklyMenuService.addWeeklyMenuItem("testuser", 100, request);
+            verify(weeklyMenuItemRepository).save(any(WeeklyMenuItem.class));
+            assertThat(result.warnings()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("allows an allergic dish after Manual Planner confirmation")
+        void addAllergicDish_isSavedWithWarningOnly() {
+            User user = mockUser();
+            mockMenu(user);
+            Dish dish = Dish.builder().dishId(503).name("Peanut salad").active(true)
+                    .calories(300).vegetarianType("VEGAN").build();
+            when(dishRepository.findByDishIdAndActiveTrue(503)).thenReturn(Optional.of(dish));
+            UserAllergy allergy = UserAllergy.builder().userId(1).ingredientId(9)
+                    .ingredient(Ingredient.builder().ingredientId(9).name("Peanut").build()).build();
+            UserProfile profile = UserProfile.builder().user(user).vegetarianType("VEGAN")
+                    .allergies(new HashSet<>(Set.of(allergy))).build();
+            when(userProfileRepository.findById(1)).thenReturn(Optional.of(profile));
+            DailyMenu meal = DailyMenu.builder().mealId(51).weeklyMenu(mockMenu(user)).dayOfWeek(1).mealType("lunch").build();
+            when(dailyMenuRepository.findByWeeklyMenuMenuIdAndDayOfWeekAndMealType(100, 1, "lunch")).thenReturn(Optional.of(meal));
+            when(weeklyMenuItemRepository.existsByDailyMenuMealIdAndDishDishId(51, 503)).thenReturn(false);
+            WeeklyMenuItem saved = WeeklyMenuItem.builder().itemId(601).dailyMenu(meal).dish(dish).servings(BigDecimal.ONE).build();
+            when(weeklyMenuItemRepository.save(any(WeeklyMenuItem.class))).thenReturn(saved);
+            when(dailyMenuRepository.findByWeeklyMenuMenuIdOrderByDayOfWeekAscMealTypeAsc(100)).thenReturn(List.of(meal));
+            when(weeklyMenuItemRepository.findByDailyMenu_MealIdIn(List.of(51))).thenReturn(List.of(saved));
+            when(nutritionTargetService.getMissingFields("testuser")).thenReturn(List.of("heightCm"));
+
+            WeeklyMenuItemCreateRequest request = WeeklyMenuItemCreateRequest.builder()
+                    .dayOfWeek(1).mealType("lunch").dishId(503).servings(BigDecimal.ONE).build();
+
+            WeeklyMenuService.AddMealResult result = weeklyMenuService.addWeeklyMenuItem("testuser", 100, request);
+            verify(weeklyMenuItemRepository).save(any(WeeklyMenuItem.class));
+            assertThat(result).isNotNull();
+        }
+    }
+
     @Nested
     @DisplayName("Day-level nutrition warning")
     class DailyWarningValidation {
@@ -476,10 +608,12 @@ class WeeklyMenuServiceValidationTest {
             when(weeklyMenuRepository.findByMenuIdAndUserUserId(100, 1)).thenReturn(Optional.of(menu));
 
             Dish existingDish = Dish.builder()
-                    .dishId(1).name("Cơm").active(true).calories(400).proteinG(new BigDecimal("10")).build();
+                    .dishId(1).name("Cơm").active(true).calories(400).proteinG(new BigDecimal("10")).vegetarianType("VEGAN").build();
             Dish newDish = Dish.builder()
-                    .dishId(2).name("Bò").active(true).calories(900).proteinG(new BigDecimal("20")).build();
+                    .dishId(2).name("Bò").active(true).calories(900).proteinG(new BigDecimal("20")).vegetarianType("VEGAN").build();
             when(dishRepository.findByDishIdAndActiveTrue(2)).thenReturn(Optional.of(newDish));
+            when(userProfileRepository.findById(1)).thenReturn(Optional.of(UserProfile.builder()
+                    .user(user).vegetarianType("VEGAN").allergies(new HashSet<>()).build()));
 
             DailyMenu lunch = DailyMenu.builder()
                     .mealId(50).weeklyMenu(menu).dayOfWeek(2).mealType("lunch").build();

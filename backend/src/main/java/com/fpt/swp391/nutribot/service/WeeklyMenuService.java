@@ -19,6 +19,7 @@ import com.fpt.swp391.nutribot.entity.WeeklyMenu;
 import com.fpt.swp391.nutribot.entity.WeeklyMenuItem;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
+import com.fpt.swp391.nutribot.exception.ProfileIncompleteException;
 import com.fpt.swp391.nutribot.repository.DailyMenuRepository;
 import com.fpt.swp391.nutribot.repository.DishRepository;
 import com.fpt.swp391.nutribot.repository.RecipeIngredientRepository;
@@ -87,6 +88,9 @@ public class WeeklyMenuService {
         if (!request.getEndDate().equals(request.getStartDate().plusDays(6))) {
             throw new BadRequestException("Ngày kết thúc phải cách ngày bắt đầu đúng 6 ngày");
         }
+        UserProfile profile = userProfileRepository.findById(user.getUserId())
+                .orElseThrow(() -> new BadRequestException("Cần hoàn thiện Vegetarian Type trước khi tạo thực đơn thủ công"));
+        requireManualVegetarianType(profile);
 
         WeeklyMenu menu = WeeklyMenu.builder()
                 .user(user)
@@ -98,7 +102,6 @@ public class WeeklyMenuService {
                 .status("initialized")
                 .build();
         menu = weeklyMenuRepository.save(menu);
-        UserProfile profile = userProfileRepository.findById(user.getUserId()).orElse(null);
         return toWeeklyMenuResponse(menu, profile, username);
     }
 
@@ -264,6 +267,13 @@ public class WeeklyMenuService {
             throw new BadRequestException("Danh sách món ăn có món không tồn tại hoặc không hoạt động");
         }
 
+        UserProfile profile = userProfileRepository.findById(user.getUserId())
+                .orElseThrow(() -> new BadRequestException("Cần hoàn thiện Vegetarian Type trước khi lưu thực đơn thủ công"));
+        // Manual Planner uses dietary compatibility as an informational warning.
+        // Keep the minimum profile gate, but do not reject a dish here: users are
+        // allowed to make their own informed choice in the Manual flow.
+        requireManualVegetarianType(profile);
+
         Set<String> slotDishKeys = new HashSet<>();
         Map<String, String> normalizedMealTypes = new HashMap<>();
         for (WeeklyMenuItemCreateRequest item : requestedItems) {
@@ -312,7 +322,6 @@ public class WeeklyMenuService {
                     .notes(item.getNotes())
                     .build());
         }
-        UserProfile profile = userProfileRepository.findById(user.getUserId()).orElse(null);
         return toWeeklyMenuResponse(menu, profile, username);
     }
 
@@ -335,6 +344,12 @@ public class WeeklyMenuService {
         if (dish.getCalories() == null) {
             throw new BadRequestException("Không thể thêm món ăn chưa có dữ liệu calo");
         }
+        UserProfile profile = userProfileRepository.findById(user.getUserId())
+                .orElseThrow(() -> new BadRequestException("Cần hoàn thiện Vegetarian Type trước khi thêm món"));
+        // Compatibility and allergy results are warnings in Manual Planner. The
+        // hard API guards below (active dish, calories, duplicate and ownership)
+        // remain unchanged.
+        requireManualVegetarianType(profile);
 
         DailyMenu meal = dailyMenuRepository
                 .findByWeeklyMenuMenuIdAndDayOfWeekAndMealType(menu.getMenuId(), request.getDayOfWeek(), mealType)
@@ -658,6 +673,12 @@ public class WeeklyMenuService {
         return false;
     }
 
+    private void requireManualVegetarianType(UserProfile profile) {
+        if (profile.getVegetarianType() == null || profile.getVegetarianType().isBlank()) {
+            throw new BadRequestException("Cần hoàn thiện Vegetarian Type trước khi tạo hoặc lưu thực đơn thủ công");
+        }
+    }
+
     private List<String> buildDayWarnings(String username, WeeklyMenu menu, Integer dayOfWeek, WeeklyMenuItem pendingItem) {
         List<WeeklyMenuItem> dayItems = new ArrayList<>();
         List<DailyMenu> dayMeals = dailyMenuRepository
@@ -706,38 +727,38 @@ public class WeeklyMenuService {
             if (protein != null) { dayProtein = dayProtein.add(protein.multiply(servings)); hasProtein = true; }
         }
 
-        int dailyCalorieTarget = getDailyCalorieTarget(username);
-        if (dayCalories > dailyCalorieTarget) {
-            warnings.add("Tổng calo trong ngày vượt " + (dayCalories - dailyCalorieTarget)
-                    + " kcal (target: " + dailyCalorieTarget + " kcal)");
-        }
+        NutritionTargetResponse target = getAvailableNutritionTarget(username);
+        if (target != null) {
+            int dailyCalorieTarget = target.calories();
+            if (dayCalories > dailyCalorieTarget) {
+                warnings.add("Tổng calo trong ngày vượt " + (dayCalories - dailyCalorieTarget)
+                        + " kcal (target: " + dailyCalorieTarget + " kcal)");
+            }
 
-        int dailyProteinTarget = getDailyProteinTarget(username);
-        if (hasProtein && dayProtein.doubleValue() > dailyProteinTarget) {
-            warnings.add("Tổng protein trong ngày vượt " + Math.round(dayProtein.doubleValue() - dailyProteinTarget)
-                    + "g (target: " + dailyProteinTarget + "g)");
+            int dailyProteinTarget = target.proteinG();
+            if (hasProtein && dayProtein.doubleValue() > dailyProteinTarget) {
+                warnings.add("Tổng protein trong ngày vượt " + Math.round(dayProtein.doubleValue() - dailyProteinTarget)
+                        + "g (target: " + dailyProteinTarget + "g)");
+            }
         }
 
         return warnings;
     }
 
-    private int getDailyCalorieTarget(String username) {
+    /**
+     * Nutrition targets are optional for Manual Planner. AI generation and the
+     * dedicated nutrition-target endpoint still enforce completeness inside
+     * NutritionTargetService; this read-only warning path must not invent
+     * targets or turn an incomplete profile into a failed menu transaction.
+     */
+    private NutritionTargetResponse getAvailableNutritionTarget(String username) {
+        if (username == null || username.isBlank()) return null;
         try {
             List<String> missing = nutritionTargetService.getMissingFields(username);
-            if (!missing.isEmpty()) return 2000;
-            NutritionTargetResponse target = nutritionTargetService.calculateTarget(username);
-            return target.calories();
-        } catch (Exception e) {
-            return 2000;
-        }
-    }
-
-    private int getDailyProteinTarget(String username) {
-        try {
-            NutritionTargetResponse target = nutritionTargetService.calculateTarget(username);
-            return target.proteinG();
-        } catch (Exception e) {
-            return 100;
+            if (!missing.isEmpty()) return null;
+            return nutritionTargetService.calculateTarget(username);
+        } catch (ProfileIncompleteException | NotFoundException e) {
+            return null;
         }
     }
 }

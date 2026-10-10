@@ -9,10 +9,11 @@ import MenuPreviewModal from '../components/menu/MenuPreviewModal';
 import ImageWithFallback from '../components/ImageWithFallback';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import freshProduce from '../assets/fresh-produce.jpg';
-import { getHealthProfile, getMyProfile } from '../services/profileApi';
+import { getAllergyIngredients, getHealthProfile, getMyProfile } from '../services/profileApi';
+import { getDishCompatibilityDetails } from '../services/dishService';
 import { addWeeklyMenuItem, createWeeklyMenu, deleteWeeklyMenuItem, getCurrentWeeklyMenu, getWeeklyMenuDishes, saveAiGeneratedMenu, updateWeeklyMenu } from '../services/weeklyMealApi';
 import { generateMealPlan } from '../services/mealPlannerApi';
-import { createLocalMeal, MEAL_SLOTS, normalizeDishCatalog, normalizeWeeklyMenu, recalculateMenu, serializeMenu, shiftWeek, startOfWeek, toIsoDate, checkNutritionOverflow } from '../utils/weeklyMenuModel';
+import { createLocalMeal, getDishCompatibility, MEAL_SLOTS, normalizeDishCatalog, normalizeWeeklyMenu, recalculateMenu, serializeMenu, shiftWeek, startOfWeek, toIsoDate, checkNutritionOverflow } from '../utils/weeklyMenuModel';
 import NutritionOverflowDialog from '../components/dialog/NutritionOverflowDialog';
 import ServiceUnavailableDialog from '../components/dialog/ServiceUnavailableDialog';
 import PlanExistsDialog from '../components/dialog/PlanExistsDialog';
@@ -21,13 +22,14 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 gsap.registerPlugin(ScrollTrigger);
 
 const storageKey = (startDate) => `nutribot-weekly-menu-${startDate}`;
-
-const isDietCompatible = (profileType, dishType) => {
-  const profile = String(profileType ?? '').toUpperCase();
-  const dish = String(dishType ?? '').toUpperCase();
-  if (!profile || !dish) return true;
-  const allowed = { VEGAN: ['VEGAN'], LACTO: ['VEGAN', 'LACTO'], OVO: ['VEGAN', 'OVO'], LACTO_OVO: ['VEGAN', 'LACTO', 'OVO', 'LACTO_OVO'] };
-  return (allowed[profile] ?? [profile]).includes(dish);
+const allergyConfirmationKey = (profile) => {
+  let identity = profile?.userId ?? profile?.id ?? profile?.username ?? profile?.email ?? 'current';
+  try {
+    identity = localStorage.getItem('nutribot-auth-token') || identity;
+  } catch {
+    // The profile identity remains a safe fallback when storage is unavailable.
+  }
+  return `nutribot-allergies-confirmed-${identity}`;
 };
 
 const selectedIndexForWeek = (weekStart) => {
@@ -70,9 +72,12 @@ export default function WeeklyMealPlannerPage() {
   const page = useRef(null);
   const [communityUser, setCommunityUser] = useState({});
   const [plannerProfile, setPlannerProfile] = useState(null);
+  const [allergyIngredients, setAllergyIngredients] = useState([]);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileLoadFailed, setProfileLoadFailed] = useState(false);
   const [showProfileReadinessModal, setShowProfileReadinessModal] = useState(false);
+  const [profileReadinessContext, setProfileReadinessContext] = useState('ai');
+  const [showManualPlanner, setShowManualPlanner] = useState(false);
   const plannerRequest = useRef(0);
   const [weekStart, setWeekStart] = useState(() => toIsoDate(startOfWeek()));
   const [menu, setMenu] = useState(() => normalizeWeeklyMenu({}, toIsoDate(startOfWeek())));
@@ -131,13 +136,29 @@ export default function WeeklyMealPlannerPage() {
   useEffect(() => {
     const controller = new AbortController();
     Promise.all([getMyProfile(controller.signal), getHealthProfile(controller.signal)]).then(([profile, health]) => { setCommunityUser(profile); setPlannerProfile({ ...profile, ...health }); setProfileLoadFailed(false); }).catch(() => { if (!controller.signal.aborted) { setPlannerProfile(null); setProfileLoadFailed(true); } }).finally(() => { if (!controller.signal.aborted) setProfileLoading(false); });
-    getWeeklyMenuDishes(controller.signal).then((items) => {
-      setDishes(normalizeDishCatalog(items));
+    getWeeklyMenuDishes(controller.signal).then(async (items) => {
+      const catalog = normalizeDishCatalog(items);
+      // /dishes is a lightweight catalog and has no recipe ingredients. Load
+      // canonical ingredient ids from /dishes/{id} so allergy checks can
+      // distinguish compatible, incompatible and unverifiable dishes.
+      const enriched = await Promise.all(catalog.map(async (dish) => {
+        try {
+          const details = await getDishCompatibilityDetails(dish.dishId, controller.signal);
+          return { ...dish, ...details };
+        } catch (error) {
+          if (error?.name === 'AbortError') throw error;
+          // Keep the dish visible; the checker will safely show UNKNOWN.
+          return dish;
+        }
+      }));
+      setDishes(enriched);
       setDishError(false);
-    }).catch(() => {
+    }).catch((error) => {
+      if (error?.name === 'AbortError') return;
       setDishes([]);
       setDishError(true);
     });
+    getAllergyIngredients(controller.signal).then((items) => setAllergyIngredients(Array.isArray(items) ? items : [])).catch(() => setAllergyIngredients([]));
     return () => controller.abort();
   }, []);
 
@@ -183,6 +204,26 @@ export default function WeeklyMealPlannerPage() {
     return [['height_cm', plannerProfile.heightCm ?? plannerProfile.height_cm], ['weight_kg', plannerProfile.weightKg ?? plannerProfile.weight_kg], ['date_of_birth', plannerProfile.dateOfBirth ?? plannerProfile.date_of_birth], ['gender', plannerProfile.gender], ['health_goal', plannerProfile.healthGoal ?? plannerProfile.health_goal], ['vegetarian_type', plannerProfile.vegetarianType ?? plannerProfile.vegetarian_type]].filter(([, value]) => value == null || value === '').map(([name]) => name);
   }, [plannerProfile]);
   const plannerReady = !profileLoading && !missingProfileFields.length;
+  const allergyIngredientIds = useMemo(() => {
+    const ids = plannerProfile?.allergyIngredientIds ?? plannerProfile?.allergy_ingredient_ids ?? [];
+    return Array.isArray(ids) ? ids : [];
+  }, [plannerProfile]);
+  const allergiesConfirmed = useMemo(() => {
+    if (allergyIngredientIds.length > 0) return true;
+    try {
+      return localStorage.getItem(allergyConfirmationKey(communityUser)) === 'true';
+    } catch {
+      return false;
+    }
+  }, [allergyIngredientIds, communityUser]);
+  const manualMissingFields = useMemo(() => {
+    const missing = [];
+    const vegetarianType = plannerProfile?.vegetarianType ?? plannerProfile?.vegetarian_type;
+    if (!vegetarianType) missing.push('Vegetarian type');
+    if (!allergiesConfirmed) missing.push('Allergies');
+    return missing;
+  }, [plannerProfile, allergiesConfirmed]);
+  const manualPlannerReady = !profileLoading && !manualMissingFields.length;
   const selectedDay = plannerDays[selectedDayIndex] ?? plannerDays[0] ?? null;
   const hasMeals = plannerDays.some((day) => day.meals.length > 0);
   const dailyNutritionMetrics = useMemo(() => {
@@ -214,6 +255,17 @@ export default function WeeklyMealPlannerPage() {
     setEditor({ day, dayIndex: plannerDays.findIndex((item) => item.isoDate === day.isoDate), slot, meal });
   };
 
+  const startManualPlanner = () => {
+    if (profileLoading) return;
+    if (!manualPlannerReady) {
+      setProfileReadinessContext('manual');
+      setShowProfileReadinessModal(true);
+      return;
+    }
+    setShowManualPlanner(true);
+    setViewMode('week');
+  };
+
   const ensureMenu = async () => {
     if (menu.menuId) return menu.menuId;
     const created = await createWeeklyMenu(menuPayload(menu));
@@ -237,14 +289,24 @@ export default function WeeklyMealPlannerPage() {
       });
       await loadWeek(weekStart);
       setNotice({ type: 'success', text: `Added ${newMeal.name} in ${dayLabel}.` });
-    } catch {
-      setNotice({ type: 'offline', text: 'The backend could not save this change. It is stored in your local draft.' });
+    } catch (error) {
+      await loadWeek(weekStart);
+      setNotice({ type: 'error', text: error?.message || 'The backend rejected this dish. Your week was synchronized.' });
     }
   };
 
   const submitMeal = async ({ dish, dishes: selectedDishes = [], servings = 1, notes = '', isAddMode }) => {
+    if (!editor) return;
     const dayIndex = editor.dayIndex;
     const slot = editor.slot;
+    const requestedDishes = isAddMode ? selectedDishes : [dish];
+    if (requestedDishes.some((item) => !item)) return;
+    const currentIds = new Set((menu.days[dayIndex]?.meals ?? []).filter((meal) => meal.slot === slot && (isAddMode || meal.key !== editor.meal?.key)).map((meal) => String(meal.dishId)));
+    const duplicateDish = requestedDishes.find((item) => currentIds.has(String(item.dishId)));
+    if (duplicateDish) {
+      setNotice({ type: 'error', text: `${duplicateDish.name} is already in this meal.` });
+      return;
+    }
 
     if (isAddMode && selectedDishes.length > 1) {
       setEditor(null);
@@ -252,13 +314,20 @@ export default function WeeklyMealPlannerPage() {
       setNotice({ type: 'saving', text: 'Saving your dishes...' });
       try {
         const menuId = await ensureMenu();
-        await Promise.all(selectedDishes.map((selectedDish) => addWeeklyMenuItem(menuId, {
-          dayOfWeek: dayIndex + 1, mealType: mealSlotApiValue(slot), dishId: selectedDish.dishId, servings: 1, notes: ''
-        })));
+        const failures = [];
+        for (const selectedDish of selectedDishes) {
+          try {
+            await addWeeklyMenuItem(menuId, { dayOfWeek: dayIndex + 1, mealType: mealSlotApiValue(slot), dishId: selectedDish.dishId, servings: 1, notes: '' });
+          } catch (error) {
+            failures.push({ dish: selectedDish, error });
+          }
+        }
         await loadWeek(weekStart);
-        setNotice({ type: 'success', text: `Added ${selectedDishes.length} dishes in ${editor.day.label}.` });
-      } catch {
-        setNotice({ type: 'offline', text: 'The backend could not save all selected dishes. Please refresh and try again.' });
+        if (failures.length) setNotice({ type: 'error', text: `${selectedDishes.length - failures.length} dish(es) added. ${failures.length} could not be saved; the week was synchronized.` });
+        else setNotice({ type: 'success', text: `Added ${selectedDishes.length} dishes in ${editor.day.label}.` });
+      } catch (error) {
+        await loadWeek(weekStart);
+        setNotice({ type: 'error', text: error?.message || 'The backend could not save the selected dishes. The week was synchronized.' });
       }
       return;
     }
@@ -320,8 +389,9 @@ export default function WeeklyMealPlannerPage() {
       setMenu(normalizeWeeklyMenu(savedMenu, weekStart));
       setHasUnsavedChanges(false);
       setNotice({ type: 'success', text: `Replaced ${dish.name} in ${editor.day.label}.` });
-    } catch {
-      setNotice({ type: 'offline', text: 'The backend could not save this change. It is stored in your local draft.' });
+    } catch (error) {
+      await loadWeek(weekStart);
+      setNotice({ type: 'error', text: error?.message || 'The backend rejected this dish. Your week was synchronized.' });
     }
   };
 
@@ -421,6 +491,7 @@ export default function WeeklyMealPlannerPage() {
     event.preventDefault();
     if (!plannerReady) {
       setShowAiGenerator(false);
+      setProfileReadinessContext('ai');
       setShowProfileReadinessModal(true);
       return;
     }
@@ -448,6 +519,7 @@ export default function WeeklyMealPlannerPage() {
   const requestMealPlanGeneration = () => {
     if (profileLoading) return;
     if (!plannerReady) {
+      setProfileReadinessContext('ai');
       setShowProfileReadinessModal(true);
       return;
     }
@@ -466,7 +538,10 @@ export default function WeeklyMealPlannerPage() {
 
   const persistAiPreview = async () => {
     if (!aiPreview || aiSaveRequest.current) return;
-    const incompatibleMeal = aiPreview.weeklyPlan.flatMap((day) => ['breakfast', 'lunch', 'dinner'].map((field) => day[field])).find((meal) => !isDietCompatible(aiPreview.vegetarianType, meal?.vegetarianType ?? dishes.find((dish) => String(dish.dishId) === String(meal?.dishId))?.vegetarianType));
+    const incompatibleMeal = aiPreview.weeklyPlan.flatMap((day) => ['breakfast', 'lunch', 'dinner'].map((field) => day[field])).find((meal) => {
+      const dish = dishes.find((item) => String(item.dishId) === String(meal?.dishId)) ?? { vegetarianType: meal?.vegetarianType, ingredientIds: meal?.ingredientIds, ingredients: meal?.ingredients };
+      return getDishCompatibility(dish, aiPreview.vegetarianType, allergyIngredientIds).status !== 'compatible';
+    });
     if (incompatibleMeal) {
       setAiSaveError(`Dish “${incompatibleMeal.dishName}” is not compatible with your ${aiPreview.vegetarianType} diet. Replace it before saving.`);
       return;
@@ -527,6 +602,8 @@ export default function WeeklyMealPlannerPage() {
     setHasUnsavedChanges(true);
     setNotice({ type: 'success', text: aiPreview.suggestedMenuTitle ? `AI plan applied: ${aiPreview.suggestedMenuTitle}` : 'Your AI weekly plan is ready to review.' });
   };
+
+  const manualProfileTarget = manualMissingFields.includes('Vegetarian type') ? '#dietary-preference-title' : '#allergy-title';
 
   return <><MemberPageLayout className="planner-page">
       <div className="planner-workspace" ref={page}>
@@ -596,11 +673,11 @@ export default function WeeklyMealPlannerPage() {
             </div>
           </footer></>}
 
-          {loading ? <div className="planner-loading"><Loader2 className="is-spinning"/><span>Loading your weekly plan…</span></div> : !hasMeals ? <section className="planner-empty-state" aria-labelledby="empty-plan-title">
+          {loading ? <div className="planner-loading"><Loader2 className="is-spinning"/><span>Loading your weekly plan…</span></div> : !hasMeals && !showManualPlanner ? <section className="planner-empty-state" aria-labelledby="empty-plan-title">
             <div className="planner-empty-icon"><Sparkles size={24}/></div>
             <p>YOUR MEAL PLAN</p><h2 id="empty-plan-title">Start a balanced week.</h2>
             <span>Create a personalized plan with AI or add your first dish manually.</span>
-            <div><button type="button" className="planner-btn-primary" onClick={requestMealPlanGeneration} disabled={profileLoading}><Sparkles size={16}/> Generate with AI</button><button type="button" className="planner-btn-ghost" onClick={() => openEditor(plannerDays[0], MEAL_SLOTS[0])} disabled={!plannerDays.length}><Plus size={16}/> Add a dish manually</button></div>
+            <div><button type="button" className="planner-btn-primary" onClick={requestMealPlanGeneration} disabled={profileLoading}><Sparkles size={16}/> Generate with AI</button><button type="button" className="planner-btn-ghost" onClick={startManualPlanner} disabled={!plannerDays.length}><Plus size={16}/> Create manually</button></div>
           </section> : <>
             <section className="planner-toolbar" aria-label="Select a day">
               {viewMode === 'day' && <>
@@ -626,7 +703,7 @@ export default function WeeklyMealPlannerPage() {
               </div>)}
             </section> : selectedDay && <section className="planner-daily-workspace" key={`${selectedDay.isoDate}-day`} aria-label={`${selectedDay.label} meal plan`}>
               <div className="planner-day-title"><div><h2>{selectedDayFullLabel}</h2></div></div>
-              {nutritionLoading ? <section className="planner-nutrition-unavailable" role="status"><Loader2 size={17} className="is-spinning"/><span>Loading nutrition targets…</span></section> : requiresHealthProfile ? <section className="planner-profile-callout" aria-label="Health Profile needed"><Info size={18}/><div><b>Personalize your nutrition tracking</b><span>Complete your Health Profile to unlock personalized nutrition targets and track your progress.</span></div><a href="/profile/health">Complete Profile <span aria-hidden="true">→</span></a></section> : nutritionDataUnavailable ? <section className="planner-nutrition-unavailable" role="status"><Info size={17}/><span>Nutrition targets are temporarily unavailable. Please try again shortly.</span></section> : <section className="planner-nutrition-summary" aria-label="Daily nutrition summary"><div className="planner-nutrition-heading"><div><b>Daily Nutrition</b><span>Personalized targets</span></div></div>{dailyNutritionMetrics.map((metric) => <div className="planner-nutrition-metric" key={metric.label}><div><span>{metric.label}</span><b>{formatNumber(metric.actual)} <small>/ {formatNumber(metric.target)} {metric.unit}</small></b></div><span className="planner-nutrition-progress" aria-label={`${metric.label}: ${metric.actual} ${metric.unit}`}><i style={{ width: `${metric.progress}%` }}/></span></div>)}</section>}
+              {nutritionLoading ? <section className="planner-nutrition-unavailable" role="status"><Loader2 size={17} className="is-spinning"/><span>Loading nutrition targets…</span></section> : (showManualPlanner && !plannerReady) ? <section className="profile-readiness-inline" aria-label="Health Profile reminder"><div className="profile-readiness-inline-icon"><Info size={18}/></div><div className="profile-readiness-inline-copy"><span>Health Profile</span><b>Personalize your nutrition targets</b><p>You can keep building your plan manually. Complete your profile whenever you want to add personalized targets.</p></div><a className="profile-readiness-secondary" href="/profile/health">Complete Health Profile</a></section> : requiresHealthProfile ? <section className="planner-profile-callout" aria-label="Health Profile needed"><Info size={18}/><div><b>Personalize your nutrition tracking</b><span>Complete your Health Profile to unlock personalized nutrition targets and track your progress.</span></div><a href="/profile/health">Complete Profile <span aria-hidden="true">→</span></a></section> : nutritionDataUnavailable ? <section className="planner-nutrition-unavailable" role="status"><Info size={17}/><span>Nutrition targets are temporarily unavailable. Please try again shortly.</span></section> : <section className="planner-nutrition-summary" aria-label="Daily nutrition summary"><div className="planner-nutrition-heading"><div><b>Daily Nutrition</b><span>Personalized targets</span></div></div>{dailyNutritionMetrics.map((metric) => <div className="planner-nutrition-metric" key={metric.label}><div><span>{metric.label}</span><b>{formatNumber(metric.actual)} <small>/ {formatNumber(metric.target)} {metric.unit}</small></b></div><span className="planner-nutrition-progress" aria-label={`${metric.label}: ${metric.actual} ${metric.unit}`}><i style={{ width: `${metric.progress}%` }}/></span></div>)}</section>}
               <div className="planner-meal-sections">
                 {MEAL_SLOTS.map((slot) => {
                   const slotMeals = selectedDay.meals.filter((item) => item.slot === slot);
@@ -667,7 +744,7 @@ export default function WeeklyMealPlannerPage() {
       </div>
   </MemberPageLayout>
 
-    {editor && <MealEditorDialog editor={editor} dishes={dishes} onClose={() => setEditor(null)} onSubmit={submitMeal}/>}
+    {editor && <MealEditorDialog editor={editor} dishes={dishes} vegetarianType={plannerProfile?.vegetarianType ?? plannerProfile?.vegetarian_type} allergyIngredientIds={allergyIngredientIds} onClose={() => setEditor(null)} onSubmit={submitMeal}/>}
     {detailMeal && <DishDetailModal meal={detailMeal} onClose={() => setDetailMeal(null)}/>}
     {showGrocery && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowGrocery(false)}>
       <section className="meal-dialog grocery-dialog" role="dialog" aria-modal="true" aria-labelledby="meal-list-title">
@@ -685,17 +762,22 @@ export default function WeeklyMealPlannerPage() {
     </div>}
     {showProfileReadinessModal && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setShowProfileReadinessModal(false)}>
       <section className="meal-dialog profile-readiness-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-readiness-title" aria-describedby="profile-readiness-description">
-        <header><h2 id="profile-readiness-title">Complete your health profile</h2><button type="button" className="meal-dialog-close" onClick={() => setShowProfileReadinessModal(false)} aria-label="Close profile reminder"><X size={18}/></button></header>
+        <header><h2 id="profile-readiness-title">{profileReadinessContext === 'manual' ? 'Complete your dietary preferences' : 'Complete your health profile'}</h2><button type="button" className="meal-dialog-close" onClick={() => setShowProfileReadinessModal(false)} aria-label="Close profile reminder"><X size={18}/></button></header>
         <div className="profile-readiness-content">
-          <p id="profile-readiness-description">We need a few more details before NutriBot can create your personalized weekly meal plan.</p>
-          {missingProfileFields.length > 0 && (
+          <p id="profile-readiness-description">{profileReadinessContext === 'manual' ? 'Before creating your meal plan, we need a few details to help you choose dishes that match your dietary needs.' : 'We need a few more details before NutriBot can create your personalized weekly meal plan.'}</p>
+          {profileReadinessContext === 'manual' ? <>
+            <div className="profile-readiness-checklist" aria-label="Dietary preferences status">
+              {[['Vegetarian type', Boolean(plannerProfile?.vegetarianType ?? plannerProfile?.vegetarian_type), 'Your preferred vegetarian diet'], ['Allergies', allergiesConfirmed, 'Ingredients you need to avoid']].map(([label, completed, description]) => <div key={label}><span><b>{label}</b><small>{description}</small></span><em className={completed ? 'is-complete' : ''}>{completed ? 'Completed' : 'Required'}</em></div>)}
+            </div>
+            <p className="profile-readiness-note">You don't need to complete your entire Health Profile to create a manual meal plan.</p>
+          </> : missingProfileFields.length > 0 && (
             <div className="profile-readiness-fields">
               <span>Missing information</span>
               <ul>{missingProfileFields.map((field) => <li key={field}>{field.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</li>)}</ul>
             </div>
           )}
         </div>
-        <footer><button type="button" className="profile-readiness-secondary" onClick={() => setShowProfileReadinessModal(false)}>Not now</button><button type="button" className="profile-readiness-primary" onClick={() => { window.location.href = '/profile/health'; }}>Complete Profile</button></footer>
+        <footer>{profileReadinessContext === 'manual' ? <button type="button" className="profile-readiness-primary" onClick={() => { window.location.href = `/profile/health${manualProfileTarget}`; }}>Complete dietary preferences</button> : null}<button type="button" className="profile-readiness-secondary" onClick={() => setShowProfileReadinessModal(false)}>Not now</button>{profileReadinessContext !== 'manual' && <button type="button" className="profile-readiness-primary" onClick={() => { window.location.href = '/profile/health'; }}>Complete Health Profile</button>}</footer>
       </section>
     </div>}
     {showAiGenerator && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !generatingPlan && setShowAiGenerator(false)}>
@@ -712,7 +794,7 @@ export default function WeeklyMealPlannerPage() {
       <MenuPreviewModal preview={aiPreview} isSaving={savingAiPreview} saveError={aiSaveError} onDismissError={() => setAiSaveError('')} onClose={() => setAiPreview(null)} onSave={persistAiPreview} onRequestReplace={(dayIndex, field, label) => setPreviewReplaceTarget({ dayIndex, field, label })}/>
     )}
     {previewReplaceTarget && aiPreview && (
-      <MealEditorDialog editor={{ day: { label: aiPreview.weeklyPlan[previewReplaceTarget.dayIndex]?.day || `Day ${previewReplaceTarget.dayIndex + 1}`, meals: [] }, slot: previewReplaceTarget.label, meal: { dishId: null } }} dishes={dishes} onClose={() => setPreviewReplaceTarget(null)} onSubmit={({ dish }) => { if (dish && !isDietCompatible(aiPreview.vegetarianType, dish.vegetarianType)) { setAiSaveError(`Dish “${dish.name}” is not compatible with your ${aiPreview.vegetarianType} diet.`); } else if (dish) { replacePreviewMeal(previewReplaceTarget.dayIndex, previewReplaceTarget.field, dish); } setPreviewReplaceTarget(null); }}/>
+      <MealEditorDialog editor={{ day: { label: aiPreview.weeklyPlan[previewReplaceTarget.dayIndex]?.day || `Day ${previewReplaceTarget.dayIndex + 1}`, meals: [] }, slot: previewReplaceTarget.label, meal: { dishId: null } }} dishes={dishes} vegetarianType={aiPreview.vegetarianType} allergyIngredientIds={allergyIngredientIds} onClose={() => setPreviewReplaceTarget(null)} onSubmit={({ dish }) => { if (dish && getDishCompatibility(dish, aiPreview.vegetarianType, allergyIngredientIds).status !== 'compatible') { setAiSaveError(`Dish “${dish.name}” cannot be verified as compatible with this profile.`); } else if (dish) { replacePreviewMeal(previewReplaceTarget.dayIndex, previewReplaceTarget.field, dish); } setPreviewReplaceTarget(null); }}/>
     )}
     {showServiceUnavailableDialog && (
       <ServiceUnavailableDialog

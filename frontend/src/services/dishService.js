@@ -1,5 +1,25 @@
 import { apiRequest, unwrapData } from './apiClient';
 
+// The catalog endpoint intentionally contains lightweight dish options and
+// does not include recipe ingredients. Compatibility checks must use the
+// canonical ingredient ids from the detail endpoint instead of guessing from
+// display names.
+export async function getDishCompatibilityDetails(dishId, signal) {
+  const data = unwrapData(await apiRequest(`/api/v1/dishes/${encodeURIComponent(dishId)}`, { signal }), {});
+  const recipe = data.recipe;
+  if (!recipe || !Array.isArray(recipe.ingredients)) {
+    return { ingredientIds: null, ingredients: null };
+  }
+
+  const ingredients = recipe.ingredients;
+  const ingredientIds = ingredients.map((ingredient) => ingredient?.ingredientId ?? ingredient?.id ?? ingredient);
+  const hasReliableIds = ingredientIds.every((ingredientId) => ingredientId !== null && ingredientId !== undefined && ingredientId !== '');
+  return {
+    ingredientIds: hasReliableIds ? ingredientIds.map(String) : null,
+    ingredients: hasReliableIds ? ingredients : null
+  };
+}
+
 export async function getDishDetail(dishId, signal) {
   const data = unwrapData(await apiRequest(`/api/v1/dishes/${encodeURIComponent(dishId)}`, { signal }), {});
   const recipe = data.recipe ?? {};
