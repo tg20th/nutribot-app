@@ -590,7 +590,7 @@ export default function ProfilePage() {
 
                   <label className="nb-profile-field">
                     <span>Gender</span>
-                    <div className="nb-profile-select"><UserRound size={17} /><select name="gender" value={profile.gender} onChange={updateField}><option value="Female">Female</option><option value="Male">Male</option></select><ChevronDown size={16} /></div>
+                    <div className="nb-profile-select"><UserRound size={17} /><select name="gender" value={profile.gender} onChange={updateField}><option value="" disabled>Select gender</option><option value="Female">Female</option><option value="Male">Male</option></select><ChevronDown size={16} /></div>
                   </label>
 
                   <label className="nb-profile-field nb-profile-field--wide">
