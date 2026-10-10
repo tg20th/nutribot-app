@@ -75,6 +75,13 @@ function mergeCreatedContent(items, createdContent) {
   return exists ? items : [createdContent, ...items];
 }
 
+function syncViewedContent(items, viewedContentId, viewCount) {
+  if (viewedContentId == null || !Number.isFinite(Number(viewCount))) return items;
+  return items.map((item) => String(item.contentId) === String(viewedContentId)
+    ? { ...item, viewCount: Math.max(Number(item.viewCount) || 0, Number(viewCount)) }
+    : item);
+}
+
 function Thumbnail({ src, type }) {
   const [failed, setFailed] = useState(false);
   const Icon = type === 'video' ? Film : BookOpen;
@@ -270,7 +277,7 @@ export default function MyBlogsPage() {
     Promise.all([getMyBlogs(page, PAGE_SIZE, controller.signal), getMyVideos(page, PAGE_SIZE, controller.signal)]).then(([blogs, videos]) => {
       if (controller.signal.aborted) return;
       const apiContent = [...blogs.content.map((item) => ({ ...item, contentType: 'blog' })), ...videos.content.map((item) => ({ ...item, contentType: 'video' }))];
-      const content = mergeCreatedContent(apiContent, location.state?.createdContent)
+      const content = syncViewedContent(mergeCreatedContent(apiContent, location.state?.createdContent), location.state?.viewedContentId, location.state?.viewCount)
         .sort((left, right) => new Date(right.updatedAt ?? right.createdAt ?? 0) - new Date(left.updatedAt ?? left.createdAt ?? 0));
       const data = {
         content,
