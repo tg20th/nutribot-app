@@ -51,7 +51,7 @@ fix/NB-<task_id>-<short_description>-<member_name>
 
 ### 2. Commit Message Guidelines (100% VIETNAMESE + 50/72 RULE)
 Claude Code MUST format all git commit messages in **100% Vietnamese**, adhering strictly to the **Git 50/72 rule**.
-**IMPORTANT:** Không đánh bất kì watermark nào của AI (ví dụ: `Co-Authored-By`) trong git commit messages.
+**IMPORTANT:** Không đánh bất kì watermark nào của AI (ví dụ: `Co-Authored-By`) trong git commit messages và PR descriptions.
 
 ```text
 <type>(NB-<task_id>-<LAYER>): <Tiêu đề ngắn 50 - 72 ký tự tiếng Việt> [#done]
