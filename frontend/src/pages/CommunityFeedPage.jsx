@@ -176,7 +176,7 @@ export default function CommunityFeedPage() {
           <CommunityFilters filters={filters} active={filter} onChange={setFilter}/>
           {loading ? <div className="feed-skeleton-list" role="status" aria-label="Loading community posts" aria-busy="true">
             {Array.from({ length: 3 }, (_, index) => <FeedPostSkeleton key={index}/>)}
-          </div> : error && !posts.length ? <p className="content-status content-status--error">{error}</p> : visiblePosts.length ? visiblePosts.map((post) => <CommunityPostCard key={postKey(post)} post={post} profile={profile} fullPageDetail routeDetail/>) : <div className="empty-results">No posts match that filter yet.</div>}
+          </div> : error && !posts.length ? <p className="content-status content-status--error">{error}</p> : visiblePosts.length ? visiblePosts.map((post) => <CommunityPostCard key={postKey(post)} post={post} profile={profile} routeDetail/>) : <div className="empty-results">No posts match that filter yet.</div>}
           {!loading && <div ref={loadMoreTrigger} className="feed-load-more" aria-live="polite">
             {loadingMore && <div className="feed-skeleton-more" role="status" aria-label="Loading more community posts" aria-busy="true">
               {Array.from({ length: 2 }, (_, index) => <FeedPostSkeleton key={index}/>)}
