@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createContentComment, getContentComments, toggleContentVote } from '../contentInteractionApi';
+import { createContentComment, getContentCommentCount, getContentComments, toggleContentVote } from '../contentInteractionApi';
 
 const ok = (data) => ({ ok: true, status: 200, headers: { get: () => 'application/json' },
   json: async () => ({ success: true, message: 'Success', data }) });
@@ -12,6 +12,12 @@ describe('content interaction API contract', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok(page));
     await expect(getContentComments(8, 0)).resolves.toEqual(page);
     expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/contents/8/comments?page=0&size=20');
+  });
+
+  it('requests only one comment when loading a card comment count', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok({ content: [], totalElements: 7, totalPages: 7 }));
+    await expect(getContentCommentCount(8)).resolves.toBe(7);
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/contents/8/comments?page=0&size=1');
   });
 
   it('sends parentId for a reply and uses POST to toggle a vote', async () => {
