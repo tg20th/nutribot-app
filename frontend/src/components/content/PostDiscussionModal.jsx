@@ -46,12 +46,15 @@ export default function PostDiscussionModal({ post, onClose, focusComments = fal
     const controller = new AbortController();
     setError('');
     setFullPost(null);
-    loadPost(post.id, controller.signal).then((data) => {
-      if (!controller.signal.aborted) setFullPost(data);
-    }).catch(() => {
-      if (!controller.signal.aborted) setError('Could not load the full post.');
-    });
-    return () => controller.abort();
+    // Avoid a duplicate view request from StrictMode's development-only effect replay.
+    const timer = window.setTimeout(() => {
+      loadPost(post.id, controller.signal).then((data) => {
+        if (!controller.signal.aborted) setFullPost(data);
+      }).catch(() => {
+        if (!controller.signal.aborted) setError('Could not load the full post.');
+      });
+    }, 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
   }, [post.id, loadPost, retry]);
 
   const syncCommentCount = (nextCount) => {

@@ -9,13 +9,41 @@ import RestaurantRecommendations from '../components/community/RestaurantRecomme
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CommentSection from '../components/content/CommentSection';
 import VoteButton from '../components/content/VoteButton';
-import { getPost } from '../services/communityApi';
+import { getPost, normalizePost } from '../services/communityApi';
+import { getMyBlog, getMyVideo } from '../services/authorBlogApi';
 import { extractStoryText } from '../utils/content';
+
+function loadMyContent(postId, contentType, signal) {
+  const request = String(contentType).toLowerCase() === 'video'
+    ? getMyVideo(postId, signal)
+    : getMyBlog(postId, signal);
+  return request.then((item) => normalizePost(item, item.contentType ?? contentType));
+}
+
+function syncSearchViewSnapshot(returnTo, post) {
+  if (!returnTo?.startsWith('/community/search') || post?.id == null || !Number.isFinite(Number(post.viewCount))) return;
+  try {
+    const key = `nutribot-search-state:${returnTo}`;
+    const snapshot = JSON.parse(sessionStorage.getItem(key) ?? 'null');
+    if (!snapshot || !Array.isArray(snapshot.results)) return;
+    const viewCount = Number(post.viewCount);
+    sessionStorage.setItem(key, JSON.stringify({
+      ...snapshot,
+      results: snapshot.results.map((item) => String(item.id ?? item.contentId) === String(post.id)
+        ? { ...item, viewCount: Math.max(Number(item.viewCount) || 0, viewCount) }
+        : item)
+    }));
+  } catch {
+    // The detail view remains available when session storage is unavailable.
+  }
+}
 
 export default function CommunityContentDetailPage() {
   const { postId } = useParams();
   const location = useLocation();
   const requestedReturnTo = location.state?.returnTo;
+  const isMyContentSource = location.state?.source === 'my-content';
+  const sourceContentType = location.state?.contentType;
   const searchReturnState = location.state?.restoreSearch ? { restoreSearch: true } : undefined;
   const isMyContentReturn = requestedReturnTo === '/community/my-blogs';
   const returnTo = isMyContentReturn || (typeof requestedReturnTo === 'string' && requestedReturnTo.startsWith('/community/search')) ? requestedReturnTo : '/home';
@@ -31,15 +59,25 @@ export default function CommunityContentDetailPage() {
     setLoading(true);
     setPost(null);
     setVideoStarted(false);
-    getPost(postId, controller.signal).then((item) => {
-      if (!controller.signal.aborted) setPost(item);
-    }).catch(() => {
-      if (!controller.signal.aborted) setPost(false);
-    }).finally(() => {
-      if (!controller.signal.aborted) setLoading(false);
-    });
-    return () => controller.abort();
-  }, [postId]);
+    // StrictMode mounts effects twice in development. Deferring the request lets
+    // its first cleanup cancel the simulated mount before a view can be counted.
+    const timer = window.setTimeout(() => {
+      const loadPost = isMyContentSource
+        ? loadMyContent(postId, sourceContentType, controller.signal)
+        : getPost(postId, controller.signal);
+      loadPost.then((item) => {
+        if (!controller.signal.aborted) {
+          syncSearchViewSnapshot(returnTo, item);
+          setPost(item);
+        }
+      }).catch(() => {
+        if (!controller.signal.aborted) setPost(false);
+      }).finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    }, 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [isMyContentSource, postId, returnTo, sourceContentType]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });

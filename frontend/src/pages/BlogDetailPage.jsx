@@ -84,10 +84,14 @@ export default function BlogDetailPage({ byId = false }) {
     const controller = new AbortController();
     setBlog(null);
     setError('');
-    getPublishedBlog(identifier, { byId, signal: controller.signal })
-      .then((item) => { if (!controller.signal.aborted) { setBlog(item); setError(''); } })
-      .catch((failure) => { if (!controller.signal.aborted) setError(failure.status === 400 || failure.status === 404 ? 'This story is not available.' : failure.message || 'Could not load this story.'); });
-    return () => controller.abort();
+    // The public detail endpoint records a view; delay it so StrictMode can
+    // cancel its development-only simulated mount before it reaches the API.
+    const timer = window.setTimeout(() => {
+      getPublishedBlog(identifier, { byId, signal: controller.signal })
+        .then((item) => { if (!controller.signal.aborted) { setBlog(item); setError(''); } })
+        .catch((failure) => { if (!controller.signal.aborted) setError(failure.status === 400 || failure.status === 404 ? 'This story is not available.' : failure.message || 'Could not load this story.'); });
+    }, 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
   }, [identifier, byId, retry]);
 
   useEffect(() => { window.scrollTo(0, 0); }, [identifier]);
