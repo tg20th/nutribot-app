@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, MessageCircle, MoreHorizontal, Play } from 'lucide-react';
 import { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ImageWithFallback from '../ImageWithFallback';
 import PostDiscussionModal from '../content/PostDiscussionModal';
 import VoteButton from '../content/VoteButton';
@@ -8,7 +9,8 @@ import { formatPostDate, extractStoryText } from '../../utils/content';
 
 const firstPresent = (...values) => values.find((value) => value != null && value !== '');
 
-export default function CommunityPostCard({ post: sourcePost, interactionApi = {}, loadPost, fullPageDetail = false }) {
+export default function CommunityPostCard({ post: sourcePost, interactionApi = {}, loadPost, fullPageDetail = false, routeDetail = false }) {
+  const navigate = useNavigate();
   const post = { ...sourcePost, createdAt: formatPostDate(sourcePost.createdAt) };
   const [slide, setSlide] = useState(0);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -22,7 +24,13 @@ export default function CommunityPostCard({ post: sourcePost, interactionApi = {
   const captionPreviewLength = 280;
   const captionIsLong = caption.length > captionPreviewLength;
   const visibleCaption = captionExpanded || !captionIsLong ? caption : `${caption.slice(0, captionPreviewLength).trimEnd()}…`;
-  const openPost = useCallback((focus = 'top') => { setFocusComments(focus === 'comments'); setFocusCaption(focus === 'caption'); setCommentsOpen(true); }, []);
+  const openPost = useCallback((focus = 'top') => {
+    if (routeDetail && post.id != null) {
+      navigate(`/community/posts/${post.id}`, { state: { returnTo: '/home' } });
+      return;
+    }
+    setFocusComments(focus === 'comments'); setFocusCaption(focus === 'caption'); setCommentsOpen(true);
+  }, [navigate, post.id, routeDetail]);
   const closePost = useCallback(() => { setCommentsOpen(false); setFocusComments(false); setFocusCaption(false); setVoteRevision((value) => value + 1); }, []);
   const openFromCard = (event) => {
     if (event.target.closest('button, a, input, textarea, select')) return;

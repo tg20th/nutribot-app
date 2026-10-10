@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowLeft, RotateCcw, UsersRound } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
 import CommunityTopBar from '../community/CommunityTopBar';
 import CommunitySideNav from '../community/CommunitySideNav';
 import RestaurantRecommendations from '../community/RestaurantRecommendations';
@@ -18,8 +17,6 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
   const [detail, setDetail] = useState(null);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
-  const location = useLocation();
-  const openedAt = useRef(location.key);
   const nutrition = detail?.nutrition ?? {};
   const nutritionItems = detail ? [
     detail.calories != null && { label: 'Calories', value: detail.calories },
@@ -60,12 +57,6 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
       }
     };
   }, [post?.id]);
-
-  useEffect(() => {
-    if (!closedByPopstateRef.current && location.pathname !== '/home' && location.key !== openedAt.current) {
-      onCloseRef.current();
-    }
-  }, [location.key, location.pathname]);
 
   const handleBack = () => {
     if (!closedByPopstateRef.current && window.history?.state?.feedDetailModal) {
