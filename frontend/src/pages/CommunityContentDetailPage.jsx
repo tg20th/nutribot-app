@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { ArrowLeft, Clock3, Play, UsersRound } from 'lucide-react';
+import { ArrowLeft, Play, UsersRound } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import RestaurantRecommendations from '../components/community/RestaurantRecommendations';
@@ -22,6 +22,7 @@ export default function CommunityContentDetailPage() {
   const isSearchReturn = returnTo.startsWith('/community/search');
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [videoStarted, setVideoStarted] = useState(false);
   const page = useRef(null);
   const [query, setQuery] = useState('');
 
@@ -29,6 +30,7 @@ export default function CommunityContentDetailPage() {
     const controller = new AbortController();
     setLoading(true);
     setPost(null);
+    setVideoStarted(false);
     getPost(postId, controller.signal).then((item) => {
       if (!controller.signal.aborted) setPost(item);
     }).catch(() => {
@@ -67,10 +69,9 @@ export default function CommunityContentDetailPage() {
         <section className="detail-hero detail-reveal">
           <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1>{post.description && post.description !== (post.cleanBody || post.body) && <p>{extractStoryText(post.description)}</p>}<div className="detail-author">{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}<div><b>{post.author}</b><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></div></div></div>
           <div className="detail-media">
-            {post.type === 'video' && post.videoUrl
-              ? <video controls playsInline preload="metadata" src={post.videoUrl} poster={image || undefined} aria-label={post.title}/>
-              : <>{image && <img src={image} alt={post.title}/>} {post.type === 'video' && <span className="detail-play" aria-hidden="true"><Play fill="currentColor" size={24}/></span>}</>}
-            <span className="detail-duration"><Clock3 size={13}/>{post.prepTime} prep</span>
+            {post.type === 'video' && post.videoUrl && videoStarted
+              ? <video controls autoPlay playsInline preload="metadata" src={post.videoUrl} poster={image || undefined} aria-label={post.title}/>
+              : <>{image && <img src={image} alt={post.title}/>} {post.type === 'video' && post.videoUrl && <button className="detail-play" type="button" aria-label={`Play ${post.title}`} onClick={() => setVideoStarted(true)}><Play fill="currentColor" size={24}/></button>}</>}
           </div>
         </section>
         <section className="detail-nutrition detail-reveal" aria-label="Nutrition information">

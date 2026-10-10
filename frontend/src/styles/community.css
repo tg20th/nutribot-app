@@ -291,6 +291,8 @@
 @media(max-width:540px){.restaurant-recommendations{padding-top:40px}.restaurant-recommendation-grid{grid-template-columns:1fr}}
 
 /* Direct Cloudinary video URLs need native controls, not a thumbnail overlay. */
+.detail-media:has(.detail-play){min-height:0;aspect-ratio:4/3;background:#fff}
+.detail-media:has(.detail-play) img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .detail-media:has(video){min-height:0;aspect-ratio:16/9}
 .detail-media video{position:absolute;inset:0;display:block;width:100%;height:100%;object-fit:contain;background:#17251b}
 .detail-media:has(video):after{display:none}
