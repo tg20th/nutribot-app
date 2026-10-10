@@ -75,8 +75,8 @@ public class HealthProfileService {
         }
 
         profile.setUser(user);
-        profile.setHeightCm(request.getHeightCm());
-        profile.setWeightKg(request.getWeightKg());
+        if (request.getHeightCm() != null) profile.setHeightCm(request.getHeightCm());
+        if (request.getWeightKg() != null) profile.setWeightKg(request.getWeightKg());
         profile.setHealthGoal(request.getHealthGoal());
         profile.setVegetarianType(normalizeVegetarianType(request.getVegetarianType()));
 

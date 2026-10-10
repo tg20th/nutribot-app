@@ -19,12 +19,17 @@ import { getAllergyIngredients, getHealthProfile, updateHealthProfile } from '..
 const EMPTY_HEALTH = {
   heightCm: '',
   weightKg: '',
-  healthGoal: 'maintain',
+  healthGoal: '',
   vegetarianType: '',
   allergyIngredientIds: [],
 };
 
-const VEGETARIAN_TYPE_STORAGE_KEY = 'nutribot-vegetarian-type';
+const ALLERGY_CONFIRMATION_STORAGE_KEY = 'nutribot-allergies-confirmed-';
+
+const allergyConfirmationKey = () => {
+  if (typeof window === 'undefined') return `${ALLERGY_CONFIRMATION_STORAGE_KEY}current`;
+  return `${ALLERGY_CONFIRMATION_STORAGE_KEY}${window.localStorage.getItem('nutribot-auth-token') || 'current'}`;
+};
 
 const VEGETARIAN_TYPES = [
   { value: 'VEGAN', title: 'Vegan', copy: 'No ingredients or products derived from animals.' },
@@ -35,18 +40,6 @@ const VEGETARIAN_TYPES = [
 
 const vegetarianTypeValues = new Set(VEGETARIAN_TYPES.map(({ value }) => value));
 
-const getStoredVegetarianType = () => {
-  if (typeof window === 'undefined') return '';
-  const value = window.localStorage.getItem(VEGETARIAN_TYPE_STORAGE_KEY) || '';
-  return vegetarianTypeValues.has(value) ? value : '';
-};
-
-const saveVegetarianType = (value) => {
-  if (typeof window === 'undefined') return;
-  if (value) window.localStorage.setItem(VEGETARIAN_TYPE_STORAGE_KEY, value);
-  else window.localStorage.removeItem(VEGETARIAN_TYPE_STORAGE_KEY);
-};
-
 const GOALS = [
   { value: 'lose_weight', title: 'Lose weight', copy: 'A steady, balanced calorie deficit.' },
   { value: 'maintain', title: 'Maintain health', copy: 'Keep your current rhythm and energy.' },
@@ -56,10 +49,8 @@ const GOALS = [
 const toFormHealth = (data = {}) => ({
   heightCm: data.heightCm == null ? '' : String(data.heightCm),
   weightKg: data.weightKg == null ? '' : String(data.weightKg),
-  healthGoal: data.healthGoal || 'maintain',
-  vegetarianType: vegetarianTypeValues.has(data.vegetarianType)
-    ? data.vegetarianType
-    : getStoredVegetarianType(),
+  healthGoal: data.healthGoal || '',
+  vegetarianType: vegetarianTypeValues.has(data.vegetarianType) ? data.vegetarianType : '',
   allergyIngredientIds: Array.isArray(data.allergyIngredientIds) ? data.allergyIngredientIds : [],
 });
 
@@ -82,10 +73,8 @@ const validate = (health) => {
   const errors = {};
   const height = Number(health.heightCm);
   const weight = Number(health.weightKg);
-  if (!health.heightCm) errors.heightCm = 'Enter your height.';
-  else if (!Number.isFinite(height) || height < 80 || height > 250) errors.heightCm = 'Height must be between 80 and 250 cm.';
-  if (!health.weightKg) errors.weightKg = 'Enter your weight.';
-  else if (!Number.isFinite(weight) || weight < 20 || weight > 350) errors.weightKg = 'Weight must be between 20 and 350 kg.';
+  if (health.heightCm && (!Number.isFinite(height) || height < 80 || height > 250)) errors.heightCm = 'Height must be between 80 and 250 cm.';
+  if (health.weightKg && (!Number.isFinite(weight) || weight < 20 || weight > 350)) errors.weightKg = 'Weight must be between 20 and 350 kg.';
   return errors;
 };
 
@@ -93,6 +82,7 @@ export default function HealthProfileSection() {
   const savingRef = useRef(false);
   const [health, setHealth] = useState(EMPTY_HEALTH);
   const [savedHealth, setSavedHealth] = useState(EMPTY_HEALTH);
+  const [allergiesConfirmed, setAllergiesConfirmed] = useState(false);
   const [savedBmi, setSavedBmi] = useState(
     calculateBmi(EMPTY_HEALTH.heightCm, EMPTY_HEALTH.weightKg),
   );
@@ -112,6 +102,7 @@ export default function HealthProfileSection() {
         setHealth(mapped);
         setSavedHealth(mapped);
         setSavedBmi(profile.bmi ?? calculateBmi(mapped.heightCm, mapped.weightKg));
+        setAllergiesConfirmed(mapped.allergyIngredientIds.length > 0 || window.localStorage.getItem(allergyConfirmationKey()) === 'true');
         setIngredients(Array.isArray(ingredientOptions) ? ingredientOptions : []);
       })
       .catch((error) => {
@@ -157,12 +148,13 @@ export default function HealthProfileSection() {
   };
 
   const toggleAllergy = (ingredientId) => {
-    setHealth((current) => ({
-      ...current,
-      allergyIngredientIds: current.allergyIngredientIds.includes(ingredientId)
+    setHealth((current) => {
+      const allergyIngredientIds = current.allergyIngredientIds.includes(ingredientId)
         ? current.allergyIngredientIds.filter((id) => id !== ingredientId)
-        : [...current.allergyIngredientIds, ingredientId],
-    }));
+        : [...current.allergyIngredientIds, ingredientId];
+      setAllergiesConfirmed(allergyIngredientIds.length > 0);
+      return { ...current, allergyIngredientIds };
+    });
     if (notice?.type === 'success') setNotice(null);
   };
 
@@ -183,23 +175,28 @@ export default function HealthProfileSection() {
       scrollToSaveFeedback();
       return;
     }
+    if (!health.allergyIngredientIds.length && !allergiesConfirmed) {
+      setNotice({ type: 'error', message: 'Confirm whether you have any food allergies before saving.' });
+      return;
+    }
 
     savingRef.current = true;
     setIsSaving(true);
     setNotice(null);
     try {
       const updated = await updateHealthProfile({
-        heightCm: Number(health.heightCm),
-        weightKg: Number(health.weightKg),
+        heightCm: health.heightCm ? Number(health.heightCm) : null,
+        weightKg: health.weightKg ? Number(health.weightKg) : null,
         healthGoal: health.healthGoal,
         vegetarianType: health.vegetarianType || null,
         allergyIngredientIds: health.allergyIngredientIds,
       });
-      saveVegetarianType(health.vegetarianType);
       const mapped = toFormHealth({ ...updated, vegetarianType: health.vegetarianType });
       setHealth(mapped);
       setSavedHealth(mapped);
       setSavedBmi(updated.bmi ?? null);
+      setAllergiesConfirmed(true);
+      window.localStorage.setItem(allergyConfirmationKey(), 'true');
       setNotice({ type: 'success', message: 'Your health profile is now up to date.' });
     } catch (error) {
       setNotice({ type: 'error', message: error?.message || 'We could not save your health profile.' });
@@ -258,6 +255,7 @@ export default function HealthProfileSection() {
 
         <section className="health-card health-goal-card" aria-labelledby="health-goal-title">
           <header><div><span>Your direction</span><h2 id="health-goal-title">Choose the goal that fits now</h2></div><Sparkles size={23} /></header>
+          {!health.healthGoal && <p className="health-choice-placeholder">Select health goal</p>}
           <div className="health-goals">
             {GOALS.map((goal) => (
               <button key={goal.value} type="button" className={health.healthGoal === goal.value ? 'is-selected' : ''} onClick={() => setHealth((current) => ({ ...current, healthGoal: goal.value }))} aria-pressed={health.healthGoal === goal.value}>
@@ -272,6 +270,7 @@ export default function HealthProfileSection() {
         <section className="health-card health-dietary-card" aria-labelledby="dietary-preference-title">
           <header><div><span>Plant-forward eating</span><h2 id="dietary-preference-title">The way you want to eat</h2></div><Leaf size={23} /></header>
           <p>Choose the dietary direction that feels closest to you. Your choice stays on this device until profile syncing is available.</p>
+          {!health.vegetarianType && <p className="health-choice-placeholder">Select vegetarian type</p>}
           <div className="health-dietary-preferences" role="radiogroup" aria-label="Dietary preference">
             {VEGETARIAN_TYPES.map((vegetarianType) => {
               const selected = health.vegetarianType === vegetarianType.value;
@@ -310,6 +309,7 @@ export default function HealthProfileSection() {
             })}
             {visibleIngredients.length === 0 && <p>No ingredients match your search.</p>}
           </div>
+          {selectedIds.size === 0 && <label className="health-no-allergy-confirmation"><input type="checkbox" checked={allergiesConfirmed} onChange={(event) => setAllergiesConfirmed(event.target.checked)} /> <span>I confirm that I have no known food allergies.</span></label>}
         </section>
       </div>
 

@@ -72,11 +72,53 @@ const normalizeDish = (dish, index = 0) => ({
   carbsG: Number(dish.carbsG ?? dish.carbs ?? dish.carbs_g ?? 0),
   healthyFatsG: Number(dish.healthyFatsG ?? dish.fatG ?? dish.fat ?? dish.healthy_fats_g ?? 0),
   vegetarianType: dish.vegetarianType ?? dish.vegetarian_type ?? null,
+  ingredientIds: Array.isArray(dish.ingredientIds ?? dish.ingredient_ids)
+    ? (dish.ingredientIds ?? dish.ingredient_ids).map((id) => String(id))
+    : null,
+  ingredients: Array.isArray(dish.ingredients) ? dish.ingredients : null,
   image: dish.image ?? dish.imageUrl ?? dish.image_url ?? IMAGE_POOL[index % IMAGE_POOL.length]
 });
 
 export const normalizeDishCatalog = (dishes = []) => {
   return dishes.map(normalizeDish).filter((dish) => dish.dishId != null);
+};
+
+const DIET_COMPATIBILITY = {
+  VEGAN: ['VEGAN'],
+  LACTO: ['VEGAN', 'LACTO'],
+  OVO: ['VEGAN', 'OVO'],
+  LACTO_OVO: ['VEGAN', 'LACTO', 'OVO', 'LACTO_OVO']
+};
+
+const dishIngredientIds = (dish) => {
+  if (Array.isArray(dish?.ingredientIds)) {
+    const hasReliableIds = dish.ingredientIds.every((id) => id !== null && id !== undefined && id !== '');
+    return { ids: hasReliableIds ? dish.ingredientIds.map(String) : [], verified: hasReliableIds };
+  }
+  if (Array.isArray(dish?.ingredients)) {
+    const rawIds = dish.ingredients.map((ingredient) => ingredient?.ingredientId ?? ingredient?.id ?? ingredient);
+    const hasReliableIds = rawIds.every((id) => id !== null && id !== undefined && id !== '');
+    return { ids: hasReliableIds ? rawIds.map(String) : [], verified: hasReliableIds };
+  }
+  return { ids: [], verified: false };
+};
+
+export const getDishCompatibility = (dish, vegetarianType, allergyIngredientIds = []) => {
+  const diet = String(vegetarianType ?? '').trim().toUpperCase();
+  const dishType = String(dish?.vegetarianType ?? '').trim().toUpperCase();
+  const allergies = new Set((allergyIngredientIds ?? []).map(String));
+  const ingredients = dishIngredientIds(dish);
+
+  if (diet && (!dishType || !DIET_COMPATIBILITY[diet]?.includes(dishType))) {
+    return dishType
+      ? { status: 'incompatible', reason: `Not compatible with ${diet}` }
+      : { status: 'unknown', reason: 'Cannot verify compatibility' };
+  }
+  if (allergies.size > 0) {
+    if (!ingredients.verified) return { status: 'unknown', reason: 'Cannot verify compatibility' };
+    if (ingredients.ids.some((id) => allergies.has(id))) return { status: 'incompatible', reason: 'Contains an ingredient you marked as an allergy' };
+  }
+  return { status: 'compatible', reason: '' };
 };
 
 const normalizeMeal = (item, meal, index) => {
@@ -392,6 +434,8 @@ export const createLocalMeal = (dish, slot, servings = 1, notes = '', swapped = 
   baseProtein: dish.protein,
   carbsG: Number.isFinite(Number(dish.carbsG)) ? Number(dish.carbsG) : 0,
   healthyFatsG: Number.isFinite(Number(dish.healthyFatsG)) ? Number(dish.healthyFatsG) : 0,
+  ingredientIds: dish.ingredientIds ?? null,
+  ingredients: dish.ingredients ?? null,
   image: dish.image,
   servings,
   notes,
