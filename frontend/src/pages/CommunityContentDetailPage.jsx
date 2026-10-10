@@ -9,6 +9,7 @@ import RestaurantRecommendations from '../components/community/RestaurantRecomme
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CommentSection from '../components/content/CommentSection';
 import VoteButton from '../components/content/VoteButton';
+import RelatedContentSection from '../components/content/RelatedContentSection';
 import { getPost, normalizePost } from '../services/communityApi';
 import { getMyBlog, getMyVideo } from '../services/authorBlogApi';
 import { extractStoryText } from '../utils/content';
@@ -135,6 +136,7 @@ export default function CommunityContentDetailPage() {
               <p key={index}>{paragraph}</p>
             ))}
         </article>
+        <RelatedContentSection contentId={post.id} contentType={post.type}/>
         <RestaurantRecommendations dishName={post.title}/>
         <section className="detail-actions detail-reveal"><VoteButton contentId={post.id}/></section>
         <section className="detail-comments detail-reveal"><CommentSection contentId={post.id}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><Link to="/home">Open the feed</Link></div></section>
