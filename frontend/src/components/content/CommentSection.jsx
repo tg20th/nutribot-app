@@ -8,6 +8,13 @@ const memberName = (comment) => comment.userName || 'NutriBot member';
 const replyList = (comment) => Array.isArray(comment.replies) ? comment.replies : [];
 const replyCount = (comment) => replyList(comment).reduce((count, reply) => count + 1 + replyCount(reply), 0);
 
+function flattenReplies(comment) {
+  return replyList(comment).flatMap((reply) => [
+    { ...reply, parentComment: comment },
+    ...flattenReplies(reply),
+  ]);
+}
+
 function formatDate(value) {
   if (!value) return null;
   const date = new Date(value);
@@ -22,13 +29,19 @@ function appendReply(comments, parentId, reply) {
   });
 }
 
+function submitOnEnter(event) {
+  if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+  event.preventDefault();
+  event.currentTarget.form?.requestSubmit();
+}
+
 function ReplyComposer({ comment, inputRef, value, submitting, error, onChange, onCancel, onSubmit }) {
   const username = memberName(comment);
   return <form className="content-comment-form content-comment-reply-form" onSubmit={(event) => onSubmit(event, comment)}>
     <p className="content-comment-reply-target">Replying to <strong>@{username}</strong></p>
     <label className="sr-only" htmlFor={`reply-to-comment-${comment.commentId}`}>Reply to {username}</label>
     <textarea ref={inputRef} id={`reply-to-comment-${comment.commentId}`} value={value} onChange={(event) => onChange(event.target.value)}
-      maxLength={2000} rows={3} placeholder={`Reply to @${username}...`} disabled={submitting}/>
+      maxLength={2000} rows={2} placeholder={`Reply to @${username}...`} disabled={submitting} onKeyDown={submitOnEnter}/>
     <div className="content-comment-reply-actions">
       <button type="submit" disabled={submitting || !value.trim()}><Send size={15}/>{submitting ? 'Posting...' : 'Post'}</button>
       <button className="content-comment-reply-cancel" type="button" onClick={onCancel} disabled={submitting}>Cancel</button>
@@ -38,7 +51,7 @@ function ReplyComposer({ comment, inputRef, value, submitting, error, onChange, 
 }
 
 function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, submittingReply, replyError, expandedReplyIds, onReplyChange, onReplyCancel, onReplySubmit, onStartReply, onToggleReplies }) {
-  const replies = replyList(comment);
+  const replies = depth === 0 ? replyList(comment) : depth === 1 ? flattenReplies(comment) : [];
   const hasReplies = replies.length > 0;
   const isExpanded = expandedReplyIds.has(comment.commentId);
   const isReplying = activeReplyId === comment.commentId;
@@ -63,8 +76,8 @@ function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, 
         <ReplyComposer comment={comment} inputRef={replyInputRef} value={replyText} submitting={submittingReply} error={replyError}
           onChange={onReplyChange} onCancel={onReplyCancel} onSubmit={onReplySubmit}/>
       )}
-      {hasReplies && isExpanded && <div className={`content-comment-replies${depth >= 1 ? ' content-comment-replies--deep' : ''}`} aria-label={`Replies to ${memberName(comment)}`}>
-        {replies.map((reply) => <CommentItem key={reply.commentId} comment={{ ...reply, parentComment: comment }} depth={depth + 1}
+      {hasReplies && isExpanded && <div className="content-comment-replies" aria-label={`Replies to ${memberName(comment)}`}>
+        {replies.map((reply) => <CommentItem key={reply.commentId} comment={depth === 0 ? { ...reply, parentComment: comment } : reply} depth={depth === 0 ? 1 : 2}
           activeReplyId={activeReplyId} replyText={replyText} replyInputRef={replyInputRef} submittingReply={submittingReply} replyError={replyError}
           expandedReplyIds={expandedReplyIds} onReplyChange={onReplyChange} onReplyCancel={onReplyCancel} onReplySubmit={onReplySubmit}
           onStartReply={onStartReply} onToggleReplies={onToggleReplies}/>)}</div>}
@@ -72,7 +85,7 @@ function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, 
   </article>;
 }
 
-export default function CommentSection({ contentId, loadComments = getContentComments, submitComment = createContentComment, composerTarget }) {
+export default function CommentSection({ contentId, loadComments = getContentComments, submitComment = createContentComment, composerTarget, showFilter = false, onCommentCountChange, currentUser = {} }) {
   const [comments, setComments] = useState([]);
   const [totalThreads, setTotalThreads] = useState(0);
   const [nextPage, setNextPage] = useState(0);
@@ -90,6 +103,7 @@ export default function CommentSection({ contentId, loadComments = getContentCom
   const [submissionMessage, setSubmissionMessage] = useState('');
   const [expandedReplyIds, setExpandedReplyIds] = useState(() => new Set());
   const [retry, setRetry] = useState(0);
+  const [commentFilter, setCommentFilter] = useState('all');
   const replyInput = useRef(null);
 
   useEffect(() => {
@@ -111,6 +125,7 @@ export default function CommentSection({ contentId, loadComments = getContentCom
       if (controller.signal.aborted) return;
       setComments(data.content);
       setTotalThreads(data.totalElements);
+      onCommentCountChange?.(data.totalElements);
       setTotalPages(data.totalPages);
       setNextPage(1);
     }).catch((failure) => {
@@ -149,9 +164,12 @@ export default function CommentSection({ contentId, loadComments = getContentCom
     try {
       const created = await submitComment(contentId, body, null);
       setComments((current) => [created, ...current]);
-      setTotalThreads((current) => current + 1);
+      setTotalThreads((current) => {
+        const next = current + 1;
+        onCommentCountChange?.(next);
+        return next;
+      });
       setText('');
-      setSubmissionMessage('Your comment has been posted.');
     } catch (failure) {
       setCommentError(failure.message || 'Unable to post your comment.');
     } finally {
@@ -192,9 +210,13 @@ export default function CommentSection({ contentId, loadComments = getContentCom
     try {
       const created = await submitComment(contentId, body, parentComment.commentId);
       setComments((current) => appendReply(current, parentComment.commentId, created));
+      setTotalThreads((current) => {
+        const next = current + 1;
+        onCommentCountChange?.(next);
+        return next;
+      });
       setExpandedReplyIds((current) => new Set(current).add(parentComment.commentId));
       cancelReply();
-      setSubmissionMessage(`Your reply to @${memberName(parentComment)} has been posted.`);
     } catch (failure) {
       setReplyError(failure.message || 'Unable to post your reply.');
     } finally {
@@ -204,23 +226,29 @@ export default function CommentSection({ contentId, loadComments = getContentCom
 
   const composer = <>
     <form className="content-comment-form" onSubmit={submitCommentForm}>
+      {currentUser.avatarUrl && <img className="content-comment-composer-avatar" src={currentUser.avatarUrl} alt=""/>}
+      {!currentUser.avatarUrl && composerTarget && <span className="content-comment-composer-avatar" aria-hidden="true">{(currentUser.fullName || currentUser.name || currentUser.username || 'N').charAt(0).toUpperCase()}</span>}
       <label className="sr-only" htmlFor="new-content-comment">Write a comment</label>
       <textarea id="new-content-comment" value={text} onChange={(event) => setText(event.target.value)} maxLength={2000} rows={3}
-        placeholder="Write a comment..." disabled={submittingComment}/>
+        placeholder="Write a comment..." disabled={submittingComment} onKeyDown={submitOnEnter}/>
       <button type="submit" disabled={submittingComment || !text.trim()}><Send size={15}/>{submittingComment ? 'Posting...' : 'Post'}</button>
     </form>
     {commentError && <p className="content-comment-error" role="alert">{commentError}</p>}
   </>;
+  const visibleComments = [...comments].sort((left, right) => {
+    const direction = commentFilter === 'newest' ? -1 : 1;
+    return direction * (new Date(left.createdAt ?? 0) - new Date(right.createdAt ?? 0));
+  });
 
   return <section className="content-comments" aria-labelledby="content-comments-heading">
     <div className="content-comments-heading"><span>Join the conversation</span><h2 id="content-comments-heading">Comments</h2>
-      {!loading && !loadError && <small>{totalThreads} {totalThreads === 1 ? 'comment' : 'comments'}</small>}</div>
+      {!loading && !loadError && <small>{totalThreads} {totalThreads === 1 ? 'comment' : 'comments'}</small>}
+      {showFilter && <label className="content-comments-filter"><span className="sr-only">Comment order</span><select value={commentFilter} onChange={(event) => setCommentFilter(event.target.value)}><option value="all">All comments</option><option value="newest">Newest</option></select></label>}</div>
     {composerTarget ? createPortal(composer, composerTarget) : composer}
-    {submissionMessage && <p className="content-comment-success" role="status" aria-live="polite">{submissionMessage}</p>}
     {loading && <p className="content-comment-status" role="status">Loading comments...</p>}
     {!loading && loadError && !comments.length && <div className="content-comment-status" role="alert">{loadError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button></div>}
     {!loading && !loadError && !comments.length && <p className="content-comment-status">No comments yet. Start the conversation.</p>}
-    {!!comments.length && <div className="content-comment-list">{comments.map((comment) => <CommentItem key={comment.commentId} comment={comment} depth={0}
+    {!!visibleComments.length && <div className="content-comment-list">{visibleComments.map((comment) => <CommentItem key={comment.commentId} comment={comment} depth={0}
       activeReplyId={replyTo?.commentId} replyText={replyText} replyInputRef={replyInput} submittingReply={submittingReply} replyError={replyError}
       expandedReplyIds={expandedReplyIds} onReplyChange={setReplyText} onReplyCancel={cancelReply} onReplySubmit={submitReply}
       onStartReply={startReply} onToggleReplies={toggleReplies}/>)}</div>}
