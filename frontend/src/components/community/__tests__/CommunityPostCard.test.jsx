@@ -19,7 +19,7 @@ it('renders Snack chay story before media when the API provides a caption', () =
     caption: 'snack chay ngon ngon',
     thumbnailUrl: '/snack.jpg'
   }, 'BLOG');
-  render(<CommunityPostCard post={post} interactionApi={{ loadVote: async () => ({ voteCount: 0, isVoted: false }) }} />);
+  render(<MemoryRouter><CommunityPostCard post={post} interactionApi={{ loadVote: async () => ({ voteCount: 0, isVoted: false }) }} /></MemoryRouter>);
 
   const title = screen.getByRole('button', { name: 'Snack chay' });
   const caption = screen.getByText('snack chay ngon ngon');
@@ -72,7 +72,7 @@ it('extracts story from recipe JSON body or caption and does not display raw JSO
     thumbnailUrl: '/tofu.jpg'
   }, 'BLOG');
 
-  render(<CommunityPostCard post={post} interactionApi={{ loadVote: async () => ({ voteCount: 0, isVoted: false }) }} />);
+  render(<MemoryRouter><CommunityPostCard post={post} interactionApi={{ loadVote: async () => ({ voteCount: 0, isVoted: false }) }} /></MemoryRouter>);
 
   expect(screen.getByText('Lời dẫn hoặc câu chuyện giới thiệu về món ăn...')).toBeInTheDocument();
   expect(screen.queryByText(/prepMinutes/)).not.toBeInTheDocument();
