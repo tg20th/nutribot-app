@@ -59,13 +59,19 @@ export default function CommunityContentDetailPage() {
   const image = post.type === 'gallery' ? post.images[0] : post.image;
   const nutrition = post.nutrition ?? { carbs: '—', fat: '—', fiber: '—', sodium: '—' };
 
+  const returnState = isSearchReturn
+    ? searchReturnState
+    : isMyContentReturn && Number.isFinite(Number(post.viewCount))
+      ? { viewedContentId: post.id, viewCount: Number(post.viewCount) }
+      : undefined;
+
   return <div className="community-page community-detail-page" ref={page}>
     <CommunityTopBar query={query} onQueryChange={setQuery}/>
     <div className="community-shell">
       <CommunitySideNav activePath={isSearchReturn ? '/community/search' : '/home'}/>
       <span className="community-sidenav-spacer" aria-hidden="true"/>
       <main className="content-detail-main">
-        <Link className="detail-back detail-reveal" to={returnTo} state={searchReturnState}><ArrowLeft size={16}/>{isMyContentReturn ? 'Back to my content' : isSearchReturn ? 'Back to search results' : 'Back to home'}</Link>
+        <Link className="detail-back detail-reveal" to={returnTo} state={returnState}><ArrowLeft size={16}/>{isMyContentReturn ? 'Back to my content' : isSearchReturn ? 'Back to search results' : 'Back to home'}</Link>
         <section className="detail-hero detail-reveal">
           <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1>{post.description && post.description !== (post.cleanBody || post.body) && <p>{extractStoryText(post.description)}</p>}<div className="detail-author">{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}<div><b>{post.author}</b><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></div></div></div>
           <div className="detail-media">
