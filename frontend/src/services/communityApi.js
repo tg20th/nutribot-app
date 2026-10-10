@@ -310,7 +310,9 @@ export const normalizePost = (item = {}, fallbackType = 'BLOG') => {
     images: item.images ?? item.imageUrls ?? item.image_urls ?? [],
     videoUrl: item.videoUrl ?? item.mediaUrl ?? null,
     likes: item.likes ?? item.likeCount ?? item.voteCount ?? 0,
-    comments: typeof item.comments === 'number' ? item.comments : item.commentCount ?? 0,
+    comments: Number.isFinite(Number(item.comments ?? item.commentCount))
+      ? Number(item.comments ?? item.commentCount)
+      : null,
     commentList: (item.commentList ?? item.commentsList ?? []).map(normalizeComment),
     shares: item.shares ?? item.shareCount ?? 0,
     userVoted: Boolean(item.userVoted)

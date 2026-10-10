@@ -1,11 +1,12 @@
 import { ChevronLeft, ChevronRight, MessageCircle, MoreHorizontal, Play } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageWithFallback from '../ImageWithFallback';
 import PostDiscussionModal from '../content/PostDiscussionModal';
 import VoteButton from '../content/VoteButton';
 import FeedContentDetail from '../content/FeedContentDetail';
 import { formatPostDate, extractStoryText } from '../../utils/content';
+import { getContentCommentCount } from '../../services/contentInteractionApi';
 
 const firstPresent = (...values) => values.find((value) => value != null && value !== '');
 
@@ -18,11 +19,21 @@ export default function CommunityPostCard({ post: sourcePost, interactionApi = {
   const [focusCaption, setFocusCaption] = useState(false);
   const [voteRevision, setVoteRevision] = useState(0);
   const [captionExpanded, setCaptionExpanded] = useState(false);
+  const [commentCount, setCommentCount] = useState(post.comments);
   const images = post.type === 'gallery' ? post.images : [post.image];
   const rawCaption = firstPresent(post.caption, post.story, post.description, post.summary, typeof post.content === 'string' ? post.content : null, post.cleanBody);
   const caption = String(extractStoryText(rawCaption) ?? '').trim();
   const captionPreviewLength = 280;
   const captionIsLong = caption.length > captionPreviewLength;
+  useEffect(() => {
+    setCommentCount(post.comments);
+    if (post.id == null || Number.isFinite(post.comments)) return undefined;
+    const controller = new AbortController();
+    getContentCommentCount(post.id, controller.signal)
+      .then((count) => { if (!controller.signal.aborted) setCommentCount(count); })
+      .catch(() => { if (!controller.signal.aborted) setCommentCount(0); });
+    return () => controller.abort();
+  }, [post.id, post.comments]);
   const visibleCaption = captionExpanded || !captionIsLong ? caption : `${caption.slice(0, captionPreviewLength).trimEnd()}…`;
   const openPost = useCallback((focus = 'top') => {
     if (routeDetail && post.id != null) {
@@ -67,7 +78,7 @@ export default function CommunityPostCard({ post: sourcePost, interactionApi = {
     <div className="community-post-footer" onClick={(event) => event.stopPropagation()}>
       <VoteButton key={voteRevision} contentId={post.id} compact loadVote={interactionApi.loadVote} submitVote={interactionApi.submitVote}/>
       <button type="button" aria-label="Comments" aria-haspopup="dialog" aria-expanded={commentsOpen} onClick={() => openPost('comments')}>
-        <MessageCircle size={18}/><small aria-hidden="true">{post.comments ?? 0}</small></button>
+        <MessageCircle size={18}/><small aria-hidden="true">{commentCount ?? 0}</small></button>
     </div>
 
     {commentsOpen && (fullPageDetail

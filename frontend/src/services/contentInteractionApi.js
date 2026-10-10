@@ -9,12 +9,17 @@ function responseData(response) {
   return response.data;
 }
 
-export async function getContentComments(contentId, page = 0, signal) {
-  const data = responseData(await apiRequest(`${contentPath(contentId)}/comments?page=${page}&size=20`, { signal }));
+export async function getContentComments(contentId, page = 0, signal, size = 20) {
+  const data = responseData(await apiRequest(`${contentPath(contentId)}/comments?page=${page}&size=${size}`, { signal }));
   if (!Array.isArray(data.content) || !Number.isInteger(data.totalPages) || !Number.isFinite(data.totalElements)) {
     throw new Error('Invalid comments response');
   }
   return data;
+}
+
+export async function getContentCommentCount(contentId, signal) {
+  const data = await getContentComments(contentId, 0, signal, 1);
+  return data.totalElements;
 }
 
 export async function createContentComment(contentId, body, parentId = null) {
