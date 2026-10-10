@@ -164,3 +164,9 @@
   background: #f8faf7;
   border-color: #c5d5c0;
 }
+
+.login-required-google .google-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}

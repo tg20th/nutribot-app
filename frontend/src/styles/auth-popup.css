@@ -75,6 +75,12 @@ body:not(:has(.admin-shell)) #root .email-verification__heading h2 {
   padding-bottom: 0;
 }
 
+.google-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
 .auth-modal input[aria-invalid='true'] {
   border-color: #b44435;
 }
