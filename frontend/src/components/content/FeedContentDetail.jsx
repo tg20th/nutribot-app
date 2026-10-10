@@ -8,6 +8,7 @@ import { getPost } from '../../services/communityApi';
 import CommentSection from './CommentSection';
 import { formatPostDate, extractStoryText } from '../../utils/content';
 import VoteButton from './VoteButton';
+import RelatedContentSection from './RelatedContentSection';
 import '../../styles/feed-content-detail.css';
 
 export default function FeedContentDetail({ post, onClose, focusComments = false, focusCaption = false, loadPost = getPost, interactionApi = {} }) {
@@ -144,6 +145,7 @@ export default function FeedContentDetail({ post, onClose, focusComments = false
                 <p key={index}>{paragraph}</p>
               ))}
           </article>}
+          <RelatedContentSection contentId={detail.id} contentType={detail.type}/>
           <RestaurantRecommendations dishName={detail.title}/>
           <section className="detail-actions"><VoteButton contentId={post.id} loadVote={interactionApi.loadVote} submitVote={interactionApi.submitVote}/></section>
           <section ref={comments} tabIndex={-1} className="detail-comments" aria-label="Comments"><CommentSection contentId={post.id} loadComments={interactionApi.loadComments} submitComment={interactionApi.submitComment}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><button type="button" onClick={handleBack}>Open the feed</button></div></section>

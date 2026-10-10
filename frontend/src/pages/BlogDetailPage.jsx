@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, Eye, ImageOff } from 'lu
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { getPublishedBlog } from '../services/publicBlogApi';
+import RelatedContentSection from '../components/content/RelatedContentSection';
 import '../styles/public-blogs.css';
 
 function formatDate(value) {
@@ -117,6 +118,7 @@ export default function BlogDetailPage({ byId = false }) {
           <aside className="public-blog-detail-aside"><span>01 / JOURNAL</span><p>A little more to read, a little more to share.</p></aside>
           <div className="public-blog-article"><ArticleBody body={blog.body}/></div>
         </div>
+        <RelatedContentSection contentId={blog.contentId} contentType="BLOG"/>
         <footer className="public-blog-detail-footer"><Link to={listHref}><ArrowLeft size={17}/> Back to all stories</Link><Link to={listHref}>Explore more <ArrowRight size={17}/></Link></footer>
       </article>}
     </main>
