@@ -9,7 +9,7 @@ import { getContentCommentCount } from '../../services/contentInteractionApi';
 
 const firstPresent = (...values) => values.find((value) => value != null && value !== '');
 
-export default function CommunityPostCard({ post: sourcePost, interactionApi = {}, loadPost, routeDetail = false, profile = {} }) {
+export default function CommunityPostCard({ post: sourcePost, interactionApi = {}, loadPost, routeDetail = false, onOpenPost, profile = {} }) {
   const navigate = useNavigate();
   const post = { ...sourcePost, createdAt: formatPostDate(sourcePost.createdAt) };
   const [slide, setSlide] = useState(0);
@@ -35,11 +35,15 @@ export default function CommunityPostCard({ post: sourcePost, interactionApi = {
   const visibleCaption = captionExpanded || !captionIsLong ? caption : `${caption.slice(0, captionPreviewLength).trimEnd()}…`;
   const openPost = useCallback((focus = 'top') => {
     if (routeDetail && post.id != null) {
+      if (onOpenPost) {
+        onOpenPost(post.id);
+        return;
+      }
       navigate(`/community/posts/${post.id}`, { state: { returnTo: '/home' } });
       return;
     }
     setFocusComments(focus === 'comments'); setCommentsOpen(true);
-  }, [navigate, post.id, routeDetail]);
+  }, [navigate, onOpenPost, post.id, routeDetail]);
   const openComments = useCallback(() => {
     setFocusComments(true);
     setCommentsOpen(true);

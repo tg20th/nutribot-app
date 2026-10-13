@@ -12,7 +12,7 @@ import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CreateBlogPage from './CreateBlogPage';
 import { appendUniquePersonalizedPosts, getCommunityFilters, getPersonalizedPostsPage, getPost, prioritizePersonalizedPost } from '../services/communityApi';
 import { getMyProfile } from '../services/profileApi';
-import { captureFeedAnchor, clearFeedSnapshots, feedSnapshotKey, getActiveFeedSnapshot, getFeedSnapshot, prepareFeedCacheForPageLoad, refreshFeedSnapshot, restoreFeedAnchor, saveActiveFeedSnapshot } from '../services/feedStateCache';
+import { captureFeedAnchor, clearFeedSnapshots, completeFeedPageLoad, feedSnapshotKey, getActiveFeedSnapshot, getFeedSnapshot, prepareFeedCacheForPageLoad, refreshFeedSnapshot, restoreFeedAnchor, saveActiveFeedSnapshot } from '../services/feedStateCache';
 
 function postKey(post) {
   return `${post.type ?? 'POST'}:${post.id ?? post.slug ?? post.title}`;
@@ -44,7 +44,7 @@ function FeedPostSkeleton() {
 export default function CommunityFeedPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const browserReload = prepareFeedCacheForPageLoad();
+  const [browserReload] = useState(prepareFeedCacheForPageLoad);
   const page = useRef(null);
   const composerTrigger = useRef(null);
   const loadMoreTrigger = useRef(null);
@@ -76,6 +76,7 @@ export default function CommunityFeedPage() {
     const previousRestoration = window.history.scrollRestoration;
     window.history.scrollRestoration = 'manual';
     if (browserReload) window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    completeFeedPageLoad();
     return () => { window.history.scrollRestoration = previousRestoration; };
   }, [browserReload]);
 

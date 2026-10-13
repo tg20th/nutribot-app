@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   captureFeedAnchor,
   clearFeedSnapshots,
+  completeFeedPageLoad,
   getActiveFeedSnapshot,
   getFeedSnapshot,
   getFeedScrollContainer,
+  prepareFeedCacheForPageLoad,
   restoreFeedAnchor,
   saveActiveFeedSnapshot,
   saveFeedSnapshot,
@@ -75,5 +77,40 @@ describe('Feed state cache and scroll restoration', () => {
     restoreFeedAnchor(anchor, shell);
 
     expect(shell.scrollTop).toBe(120);
+  });
+
+  it('uses the reload flag only through the initial committed Feed load', async () => {
+    vi.resetModules();
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ type: 'reload' }]);
+    const cache = await import('../feedStateCache');
+    const key = 'guest:home:All::';
+
+    expect(cache.prepareFeedCacheForPageLoad()).toBe(true);
+    expect(cache.prepareFeedCacheForPageLoad()).toBe(true);
+    cache.saveActiveFeedSnapshot('home', key, {
+      posts: [{ id: 1 }, { id: 2 }],
+      pagination: { cursor: 'cursor-2', hasMore: true },
+      filter: 'All'
+    });
+
+    cache.completeFeedPageLoad();
+
+    expect(cache.prepareFeedCacheForPageLoad()).toBe(false);
+    expect(cache.getFeedSnapshot(key)).toMatchObject({
+      posts: [{ id: 1 }, { id: 2 }],
+      pagination: { cursor: 'cursor-2', hasMore: true }
+    });
+  });
+
+  it('clears snapshots for a separate real browser reload', async () => {
+    vi.resetModules();
+    vi.spyOn(performance, 'getEntriesByType').mockReturnValue([{ type: 'reload' }]);
+    const cache = await import('../feedStateCache');
+    const key = 'guest:home:All::';
+
+    cache.saveFeedSnapshot(key, { posts: [{ id: 1 }] });
+
+    expect(cache.prepareFeedCacheForPageLoad()).toBe(true);
+    expect(cache.getFeedSnapshot(key)).toBeNull();
   });
 });
