@@ -16,7 +16,7 @@ import { generateMealPlan } from '../services/mealPlannerApi';
 import { createLocalMeal, getDishCompatibility, MEAL_SLOTS, normalizeDishCatalog, normalizeWeeklyMenu, recalculateMenu, serializeMenu, shiftWeek, startOfWeek, toIsoDate, checkNutritionOverflow } from '../utils/weeklyMenuModel';
 import NutritionOverflowDialog from '../components/dialog/NutritionOverflowDialog';
 import ServiceUnavailableDialog from '../components/dialog/ServiceUnavailableDialog';
-import PlanExistsDialog from '../components/dialog/PlanExistsDialog';
+import RegenerateMealPlanDialog from '../components/dialog/RegenerateMealPlanDialog';
 import { mealSlotApiValue } from '../utils/weeklyMenuModel';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 gsap.registerPlugin(ScrollTrigger);
@@ -79,6 +79,7 @@ export default function WeeklyMealPlannerPage() {
   const [profileReadinessContext, setProfileReadinessContext] = useState('ai');
   const [showManualPlanner, setShowManualPlanner] = useState(false);
   const plannerRequest = useRef(0);
+  const aiGenerateRequest = useRef(false);
   const [weekStart, setWeekStart] = useState(() => toIsoDate(startOfWeek()));
   const [menu, setMenu] = useState(() => normalizeWeeklyMenu({}, toIsoDate(startOfWeek())));
   const [dishes, setDishes] = useState([]);
@@ -87,9 +88,9 @@ export default function WeeklyMealPlannerPage() {
   const [detailMeal, setDetailMeal] = useState(null);
   const [pendingMealRemoval, setPendingMealRemoval] = useState(null);
   const [showGrocery, setShowGrocery] = useState(false);
-  const [showAiGenerator, setShowAiGenerator] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [aiPreview, setAiPreview] = useState(null);
+  const [showAiPreview, setShowAiPreview] = useState(false);
   const [previewReplaceTarget, setPreviewReplaceTarget] = useState(null);
   const [loading, setLoading] = useState(true);
   const [menuLoadFailed, setMenuLoadFailed] = useState(false);
@@ -104,9 +105,12 @@ export default function WeeklyMealPlannerPage() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showServiceUnavailableDialog, setShowServiceUnavailableDialog] = useState(false);
   const [serviceUnavailableDraftExists, setServiceUnavailableDraftExists] = useState(false);
-  const [showPlanExistsDialog, setShowPlanExistsDialog] = useState(false);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [regenerateDialogStatus, setRegenerateDialogStatus] = useState('confirm');
+  const [regenerateDialogError, setRegenerateDialogError] = useState('');
   const [pendingNutritionOverflow, setPendingNutritionOverflow] = useState(null);
   const [pendingOverflowMeal, setPendingOverflowMeal] = useState(null);
+  const hasActiveAiPreview = Boolean(aiPreview);
 
   const loadWeek = useCallback(async (startDate, signal) => {
     setLoading(true);
@@ -170,6 +174,11 @@ export default function WeeklyMealPlannerPage() {
 
   useEffect(() => {
     setSelectedDayIndex(selectedIndexForWeek(weekStart));
+    setAiPreview(null);
+    setShowAiPreview(false);
+    setShowRegenerateConfirm(false);
+    setRegenerateDialogStatus('confirm');
+    setRegenerateDialogError('');
   }, [weekStart]);
 
   useEffect(() => {
@@ -226,6 +235,8 @@ export default function WeeklyMealPlannerPage() {
   const manualPlannerReady = !profileLoading && !manualMissingFields.length;
   const selectedDay = plannerDays[selectedDayIndex] ?? plannerDays[0] ?? null;
   const hasMeals = plannerDays.some((day) => day.meals.length > 0);
+  const hasSelectedWeekPlan = Boolean(menu.menuId) || hasMeals || hasActiveAiPreview;
+  const generateActionLabel = hasSelectedWeekPlan ? 'Re-generate' : 'Generate';
   const dailyNutritionMetrics = useMemo(() => {
     if (!selectedDay) return [];
     return [
@@ -487,33 +498,68 @@ export default function WeeklyMealPlannerPage() {
     }
   };
 
-  const generateAiPlan = async (event) => {
-    event.preventDefault();
+  const generateAiPlan = async ({ suppressNotice = false } = {}) => {
+    if (generatingPlan || aiGenerateRequest.current) return { success: false, cancelled: true };
+    aiGenerateRequest.current = true;
     if (!plannerReady) {
-      setShowAiGenerator(false);
+      aiGenerateRequest.current = false;
+      if (suppressNotice) return { success: false, errorMessage: 'Complete your Health Profile before generating a meal plan.' };
       setProfileReadinessContext('ai');
       setShowProfileReadinessModal(true);
-      return;
+      return { success: false, cancelled: true };
     }
     const requestId = ++plannerRequest.current;
     setGeneratingPlan(true);
     try {
       const result = await generateMealPlan({ vegetarianType: plannerProfile.vegetarianType ?? plannerProfile.vegetarian_type });
       if (!Array.isArray(result.weeklyPlan) || result.weeklyPlan.length !== 7) throw new Error('The planner did not return a valid seven-day meal plan.');
-      if (requestId !== plannerRequest.current) return;
-      setShowAiGenerator(false);
+      if (requestId !== plannerRequest.current) return { success: false, cancelled: true };
       setAiPreview({ ...result, vegetarianType: plannerProfile.vegetarianType ?? plannerProfile.vegetarian_type ?? null });
+      setShowAiPreview(true);
+      return { success: true };
     } catch (error) {
-      if (requestId !== plannerRequest.current) return;
+      if (requestId !== plannerRequest.current) return { success: false, cancelled: true };
       if (isProfileIncompleteError(error)) {
-        setShowAiGenerator(false);
+        if (suppressNotice) return { success: false, errorMessage: 'Complete your Health Profile before generating a meal plan.' };
         setShowProfileReadinessModal(true);
-        return;
+        return { success: false, cancelled: true };
       }
-      setNotice({ type: 'offline', text: error?.message || 'NutriBot could not generate a plan right now. Please try again.' });
+      const errorMessage = typeof error?.message === 'string' && !/[^\x00-\x7F]/.test(error.message) ? error.message : 'NutriBot could not generate a meal plan right now. Please try again.';
+      if (!suppressNotice) setNotice({ type: 'offline', text: errorMessage });
+      return { success: false, errorMessage };
     } finally {
+      aiGenerateRequest.current = false;
       if (requestId === plannerRequest.current) setGeneratingPlan(false);
     }
+  };
+
+  const openRegenerateConfirmation = () => {
+    if (generatingPlan) return;
+    setRegenerateDialogError('');
+    setRegenerateDialogStatus('confirm');
+    setShowRegenerateConfirm(true);
+  };
+
+  const runRegeneration = async () => {
+    if (regenerateDialogStatus === 'loading' || generatingPlan) return;
+    setRegenerateDialogError('');
+    setRegenerateDialogStatus('loading');
+    const result = await generateAiPlan({ suppressNotice: true });
+    if (result?.success) {
+      setShowRegenerateConfirm(false);
+      setRegenerateDialogStatus('confirm');
+      return;
+    }
+    if (result?.cancelled) return;
+    setRegenerateDialogError(result?.errorMessage || 'We could not generate a new meal plan. Please try again.');
+    setRegenerateDialogStatus('error');
+  };
+
+  const closeRegenerateConfirmation = () => {
+    if (regenerateDialogStatus === 'loading') return;
+    setShowRegenerateConfirm(false);
+    setRegenerateDialogStatus('confirm');
+    setRegenerateDialogError('');
   };
 
   const requestMealPlanGeneration = () => {
@@ -523,12 +569,11 @@ export default function WeeklyMealPlannerPage() {
       setShowProfileReadinessModal(true);
       return;
     }
-    if (hasUnsavedChanges && !window.confirm('You have unsaved changes. Generating a new plan can replace your draft when applied. Continue?')) return;
-    if (menu.menuId) {
-      setShowPlanExistsDialog(true);
+    if (hasSelectedWeekPlan) {
+      openRegenerateConfirmation();
       return;
     }
-    setShowAiGenerator(true);
+    generateAiPlan();
   };
 
   const replacePreviewMeal = (dayIndex, field, dish) => {
@@ -557,6 +602,7 @@ export default function WeeklyMealPlannerPage() {
       });
       setMenu(normalizeWeeklyMenu(savedMenu, weekStart));
       setAiPreview(null);
+      setShowAiPreview(false);
       setNotice({ type: 'success', text: 'Your AI weekly plan was saved to your account.' });
     } catch (error) {
       setAiSaveError(error?.message || 'We could not save your AI plan. Please sign in and try again.');
@@ -599,6 +645,7 @@ export default function WeeklyMealPlannerPage() {
         })
       }));
     setAiPreview(null);
+    setShowAiPreview(false);
     setHasUnsavedChanges(true);
     setNotice({ type: 'success', text: aiPreview.suggestedMenuTitle ? `AI plan applied: ${aiPreview.suggestedMenuTitle}` : 'Your AI weekly plan is ready to review.' });
   };
@@ -624,6 +671,7 @@ export default function WeeklyMealPlannerPage() {
             </div>
           </header>
 
+          {generatingPlan && !showRegenerateConfirm && <div className="planner-toast is-saving" role="status" aria-live="polite"><Loader2 size={15} className="is-spinning"/><span>Generating your AI meal plan...</span></div>}
           {notice && <div className={`planner-toast is-${notice.type}`} role={notice.type === 'offline' ? 'alert' : 'status'}>
             {notice.type === 'offline' ? <WifiOff size={15}/> : notice.type === 'saving' ? <Loader2 size={15} className="is-spinning"/> : <CheckCircle2 size={15}/>}
             <span>{notice.text}</span><button type="button" onClick={() => setNotice(null)} aria-label="Dismiss message"><X size={14}/></button>
@@ -677,7 +725,7 @@ export default function WeeklyMealPlannerPage() {
             <div className="planner-empty-icon"><Sparkles size={24}/></div>
             <p>YOUR MEAL PLAN</p><h2 id="empty-plan-title">Start a balanced week.</h2>
             <span>Create a personalized plan with AI or add your first dish manually.</span>
-            <div><button type="button" className="planner-btn-primary" onClick={requestMealPlanGeneration} disabled={profileLoading}><Sparkles size={16}/> Generate with AI</button><button type="button" className="planner-btn-ghost" onClick={startManualPlanner} disabled={!plannerDays.length}><Plus size={16}/> Create manually</button></div>
+            <div><button type="button" className="planner-btn-primary" onClick={requestMealPlanGeneration} disabled={profileLoading || generatingPlan}>{generatingPlan ? 'Generating...' : <><Sparkles size={16}/> {generateActionLabel}</>}</button><button type="button" className="planner-btn-ghost" onClick={startManualPlanner} disabled={!plannerDays.length}><Plus size={16}/> Create manually</button></div>
           </section> : <>
             <section className="planner-toolbar" aria-label="Select a day">
               {viewMode === 'day' && <>
@@ -738,7 +786,7 @@ export default function WeeklyMealPlannerPage() {
                 })}
               </article>)}
             </section>}
-            <footer className="planner-actions-footer"><button type="button" className="planner-btn-ghost" onClick={requestMealPlanGeneration}><RefreshCw size={15}/> Regenerate</button><button type="button" className="planner-btn-primary" onClick={savePlan} disabled={saving}>{saving && <Loader2 size={15} className="is-spinning"/>}<Save size={15}/>{saving ? 'Saving…' : 'Save Plan'}</button></footer>
+            <footer className="planner-actions-footer"><button type="button" className="planner-btn-ghost" onClick={requestMealPlanGeneration} disabled={generatingPlan}><RefreshCw size={15}/> {generatingPlan ? 'Generating...' : generateActionLabel}</button><button type="button" className="planner-btn-primary" onClick={savePlan} disabled={saving || generatingPlan}>{saving && <Loader2 size={15} className="is-spinning"/>}<Save size={15}/>{saving ? 'Saving…' : 'Save Plan'}</button></footer>
           </>}
         </main>
       </div>
@@ -780,18 +828,8 @@ export default function WeeklyMealPlannerPage() {
         <footer>{profileReadinessContext === 'manual' ? <button type="button" className="profile-readiness-primary" onClick={() => { window.location.href = `/profile/health${manualProfileTarget}`; }}>Complete dietary preferences</button> : null}<button type="button" className="profile-readiness-secondary" onClick={() => setShowProfileReadinessModal(false)}>Not now</button>{profileReadinessContext !== 'manual' && <button type="button" className="profile-readiness-primary" onClick={() => { window.location.href = '/profile/health'; }}>Complete Health Profile</button>}</footer>
       </section>
     </div>}
-    {showAiGenerator && <div className="meal-dialog-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && !generatingPlan && setShowAiGenerator(false)}>
-      <section className="meal-dialog ai-generator-dialog" role="dialog" aria-modal="true" aria-labelledby="ai-generator-title">
-        <header><div><span>NutriBot AI</span><h2 id="ai-generator-title">Create this week's meals.</h2></div><button type="button" className="meal-dialog-close" onClick={() => setShowAiGenerator(false)} disabled={generatingPlan} aria-label="Close AI generator"><X size={18}/></button></header>
-        <form className="ai-generator-form" onSubmit={generateAiPlan}>
-          <p className="ai-generator-note">Calories, protein, carbs, fat targets and allergies come from your Health Profile — no need to enter them.</p>
-          <p>NutriBot will replace the visible week with a seven-day preview. You can still swap or edit every meal after it is generated.</p>
-          <footer><button type="button" className="planner-btn-ghost" onClick={() => setShowAiGenerator(false)} disabled={generatingPlan}>Cancel</button><button type="submit" className="planner-btn-primary" disabled={generatingPlan}>{generatingPlan ? <><Loader2 size={15} className="is-spinning"/> Generating...</> : <><Sparkles size={15}/> Generate plan</>}</button></footer>
-        </form>
-      </section>
-    </div>}
-    {aiPreview && (
-      <MenuPreviewModal preview={aiPreview} isSaving={savingAiPreview} saveError={aiSaveError} onDismissError={() => setAiSaveError('')} onClose={() => setAiPreview(null)} onSave={persistAiPreview} onRequestReplace={(dayIndex, field, label) => setPreviewReplaceTarget({ dayIndex, field, label })}/>
+    {aiPreview && showAiPreview && (
+      <MenuPreviewModal preview={aiPreview} isSaving={savingAiPreview} isGenerating={generatingPlan} saveError={aiSaveError} onDismissError={() => setAiSaveError('')} onClose={() => setShowAiPreview(false)} onSave={persistAiPreview} onRequestReplace={(dayIndex, field, label) => setPreviewReplaceTarget({ dayIndex, field, label })} onRequestRegenerate={openRegenerateConfirmation}/>
     )}
     {previewReplaceTarget && aiPreview && (
       <MealEditorDialog editor={{ day: { label: aiPreview.weeklyPlan[previewReplaceTarget.dayIndex]?.day || `Day ${previewReplaceTarget.dayIndex + 1}`, meals: [] }, slot: previewReplaceTarget.label, meal: { dishId: null } }} dishes={dishes} vegetarianType={aiPreview.vegetarianType} allergyIngredientIds={allergyIngredientIds} onClose={() => setPreviewReplaceTarget(null)} onSubmit={({ dish }) => { if (dish && getDishCompatibility(dish, aiPreview.vegetarianType, allergyIngredientIds).status !== 'compatible') { setAiSaveError(`Dish “${dish.name}” cannot be verified as compatible with this profile.`); } else if (dish) { replacePreviewMeal(previewReplaceTarget.dayIndex, previewReplaceTarget.field, dish); } setPreviewReplaceTarget(null); }}/>
@@ -804,10 +842,13 @@ export default function WeeklyMealPlannerPage() {
         onClose={() => setShowServiceUnavailableDialog(false)}
       />
     )}
-    {showPlanExistsDialog && (
-      <PlanExistsDialog
-        onConfirm={() => { setShowPlanExistsDialog(false); setShowAiGenerator(true); }}
-        onCancel={() => setShowPlanExistsDialog(false)}
+    {showRegenerateConfirm && (
+      <RegenerateMealPlanDialog
+        status={regenerateDialogStatus}
+        errorMessage={regenerateDialogError}
+        onConfirm={runRegeneration}
+        onRetry={runRegeneration}
+        onCancel={closeRegenerateConfirmation}
       />
     )}
     {pendingNutritionOverflow && (
