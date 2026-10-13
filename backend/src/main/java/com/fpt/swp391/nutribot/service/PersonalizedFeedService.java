@@ -27,6 +27,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.regex.Matcher;
@@ -52,8 +54,15 @@ public class PersonalizedFeedService {
     private static final int FEATURED_TOP_TRACK = 10;
     private static final int TOP_FIVE_SIZE = 5;
     private static final int FALLBACK_TIER_SIZE = 20;
+    // Scores are model-relative values, not probabilities. Group nearby ranks
+    // from the response's observed gap distribution, so refresh can rotate
+    // comparable candidates without promoting a clear relevance outlier.
+    private static final int MAX_RELEVANCE_WINDOW_SIZE = 8;
+    private static final double SCORE_GAP_PERCENTILE = 0.75d;
+    private static final int GENERATION_ROTATION_STEP = 7;
     private static final long RECENT_TRACK_TTL_MS = 3600000; // 1 hour TTL for recent tracking
     private final Map<String, FeedSnapshot> feedSnapshots = new ConcurrentHashMap<>();
+    private final Map<String, CompletableFuture<FeedSnapshot>> snapshotsInFlight = new ConcurrentHashMap<>();
 
     // Track recent top-N for each user to enable session diversity
     // Key: ownerKey, Value: {recentIds: List, timestamp: Instant}
@@ -83,7 +92,7 @@ public class PersonalizedFeedService {
         String ownerKey = user == null ? "guest" : "user:" + user.getUserId();
         SnapshotCursor snapshotCursor = decodeCursor(cursor);
         log.info("TRACE: snapshotCursor={}", snapshotCursor != null ? snapshotCursor.snapshotId().substring(0,8) + " offset=" + snapshotCursor.offset() : "null (creating new)");
-        FeedSnapshot snapshot = snapshotCursor == null ? createSnapshot(user, ownerKey) : getSnapshot(snapshotCursor, ownerKey);
+        FeedSnapshot snapshot = snapshotCursor == null ? createSnapshotOnce(user, ownerKey) : getSnapshot(snapshotCursor, ownerKey);
         log.info("TRACE: snapshot.id={} contentIds.size={}", snapshot.id(), snapshot.contentIds().size());
         int offset = snapshotCursor == null ? 0 : snapshotCursor.offset();
         PersonalizedFeedResponse response = buildPage(snapshot, offset, effectiveLimit);
@@ -91,6 +100,35 @@ public class PersonalizedFeedService {
                 response.getItems().size(), response.getTotal(),
                 response.getNextCursor() != null, response.getNextCursor() != null ? "present" : "null");
         return response;
+    }
+
+    /**
+     * A React development mount or a browser retry can issue two first-page
+     * requests almost simultaneously. They must share one immutable snapshot
+     * instead of each calling AI and advancing the diversity history twice.
+     */
+    private FeedSnapshot createSnapshotOnce(User user, String ownerKey) {
+        CompletableFuture<FeedSnapshot> created = new CompletableFuture<>();
+        CompletableFuture<FeedSnapshot> inFlight = snapshotsInFlight.putIfAbsent(ownerKey, created);
+        if (inFlight != null) {
+            log.info("Coalescing concurrent feed snapshot request for owner={}", ownerKey);
+            try {
+                return inFlight.join();
+            } catch (CompletionException failure) {
+                throw failure.getCause() instanceof RuntimeException runtime ? runtime : failure;
+            }
+        }
+
+        try {
+            FeedSnapshot snapshot = createSnapshot(user, ownerKey);
+            created.complete(snapshot);
+            return snapshot;
+        } catch (RuntimeException failure) {
+            created.completeExceptionally(failure);
+            throw failure;
+        } finally {
+            snapshotsInFlight.remove(ownerKey, created);
+        }
     }
 
     private FeedSnapshot createSnapshot(User user, String ownerKey) {
@@ -313,12 +351,20 @@ public class PersonalizedFeedService {
     private RecommendationResponseDto callAiService(RecommendationRequestDto request) {
         try {
             String requestBody = objectMapper.writeValueAsString(request);
-            String responseBody = restClient.post()
+            // Read raw bytes so a valid JSON payload is not discarded only
+            // because an upstream proxy incorrectly labels it octet-stream.
+            // Jackson below remains the single contract validator.
+            byte[] responseBytes = restClient.post()
                     .uri(aiServiceBaseUrl + "/api/ai/content-recommendations")
                     .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                     .body(requestBody)
                     .retrieve()
-                    .body(String.class);
+                    .body(byte[].class);
+
+            if (responseBytes == null || responseBytes.length == 0) {
+                throw new IllegalStateException("AI recommendation service returned an empty response");
+            }
+            String responseBody = new String(responseBytes, StandardCharsets.UTF_8);
 
             return objectMapper.readValue(responseBody, RecommendationResponseDto.class);
         } catch (Exception e) {
@@ -479,11 +525,9 @@ public class PersonalizedFeedService {
 
     /**
      * Builds a new ranked generation for a refresh while keeping the snapshot immutable
-     * for cursor pagination. The old implementation rotated only tiny equal-score windows;
-     * real AI score distributions frequently made those windows one item wide, so top five
-     * never changed. Here, the candidate pool includes every AI-ranked result followed by
-     * the recency-ranked catalog. Any content featured in this session's history is placed
-     * after unseen candidates, so an item cannot keep occupying the same leading positions.
+     * for cursor pagination. Diversity is only applied inside bounded
+     * relevance windows derived from the observed score gaps; an outlier
+     * remains ahead of lower-relevance candidates.
      */
     private List<Content> applySessionDiversity(
             LinkedHashSet<Integer> orderedIds,
@@ -513,31 +557,16 @@ public class PersonalizedFeedService {
                 }
                 rankedIds.add(item.getContentId());
             }
-            List<Integer> resultIds = new ArrayList<>();
-            List<Integer> qualityPool = new ArrayList<>(rankedIds);
-            orderedIds.stream().filter(id -> !seenRankedIds.contains(id)).forEach(qualityPool::add);
-
-            if (sessionFeaturedIds.isEmpty()) {
-                resultIds.addAll(qualityPool);
-            } else {
-                // A hard session exposure penalty for the featured region. AI-ranked items
-                // still come first; once AI has returned fewer than 50, recency is the
-                // relevance baseline for the remaining catalog candidates.
-                qualityPool.stream().filter(id -> !sessionFeaturedIds.contains(id)).forEach(resultIds::add);
-                qualityPool.stream().filter(sessionFeaturedIds::contains).forEach(resultIds::add);
-
-                long novelTopFive = resultIds.stream().limit(TOP_FIVE_SIZE)
-                        .filter(id -> !sessionFeaturedIds.contains(id)).count();
-                if (novelTopFive < TOP_FIVE_SIZE) {
-                    log.info("Feed diversity target unavailable: owner={}, generation={}, novelTop5={}/{}, qualityPool={}, featuredHistory={}",
-                            ownerKey, generation, novelTopFive, TOP_FIVE_SIZE,
-                            qualityPool.size(), tracker.recentIds());
-                }
+            List<Integer> resultIds = diversifyRelevanceWindows(rankedItems, rankedIds,
+                    sessionFeaturedIds, generation);
+            if (fallback && !rankedIds.isEmpty()) {
+                // In cold-start/fallback mode, recency is the relevance signal.
+                // Keep the newest item leading the tier while rotating the rest.
+                Integer newest = rankedIds.getFirst();
+                resultIds.remove(newest);
+                resultIds.add(0, newest);
             }
-
-            for (Integer id : orderedIds) {
-                if (!resultIds.contains(id)) resultIds.add(id);
-            }
+            orderedIds.stream().filter(id -> !resultIds.contains(id)).forEach(resultIds::add);
 
             List<Integer> topTen = resultIds.stream().limit(FEATURED_TOP_TRACK).toList();
             List<Integer> mergedHistory = new ArrayList<>(topTen);
@@ -546,12 +575,82 @@ public class PersonalizedFeedService {
             recentTops.put(ownerKey, new RecentTopTracker(featuredHistory, Instant.now(), generation + 1));
             int novelInTopFive = (int) resultIds.stream().limit(TOP_FIVE_SIZE)
                     .filter(id -> !sessionFeaturedIds.contains(id)).count();
+            if (novelInTopFive < TOP_FIVE_SIZE) {
+                log.info("Feed diversity limited by relevance-window candidates: owner={}, generation={}, novelTop5={}/{}, featuredHistory={}",
+                        ownerKey, generation, novelInTopFive, TOP_FIVE_SIZE, tracker.recentIds());
+            }
             log.info("Feed diversity generation: owner={}, generation={}, qualityPool={}, featuredHistory={}, " +
                             "novelInTop5={}, targetNovelInTop5={}, finalTop10={}",
-                    ownerKey, generation, qualityPool.size(), tracker.recentIds(), novelInTopFive, TOP_FIVE_SIZE,
+                    ownerKey, generation, rankedIds.size(), tracker.recentIds(), novelInTopFive, TOP_FIVE_SIZE,
                     resultIds.stream().limit(10).toList());
             return resultIds.stream().map(contentMap::get).filter(Objects::nonNull).toList();
         }
+    }
+
+    private List<Integer> diversifyRelevanceWindows(
+            List<RecommendationResponseDto.RecommendationItemDto> rankedItems,
+            List<Integer> rankedIds,
+            Set<Integer> sessionFeaturedIds,
+            long generation) {
+        Map<Integer, Double> scores = rankedItems.stream()
+                .filter(item -> item != null && item.getContentId() != null && item.getScore() != null)
+                .collect(Collectors.toMap(RecommendationResponseDto.RecommendationItemDto::getContentId,
+                        RecommendationResponseDto.RecommendationItemDto::getScore, (left, ignored) -> left,
+                        LinkedHashMap::new));
+        List<Double> gaps = new ArrayList<>();
+        for (int index = 1; index < rankedIds.size(); index++) {
+            Double previous = scores.get(rankedIds.get(index - 1));
+            Double current = scores.get(rankedIds.get(index));
+            if (previous != null && current != null) gaps.add(Math.abs(previous - current));
+        }
+        double gapThreshold = percentile(gaps, SCORE_GAP_PERCENTILE);
+        List<Integer> diversified = new ArrayList<>();
+        List<Integer> window = new ArrayList<>();
+        for (Integer id : rankedIds) {
+            if (!window.isEmpty()) {
+                Double previous = scores.get(window.getLast());
+                Double current = scores.get(id);
+                boolean separateWindow = previous == null || current == null
+                        || Math.abs(previous - current) > gapThreshold
+                        || window.size() >= MAX_RELEVANCE_WINDOW_SIZE;
+                if (separateWindow) {
+                    appendDiversifiedWindow(diversified, window, sessionFeaturedIds, generation);
+                    window.clear();
+                }
+            }
+            window.add(id);
+        }
+        appendDiversifiedWindow(diversified, window, sessionFeaturedIds, generation);
+        log.debug("Feed relevance windows: generation={}, gapThreshold={}", generation, gapThreshold);
+        return diversified;
+    }
+
+    private void appendDiversifiedWindow(List<Integer> destination, List<Integer> window,
+                                         Set<Integer> sessionFeaturedIds, long generation) {
+        List<Integer> unseen = window.stream().filter(id -> !sessionFeaturedIds.contains(id)).toList();
+        List<Integer> seen = window.stream().filter(sessionFeaturedIds::contains).toList();
+        destination.addAll(rotate(unseen, generation));
+        destination.addAll(rotate(seen, generation));
+    }
+
+    private double percentile(List<Double> values, double percentile) {
+        if (values.isEmpty()) return 0.0;
+        List<Double> sorted = values.stream().sorted().toList();
+        // Use the lower percentile rank. With a small score list such as
+        // [0, 0.50, 0], choosing the upper rank would select the exceptional
+        // 0.50 gap itself and incorrectly merge both relevance tiers.
+        int index = (int) Math.floor(percentile * (sorted.size() - 1));
+        return sorted.get(Math.max(0, index));
+    }
+
+    private List<Integer> rotate(List<Integer> ids, long generation) {
+        if (ids.size() < 2) return ids;
+        int shift = (int) Math.floorMod(generation * GENERATION_ROTATION_STEP, ids.size());
+        if (shift == 0) return ids;
+        List<Integer> rotated = new ArrayList<>(ids.size());
+        rotated.addAll(ids.subList(shift, ids.size()));
+        rotated.addAll(ids.subList(0, shift));
+        return rotated;
     }
 
     private record SnapshotCursor(String snapshotId, int offset) { }
