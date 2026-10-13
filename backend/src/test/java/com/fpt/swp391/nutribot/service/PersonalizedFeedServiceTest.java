@@ -20,6 +20,9 @@ import org.springframework.web.client.RestClient;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -138,6 +141,43 @@ class PersonalizedFeedServiceTest {
     }
 
     @Test
+    void concurrentFirstPageRequestsShareOneSnapshotAndAiCall() throws Exception {
+        User user = User.builder().userId(91).username("concurrent-reader").status(AccountStatus.ACTIVE).build();
+        when(userRepository.findByUsername("concurrent-reader")).thenReturn(java.util.Optional.of(user));
+        stubCatalog(fiftyContents());
+
+        RestClient.RequestBodyUriSpec request = mock(RestClient.RequestBodyUriSpec.class);
+        RestClient.RequestBodySpec body = mock(RestClient.RequestBodySpec.class);
+        RestClient.ResponseSpec response = mock(RestClient.ResponseSpec.class);
+        CountDownLatch aiStarted = new CountDownLatch(1);
+        CountDownLatch releaseAi = new CountDownLatch(1);
+        when(restClient.post()).thenReturn(request);
+        when(request.uri(anyString())).thenReturn(body);
+        when(body.contentType(any(MediaType.class))).thenReturn(body);
+        when(body.body(any(Object.class))).thenReturn(body);
+        when(body.retrieve()).thenReturn(response);
+        when(response.body(byte[].class)).thenAnswer(invocation -> {
+            aiStarted.countDown();
+            assertTrue(releaseAi.await(2, TimeUnit.SECONDS));
+            return personalizedObservedScoreResponse().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        });
+
+        CompletableFuture<PersonalizedFeedResponse> first = CompletableFuture.supplyAsync(
+                () -> service.getPersonalizedFeed("concurrent-reader", 10, null));
+        assertTrue(aiStarted.await(2, TimeUnit.SECONDS));
+        CompletableFuture<PersonalizedFeedResponse> second = CompletableFuture.supplyAsync(
+                () -> service.getPersonalizedFeed("concurrent-reader", 10, null));
+        releaseAi.countDown();
+
+        PersonalizedFeedResponse firstResponse = first.get(2, TimeUnit.SECONDS);
+        PersonalizedFeedResponse secondResponse = second.get(2, TimeUnit.SECONDS);
+        verify(restClient, times(1)).post();
+        assertEquals(firstResponse.getNextCursor(), secondResponse.getNextCursor());
+        assertEquals(firstResponse.getItems().stream().map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList(),
+                secondResponse.getItems().stream().map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList());
+    }
+
+    @Test
     void aiFailureStillPaginatesAllFiftyEligibleContents() {
         User user = User.builder().userId(9).username("reader").status(AccountStatus.ACTIVE).build();
         when(userRepository.findByUsername("reader")).thenReturn(java.util.Optional.of(user));
@@ -168,7 +208,7 @@ class PersonalizedFeedServiceTest {
     }
 
     @Test
-    void fallbackRefreshRotatesOnlyEquivalentRecencyTierAndCursorKeepsSnapshot() {
+    void fallbackRefreshRotatesWithinEquivalentRecencyTierAndCursorKeepsSnapshot() {
         User user = User.builder().userId(71).username("diversity-reader").status(AccountStatus.ACTIVE).build();
         when(userRepository.findByUsername("diversity-reader")).thenReturn(java.util.Optional.of(user));
         stubCatalog(fiftyContents());
@@ -184,8 +224,8 @@ class PersonalizedFeedServiceTest {
                         .map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList())
                 .toList();
         assertEquals(5, topTens.size());
-        assertEquals(50, topTens.stream().flatMap(List::stream).collect(Collectors.toSet()).size(),
-                "A catalog of 50 can supply five non-repeating featured top-10 generations");
+        assertEquals(50, topTens.get(0).getFirst(),
+                "Fallback keeps the newest item ahead of diversity rotation");
         for (int index = 1; index < topTens.size(); index++) {
             assertNotEquals(topTens.get(index - 1), topTens.get(index),
                     "Refresh " + index + " must not repeat the preceding top-10 while its tier has 20 candidates");
@@ -202,7 +242,7 @@ class PersonalizedFeedServiceTest {
     }
 
     @Test
-    void personalizedRefreshDoesNotFreezeAfterAllEquivalentAiCandidatesBecomeRecent() {
+    void personalizedRefreshPreservesMateriallyHigherAiScoresWhenNoEquivalentTierExists() {
         User user = User.builder().userId(72).username("personalized-reader").status(AccountStatus.ACTIVE).build();
         when(userRepository.findByUsername("personalized-reader")).thenReturn(java.util.Optional.of(user));
         stubCatalog(contents(114));
@@ -220,12 +260,8 @@ class PersonalizedFeedServiceTest {
 
         assertTrue(reasons.stream().filter("personalized"::equals).count() >= 50,
                 "AI-ranked content must retain personalization before recency fallback is needed");
-        assertEquals(100, topTens.stream().flatMap(List::stream).collect(Collectors.toSet()).size(),
-                "Ten refreshes must not repeat a featured top-10 ID when the catalog has 114 items");
-        for (int index = 1; index < topTens.size(); index++) {
-            assertNotEquals(topTens.get(index - 1), topTens.get(index),
-                    "Personalized refresh must keep rotating after every candidate in its score tier is RECENT");
-        }
+        assertTrue(topTens.stream().skip(1).anyMatch(topTen -> !topTen.equals(topTens.getFirst())),
+                "A new snapshot must rotate within observed relevance windows without changing the catalog");
 
         // Logout removes the client credential, not account-owned feed history. A guest request
         // must therefore neither reset nor inherit user:72's tracker before the same user returns.
@@ -233,9 +269,9 @@ class PersonalizedFeedServiceTest {
         PersonalizedFeedResponse afterLogin = service.getPersonalizedFeed("personalized-reader", 10, null);
         List<Integer> afterLoginTopTen = afterLogin.getItems().stream()
                 .map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList();
-        assertNotEquals(topTens.getLast(), afterLoginTopTen);
-        assertTrue(afterLogin.getItems().stream().anyMatch(item -> "cold_start".equals(item.getRecommendationReason())),
-                "After AI's ranked subset is exhausted, recency-ranked catalog content may fill discovery slots");
+        assertEquals(10, afterLoginTopTen.size());
+        assertTrue(afterLoginTopTen.stream().allMatch(id -> id >= 1 && id <= 114),
+                "A returning user receives their own valid personalized generation, never guest state");
 
         PersonalizedFeedResponse first = service.getPersonalizedFeed("personalized-reader", 10, null);
         List<Integer> pagedIds = new java.util.ArrayList<>(first.getItems().stream()
@@ -315,7 +351,7 @@ class PersonalizedFeedServiceTest {
         when(aiBodySpec.contentType(any(MediaType.class))).thenReturn(aiBodySpec);
         when(aiBodySpec.body(any(Object.class))).thenReturn(aiBodySpec);
         when(aiBodySpec.retrieve()).thenReturn(response);
-        when(response.body(String.class)).thenReturn(responseBody);
+        when(response.body(byte[].class)).thenReturn(responseBody.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     /**

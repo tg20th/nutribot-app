@@ -39,6 +39,14 @@ describe('personalized community feed API', () => {
     expect(result.fallback).toBe(true);
   });
 
+  it('requests a fresh first page when the browser performs a full reload', async () => {
+    apiRequest.mockResolvedValue({ data: { items: [], nextCursor: null } });
+
+    await getPersonalizedPostsPage({ cache: 'no-store' });
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/v1/feed/home?limit=20', { signal: undefined, cache: 'no-store' });
+  });
+
   it('deduplicates repeated typed content while preserving first-seen server order', () => {
     const pageOne = [
       { id: 1, type: 'blog', title: 'A' },

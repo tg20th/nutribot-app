@@ -336,7 +336,7 @@ class PersonalizedFeedIntegrationTest {
             json.append("{\"content_id\":").append(i + 1).append(",\"content_type\":\"BLOG\",\"score\":0.9,\"reason\":\"test\"}");
         }
         json.append("],\"embedding_model\":\"test\"}");
-        when(response.body(String.class)).thenReturn(json.toString());
+        when(response.body(byte[].class)).thenReturn(json.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     private void stubAiResponseEmpty() {
@@ -349,6 +349,6 @@ class PersonalizedFeedIntegrationTest {
         when(bodySpec.body(any(Object.class))).thenReturn(bodySpec);
         when(bodySpec.retrieve()).thenReturn(response);
 
-        when(response.body(String.class)).thenReturn("{\"items\":[],\"embedding_model\":\"test\"}");
+        when(response.body(byte[].class)).thenReturn("{\"items\":[],\"embedding_model\":\"test\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 }
