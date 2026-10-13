@@ -77,7 +77,7 @@ export default function App() {
     <Route path="/community/videos/new" element={<MemberRoute><CreateVideoPage /></MemberRoute>} />
     <Route path="/community/my-content/:type/:id/edit" element={<MemberRoute><CreateBlogPage /></MemberRoute>} />
     <Route path="/chat-history" element={<MemberRoute><ChatHistoryPage /></MemberRoute>} />
-    <Route path="/community/posts/:postId" element={<MemberRoute><CommunityContentDetailPage /></MemberRoute>} />
+    <Route path="/community/posts/:postId" element={<CommunityContentDetailPage />} />
     <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
       <Route index element={<AdminDashboard />} />
       <Route path="users" element={<UserManagementPage />} />
