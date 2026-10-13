@@ -373,10 +373,12 @@ export const prioritizePersonalizedPost = (posts, priorityPost) => {
   return [priorityPost, ...posts.filter((post) => String(contentIdOf(post)) !== String(priorityId))];
 };
 
-export async function getPersonalizedPostsPage({ cursor, signal, limit = 20 } = {}) {
+export async function getPersonalizedPostsPage({ cursor, signal, limit = 20, cache } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) params.set('cursor', cursor);
-  const data = unwrapData(await apiRequest(`/api/v1/feed/home?${params}`, { signal }), {});
+  const requestOptions = { signal };
+  if (cache) requestOptions.cache = cache;
+  const data = unwrapData(await apiRequest(`/api/v1/feed/home?${params}`, requestOptions), {});
   const items = Array.isArray(data?.items) ? data.items : [];
   return {
     posts: items.map((item) => normalizePost(item, item?.contentType)),
