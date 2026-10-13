@@ -636,7 +636,10 @@ public class PersonalizedFeedService {
     private double percentile(List<Double> values, double percentile) {
         if (values.isEmpty()) return 0.0;
         List<Double> sorted = values.stream().sorted().toList();
-        int index = Math.min(sorted.size() - 1, (int) Math.ceil(percentile * sorted.size()) - 1);
+        // Use the lower percentile rank. With a small score list such as
+        // [0, 0.50, 0], choosing the upper rank would select the exceptional
+        // 0.50 gap itself and incorrectly merge both relevance tiers.
+        int index = (int) Math.floor(percentile * (sorted.size() - 1));
         return sorted.get(Math.max(0, index));
     }
 

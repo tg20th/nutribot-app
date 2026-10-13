@@ -115,7 +115,7 @@ class FeedTraceTest {
                     .append(",\"content_type\":\"BLOG\",\"score\":0.9,\"reason\":\"personalized\"}");
         }
         aiResponse.append("],\"embedding_model\":\"test\"}");
-        when(response.body(String.class)).thenReturn(aiResponse.toString());
+        when(response.body(byte[].class)).thenReturn(aiResponse.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
         // === EXECUTE ===
         PersonalizedFeedResponse feed = service.getPersonalizedFeed("reader", 10, null);
@@ -218,7 +218,7 @@ class FeedTraceTest {
                     .append(",\"content_type\":\"BLOG\",\"score\":0.9,\"reason\":\"personalized\"}");
         }
         aiResponse.append("],\"embedding_model\":\"test\"}");
-        when(response.body(String.class)).thenReturn(aiResponse.toString());
+        when(response.body(byte[].class)).thenReturn(aiResponse.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
         PersonalizedFeedResponse feed = service.getPersonalizedFeed("reader", 20, null);
 
@@ -308,7 +308,7 @@ class FeedTraceTest {
                 "{\"content_id\":3,\"content_type\":\"BLOG\",\"score\":0.45,\"reason\":\"personalized\"}," +
                 "{\"content_id\":4,\"content_type\":\"BLOG\",\"score\":0.45,\"reason\":\"personalized\"}" +
                 "],\"embedding_model\":\"test\"}";
-        when(response.body(String.class)).thenReturn(aiResponse);
+        when(response.body(byte[].class)).thenReturn(aiResponse.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
         // First refresh
         PersonalizedFeedResponse feed1 = service.getPersonalizedFeed("reader", 4, null);
@@ -326,18 +326,19 @@ class FeedTraceTest {
 
         // VERIFY: High-score items (1,2) ALWAYS come before low-score items (3,4)
         // Score tier 0 (0.95) should come before tier 5 (0.45)
-        int idx1 = top1.indexOf(1);
-        int idx2 = top1.indexOf(2);
-        int idx3 = top1.indexOf(3);
-        int idx4 = top1.indexOf(4);
-
-        // Items 1,2 should be before 3,4 (different tiers)
-        assertTrue(Math.min(idx1, idx2) < Math.min(idx3, idx4),
-                "High-score items (1,2) should come before low-score items (3,4). Order: " + top1);
+        assertHighScoreTierPrecedesLowScoreTier(top1);
+        assertHighScoreTierPrecedesLowScoreTier(top2);
 
         System.out.println("TRACE TIER ORDERING TEST:");
         System.out.println("  First refresh:  " + top1);
         System.out.println("  Second refresh: " + top2);
+    }
+
+    private void assertHighScoreTierPrecedesLowScoreTier(List<Integer> order) {
+        int lastHighScoreIndex = Math.max(order.indexOf(1), order.indexOf(2));
+        int firstLowScoreIndex = Math.min(order.indexOf(3), order.indexOf(4));
+        assertTrue(lastHighScoreIndex < firstLowScoreIndex,
+                "High-score items (1,2) should both come before low-score items (3,4). Order: " + order);
     }
 
     @Test
@@ -395,7 +396,7 @@ class FeedTraceTest {
                     .append(",\"reason\":\"personalized\"}");
         }
         aiResponse.append("],\"embedding_model\":\"test\"}");
-        when(response.body(String.class)).thenReturn(aiResponse.toString());
+        when(response.body(byte[].class)).thenReturn(aiResponse.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
         // User 1 - first refresh
         PersonalizedFeedResponse feed1 = service.getPersonalizedFeed("user1", 10, null);
@@ -490,7 +491,7 @@ class FeedTraceTest {
                     .append(",\"content_type\":\"BLOG\",\"score\":0.9,\"reason\":\"personalized\"}");
         }
         aiResponse.append("],\"embedding_model\":\"test\"}");
-        when(response.body(String.class)).thenReturn(aiResponse.toString());
+        when(response.body(byte[].class)).thenReturn(aiResponse.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
         // Page 1
         PersonalizedFeedResponse page1 = service.getPersonalizedFeed("reader", 10, null);
