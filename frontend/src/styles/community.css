@@ -741,6 +741,54 @@
 @media(max-width:640px){.meal-picker-backdrop{padding:0;align-items:end}.meal-picker-workspace{width:100%;height:92dvh;max-height:92dvh;border-radius:19px 19px 0 0}.meal-picker-workspace .meal-picker-header{padding:17px 18px 14px}.meal-picker-workspace .meal-picker-header h2{font-size:23px}.meal-picker-workspace-body{display:flex;flex-direction:column;gap:0;padding:14px 18px 0}.meal-picker-browse{min-height:0;flex:1;padding-bottom:72px}.meal-picker-section-heading{padding-left:0}.meal-picker-selection{position:absolute;right:0;bottom:0;left:0;z-index:2;min-height:62px;max-height:62px;padding:12px 18px;border-radius:16px 16px 0 0;border-right:0;border-bottom:0;box-shadow:0 -8px 22px rgba(23,53,41,.08)}.meal-picker-selection.is-open{max-height:58%;min-height:180px}.meal-picker-selection-heading{padding:0;border:0;align-items:center}.meal-picker-selection-heading h3{font-size:14px}.meal-picker-selection-toggle{display:block}.meal-picker-selection:not(.is-open) .meal-picker-selected-list,.meal-picker-selection:not(.is-open) .meal-picker-selection-footer{display:none}.meal-picker-selection.is-open .meal-picker-selected-list{display:block;padding-top:10px}.meal-picker-selection.is-open .meal-picker-selection-footer{display:block}.meal-picker-selection-empty{min-height:90px}.meal-picker-selection-footer{padding-bottom:2px}.meal-picker-dish-row{grid-template-columns:56px minmax(0,1fr) 22px!important}.meal-picker-dish-row img{width:56px!important;height:50px!important}.meal-picker-browse-list{padding-right:4px!important}}
 
 @media(max-width:640px){.meal-picker-selection{min-height:76px;max-height:76px}.meal-picker-selection:not(.is-open) .meal-picker-selected-list{display:none}.meal-picker-selection:not(.is-open) .meal-picker-selection-footer{display:flex;align-items:center;gap:10px;padding-top:8px;border-top:0}.meal-picker-selection:not(.is-open) .meal-picker-total{flex:1;margin:0}.meal-picker-selection:not(.is-open) .meal-picker-submit{width:auto;min-width:118px;min-height:34px}.meal-picker-selection:not(.is-open) .meal-picker-risk-confirm{display:none}.meal-picker-browse{padding-bottom:90px}}
+
+/* Weekly Planner dialogs: one quiet, accessible visual language. */
+.planner-page .meal-dialog-backdrop{z-index:120;display:grid;place-items:center;padding:clamp(16px,3vw,28px);background:rgba(20,37,28,.52);backdrop-filter:blur(5px)}
+.planner-page .meal-dialog{border:1px solid #e0e8dd;border-radius:18px;background:#fffefa;box-shadow:0 22px 60px rgba(23,53,41,.2)}
+.planner-page .meal-dialog>header{padding:20px 22px 16px;border-bottom:1px solid #e6ece4;background:#fffefa}
+.planner-page .meal-dialog h2{font-size:24px;line-height:1.08;letter-spacing:-.04em}
+.planner-page .meal-dialog>header span{margin-bottom:5px;color:#718077;font-size:9px;letter-spacing:.12em}
+.planner-dialog-heading{display:flex;align-items:flex-start;gap:11px;min-width:0}
+.planner-dialog-heading>div{min-width:0}
+.planner-dialog-icon{width:32px;height:32px;display:grid;place-items:center;flex:none;border-radius:9px;background:#edf5e9;color:#315c2b}
+.planner-dialog-icon.is-error{background:#fff0ec;color:#a24b3e}.planner-dialog-icon.is-warning{background:#fff6df;color:#9a6a1f}
+.planner-page .meal-dialog-close{width:32px;height:32px;border-radius:8px;background:#f1f5ef;color:#315c2b}
+.planner-page .meal-dialog-close:hover,.planner-page .meal-dialog-close:focus-visible{background:#315c2b;color:#fff;outline:2px solid #9fc49b;outline-offset:2px}
+.planner-page .meal-dialog>footer{gap:8px;padding:14px 22px 18px;border-top:1px solid #e7ece5;background:#fffefa}
+.planner-page .meal-dialog>footer .planner-btn-ghost,.planner-page .meal-dialog>footer .planner-btn-primary{min-height:38px;padding:0 13px;border-radius:9px;font-size:11px}
+.planner-page .meal-dialog>footer .planner-btn-ghost{border:1px solid #cbd8c9;background:#fff;color:#315c2b}
+.planner-page .meal-dialog>footer .planner-btn-primary{background:#315c2b;color:#fff}
+.planner-page .meal-dialog>footer .planner-btn-primary:hover{background:#254a21}
+.planner-page .meal-dialog:focus{outline:0}.planner-page .meal-dialog button:focus-visible,.planner-page .meal-dialog input:focus-visible{outline:2px solid #7da879;outline-offset:2px}
+.planner-page .plan-exists-body,.planner-page .service-unavailable-body{padding:20px 22px 22px}.planner-page .plan-exists-dialog,.planner-page .service-unavailable-dialog{width:min(100%,500px)}
+.planner-page .plan-exists-body p,.planner-page .service-unavailable-body p{margin:0;color:#596b60;font-size:13px;line-height:1.6}
+.planner-page .service-unavailable-draft-note{margin-top:12px!important;padding:10px 12px;border:1px solid #dfeadb;border-radius:9px;background:#f3f8f0;color:#416346!important;font-size:11px!important}
+.planner-page .nutrition-overflow-dialog{width:min(100%,450px)}.planner-page .nutrition-overflow-dialog .overflow-body{padding:18px 22px 20px}.planner-page .nutrition-overflow-dialog .overflow-body p{font-size:13px;line-height:1.55}
+.planner-page .grocery-dialog{width:min(100%,540px)}.planner-page .grocery-list{max-height:min(55dvh,500px);padding:8px 22px 14px}.planner-page .grocery-list>div{padding:11px 0}
+.planner-page .ai-generator-dialog{width:min(100%,560px)}.planner-page .ai-generator-form{padding:20px 22px 0}.planner-page .ai-generator-form>p{font-size:13px;line-height:1.6}.planner-page .ai-generator-form footer{margin:2px -22px 0;padding:14px 22px 18px;background:#fffefa}
+.planner-page .ai-preview-dialog{width:min(100%,900px);max-height:min(780px,calc(100dvh - 32px))}.planner-page .ai-preview-days{max-height:min(55dvh,500px)}
+@media(max-width:640px){.planner-page .meal-dialog-backdrop{padding:14px;align-items:center}.planner-page .meal-dialog,.planner-page .meal-picker-workspace{max-height:calc(100dvh - 28px);border-radius:16px}.planner-page .meal-dialog>header{padding:17px 18px 14px}.planner-page .meal-dialog>footer{padding:13px 18px 16px}.planner-page .meal-dialog>footer button{flex:1}.planner-page .meal-dialog h2{font-size:21px}.planner-page .meal-picker-workspace{height:calc(100dvh - 28px)}.planner-page .ai-preview-dialog{max-height:calc(100dvh - 28px)}.planner-page .grocery-list{max-height:52dvh;padding-left:18px;padding-right:18px}}
+@media(prefers-reduced-motion:reduce){.planner-page .meal-dialog-backdrop,.planner-page .meal-dialog{transition:none!important;animation:none!important}}
+
+/* The dialogs are rendered at the app root, outside the page wrapper. */
+.meal-dialog-backdrop .meal-dialog{border:1px solid #e0e8dd;border-radius:18px;background:#fffefa;box-shadow:0 22px 60px rgba(23,53,41,.2)}
+.meal-dialog-backdrop .meal-dialog>header{padding:20px 22px 16px;border-bottom:1px solid #e6ece4;background:#fffefa}
+.meal-dialog-backdrop .meal-dialog h2{font-size:24px;line-height:1.08;letter-spacing:-.04em}
+.meal-dialog-backdrop .meal-dialog-close{width:32px;height:32px;border-radius:8px;background:#f1f5ef;color:#315c2b}
+.meal-dialog-backdrop .meal-dialog-close:hover,.meal-dialog-backdrop .meal-dialog-close:focus-visible{background:#315c2b;color:#fff;outline:2px solid #9fc49b;outline-offset:2px}
+.meal-dialog-backdrop .meal-dialog>footer{gap:8px;padding:14px 22px 18px;border-top:1px solid #e7ece5;background:#fffefa}
+.meal-dialog-backdrop .meal-dialog>footer .planner-btn-ghost,.meal-dialog-backdrop .meal-dialog>footer .planner-btn-primary{min-height:38px;padding:0 13px;border-radius:9px;font-size:11px}
+.meal-dialog-backdrop .meal-dialog>footer .planner-btn-ghost{border:1px solid #cbd8c9;background:#fff;color:#315c2b}
+.meal-dialog-backdrop .meal-dialog>footer .planner-btn-primary{background:#315c2b;color:#fff}
+.meal-dialog-backdrop .meal-dialog:focus{outline:0}.meal-dialog-backdrop .meal-dialog button:focus-visible,.meal-dialog-backdrop .meal-dialog input:focus-visible{outline:2px solid #7da879;outline-offset:2px}
+.plan-exists-body,.service-unavailable-body{padding:20px 22px 22px}.plan-exists-dialog,.service-unavailable-dialog{width:min(100%,500px)}
+.plan-exists-body p,.service-unavailable-body p{margin:0;color:#596b60;font-size:13px;line-height:1.6}
+.service-unavailable-draft-note{margin-top:12px!important;padding:10px 12px;border:1px solid #dfeadb;border-radius:9px;background:#f3f8f0;color:#416346!important;font-size:11px!important}
+.nutrition-overflow-dialog{width:min(100%,450px)}.nutrition-overflow-dialog .overflow-body{padding:18px 22px 20px}
+.grocery-dialog{width:min(100%,540px)}.grocery-list{max-height:min(55dvh,500px)}
+.ai-generator-dialog{width:min(100%,560px)}.ai-generator-form{padding:20px 22px 0}.ai-generator-form>p{font-size:13px;line-height:1.6}.ai-generator-form footer{margin:2px -22px 0;padding:14px 22px 18px;background:#fffefa}
+.ai-preview-dialog{width:min(100%,900px);max-height:min(780px,calc(100dvh - 32px))}
+@media(max-width:640px){.meal-dialog-backdrop{padding:14px;align-items:center}.meal-dialog-backdrop .meal-dialog,.meal-picker-workspace{max-height:calc(100dvh - 28px);border-radius:16px}.meal-dialog-backdrop .meal-dialog>header{padding:17px 18px 14px}.meal-dialog-backdrop .meal-dialog>footer{padding:13px 18px 16px}.meal-dialog-backdrop .meal-dialog>footer button{flex:1}.meal-dialog-backdrop .meal-dialog h2{font-size:21px}.meal-picker-workspace{height:calc(100dvh - 28px)}.ai-preview-dialog{max-height:calc(100dvh - 28px)}.grocery-list{max-height:52dvh;padding-left:18px;padding-right:18px}}
 @media(max-width:640px){.ai-generator-form{padding:18px 18px 0}.ai-generator-grid{grid-template-columns:1fr}.ai-generator-form footer{margin-left:-18px;margin-right:-18px;padding:14px 18px 18px}.planner-btn-ai{flex:1;justify-content:center}}
 @media(max-width:640px){.ai-preview-days{padding:0 18px}.ai-preview-days>article{grid-template-columns:1fr;gap:12px}.ai-preview-days dl{grid-template-columns:1fr;gap:12px}.ai-preview-days>article>header{flex-direction:row;align-items:center}.ai-preview-dialog>footer{padding-left:18px;padding-right:18px}}
 @media(max-width:640px){.ai-preview-summary{padding-left:18px;padding-right:18px}.ai-preview-meals{grid-template-columns:1fr}.ai-preview-warning{margin-left:18px;margin-right:18px}}
