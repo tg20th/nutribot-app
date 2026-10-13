@@ -41,6 +41,15 @@ export function prepareFeedCacheForPageLoad() {
   return pageLoadWasReload;
 }
 
+/**
+ * Keep the reload result stable until the initial Feed render commits so a
+ * discarded StrictMode render cannot consume it. Later SPA remounts must be
+ * allowed to restore their in-memory snapshots.
+ */
+export function completeFeedPageLoad() {
+  pageLoadWasReload = false;
+}
+
 function isFresh(snapshot) {
   return snapshot && Date.now() - snapshot.savedAt < CACHE_TTL_MS;
 }
