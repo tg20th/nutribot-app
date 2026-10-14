@@ -198,7 +198,7 @@ class ContentRecipeSuggestionReviewServiceTest {
 
         when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
-        when(contentRepository.findPublishedById(82, "published")).thenReturn(Optional.of(content));
+        when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
         when(categoryRepository.findById(20)).thenReturn(Optional.of(category(20, "RECIPE")));
         when(categoryRepository.findBySlug("rau-cu")).thenReturn(Optional.of(category(5, "INGREDIENT")));
         when(dishRepository.findByNameIgnoreCase("Bún gạo lứt rau củ")).thenReturn(Optional.empty());
@@ -263,7 +263,7 @@ class ContentRecipeSuggestionReviewServiceTest {
 
         when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
-        when(contentRepository.findPublishedById(82, "published")).thenReturn(Optional.of(content));
+        when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
         when(dishRepository.findByNameIgnoreCase("Bún gạo lứt rau củ")).thenReturn(Optional.of(existingDish));
         when(recipeRepository.findByDishId(50)).thenReturn(Optional.of(existingRecipe));
 
@@ -276,13 +276,40 @@ class ContentRecipeSuggestionReviewServiceTest {
     }
 
     @Test
+    @DisplayName("Approve nội dung có tác giả bị cảnh cáo (WARN) vẫn duyệt được vì chỉ xét trạng thái published")
+    void review_approve_warnedAuthor_stillApproved() {
+        Content content = content(20);
+        content.getUser().setStatus(AccountStatus.WARN);
+        ContentRecipeSuggestion suggestion = pendingSuggestion(content);
+        suggestion.setIngredientsJson(null);
+        suggestion.setRecipeStepsJson(null);
+
+        Dish existingDish = Dish.builder().dishId(50).name("Bún gạo lứt rau củ").build();
+        Recipe existingRecipe = Recipe.builder().recipeId(60).dishId(50).build();
+
+        when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
+        when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
+        when(dishRepository.findByNameIgnoreCase("Bún gạo lứt rau củ")).thenReturn(Optional.of(existingDish));
+        when(recipeRepository.findByDishId(50)).thenReturn(Optional.of(existingRecipe));
+
+        ContentRecipeSuggestionResponse response = service.review(700, request("APPROVE", null), "admin");
+
+        assertEquals("APPROVED", response.getStatus());
+        assertEquals(50, response.getDishId());
+        assertEquals(60, response.getRecipeId());
+        assertEquals("APPROVED", suggestion.getStatus());
+        verify(contentRepository, never()).findPublishedById(anyInt(), anyString());
+    }
+
+    @Test
     @DisplayName("Approve nội dung nguồn đã ngừng công khai -> ConflictException, không tạo dữ liệu")
     void review_approve_staleContent_conflict() {
         ContentRecipeSuggestion suggestion = pendingSuggestion(content(20));
 
         when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
-        when(contentRepository.findPublishedById(82, "published")).thenReturn(Optional.empty());
+        when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.empty());
 
         assertThrows(ConflictException.class,
                 () -> service.review(700, request("APPROVE", null), "admin"));
@@ -351,7 +378,7 @@ class ContentRecipeSuggestionReviewServiceTest {
 
         when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
-        when(contentRepository.findPublishedById(82, "published")).thenReturn(Optional.of(content));
+        when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
 
         assertThrows(BadRequestException.class,
                 () -> service.review(700, request("APPROVE", null), "admin"));

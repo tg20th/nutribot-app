@@ -49,6 +49,10 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
             @Param("contentId") Integer contentId,
             @Param("status") String status);
 
+    // NB-61: revalidate nội dung nguồn còn published khi Admin duyệt đề xuất.
+    // Không phụ thuộc trạng thái tác giả để nhất quán với điều kiện sinh đề xuất (NB-60).
+    Optional<Content> findByContentIdAndStatus(Integer contentId, String status);
+
     Optional<Content> findByContentIdAndUserUserId(Integer contentId, Integer userId);
 
     Page<Content> findByUserUserId(Integer userId, Pageable pageable);
