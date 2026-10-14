@@ -21,6 +21,8 @@ from app.services.meal_planner_service import MealPlannerService
 from app.schemas.nutrition import NutritionCalculationRequest, NutritionCalculationResponse
 from app.services.nutrition_service import NutritionCalculationService
 from app.schemas.image_verification import ImageRelevanceRequest, ImageRelevanceResponse
+from app.schemas.recipe_extraction import RecipeExtractionRequest, RecipeExtractionResponse
+from app.services.recipe_extraction_service import RecipeExtractionService
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +154,15 @@ def create_app(
         service: GeminiService = Depends(_get_gemini_service),
     ) -> ImageRelevanceResponse:
         return await service.verify_image_relevance(request)
+
+    @application.post(
+        "/api/ai/extract-recipe",
+        response_model=RecipeExtractionResponse,
+        tags=["Recipe Extraction"],
+        summary="Trích xuất công thức có cấu trúc từ nội dung Blog/Video đã publish",
+    )
+    async def extract_recipe(request: RecipeExtractionRequest) -> RecipeExtractionResponse:
+        return await RecipeExtractionService(application.state.gemini_service).extract(request)
 
     return application
 

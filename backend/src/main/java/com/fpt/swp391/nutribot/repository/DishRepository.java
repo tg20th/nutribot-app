@@ -11,6 +11,8 @@ public interface DishRepository extends JpaRepository<Dish, Integer> {
 
     Optional<Dish> findByDishIdAndActiveTrue(Integer dishId);
 
+    Optional<Dish> findByNameIgnoreCase(String name);
+
     List<Dish> findAllByDishIdInAndActiveTrue(Collection<Integer> dishIds);
 
     List<Dish> findAllByActiveTrueAndCaloriesIsNotNullOrderByNameAsc();
