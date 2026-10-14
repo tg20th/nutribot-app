@@ -176,7 +176,7 @@ public class ContentRecipeSuggestionReviewService {
             throw new ConflictException("Đề xuất không gắn với nội dung nguồn hợp lệ");
         }
 
-        Content freshContent = contentRepository.findPublishedById(content.getContentId(), PUBLISHED_STATUS)
+        Content freshContent = contentRepository.findByContentIdAndStatus(content.getContentId(), PUBLISHED_STATUS)
                 .orElseThrow(() -> new ConflictException(
                         "Nội dung nguồn không còn công khai, không thể duyệt đề xuất"));
 
