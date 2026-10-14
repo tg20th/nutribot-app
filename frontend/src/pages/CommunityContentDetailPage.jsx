@@ -43,6 +43,9 @@ export default function CommunityContentDetailPage() {
   const { postId } = useParams();
   const location = useLocation();
   const requestedReturnTo = location.state?.returnTo;
+  // Only RelatedContentSection supplies this state. Other detail entry points
+  // continue using their existing search, my-content, and feed return logic.
+  const relatedContentReturnState = location.state?.relatedContentReturnState;
   const isMyContentSource = location.state?.source === 'my-content';
   const sourceContentType = location.state?.contentType;
   const searchReturnState = location.state?.restoreSearch ? { restoreSearch: true } : undefined;
@@ -100,11 +103,12 @@ export default function CommunityContentDetailPage() {
   const image = post.type === 'gallery' ? post.images[0] : post.image;
   const nutrition = post.nutrition ?? { carbs: '—', fat: '—', fiber: '—', sodium: '—' };
 
-  const returnState = isSearchReturn
-    ? searchReturnState
-    : isMyContentReturn && Number.isFinite(Number(post.viewCount))
-      ? { viewedContentId: post.id, viewCount: Number(post.viewCount) }
-      : undefined;
+  const returnState = relatedContentReturnState
+    ?? (isSearchReturn
+      ? searchReturnState
+      : isMyContentReturn && Number.isFinite(Number(post.viewCount))
+        ? { viewedContentId: post.id, viewCount: Number(post.viewCount) }
+        : undefined);
 
   return <div className="community-page community-detail-page" ref={page}>
     <CommunityTopBar query={query} onQueryChange={setQuery}/>
