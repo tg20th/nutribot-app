@@ -5,11 +5,13 @@ import com.fpt.swp391.nutribot.dto.response.AdminContentResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentModeration;
+import com.fpt.swp391.nutribot.event.ContentPublishedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.ContentModerationRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -29,6 +31,7 @@ public class AdminModerationService {
 
     private final ContentRepository contentRepository;
     private final ContentModerationRepository contentModerationRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public PagedResponse<AdminContentResponse> getPendingContents(String contentType, int page, int size) {
@@ -82,6 +85,12 @@ public class AdminModerationService {
         });
 
         ContentModeration cm = contentModerationRepository.findByContentId(contentId).orElse(null);
+
+        // NB-60: sau khi duyệt published, phát sự kiện để đánh giá tạo recipe suggestion bất đồng bộ
+        if ("APPROVE".equals(action)) {
+            eventPublisher.publishEvent(new ContentPublishedEvent(contentId));
+        }
+
         return toResponse(saved, cm);
     }
 
