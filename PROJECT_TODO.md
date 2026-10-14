@@ -246,5 +246,5 @@
 ### 📋 KHÁNH (BA & React FE - 2 tasks)
 - [x] **#56 [FE] Component Thẻ Gợi ý Nhà hàng** ✅
   - *Mô tả:* Hiển thị dưới trang chi tiết món ăn/công thức: "Bạn có thể thưởng thức món này tại các nhà hàng sau". Tự động tìm kiếm nhà hàng theo món ăn qua Goong Maps.
-- [ ] **#58 [FE] Component Khối Nội dung Liên quan**
+- [x] **#58 [FE] Component Khối Nội dung Liên quan** ✅
   - *Mô tả:* Hiển thị các bài viết và video gợi ý liên quan ở cuối trang bài viết.
