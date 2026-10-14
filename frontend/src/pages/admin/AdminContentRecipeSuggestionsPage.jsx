@@ -1,8 +1,8 @@
 import { Check, ChevronLeft, ChevronRight, ExternalLink, Eye, FileText, ListOrdered, MapPin, PlaySquare, Soup, UserRound, UtensilsCrossed, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingState, Toast } from '../../components/admin/AdminUi';
 import { contentRecipeSuggestionsApi } from '../../services/contentRecipeSuggestionsApi';
+import { getPost } from '../../services/communityApi';
 import '../../styles/admin-content-recipe-suggestions.css';
 
 const pageSize = 10;
@@ -24,12 +24,12 @@ function SuggestionStatus({ status }) {
   return <span className={`recipe-suggestion-status is-${safeStatus}`}>{statusLabel(status)}</span>;
 }
 
-function SourceContentLink({ source }) {
+function SourceContentLink({ source, onOpenSource }) {
   if (source.url) {
     return <a className="recipe-suggestion-source-link" href={source.url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open source</a>;
   }
   if (!source.contentId) return null;
-  return <Link className="recipe-suggestion-source-link" to={`/community/posts/${source.contentId}`} state={{ contentType: source.contentType }}><ExternalLink size={15} /> Open source</Link>;
+  return <button type="button" className="recipe-suggestion-source-link" onClick={() => onOpenSource(source)}><Eye size={15} /> View source</button>;
 }
 
 function NutritionGrid({ nutrition }) {
@@ -44,7 +44,7 @@ function NutritionGrid({ nutrition }) {
   return <div className="recipe-suggestion-nutrition-grid">{values.map(([label, value, unit]) => <div key={label}><span>{label}</span><strong>{value}<small> {unit}</small></strong></div>)}</div>;
 }
 
-function RecipeDetail({ suggestion, showReviewControls, onReview, submitting }) {
+function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, submitting }) {
   const { source, dish, recipe, nutrition, ingredients, restaurant } = suggestion;
   const ContentIcon = source.contentType === 'VIDEO' ? PlaySquare : FileText;
   return <article className="recipe-suggestion-detail" aria-label="Suggestion detail">
@@ -58,7 +58,7 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, submitting }) 
         <div className="recipe-suggestion-source-type"><ContentIcon size={18} /><span>{source.contentType === 'VIDEO' ? 'Video source' : 'Blog source'}</span></div>
         <h2>{source.title}</h2>
         <div className="recipe-suggestion-source-meta"><span><UserRound size={14} /> {source.authorName}</span><span><Eye size={14} /> {source.viewCount ?? 0} views</span><span>{source.voteCount ?? 0} votes</span></div>
-        <SourceContentLink source={source} />
+        <SourceContentLink source={source} onOpenSource={onOpenSource} />
       </section>
 
       <section className="recipe-suggestion-section">
@@ -89,9 +89,44 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, submitting }) 
 
       {suggestion.rejectionReason && <section className="recipe-suggestion-review-note"><strong>Review note</strong><p>{suggestion.rejectionReason}</p></section>}
       {suggestion.reviewedAt && <footer className="recipe-suggestion-review-meta">Reviewed {formatDate(suggestion.reviewedAt)}{suggestion.reviewerName ? ` by ${suggestion.reviewerName}` : ''}</footer>}
-      {showReviewControls && suggestion.status === 'PENDING' && <footer className="recipe-suggestion-review-actions"><div><strong>Preview review controls</strong><span>These actions only update local preview data.</span></div><div><button type="button" className="admin-btn secondary" disabled={submitting} onClick={() => onReview('REJECT')}><X size={16} /> Reject</button><button type="button" className="admin-btn primary" disabled={submitting} onClick={() => onReview('APPROVE')}><Check size={16} /> Approve</button></div></footer>}
+      {showReviewControls && suggestion.status === 'PENDING' && <footer className="recipe-suggestion-review-actions"><div><strong>Review controls</strong><span>Approve to import this dish into the catalog, or reject it with a reason.</span></div><div><button type="button" className="admin-btn secondary" disabled={submitting} onClick={() => onReview('REJECT')}><X size={16} /> Reject</button><button type="button" className="admin-btn primary" disabled={submitting} onClick={() => onReview('APPROVE')}><Check size={16} /> Approve</button></div></footer>}
     </div>
   </article>;
+}
+
+function SourceContentModal({ open, loading, error, post, onClose, onRetry }) {
+  if (!open) return null;
+  const story = String(post?.cleanBody || post?.body || '').trim();
+  return <div className="admin-modal-backdrop" onMouseDown={onClose}>
+    <section className="admin-dialog source-content-dialog" role="dialog" aria-modal="true" aria-labelledby="source-content-title" onMouseDown={(event) => event.stopPropagation()}>
+      <header className="source-content-head">
+        <div><p>SOURCE CONTENT</p><h2 id="source-content-title">{post?.title || 'Source content'}</h2></div>
+        <button type="button" className="source-content-close" onClick={onClose} aria-label="Close source content"><X size={18} /></button>
+      </header>
+      {loading ? <div className="source-content-state"><LoadingState /></div>
+        : error ? <div className="source-content-state"><ErrorState onRetry={onRetry} /></div>
+          : !post ? <div className="source-content-state"><EmptyState title="Source content is unavailable." text="The article or video could not be loaded from the server." /></div>
+            : <article className="source-content-body">
+              {post.type === 'video' && post.videoUrl
+                ? <video className="source-content-media" controls preload="metadata" src={post.videoUrl} poster={post.image || undefined} />
+                : post.image && <img className="source-content-media" src={post.image} alt={post.title} />}
+              <div className="source-content-meta">
+                <span><UserRound size={14} /> {post.author || 'Unknown author'}</span>
+                <span><Eye size={14} /> {post.viewCount ?? 0} views</span>
+                {post.createdAt && <time dateTime={post.createdAt}>{formatDate(post.createdAt)}</time>}
+              </div>
+              <div className="source-content-nutrition">
+                <div><strong>{post.calories ?? '—'}<small> kcal</small></strong><span>Calories</span></div>
+                <div><strong>{post.protein ?? '—'}<small> g</small></strong><span>Protein</span></div>
+                <div><strong>{post.nutrition?.carbs ?? '—'}</strong><span>Carbs</span></div>
+                <div><strong>{post.nutrition?.fat ?? '—'}</strong><span>Healthy fats</span></div>
+              </div>
+              {Array.isArray(post.pantryItems) && post.pantryItems.length > 0 && <section className="source-content-section"><h3>Ingredients</h3><ul>{post.pantryItems.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></section>}
+              {Array.isArray(post.steps) && post.steps.length > 0 && <section className="source-content-section"><h3>Method</h3><ol>{post.steps.map((step, index) => <li key={`${step}-${index}`}>{step}</li>)}</ol></section>}
+              {story && <section className="source-content-section"><h3>{post.type === 'video' ? 'About this video' : 'The story'}</h3>{story.split(/\n\n+/).filter(Boolean).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</section>}
+            </article>}
+    </section>
+  </div>;
 }
 
 export default function AdminContentRecipeSuggestionsPage() {
@@ -113,6 +148,11 @@ export default function AdminContentRecipeSuggestionsPage() {
   const [reviewError, setReviewError] = useState('');
   const [submittingReview, setSubmittingReview] = useState(false);
   const [toast, setToast] = useState('');
+  const [source, setSource] = useState(null);
+  const [sourcePost, setSourcePost] = useState(null);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceError, setSourceError] = useState(false);
+  const [sourceRefresh, setSourceRefresh] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -147,11 +187,33 @@ export default function AdminContentRecipeSuggestionsPage() {
     return () => controller.abort();
   }, [detailRefresh, selectedId]);
 
+  useEffect(() => {
+    if (!source?.contentId) return undefined;
+    const controller = new AbortController();
+    setSourcePost(null);
+    setSourceLoading(true);
+    setSourceError(false);
+    getPost(source.contentId, controller.signal)
+      .then((next) => { if (!controller.signal.aborted) setSourcePost(next); })
+      .catch((requestError) => { if (!controller.signal.aborted && requestError?.name !== 'AbortError') setSourceError(true); })
+      .finally(() => { if (!controller.signal.aborted) setSourceLoading(false); });
+    return () => controller.abort();
+  }, [source, sourceRefresh]);
+
+  useEffect(() => {
+    if (!source) return undefined;
+    const onKey = (event) => { if (event.key === 'Escape') setSource(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [source]);
+
   const selected = useMemo(() => result.content.find((item) => item.suggestionId === selectedId) ?? null, [result.content, selectedId]);
   const changeStatus = (nextStatus) => { setStatus(nextStatus); setPage(1); setSelectedId(null); };
   const retry = () => setRefreshKey((value) => value + 1);
   const openReview = (action) => { setReviewDialog(action); setReviewReason(''); setReviewError(''); };
   const closeReview = () => { if (!submittingReview) setReviewDialog(null); };
+  const openSource = (sourceInfo) => setSource({ contentId: sourceInfo.contentId, contentType: sourceInfo.contentType });
+  const closeSource = () => setSource(null);
   const submitReview = async () => {
     if (!selectedId || !reviewDialog || submittingReview) return;
     if (reviewDialog === 'REJECT' && !reviewReason.trim()) { setReviewError('Enter a reason before rejecting this suggestion.'); return; }
@@ -161,7 +223,7 @@ export default function AdminContentRecipeSuggestionsPage() {
       const updated = await contentRecipeSuggestionsApi.review(selectedId, reviewDialog, reviewReason);
       setDetail(updated);
       setReviewDialog(null);
-      setToast(reviewDialog === 'APPROVE' ? 'Suggestion approved in preview.' : 'Suggestion rejected in preview.');
+      setToast(reviewDialog === 'APPROVE' ? 'Suggestion approved.' : 'Suggestion rejected.');
       setRefreshKey((value) => value + 1);
     } catch (requestError) {
       if (requestError?.status === 409 || requestError?.status === 404) {
@@ -198,10 +260,11 @@ export default function AdminContentRecipeSuggestionsPage() {
             {detailLoading ? <section className="admin-panel recipe-suggestion-detail-state"><LoadingState /></section>
               : detailError ? <section className="admin-panel recipe-suggestion-detail-state"><ErrorState onRetry={() => setDetailRefresh((value) => value + 1)} /></section>
                 : detailUnavailable ? <section className="admin-panel recipe-suggestion-detail-state"><EmptyState title="Suggestion is no longer available." text="The server reported that this suggestion or its source content cannot be reviewed." /></section>
-                : detail ? <RecipeDetail suggestion={detail} showReviewControls={preview} onReview={openReview} submitting={submittingReview} />
+                : detail ? <RecipeDetail suggestion={detail} showReviewControls onReview={openReview} onOpenSource={openSource} submitting={submittingReview} />
                   : selected ? <section className="admin-panel recipe-suggestion-detail-state"><EmptyState title="Suggestion detail is unavailable." text="The source may have changed or is no longer available on the server." /></section> : null}
           </div>}
-    {reviewDialog && <div className="admin-modal-backdrop" onMouseDown={closeReview}><section className="admin-dialog recipe-suggestion-review-dialog" role="dialog" aria-modal="true" aria-labelledby="suggestion-review-title" onMouseDown={(event) => event.stopPropagation()}><p>PREVIEW REVIEW</p><h2 id="suggestion-review-title">{reviewDialog === 'APPROVE' ? 'Approve this suggestion?' : 'Reject this suggestion?'}</h2><span>{reviewDialog === 'APPROVE' ? 'The preview will show the approved state after confirmation.' : 'State why this proposal should not enter the catalog.'}</span>{reviewDialog === 'REJECT' && <label>Rejection reason<textarea value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} placeholder="Example: nutrition information needs a verifiable source" aria-invalid={Boolean(reviewError)} />{reviewError && <small>{reviewError}</small>}</label>}<div><button type="button" className="admin-btn secondary" disabled={submittingReview} onClick={closeReview}>Cancel</button><button type="button" className={`admin-btn ${reviewDialog === 'APPROVE' ? 'primary' : 'danger'}`} disabled={submittingReview} onClick={submitReview}>{submittingReview ? 'Saving...' : reviewDialog === 'APPROVE' ? 'Approve' : 'Reject'}</button></div></section></div>}
+    {reviewDialog && <div className="admin-modal-backdrop" onMouseDown={closeReview}><section className="admin-dialog recipe-suggestion-review-dialog" role="dialog" aria-modal="true" aria-labelledby="suggestion-review-title" onMouseDown={(event) => event.stopPropagation()}><p>REVIEW</p><h2 id="suggestion-review-title">{reviewDialog === 'APPROVE' ? 'Approve this suggestion?' : 'Reject this suggestion?'}</h2><span>{reviewDialog === 'APPROVE' ? 'The proposed dish and recipe will be imported into the catalog.' : 'State why this proposal should not enter the catalog.'}</span>{reviewDialog === 'REJECT' && <label>Rejection reason<textarea value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} placeholder="Example: nutrition information needs a verifiable source" aria-invalid={Boolean(reviewError)} />{reviewError && <small>{reviewError}</small>}</label>}<div><button type="button" className="admin-btn secondary" disabled={submittingReview} onClick={closeReview}>Cancel</button><button type="button" className={`admin-btn ${reviewDialog === 'APPROVE' ? 'primary' : 'danger'}`} disabled={submittingReview} onClick={submitReview}>{submittingReview ? 'Saving...' : reviewDialog === 'APPROVE' ? 'Approve' : 'Reject'}</button></div></section></div>}
+    <SourceContentModal open={Boolean(source)} loading={sourceLoading} error={sourceError} post={sourcePost} onClose={closeSource} onRetry={() => setSourceRefresh((value) => value + 1)} />
     <Toast message={toast} onDismiss={() => setToast('')} />
     {preview && <span className="recipe-suggestions-preview-marker">Preview data</span>}
   </div>;

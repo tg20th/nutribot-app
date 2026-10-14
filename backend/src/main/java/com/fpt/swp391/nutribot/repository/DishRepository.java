@@ -13,6 +13,8 @@ public interface DishRepository extends JpaRepository<Dish, Integer> {
 
     Optional<Dish> findByNameIgnoreCase(String name);
 
+    boolean existsBySlug(String slug);
+
     List<Dish> findAllByDishIdInAndActiveTrue(Collection<Integer> dishIds);
 
     List<Dish> findAllByActiveTrueAndCaloriesIsNotNullOrderByNameAsc();
