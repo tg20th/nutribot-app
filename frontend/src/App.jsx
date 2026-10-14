@@ -24,7 +24,6 @@ import MemberRoute from './components/MemberRoute';
 import MyBlogsPage from './pages/MyBlogsPage';
 import CreateBlogPage from './pages/CreateBlogPage';
 import CreateVideoPage from './pages/CreateVideoPage';
-import BlogListPage from './pages/BlogListPage';
 import BlogDetailPage from './pages/BlogDetailPage';
 import RestaurantRecommendationsPreviewPage from './pages/RestaurantRecommendationsPreviewPage';
 import NB26ReviewPage from './pages/NB26ReviewPage';
@@ -61,7 +60,7 @@ export default function App() {
     <Route path="/login" element={<Navigate to="/" replace state={{ authMode: 'login' }} />} />
     <Route path="/auth/callback" element={<OAuthCallbackPage />} />
     <Route path="/community" element={<Navigate to="/home" replace />} />
-    <Route path="/blogs" element={<BlogListPage />} />
+    <Route path="/blogs" element={<Navigate to="/" replace />} />
     <Route path="/blogs/id/:id" element={<BlogDetailPage byId />} />
     <Route path="/blogs/:slug" element={<BlogDetailPage />} />
     <Route path="/community/planner" element={<MemberRoute><WeeklyMenuPage /></MemberRoute>} />
