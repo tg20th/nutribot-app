@@ -98,6 +98,9 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
 
     Page<Content> findByStatus(String status, Pageable pageable);
 
+    // NB-60: nội dung published đủ ngưỡng view để rà soát tạo recipe suggestion
+    List<Content> findByStatusAndViewCountGreaterThanEqual(String status, Integer viewCount);
+
     @Query("SELECT c FROM Content c WHERE c.status IN :statuses")
     Page<Content> findByStatusIn(@Param("statuses") List<String> statuses, Pageable pageable);
 

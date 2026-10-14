@@ -476,6 +476,49 @@ CREATE TABLE content_moderations (
 );
 GO
 
+----------------------------------------------
+-- 13.1 CONTENT RECIPE SUGGESTIONS (NB-60)
+----------------------------------------------
+CREATE TABLE content_recipe_suggestions (
+    suggestion_id         INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    content_id            INT NOT NULL,
+    status                NVARCHAR(20) NOT NULL CONSTRAINT DF_content_recipe_suggestions_status DEFAULT (N'PENDING'),
+    dish_id               INT NULL,
+    recipe_id             INT NULL,
+    source_view_count     INT NULL,
+    source_vote_count     INT NULL,
+    dish_name             NVARCHAR(150) NULL,
+    dish_description      NVARCHAR(MAX) NULL,
+    serving_size          DECIMAL(8,2) NULL,
+    serving_unit          NVARCHAR(30) NULL,
+    calories              INT NULL,
+    protein_g             DECIMAL(6,2) NULL,
+    carbs_g               DECIMAL(6,2) NULL,
+    fat_g                 DECIMAL(6,2) NULL,
+    fiber_g               DECIMAL(6,2) NULL,
+    ingredients_json      NVARCHAR(MAX) NULL,
+    recipe_title          NVARCHAR(200) NULL,
+    recipe_description    NVARCHAR(MAX) NULL,
+    prep_time_min         INT NULL,
+    cook_time_min         INT NULL,
+    servings              INT NULL,
+    recipe_steps_json     NVARCHAR(MAX) NULL,
+    restaurant_name       NVARCHAR(200) NULL,
+    restaurant_address    NVARCHAR(300) NULL,
+    restaurant_reference  NVARCHAR(500) NULL,
+    reviewed_by           INT NULL,
+    reviewed_at           DATETIME2(3) NULL,
+    rejection_reason      NVARCHAR(MAX) NULL,
+    created_at            DATETIME2(3) NOT NULL CONSTRAINT DF_content_recipe_suggestions_created_at DEFAULT (SYSUTCDATETIME()),
+    updated_at            DATETIME2(3) NOT NULL CONSTRAINT DF_content_recipe_suggestions_updated_at DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT FK_content_recipe_suggestions_contents FOREIGN KEY (content_id) REFERENCES contents(content_id) ON DELETE CASCADE,
+    CONSTRAINT FK_content_recipe_suggestions_users FOREIGN KEY (reviewed_by) REFERENCES users(user_id) ON DELETE SET NULL,
+    CONSTRAINT FK_content_recipe_suggestions_dishes FOREIGN KEY (dish_id) REFERENCES dishes(dish_id),
+    CONSTRAINT FK_content_recipe_suggestions_recipes FOREIGN KEY (recipe_id) REFERENCES recipes(recipe_id),
+    CONSTRAINT CK_content_recipe_suggestions_status CHECK (status IN (N'PENDING', N'APPROVED', N'REJECTED'))
+);
+GO
+
 ------------------------------------------------
 -- INDEXES
 ------------------------------------------------
@@ -510,4 +553,8 @@ CREATE NONCLUSTERED INDEX IX_email_otps_email_active    ON email_otps(email, exp
 CREATE NONCLUSTERED INDEX IX_chat_messages_session      ON chat_messages(session_id, created_at);
 CREATE NONCLUSTERED INDEX IX_chat_sessions_status        ON chat_sessions(status);
 CREATE NONCLUSTERED INDEX IX_content_moderations_status ON content_moderations(status) WHERE status = N'pending';
+CREATE UNIQUE NONCLUSTERED INDEX UQ_content_recipe_suggestions_active ON content_recipe_suggestions(content_id) WHERE status IN (N'PENDING', N'APPROVED');
+CREATE NONCLUSTERED INDEX IX_content_recipe_suggestions_status ON content_recipe_suggestions(status, created_at DESC);
+CREATE NONCLUSTERED INDEX IX_content_recipe_suggestions_dish ON content_recipe_suggestions(dish_id);
+CREATE NONCLUSTERED INDEX IX_content_recipe_suggestions_recipe ON content_recipe_suggestions(recipe_id);
 GO
