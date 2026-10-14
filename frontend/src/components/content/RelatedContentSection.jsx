@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { ArrowUpRight, BookOpen, ImageOff, PlayCircle } from 'lucide-react';
 import { blogHref } from '../../services/publicBlogApi';
 import { getResolvedRelatedContent } from '../../services/relatedContentApi';
@@ -17,11 +17,11 @@ function contentHref(item) {
   return isVideo(item) ? `/community/posts/${item.contentId ?? item.id}` : blogHref(item);
 }
 
-function RelatedCard({ item }) {
+function RelatedCard({ item, returnTo }) {
   const video = isVideo(item);
   const image = item.thumbnailUrl ?? item.image;
   const excerpt = excerptOf(item);
-  return <Link className="related-content-card" to={contentHref(item)} aria-label={`Open ${item.title}`}>
+  return <Link className="related-content-card" to={contentHref(item)} state={{ returnTo }} aria-label={`Open ${item.title}`}>
     <div className="related-content-media">
       {image ? <img src={image} alt=""/> : <span aria-hidden="true"><ImageOff size={20}/></span>}
       <span className="related-content-kind">{video ? <><PlayCircle size={13}/> Video</> : <><BookOpen size={13}/> Article</>}</span>
@@ -35,7 +35,9 @@ function RelatedCard({ item }) {
 }
 
 export default function RelatedContentSection({ contentId, contentType, loadRelated = getResolvedRelatedContent }) {
+  const location = useLocation();
   const [state, setState] = useState({ status: 'loading', items: [] });
+  const returnTo = `${location.pathname}${location.search}${location.hash}`;
 
   useEffect(() => {
     if (contentId == null) return undefined;
@@ -58,7 +60,7 @@ export default function RelatedContentSection({ contentId, contentType, loadRela
     </div>}
 
     {state.status === 'ready' && state.items.length > 0 && <div className="related-content-grid">
-      {state.items.map((item) => <RelatedCard key={`${item.contentType}:${item.contentId ?? item.id}`} item={item}/>) }
+      {state.items.map((item) => <RelatedCard key={`${item.contentType}:${item.contentId ?? item.id}`} item={item} returnTo={returnTo}/>) }
     </div>}
 
     {state.status === 'ready' && state.items.length === 0 && <p className="related-content-message">There is nothing else to recommend just yet. Explore more stories as our library grows.</p>}
