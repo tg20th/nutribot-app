@@ -11,4 +11,6 @@ public interface IngredientRepository extends JpaRepository<Ingredient, Integer>
     List<Ingredient> findAllByActiveTrueOrderByNameAsc();
     List<Ingredient> findAllByIngredientIdInAndActiveTrue(Collection<Integer> ingredientIds);
     Optional<Ingredient> findByNameIgnoreCase(String name);
+
+    boolean existsBySlug(String slug);
 }
