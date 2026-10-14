@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowUpRight, BookOpen, ImageOff, PlayCircle } from 'lucide-react';
-import { blogHref } from '../../services/publicBlogApi';
 import { getResolvedRelatedContent } from '../../services/relatedContentApi';
 import '../../styles/related-content.css';
 
@@ -13,15 +12,18 @@ const excerptOf = (item) => String(item.description ?? item.caption ?? item.body
 
 const isVideo = (item) => String(item.contentType ?? item.type).toUpperCase() === 'VIDEO' || item.type === 'video';
 
+// Community detail is the canonical destination for both blog and video posts.
+// Sending blog recommendations to /blogs previously hit the public-site fallback,
+// which discarded the currently open post and could show the guest home screen.
 function contentHref(item) {
-  return isVideo(item) ? `/community/posts/${item.contentId ?? item.id}` : blogHref(item);
+  return `/community/posts/${item.contentId ?? item.id}`;
 }
 
-function RelatedCard({ item, returnTo }) {
+function RelatedCard({ item, returnTo, relatedContentReturnState }) {
   const video = isVideo(item);
   const image = item.thumbnailUrl ?? item.image;
   const excerpt = excerptOf(item);
-  return <Link className="related-content-card" to={contentHref(item)} state={{ returnTo }} aria-label={`Open ${item.title}`}>
+  return <Link className="related-content-card" to={contentHref(item)} state={{ returnTo, relatedContentReturnState }} aria-label={`Open ${item.title}`}>
     <div className="related-content-media">
       {image ? <img src={image} alt=""/> : <span aria-hidden="true"><ImageOff size={20}/></span>}
       <span className="related-content-kind">{video ? <><PlayCircle size={13}/> Video</> : <><BookOpen size={13}/> Article</>}</span>
@@ -60,7 +62,7 @@ export default function RelatedContentSection({ contentId, contentType, loadRela
     </div>}
 
     {state.status === 'ready' && state.items.length > 0 && <div className="related-content-grid">
-      {state.items.map((item) => <RelatedCard key={`${item.contentType}:${item.contentId ?? item.id}`} item={item} returnTo={returnTo}/>) }
+      {state.items.map((item) => <RelatedCard key={`${item.contentType}:${item.contentId ?? item.id}`} item={item} returnTo={returnTo} relatedContentReturnState={location.state}/>) }
     </div>}
 
     {state.status === 'ready' && state.items.length === 0 && <p className="related-content-message">There is nothing else to recommend just yet. Explore more stories as our library grows.</p>}
