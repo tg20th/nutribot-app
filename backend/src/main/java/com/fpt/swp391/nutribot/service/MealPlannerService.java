@@ -139,6 +139,7 @@ public class MealPlannerService {
         if (response.getSuggestedMenuTitle() == null || response.getSuggestedMenuTitle().isBlank()) {
             response.setSuggestedMenuTitle("Thực đơn tuần " + vegetarianType.toLowerCase().replace("_", "-"));
         }
+        response.setVegetarianType(vegetarianType);
         response.setEstimatedDailyCalories((int) Math.round(nutritionTarget.calories()));
         response.setNutritionTarget(NutritionTargetResponse.builder()
                 .estimated(nutritionTarget.estimated())
@@ -213,6 +214,14 @@ public class MealPlannerService {
 
         List<Map<String, Object>> canonicalDishes = new ArrayList<>();
         for (Dish dish : dishes) {
+            String dishVegetarianType = normaliseVegetarianType(dish.getVegetarianType());
+            if (dishVegetarianType == null) {
+                // Bỏ qua món chưa xác định được loại ăn chay (NULL/không chuẩn) để thực đơn
+                // sinh ra luôn qua được bước kiểm tra tương thích khi lưu (NB-55).
+                // Không gán mặc định LACTO_OVO vì món vẫn có thể không phù hợp với
+                // nhiều loại ăn chay khác (VEGAN/LACTO/OVO).
+                continue;
+            }
             Map<String, Object> dishMap = new LinkedHashMap<>();
             dishMap.put("dishId", dish.getDishId());
             dishMap.put("name", dish.getName());
@@ -225,8 +234,7 @@ public class MealPlannerService {
             dishMap.put("proteinG", dish.getProteinG() != null ? dish.getProteinG().doubleValue() : 0.0);
             dishMap.put("carbsG", dish.getCarbsG() != null ? dish.getCarbsG().doubleValue() : 0.0);
             dishMap.put("healthyFatsG", dish.getHealthyFatsG() != null ? dish.getHealthyFatsG().doubleValue() : 0.0);
-            dishMap.put("vegetarianType", normaliseVegetarianType(dish.getVegetarianType()) != null
-                    ? normaliseVegetarianType(dish.getVegetarianType()) : "LACTO_OVO");
+            dishMap.put("vegetarianType", dishVegetarianType);
             dishMap.put("isActive", dish.getActive() != null ? dish.getActive() : true);
 
             // Ingredients
@@ -238,7 +246,6 @@ public class MealPlannerService {
                         "name", ingredientNames.getOrDefault(ingId, "")
                 ));
             }
-            // Đảm bảo tuân thủ Pydantic schema min_length=1
             if (ingredients.isEmpty()) {
                 ingredients.add(Map.of(
                         "ingredientId", 1,
@@ -363,6 +370,7 @@ public class MealPlannerService {
         selection.setCarbsG(dish.getCarbsG());
         selection.setHealthyFatsG(dish.getHealthyFatsG());
         selection.setImageUrl(dish.getImageUrl());
+        selection.setVegetarianType(dish.getVegetarianType());
         if (selection.getServings() == null) {
             selection.setServings(BigDecimal.ONE);
         }

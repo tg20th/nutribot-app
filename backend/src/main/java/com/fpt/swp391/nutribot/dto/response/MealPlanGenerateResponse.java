@@ -10,4 +10,5 @@ public class MealPlanGenerateResponse {
     private Integer estimatedDailyCalories;
     private NutritionTargetResponse nutritionTarget;
     private List<MealPlanDayResponse> weeklyPlan;
+    private String vegetarianType;
 }
