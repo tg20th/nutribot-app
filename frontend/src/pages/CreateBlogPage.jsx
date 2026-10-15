@@ -549,13 +549,18 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         created = isEditing ? await updateMyBlog(editId, payload) : await createMyBlog(payload);
       }
       let finalStatus = created?.status || 'draft';
+      let submittedContentId = null;
       if (intent === 'submit') {
         const targetId = isEditing ? editId : created?.contentId;
+        submittedContentId = targetId;
+        // Submit giờ trả ngay trong ~50ms (status = 'ai_processing'), không chờ AI nữa
         const reviewRes = await submitForReview(isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG, targetId);
         const reviewData = reviewRes?.data ?? reviewRes ?? {};
-        finalStatus = reviewData.status || 'under_review';
+        finalStatus = reviewData.status || 'ai_processing';
       }
 
+      // Auto-publish ngay (AI đã duyệt trong lúc blocking cũ) giờ hiếm xảy ra,
+      // chỉ giữ để backward-compat với backend cũ. Flow mới thường vào nhánh navigate MyBlogs.
       const canPrioritizeOnFeed = !isEditing
         && intent === 'submit'
         && String(finalStatus).toLowerCase() === 'published'
@@ -572,6 +577,9 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
           type: isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG,
           submitted: intent === 'submit',
           status: finalStatus,
+          // Truyền contentId vừa submit để MyBlogsPage highlight + polling
+          justSubmittedContentId: submittedContentId,
+          justSubmittedContentType: isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG,
           createdContent: !isEditing && created?.contentId != null
             ? { ...created, contentType: isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG, status: finalStatus }
             : null,
