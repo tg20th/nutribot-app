@@ -38,6 +38,13 @@ class ChatMediaValidatorTest {
         return req;
     }
 
+    private ChatAttachmentRequest videoUrl(String url) {
+        ChatAttachmentRequest req = new ChatAttachmentRequest();
+        req.setType("VIDEO");
+        req.setUrl(url);
+        return req;
+    }
+
     @Test
     @DisplayName("List rỗng thì pass")
     void validate_emptyList_passes() {
@@ -117,5 +124,70 @@ class ChatMediaValidatorTest {
     void validate_validMp4_passes() {
         byte[] mp4 = new byte[]{0, 0, 0, 0x20, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm'};
         assertDoesNotThrow(() -> validator.validate(List.of(video("video/mp4", mp4))));
+    }
+
+    @Test
+    @DisplayName("URL video YouTube watch hợp lệ thì pass")
+    void validate_validYouTubeWatchUrl_passes() {
+        assertDoesNotThrow(() ->
+                validator.validate(List.of(videoUrl("https://www.youtube.com/watch?v=dQw4w9WgXcQ"))));
+    }
+
+    @Test
+    @DisplayName("URL youtu.be, shorts, embed, live hợp lệ thì pass")
+    void validate_validShortYouTubeUrls_pass() {
+        assertDoesNotThrow(() -> validator.validate(List.of(videoUrl("https://youtu.be/dQw4w9WgXcQ"))));
+        assertDoesNotThrow(() -> validator.validate(List.of(videoUrl("https://www.youtube.com/shorts/dQw4w9WgXcQ"))));
+        assertDoesNotThrow(() -> validator.validate(List.of(videoUrl("https://www.youtube.com/embed/dQw4w9WgXcQ"))));
+        assertDoesNotThrow(() -> validator.validate(List.of(videoUrl("https://m.youtube.com/live/dQw4w9WgXcQ"))));
+    }
+
+    @Test
+    @DisplayName("URL video không phải HTTPS thì ném lỗi")
+    void validate_nonHttpsVideoUrl_throws() {
+        assertThrows(InvalidMediaException.class,
+                () -> validator.validate(List.of(videoUrl("http://youtu.be/dQw4w9WgXcQ"))));
+    }
+
+    @Test
+    @DisplayName("URL video không thuộc YouTube thì ném lỗi")
+    void validate_nonYouTubeUrl_throws() {
+        assertThrows(InvalidMediaException.class,
+                () -> validator.validate(List.of(videoUrl("https://vimeo.com/123456789"))));
+    }
+
+    @Test
+    @DisplayName("URL playlist hoặc thiếu video ID thì ném lỗi")
+    void validate_playlistUrl_throws() {
+        assertThrows(InvalidMediaException.class,
+                () -> validator.validate(List.of(videoUrl("https://www.youtube.com/playlist?list=PL1234567890"))));
+        assertThrows(InvalidMediaException.class,
+                () -> validator.validate(List.of(videoUrl("https://www.youtube.com/watch?v=short"))));
+    }
+
+    @Test
+    @DisplayName("Ảnh kèm URL thì ném lỗi")
+    void validate_imageWithUrl_throws() {
+        ChatAttachmentRequest req = image("image/jpeg",
+                new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0});
+        req.setUrl("https://youtu.be/dQw4w9WgXcQ");
+        assertThrows(InvalidMediaException.class, () -> validator.validate(List.of(req)));
+    }
+
+    @Test
+    @DisplayName("Video gửi cả URL lẫn base64 thì ném lỗi")
+    void validate_videoUrlAndBase64_throws() {
+        ChatAttachmentRequest req = video("video/mp4",
+                new byte[]{0, 0, 0, 0x20, 'f', 't', 'y', 'p'});
+        req.setUrl("https://youtu.be/dQw4w9WgXcQ");
+        assertThrows(InvalidMediaException.class, () -> validator.validate(List.of(req)));
+    }
+
+    @Test
+    @DisplayName("Video không có URL lẫn base64 thì ném lỗi")
+    void validate_videoWithoutData_throws() {
+        ChatAttachmentRequest req = new ChatAttachmentRequest();
+        req.setType("VIDEO");
+        assertThrows(InvalidMediaException.class, () -> validator.validate(List.of(req)));
     }
 }

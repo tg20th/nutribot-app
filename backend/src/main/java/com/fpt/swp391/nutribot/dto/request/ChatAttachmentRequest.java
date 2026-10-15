@@ -13,11 +13,12 @@ public class ChatAttachmentRequest {
     @Pattern(regexp = "IMAGE|VIDEO", message = "Loại đính kèm phải là IMAGE hoặc VIDEO")
     private String type;
 
-    @NotBlank(message = "Dữ liệu base64 không được trống")
     @Size(max = 40_000_000, message = "Dữ liệu đính kèm vượt quá kích thước cho phép")
     private String dataBase64;
 
-    @NotBlank(message = "MIME type không được trống")
+    @Size(max = 500, message = "URL video quá dài")
+    private String url;
+
     @Size(max = 50, message = "MIME type không hợp lệ")
     private String mimeType;
 

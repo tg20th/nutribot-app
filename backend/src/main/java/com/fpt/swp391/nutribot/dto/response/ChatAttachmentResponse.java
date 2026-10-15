@@ -10,6 +10,7 @@ import java.util.List;
 public class ChatAttachmentResponse {
 
     private String type;
+    private String url;
     private String mimeType;
     private String filename;
     private List<String> recognizedIngredients;

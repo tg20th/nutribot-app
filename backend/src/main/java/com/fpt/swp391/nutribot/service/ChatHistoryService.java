@@ -152,6 +152,7 @@ public class ChatHistoryService {
     private List<ChatAttachmentResponse> toAttachmentResponses(List<ChatAttachmentRequest> attachments) {
         return attachments.stream().map(a -> ChatAttachmentResponse.builder()
                 .type(a.getType())
+                .url(a.getUrl())
                 .mimeType(a.getMimeType())
                 .filename(a.getFilename())
                 .build()).toList();
