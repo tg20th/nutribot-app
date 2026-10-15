@@ -161,6 +161,89 @@ class CommentServiceTest {
     }
 
     @Test
+    @DisplayName("Reply vào bình luận gốc (depth 0) -> Lưu parentId = commentId của root (depth 1)")
+    void createComment_WhenReplyingToRoot_SavesParentIdAsRoot() {
+        User commenter = createSampleUser(2, "commenter", AccountStatus.ACTIVE);
+        User author = createSampleUser(1, "author1", AccountStatus.ACTIVE);
+        Content video = createSampleContent(201, "VIDEO", "published", author);
+
+        Comment root = Comment.builder()
+                .commentId(10)
+                .contentId(201)
+                .userId(author.getUserId())
+                .body("Bình luận gốc")
+                .status("published")
+                .parentId(null)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(userRepository.findByUsername("commenter")).thenReturn(Optional.of(commenter));
+        when(contentRepository.findPublishedById(201, "published")).thenReturn(Optional.of(video));
+        when(commentRepository.findById(10)).thenReturn(Optional.of(root));
+        when(commentRepository.save(any(Comment.class))).thenAnswer(invocation -> {
+            Comment c = invocation.getArgument(0);
+            c.setCommentId(11);
+            return c;
+        });
+        when(userRepository.findById(commenter.getUserId())).thenReturn(Optional.of(commenter));
+
+        CommentCreateRequest request = new CommentCreateRequest("Reply tầng 1", 10);
+
+        CommentResponse response = commentService.createComment("commenter", 201, request);
+
+        assertNotNull(response);
+        verify(commentRepository).save(argThat(c -> c.getParentId() != null && c.getParentId().equals(10) && c.getParentId().equals(root.getCommentId())));
+        assertEquals(11, response.getCommentId());
+    }
+
+    @Test
+    @DisplayName("Reply vào bình luận tầng 1 (cha đã là reply) -> Remap parentId về root, không lưu theo cấp sâu (NB-26)")
+    void createComment_WhenReplyingToDepth1_RemapsParentIdToRoot() {
+        User commenter = createSampleUser(2, "commenter", AccountStatus.ACTIVE);
+        User author = createSampleUser(1, "author1", AccountStatus.ACTIVE);
+        Content video = createSampleContent(201, "VIDEO", "published", author);
+
+        Comment root = Comment.builder()
+                .commentId(10)
+                .contentId(201)
+                .userId(author.getUserId())
+                .body("Bình luận gốc")
+                .status("published")
+                .parentId(null)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        Comment levelOneReply = Comment.builder()
+                .commentId(11)
+                .contentId(201)
+                .userId(commenter.getUserId())
+                .body("Reply tầng 1")
+                .status("published")
+                .parentId(10)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(userRepository.findByUsername("commenter")).thenReturn(Optional.of(commenter));
+        when(contentRepository.findPublishedById(201, "published")).thenReturn(Optional.of(video));
+        when(commentRepository.findById(11)).thenReturn(Optional.of(levelOneReply));
+        when(commentRepository.save(any(Comment.class))).thenAnswer(invocation -> {
+            Comment c = invocation.getArgument(0);
+            c.setCommentId(12);
+            return c;
+        });
+        when(userRepository.findById(commenter.getUserId())).thenReturn(Optional.of(commenter));
+
+        CommentCreateRequest request = new CommentCreateRequest("Reply tầng 2 (sẽ bị remap về root)", 11);
+
+        CommentResponse response = commentService.createComment("commenter", 201, request);
+
+        assertNotNull(response);
+        // Đảm bảo parentId được lưu = root (10), KHÔNG phải = 11 (depth 1)
+        verify(commentRepository).save(argThat(c -> c.getParentId() != null && c.getParentId().equals(10) && !c.getParentId().equals(11)));
+        assertEquals(12, response.getCommentId());
+    }
+
+    @Test
     @DisplayName("Tài khoản chưa kích hoạt hoặc bị khóa bình luận -> Ném ForbiddenException")
     void createComment_WhenUserNotActive_ThrowsForbiddenException() {
         User commenter = createSampleUser(2, "banned_user", AccountStatus.BANNED);

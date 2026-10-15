@@ -38,6 +38,14 @@ public class CommentService {
     public static final String STATUS_HIDDEN = "hidden";
     public static final String STATUS_REJECTED = "rejected";
 
+    /**
+     * Độ sâu tối đa của cây bình luận tính từ gốc (depth = 0 là gốc).
+     * Theo mô hình Facebook / Zalo, UI chỉ hiển thị tối đa 2 cấp (gốc + 1 cấp reply).
+     * Khi người dùng reply vào một bình luận tầng 1, hệ thống sẽ remap parentId về root
+     * để đảm bảo DB chỉ lưu tối đa 2 cấp quan hệ cha-con và API list trả đầy đủ cấu trúc.
+     */
+    public static final int MAX_DEPTH = 1;
+
     @Transactional(readOnly = true)
     public PagedResponse<CommentResponse> getCommentsByContentId(Integer contentId, int page, int size) {
         validateContentId(contentId);
@@ -83,6 +91,7 @@ public class CommentService {
 
         String cleanBody = sanitizeAndValidateBody(request.getBody());
 
+        Integer effectiveParentId = null;
         if (request.getParentId() != null) {
             Comment parent = commentRepository.findById(request.getParentId())
                     .orElseThrow(() -> new BadRequestException("Bình luận cha không tồn tại"));
@@ -92,12 +101,14 @@ public class CommentService {
             if (!STATUS_PUBLISHED.equalsIgnoreCase(parent.getStatus())) {
                 throw new BadRequestException("Không thể trả lời bình luận đã bị ẩn hoặc xóa");
             }
+            // Remap về root khi parent đã là reply (depth 1) để giữ cấu trúc 2 tầng (FB-style).
+            effectiveParentId = parent.getParentId() != null ? parent.getParentId() : parent.getCommentId();
         }
 
         Comment comment = Comment.builder()
                 .contentId(contentId)
                 .userId(user.getUserId())
-                .parentId(request.getParentId())
+                .parentId(effectiveParentId)
                 .body(cleanBody)
                 .status(STATUS_PUBLISHED)
                 .build();

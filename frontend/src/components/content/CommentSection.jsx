@@ -67,7 +67,7 @@ function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, 
         {timestamp && <time dateTime={comment.createdAt}>{timestamp}</time>}</div>
       <p>{nested && <span className="content-comment-mention">@{memberName(comment.parentComment || {})}</span>}{comment.body}</p>
       <div className="content-comment-actions">
-        <button type="button" onClick={() => onStartReply(comment)}>Reply</button>
+        <button type="button" onClick={() => onStartReply(depth > 0 ? (comment.parentComment || comment) : comment)}>Reply</button>
         {hasReplies && <button type="button" onClick={() => onToggleReplies(comment.commentId)} aria-expanded={isExpanded}>
           {isExpanded ? 'Hide replies' : `View replies (${replyTotal})`}
         </button>}
