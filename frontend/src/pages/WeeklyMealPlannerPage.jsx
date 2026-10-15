@@ -606,8 +606,15 @@ export default function WeeklyMealPlannerPage() {
   const persistAiPreview = async () => {
     if (!aiPreview || aiSaveRequest.current) return;
     const incompatibleMeal = aiPreview.weeklyPlan.flatMap((day) => ['breakfast', 'lunch', 'dinner'].map((field) => day[field])).find((meal) => {
-      const dish = dishes.find((item) => String(item.dishId) === String(meal?.dishId)) ?? { vegetarianType: meal?.vegetarianType, ingredientIds: meal?.ingredientIds, ingredients: meal?.ingredients };
-      return getDishCompatibility(dish, aiPreview.vegetarianType, allergyIngredientIds).status !== 'compatible';
+      const catalogDish = dishes.find((item) => String(item.dishId) === String(meal?.dishId));
+      // Merge vegetarianType từ meal (backend attachDishDetails đã gắn) để tránh
+      // rơi vào trạng thái "unknown" do thiếu dữ liệu. Chỉ chặn khi chắc chắn
+      // không tương thích với chế độ ăn; trạng thái "unknown" (món chưa có công
+      // thức/nguyên liệu) để backend xác thực lại ở trust boundary khi lưu (NB-55).
+      const dish = catalogDish
+        ? { ...catalogDish, vegetarianType: catalogDish.vegetarianType ?? meal?.vegetarianType }
+        : { vegetarianType: meal?.vegetarianType, ingredientIds: meal?.ingredientIds, ingredients: meal?.ingredients };
+      return getDishCompatibility(dish, aiPreview.vegetarianType, allergyIngredientIds).status === 'incompatible';
     });
     if (incompatibleMeal) {
       setAiSaveError(`Dish “${incompatibleMeal.dishName}” is not compatible with your ${aiPreview.vegetarianType} diet. Replace it before saving.`);
