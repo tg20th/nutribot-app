@@ -23,7 +23,7 @@ const CONTENT_TYPES = {
   },
 };
 const statuses = {
-  draft: 'Draft', under_review: 'Under review', published: 'Published', flagged: 'Flagged', rejected: 'Rejected', archived: 'Archived',
+  draft: 'Draft', under_review: 'Under review', ai_processing: 'Moderating', published: 'Published', flagged: 'Flagged', rejected: 'Rejected', archived: 'Archived',
 };
 
 function errorMessage(error, fallback, type) {
@@ -245,6 +245,8 @@ export default function MyBlogsPage() {
   const [error, setError] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [notice, setNotice] = useState('');
+  // NB: post async — tập id đang ở trạng thái ai_processing, cần polling để cập nhật
+  const [pollingIds, setPollingIds] = useState(new Set());
   const headingRef = useRef(null);
 
   useEffect(() => {
@@ -252,7 +254,20 @@ export default function MyBlogsPage() {
       setNotice('Your post has been updated.');
     } else if (location.state?.submitted) {
       const st = location.state?.status;
-      if (st === 'published') {
+      if (st === 'ai_processing') {
+        // Flow mới: AI moderation chạy bất đồng bộ. Cho user biết đang chờ.
+        setNotice('Bài viết đã được nộp. Hệ thống đang kiểm duyệt tự động, vui lòng chờ trong giây lát.');
+        // Bắt đầu polling cho contentId vừa submit (nếu có)
+        const justId = location.state?.justSubmittedContentId;
+        const justType = location.state?.justSubmittedContentType;
+        if (justId != null) {
+          setPollingIds((prev) => {
+            const next = new Set(prev);
+            next.add(justId);
+            return next;
+          });
+        }
+      } else if (st === 'published') {
         setNotice('Bài viết đã được AI kiểm duyệt và xuất bản tự động thành công! (Published)');
       } else if (st === 'rejected') {
         setNotice('Bài viết đã bị từ chối do vi phạm tiêu chuẩn kiểm duyệt nội dung. (Rejected)');
@@ -295,6 +310,71 @@ export default function MyBlogsPage() {
     });
     return () => controller.abort();
   }, [page, revision]);
+
+  // NB: post async — polling mỗi 3s cho các bài đang ở trạng thái ai_processing
+  useEffect(() => {
+    if (pollingIds.size === 0) return undefined;
+    const controller = new AbortController();
+    const intervalId = window.setInterval(async () => {
+      const ids = Array.from(pollingIds);
+      for (const id of ids) {
+        if (controller.signal.aborted) return;
+        try {
+          // Thử blog trước; nếu 404 hoặc loại khác thì thử video
+          let updated = null;
+          try {
+            updated = await getMyBlog(id, controller.signal);
+          } catch (blogErr) {
+            if (blogErr.status === 404 || blogErr.status === 403) {
+              try {
+                updated = await getMyVideo(id, controller.signal);
+              } catch (videoErr) {
+                // Bỏ qua, polling round tiếp theo sẽ thử lại
+                return;
+              }
+            } else {
+              return;
+            }
+          }
+          if (!updated || controller.signal.aborted) return;
+          // Cập nhật item trong result.content
+          setResult((prev) => {
+            const exists = prev.content.some((it) => String(it.contentId) === String(id));
+            if (!exists) return prev;
+            return {
+              ...prev,
+              content: prev.content.map((it) =>
+                String(it.contentId) === String(id) ? { ...it, ...updated, contentType: updated.contentType || it.contentType } : it
+              ),
+            };
+          });
+          // Nếu status không còn ai_processing -> dừng polling id này
+          if (updated.status && updated.status !== 'ai_processing') {
+            setPollingIds((prev) => {
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            });
+            // Cập nhật notice dựa trên status mới
+            if (updated.status === 'published') {
+              setNotice('Bài viết đã được AI kiểm duyệt và xuất bản tự động thành công! (Published)');
+            } else if (updated.status === 'under_review') {
+              setNotice('AI không duyệt tự động. Bài viết đã được chuyển sang hàng đợi Admin duyệt. (Under review)');
+            } else if (updated.status === 'rejected') {
+              setNotice('Bài viết đã bị từ chối do vi phạm tiêu chuẩn kiểm duyệt nội dung. (Rejected)');
+            }
+          }
+        } catch (err) {
+          // Bỏ qua lỗi mạng hoặc 401, polling sẽ thử lại ở round tiếp theo
+          if (err.name === 'AbortError') return;
+        }
+      }
+    }, 3000);
+    return () => {
+      window.clearInterval(intervalId);
+      controller.abort();
+    };
+  }, [pollingIds]);
 
   async function handleSubmitItem(item) {
     if (actionBusyId) return;
@@ -357,6 +437,7 @@ export default function MyBlogsPage() {
         <div className="my-blogs-tabs" role="tablist" aria-label="Lọc theo trạng thái">
           <button type="button" className={statusFilter === 'all' ? 'is-active' : ''} onClick={() => setStatusFilter('all')}>All ({result.content.length})</button>
           <button type="button" className={statusFilter === 'published' ? 'is-active' : ''} onClick={() => setStatusFilter('published')}>Published ({result.content.filter((x) => x.status === 'published').length})</button>
+          <button type="button" className={statusFilter === 'ai_processing' ? 'is-active' : ''} onClick={() => setStatusFilter('ai_processing')}>Đang kiểm duyệt ({result.content.filter((x) => x.status === 'ai_processing').length})</button>
           <button type="button" className={statusFilter === 'under_review' ? 'is-active' : ''} onClick={() => setStatusFilter('under_review')}>Under review ({result.content.filter((x) => x.status === 'under_review').length})</button>
           <button type="button" className={statusFilter === 'draft' ? 'is-active' : ''} onClick={() => setStatusFilter('draft')}>Draft ({result.content.filter((x) => x.status === 'draft').length})</button>
           <button type="button" className={statusFilter === 'rejected' ? 'is-active' : ''} onClick={() => setStatusFilter('rejected')}>Rejected ({result.content.filter((x) => x.status === 'rejected').length})</button>
@@ -370,12 +451,13 @@ export default function MyBlogsPage() {
               : !displayedContent.length ? <div className="my-blogs-state"><span className="my-blogs-empty-icon"><Icon size={32}/></span><p className="my-blogs-eyebrow">A FRESH PAGE</p><h3>{statusFilter === 'all' ? 'Your first post starts here.' : `No posts in ${statuses[statusFilter] || statusFilter}.`}</h3><p>{statusFilter === 'all' ? 'Share a recipe, note, story, or helpful video with the community.' : 'You have no posts matching this filter.'}</p><Link className="my-blog-button" to="/community/blogs/new">Create post <ArrowUpRight size={16}/></Link></div>
                 : <div className="my-blogs-list">{displayedContent.map((item) => { const itemConfig = CONTENT_TYPES[item.contentType]; return <article className="my-blog-card" key={`${item.contentType}-${item.contentId}`}>
                   <Thumbnail src={item.thumbnailUrl} type={item.contentType}/><div className="my-blog-card-body">
-                    <div className="my-blog-meta"><span className="my-blog-content-type">{item.contentType === 'video' ? <><Film size={13}/> Video</> : <><BookOpen size={13}/> Blog</>}</span><span className={`my-blog-status my-blog-status--${statuses[item.status] ? item.status : 'unknown'}`}>{statuses[item.status] ?? 'Unknown status'}</span><span>Updated {formattedDate(item.updatedAt ?? item.createdAt)}</span>{item.contentType === 'video' && item.durationSec ? <span>{Math.round(item.durationSec / 60)} min</span> : null}</div>
+                    <div className="my-blog-meta"><span className="my-blog-content-type">{item.contentType === 'video' ? <><Film size={13}/> Video</> : <><BookOpen size={13}/> Blog</>}</span><span className={`my-blog-status my-blog-status--${statuses[item.status] ? item.status : 'unknown'}`}>{item.status === 'ai_processing' ? <><LoaderCircle className="my-blogs-spinner" size={12}/> {statuses[item.status]}</> : (statuses[item.status] ?? 'Unknown status')}</span><span>Updated {formattedDate(item.updatedAt ?? item.createdAt)}</span>{item.contentType === 'video' && item.durationSec ? <span>{Math.round(item.durationSec / 60)} min</span> : null}</div>
                     <h3>{item.status === 'published' ? <Link to={`/community/posts/${item.contentId}`} state={{ returnTo: '/community/my-blogs', source: 'my-content', contentType: item.contentType }}>{item.title}</Link> : item.title}</h3>
                     <p className="my-blog-excerpt">{excerpt(item.body) || (item.contentType === 'video' ? 'No description yet.' : 'No story text yet.')}</p>
                     <div className="my-blog-card-footer"><span className="my-blog-views"><Eye size={15}/>{(item.viewCount ?? 0).toLocaleString()} views</span><div className="my-blog-card-actions">
                       {item.status === 'draft' && <button type="button" className="my-blog-button my-blog-button--secondary" style={{ padding: '6px 12px', minHeight: '34px', fontSize: '11px' }} disabled={actionBusyId === item.contentId} onClick={() => handleSubmitItem(item)}>{actionBusyId === item.contentId ? <LoaderCircle className="my-blogs-spinner" size={13}/> : <Send size={13}/>} Submit</button>}
                       {item.status === 'under_review' && <button type="button" className="my-blog-button my-blog-button--secondary" style={{ padding: '6px 12px', minHeight: '34px', fontSize: '11px' }} disabled={actionBusyId === item.contentId} onClick={() => handleRecallItem(item)}>{actionBusyId === item.contentId ? <LoaderCircle className="my-blogs-spinner" size={13}/> : <Undo2 size={13}/>} Recall</button>}
+                      {item.status === 'ai_processing' && <span className="my-blog-button my-blog-button--secondary" style={{ padding: '6px 12px', minHeight: '34px', fontSize: '11px', opacity: 0.6, cursor: 'not-allowed' }} title="Bài đang được AI kiểm duyệt, vui lòng chờ"><LoaderCircle className="my-blogs-spinner" size={13}/> Đang duyệt...</span>}
                       {item.status === 'published' && <Link to={`/community/posts/${item.contentId}`} state={{ returnTo: '/community/my-blogs', source: 'my-content', contentType: item.contentType }} style={{ padding: '6px 12px', minHeight: '34px', fontSize: '11px' }}><Eye size={13}/> View</Link>}
                       <Link to={`/community/my-content/${item.contentType}/${item.contentId}/edit`} aria-label={`Edit ${item.title}`}><Pencil size={15}/> Edit</Link>
                       <button type="button" className="my-blog-delete-button" onClick={() => { setNotice(''); setDialog({ type: 'delete', item, config: itemConfig }); }} aria-label={`Delete ${item.title}`}><Trash2 size={15}/> Delete</button>

@@ -52,6 +52,9 @@ class AuthorContentServiceTest {
     @Mock
     private ContentModerationRepository contentModerationRepository;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
+
     @InjectMocks
     private AuthorContentService authorContentService;
 
@@ -238,48 +241,33 @@ class AuthorContentServiceTest {
     }
 
     @Test
-    @DisplayName("9. Nộp bài viết chuyển trạng thái sang UNDER_REVIEW khi AI yêu cầu duyệt thủ công")
-    void submitContent_transitionsToUnderReview() {
+    @DisplayName("9. Nộp bài viết chuyển trạng thái sang AI_PROCESSING và fire event bất đồng bộ (NB: post async)")
+    void submitContent_transitionsToAiProcessingAndFiresEvent() {
         when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
         when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
         when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new ContentModerationGatewayService.ModerationResult("NEEDS_REVIEW", "Needs review", 0.7, java.util.List.of("AMBIGUOUS")));
 
         AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
 
-        assertEquals("under_review", response.getStatus());
-        assertEquals("under_review", sampleContent.getStatus());
+        // Trả về status mới ngay lập tức, không chờ AI
+        assertEquals("ai_processing", response.getStatus());
+        assertEquals("ai_processing", sampleContent.getStatus());
+        // AI moderation KHÔNG được gọi đồng bộ — listener sẽ xử lý
+        verify(contentModerationGatewayService, never()).moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any());
+        // Event bất đồng bộ được publish
+        verify(applicationEventPublisher).publishEvent(any(com.fpt.swp391.nutribot.event.ContentModerationRequestedEvent.class));
     }
 
     @Test
-    @DisplayName("9b. Nộp bài viết tự động chuyển sang PUBLISHED khi AI phê duyệt (APPROVE)")
-    void submitContent_whenAiApproves_transitionsToPublished() {
-        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
-        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
-        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new ContentModerationGatewayService.ModerationResult("APPROVE", "Safe vegetarian content", 0.98, java.util.List.of("SAFE")));
-
-        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
-
-        assertEquals("published", response.getStatus());
-        assertEquals("published", sampleContent.getStatus());
+    @DisplayName("9b. [Moved] AI APPROVE chuyển sang PUBLISHED — kiểm thử ở ContentModerationListenerTest")
+    void submitContent_aiApproveBehaviorMovedToListener() {
+        // Logic AI giờ nằm trong ContentModerationListener — xem ContentModerationListenerTest
     }
 
     @Test
-    @DisplayName("9c. Nộp bài viết khi AI từ chối (REJECT) -> Vẫn giữ UNDER_REVIEW để Admin duyệt lần 2")
-    void submitContent_whenAiRejects_transitionsToUnderReview() {
-        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
-        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
-        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new ContentModerationGatewayService.ModerationResult("REJECT", "Non-vegetarian recipe", 0.95, java.util.List.of("NON_VEGETARIAN_CONTENT")));
-
-        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
-
-        assertEquals("under_review", response.getStatus());
-        assertEquals("under_review", sampleContent.getStatus());
+    @DisplayName("9c. [Moved] AI REJECT giữ UNDER_REVIEW — kiểm thử ở ContentModerationListenerTest")
+    void submitContent_aiRejectBehaviorMovedToListener() {
+        // Logic AI giờ nằm trong ContentModerationListener — xem ContentModerationListenerTest
     }
 
     @Test
@@ -470,7 +458,7 @@ class AuthorContentServiceTest {
     }
 
     @Test
-    @DisplayName("19. Nộp Video và rút Video cập nhật trạng thái chuẩn xác")
+    @DisplayName("19. Nộp Video và rút Video cập nhật trạng thái chuẩn xác (NB: post async)")
     void videoSubmitAndRecall_updatesStateCorrectly() {
         Content video = Content.builder()
                 .contentId(200)
@@ -482,55 +470,27 @@ class AuthorContentServiceTest {
         when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
         when(contentRepository.findById(200)).thenReturn(Optional.of(video));
         when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new ContentModerationGatewayService.ModerationResult("NEEDS_REVIEW", "Needs review", 0.7, java.util.List.of("AMBIGUOUS")));
 
-        // Submit
+        // Submit — giờ trả về ai_processing ngay, AI moderation chạy bất đồng bộ
         AuthorContentResponse submitRes = authorContentService.submitContent("truong_author", 200, "VIDEO");
-        assertEquals("under_review", submitRes.getStatus());
+        assertEquals("ai_processing", submitRes.getStatus());
+        // AI moderation KHÔNG được gọi đồng bộ
+        verify(contentModerationGatewayService, never()).moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any());
 
-        // Recall
+        // Recall — vẫn chuyển về draft
         AuthorContentResponse recallRes = authorContentService.recallContent("truong_author", 200, "VIDEO");
         assertEquals("draft", recallRes.getStatus());
     }
 
     @Test
-    @DisplayName("20. AI trả về REJECT hoặc nghi ngờ vi phạm -> Bài viết vẫn giữ STATUS_UNDER_REVIEW để Admin duyệt lần 2")
-    void submitContent_whenAiRejects_staysUnderReviewForAdmin() {
-        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
-        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
-        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new ContentModerationGatewayService.ModerationResult("REJECT", "Chứa nội dung vi phạm hình ảnh", 0.95, java.util.List.of("SENSITIVE_IMAGE")));
-
-        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
-        // Bắt buộc phải là under_review để Admin có thể xem và duyệt lần 2
-        assertEquals("under_review", response.getStatus());
-
-        verify(contentModerationRepository, atLeastOnce()).save(argThat(cm ->
-                cm.getContentId().equals(100) &&
-                Boolean.TRUE.equals(cm.getAiFlagged()) &&
-                "pending".equals(cm.getStatus()) &&
-                "Chứa nội dung vi phạm hình ảnh".equals(cm.getAiReason())
-        ));
+    @DisplayName("20. [Moved] AI REJECT giữ UNDER_REVIEW — kiểm thử ở ContentModerationListenerTest")
+    void submitContent_aiRejectStaysUnderReview_movedToListener() {
+        // Logic AI giờ nằm trong ContentModerationListener — xem ContentModerationListenerTest
     }
 
     @Test
-    @DisplayName("21. AI trả về APPROVE đạt chuẩn an toàn -> Tự động chuyển sang STATUS_PUBLISHED ngay lập tức và lưu status approved")
-    void submitContent_whenAiApproves_autoPublishes() {
-        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
-        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
-        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(contentModerationGatewayService.moderateContent(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(new ContentModerationGatewayService.ModerationResult("APPROVE", "Safe content", 0.98, java.util.List.of("SAFE")));
-
-        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
-        assertEquals("published", response.getStatus());
-
-        verify(contentModerationRepository, atLeastOnce()).save(argThat(cm ->
-                cm.getContentId().equals(100) &&
-                Boolean.FALSE.equals(cm.getAiFlagged()) &&
-                "approved".equals(cm.getStatus())
-        ));
+    @DisplayName("21. [Moved] AI APPROVE tự publish — kiểm thử ở ContentModerationListenerTest")
+    void submitContent_aiApproveAutoPublishes_movedToListener() {
+        // Logic AI giờ nằm trong ContentModerationListener — xem ContentModerationListenerTest
     }
 }
