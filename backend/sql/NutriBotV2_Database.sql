@@ -251,7 +251,7 @@ CREATE TABLE contents (
     CONSTRAINT FK_contents_users FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION,
     CONSTRAINT FK_contents_categories FOREIGN KEY (category_id) REFERENCES categories(category_id),
     CONSTRAINT CK_contents_type CHECK (content_type IN (N'BLOG', N'VIDEO')),
-    CONSTRAINT CK_contents_status CHECK (status IN (N'draft', N'under_review', N'published', N'flagged', N'rejected', N'archived')),
+    CONSTRAINT CK_contents_status CHECK (status IN (N'draft', N'ai_processing', N'under_review', N'published', N'flagged', N'rejected', N'archived')),
     CONSTRAINT CK_contents_view_count CHECK (view_count >= 0),
     CONSTRAINT CK_contents_duration CHECK (duration_sec IS NULL OR duration_sec >= 0)
 );
