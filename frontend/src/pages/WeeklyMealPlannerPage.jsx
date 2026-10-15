@@ -106,6 +106,7 @@ export default function WeeklyMealPlannerPage() {
   const [showServiceUnavailableDialog, setShowServiceUnavailableDialog] = useState(false);
   const [serviceUnavailableDraftExists, setServiceUnavailableDraftExists] = useState(false);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [regenerateDialogMode, setRegenerateDialogMode] = useState('regenerate');
   const [regenerateDialogStatus, setRegenerateDialogStatus] = useState('confirm');
   const [regenerateDialogError, setRegenerateDialogError] = useState('');
   const [pendingNutritionOverflow, setPendingNutritionOverflow] = useState(null);
@@ -177,6 +178,7 @@ export default function WeeklyMealPlannerPage() {
     setAiPreview(null);
     setShowAiPreview(false);
     setShowRegenerateConfirm(false);
+    setRegenerateDialogMode('regenerate');
     setRegenerateDialogStatus('confirm');
     setRegenerateDialogError('');
   }, [weekStart]);
@@ -235,7 +237,9 @@ export default function WeeklyMealPlannerPage() {
   const manualPlannerReady = !profileLoading && !manualMissingFields.length;
   const selectedDay = plannerDays[selectedDayIndex] ?? plannerDays[0] ?? null;
   const hasMeals = plannerDays.some((day) => day.meals.length > 0);
-  const hasSelectedWeekPlan = Boolean(menu.menuId) || hasMeals || hasActiveAiPreview;
+  // A persisted empty weekly-menu shell is not a plan yet. Keep the primary
+  // action as Generate until the week contains meals or an AI preview.
+  const hasSelectedWeekPlan = hasMeals || hasActiveAiPreview;
   const generateActionLabel = hasSelectedWeekPlan ? 'Re-generate' : 'Generate';
   const dailyNutritionMetrics = useMemo(() => {
     if (!selectedDay) return [];
@@ -535,9 +539,26 @@ export default function WeeklyMealPlannerPage() {
 
   const openRegenerateConfirmation = () => {
     if (generatingPlan) return;
+    setRegenerateDialogMode('regenerate');
     setRegenerateDialogError('');
     setRegenerateDialogStatus('confirm');
     setShowRegenerateConfirm(true);
+  };
+
+  const openGenerateConfirmation = () => {
+    if (generatingPlan) return;
+    setRegenerateDialogMode('generate');
+    setRegenerateDialogError('');
+    setRegenerateDialogStatus('confirm');
+    setShowRegenerateConfirm(true);
+  };
+
+  const dismissAiPreview = () => {
+    if (savingAiPreview) return;
+    setShowAiPreview(false);
+    setAiPreview(null);
+    setAiSaveError('');
+    setPreviewReplaceTarget(null);
   };
 
   const runRegeneration = async () => {
@@ -558,6 +579,7 @@ export default function WeeklyMealPlannerPage() {
   const closeRegenerateConfirmation = () => {
     if (regenerateDialogStatus === 'loading') return;
     setShowRegenerateConfirm(false);
+    setRegenerateDialogMode('regenerate');
     setRegenerateDialogStatus('confirm');
     setRegenerateDialogError('');
   };
@@ -573,7 +595,7 @@ export default function WeeklyMealPlannerPage() {
       openRegenerateConfirmation();
       return;
     }
-    generateAiPlan();
+    openGenerateConfirmation();
   };
 
   const replacePreviewMeal = (dayIndex, field, dish) => {
@@ -829,7 +851,7 @@ export default function WeeklyMealPlannerPage() {
       </section>
     </div>}
     {aiPreview && showAiPreview && (
-      <MenuPreviewModal preview={aiPreview} isSaving={savingAiPreview} isGenerating={generatingPlan} saveError={aiSaveError} onDismissError={() => setAiSaveError('')} onClose={() => setShowAiPreview(false)} onSave={persistAiPreview} onRequestReplace={(dayIndex, field, label) => setPreviewReplaceTarget({ dayIndex, field, label })} onRequestRegenerate={openRegenerateConfirmation}/>
+      <MenuPreviewModal preview={aiPreview} isSaving={savingAiPreview} isGenerating={generatingPlan} saveError={aiSaveError} onDismissError={() => setAiSaveError('')} onClose={dismissAiPreview} onSave={persistAiPreview} onRequestReplace={(dayIndex, field, label) => setPreviewReplaceTarget({ dayIndex, field, label })} onRequestRegenerate={openRegenerateConfirmation}/>
     )}
     {previewReplaceTarget && aiPreview && (
       <MealEditorDialog editor={{ day: { label: aiPreview.weeklyPlan[previewReplaceTarget.dayIndex]?.day || `Day ${previewReplaceTarget.dayIndex + 1}`, meals: [] }, slot: previewReplaceTarget.label, meal: { dishId: null } }} dishes={dishes} vegetarianType={aiPreview.vegetarianType} allergyIngredientIds={allergyIngredientIds} onClose={() => setPreviewReplaceTarget(null)} onSubmit={({ dish }) => { if (dish && getDishCompatibility(dish, aiPreview.vegetarianType, allergyIngredientIds).status !== 'compatible') { setAiSaveError(`Dish “${dish.name}” cannot be verified as compatible with this profile.`); } else if (dish) { replacePreviewMeal(previewReplaceTarget.dayIndex, previewReplaceTarget.field, dish); } setPreviewReplaceTarget(null); }}/>
@@ -844,6 +866,7 @@ export default function WeeklyMealPlannerPage() {
     )}
     {showRegenerateConfirm && (
       <RegenerateMealPlanDialog
+        mode={regenerateDialogMode}
         status={regenerateDialogStatus}
         errorMessage={regenerateDialogError}
         onConfirm={runRegeneration}
