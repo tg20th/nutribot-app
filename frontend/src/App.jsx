@@ -16,7 +16,6 @@ import UserManagementPage from './pages/admin/UserManagementPage';
 import UserDetailPage from './pages/admin/UserDetailPage';
 import CategoryManagementPage from './pages/admin/CategoryManagementPage';
 import AdminModerationPage from './pages/admin/AdminModerationPage';
-import CommentManagementPage from './pages/admin/CommentManagementPage';
 import AdminContentRecipeSuggestionsPage from './pages/admin/AdminContentRecipeSuggestionsPage';
 import { ContentDetailPage, ContentManagementPage } from './pages/admin/ContentPages';
 import OAuthCallbackPage from './pages/OAuthCallbackPage';
@@ -88,7 +87,6 @@ export default function App() {
       <Route path="content/blogs/:id" element={<ContentDetailPage kind="Blog" />} />
       <Route path="content/videos" element={<ContentManagementPage kind="Video" />} />
       <Route path="content/videos/:id" element={<ContentDetailPage kind="Video" />} />
-      <Route path="comments" element={<CommentManagementPage />} />
       <Route path="content-recipe-suggestions" element={<AdminContentRecipeSuggestionsPage />} />
     </Route>
     <Route path="/restaurants" element={<MemberRoute><RestaurantMapPage /></MemberRoute>} />
