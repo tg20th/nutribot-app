@@ -1,8 +1,13 @@
 """Tích hợp Google Gemini bằng SDK google-genai."""
 
 import asyncio
+import inspect
+import json
 import logging
+import math
+from pathlib import Path
 import re
+import tempfile
 import time
 from typing import Any
 
@@ -12,7 +17,11 @@ from google.genai import errors, types
 from pydantic import ValidationError
 
 from app.config import Settings
-from app.exceptions import AIConfigurationError, AIProviderUnavailableError
+from app.exceptions import (
+    AIConfigurationError,
+    AIProviderUnavailableError,
+    AIQuotaExceededError,
+)
 from app.planner import (
     MealPlanRequest,
     MealPlanResponse,
@@ -24,11 +33,23 @@ from app.planner import (
 from app.prompts import (
     IMAGE_CONTEXT_FOLLOWUP_SYSTEM_INSTRUCTION,
     IMAGE_SYSTEM_INSTRUCTION,
+    VIDEO_CONTEXT_FOLLOWUP_SYSTEM_INSTRUCTION,
+    VIDEO_SYSTEM_INSTRUCTION,
     SYSTEM_INSTRUCTION,
     build_image_prompt,
+    build_video_prompt,
     build_user_prompt,
 )
-from app.schemas.chat import ChatRequest, ChatResponse, GeminiChatResult
+from app.schemas.chat import (
+    ChatRequest,
+    ChatResponse,
+    GeminiChatResult,
+    GeminiTextChatResult,
+    GeminiVideoExtraction,
+    VideoAnalysis,
+    VideoIngredient,
+    VideoStep,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -61,6 +82,15 @@ _RECOMMENDATION_MARKERS = (
     "gợi ý",
     "ăn gì",
 )
+_VIDEO_CAPABLE_MODELS = {
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-3.8-flash",
+}
 
 
 def _normalize_ingredient_name(value: str) -> str:
@@ -160,12 +190,15 @@ class GeminiService:
         self._settings = settings
         self._client = client
         self._image_client = None
+        self._video_client = None
 
-    def _get_client(self, image_request: bool = False) -> Any:
+    def _get_client(self, image_request: bool = False, video_request: bool = False) -> Any:
         if self._client is not None:
             return self._client
         if image_request and self._image_client is not None:
             return self._image_client
+        if video_request and self._video_client is not None:
+            return self._video_client
         if not self._settings.gemini_configured:
             raise AIConfigurationError(
                 "AI service chưa được cấu hình GEMINI_API_KEY"
@@ -175,21 +208,27 @@ class GeminiService:
                 (
                     self._settings.gemini_image_attempt_timeout_seconds
                     if image_request
-                    else self._settings.gemini_timeout_seconds
+                    else (
+                        self._settings.gemini_video_attempt_timeout_seconds
+                        if video_request
+                        else self._settings.gemini_timeout_seconds
+                    )
                 )
                 * 1_000
             )
         )
-        if image_request:
-            # Image fallback is owned by this service; avoid SDK's default
-            # five-attempt retry loop and keep primary + fallback bounded.
-            http_options.retry_options = types.HttpRetryOptions(attempts=1)
+        # Application-level fallback owns transient recovery. Disable the
+        # SDK's default retry set (which includes 429) so quota failures are
+        # surfaced immediately and never consume hidden extra attempts.
+        http_options.retry_options = types.HttpRetryOptions(attempts=1)
         client = genai.Client(
             api_key=self._settings.gemini_api_key,
             http_options=http_options,
         )
         if image_request:
             self._image_client = client
+        elif video_request:
+            self._video_client = client
         else:
             self._client = client
         return client
@@ -335,19 +374,216 @@ class GeminiService:
         text_content = getattr(response, "text", None)
         return ImageRelevanceResponse.model_validate_json(text_content)
 
-    async def chat(self, request: ChatRequest) -> ChatResponse:
-        is_image_request = request.image is not None
-        has_image_context = any(
-            message.sender == "ASSISTANT"
-            and (
-                "image_context:" in message.content.casefold()
-                or "recognized_ingredients:" in message.content.casefold()
-            )
+    @staticmethod
+    def _has_context(request: ChatRequest, marker: str) -> bool:
+        return any(
+            message.sender == "ASSISTANT" and marker in message.content.casefold()
             for message in request.conversation_history
         )
+
+    async def _maybe_await(self, value: Any) -> Any:
+        return await value if inspect.isawaitable(value) else value
+
+    async def _upload_video_part(
+        self,
+        client: Any,
+        request: ChatRequest,
+        telemetry: dict[str, Any],
+    ) -> tuple[Any, str]:
+        assert request.video is not None
+        video = request.video
+        video_bytes = video.decoded_bytes()
+        telemetry["size_bytes"] = len(video_bytes)
+        telemetry["duration_seconds"] = "unverified"
+        if len(video_bytes) > self._settings.gemini_video_max_bytes:
+            raise AIProviderUnavailableError("Video vượt quá kích thước ứng dụng cho phép")
+
+        suffix = "." + video.mime_type.split("/", 1)[1].replace("x-", "")
+        temporary_path: str | None = None
+        uploaded: Any | None = None
+        ready = False
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temporary:
+                temporary.write(video_bytes)
+                temporary_path = temporary.name
+            telemetry["stage"] = "upload"
+            upload_config = types.UploadFileConfig(mime_type=video.mime_type)
+            uploaded = await self._maybe_await(
+                client.aio.files.upload(file=temporary_path, config=upload_config)
+            )
+            file_name = getattr(uploaded, "name", None)
+            file_uri = getattr(uploaded, "uri", None)
+            if not file_name or not file_uri:
+                raise AIProviderUnavailableError("Gemini không trả về định danh video hợp lệ")
+
+            telemetry["stage"] = "processing"
+            deadline = time.monotonic() + self._settings.gemini_video_max_poll_seconds
+            current = uploaded
+            while True:
+                state = getattr(getattr(current, "state", None), "name", None) or str(
+                    getattr(current, "state", "")
+                ).upper()
+                if state == "ACTIVE":
+                    ready = True
+                    return types.Part.from_uri(
+                        file_uri=file_uri,
+                        mime_type=getattr(uploaded, "mime_type", None) or video.mime_type,
+                    ), file_name
+                if state == "FAILED":
+                    raise AIProviderUnavailableError("Gemini không xử lý được video đã tải lên")
+                if time.monotonic() >= deadline:
+                    raise AIProviderUnavailableError("Gemini xử lý video quá lâu, vui lòng thử lại sau")
+                await asyncio.sleep(self._settings.gemini_video_poll_interval_seconds)
+                current = await self._maybe_await(client.aio.files.get(name=file_name))
+        finally:
+            if uploaded is not None and not ready:
+                failed_name = getattr(uploaded, "name", None)
+                if failed_name:
+                    try:
+                        await self._delete_uploaded_video(client, failed_name, telemetry)
+                    except Exception as exc:
+                        logger.warning(
+                            "Gemini video cleanup after upload failure failed file_name=%s error_type=%s",
+                            failed_name,
+                            type(exc).__name__,
+                        )
+            if temporary_path:
+                try:
+                    Path(temporary_path).unlink(missing_ok=True)
+                except OSError:
+                    logger.warning("Video temporary file cleanup failed")
+
+    async def _delete_uploaded_video(
+        self, client: Any, file_name: str | None, telemetry: dict[str, Any]
+    ) -> None:
+        if not file_name:
+            return
+        try:
+            telemetry["stage"] = "cleanup"
+            cleanup_timeout = min(5.0, self._settings.gemini_video_attempt_timeout_seconds)
+            await asyncio.wait_for(
+                self._maybe_await(client.aio.files.delete(name=file_name)),
+                timeout=cleanup_timeout,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Gemini video cleanup failed file_name=%s error_type=%s",
+                file_name,
+                type(exc).__name__,
+            )
+
+    async def _chat_with_video(self, request: ChatRequest) -> ChatResponse:
+        client = self._get_client(video_request=True)
+        started_at = time.perf_counter()
+        telemetry: dict[str, Any] = {
+            "models": [],
+            "calls": 0,
+            "errors": [],
+            "source": "youtube_url" if request.video_url else "upload",
+            "stage": "validation",
+        }
+        remote_file_name: str | None = None
+        try:
+            if request.video_url:
+                telemetry["stage"] = "provider_input"
+                # GenerateContent cannot infer a MIME type from a YouTube URL.
+                # The provider accepts the public URL as the URI and uses this
+                # explicit type to route it through video understanding.
+                video_part = types.Part.from_uri(
+                    file_uri=request.video_url,
+                    mime_type="video/mp4",
+                )
+            else:
+                video_part, remote_file_name = await self._upload_video_part(
+                    client, request, telemetry
+                )
+            prompt = build_video_prompt(
+                request, max_history_messages=self._settings.max_history_messages
+            )
+            config = types.GenerateContentConfig(
+                system_instruction=VIDEO_SYSTEM_INSTRUCTION,
+                temperature=0.2,
+                max_output_tokens=2_000,
+                response_mime_type="application/json",
+                response_schema=GeminiVideoExtraction,
+            )
+            telemetry["stage"] = "inference"
+            response = await self._generate_with_fallback(
+                client,
+                [video_part, prompt],
+                config,
+                telemetry=telemetry,
+                fallback_on_timeout=True,
+                video_request=True,
+            )
+            extraction = self._parse_video_extraction(response)
+            result = self._build_video_result(extraction)
+            finish_reason, token_usage = self._response_telemetry(response)
+            logger.info(
+                "Gemini video completed source=%s size_bytes=%s duration=%s models=%s calls=%d latency_ms=%d finish_reason=%s token_usage=%s",
+                telemetry["source"], telemetry.get("size_bytes", "unknown"),
+                telemetry.get("duration_seconds", "unverified"), telemetry["models"], telemetry["calls"],
+                (time.perf_counter() - started_at) * 1000,
+                finish_reason,
+                token_usage if token_usage is not None else "unavailable",
+            )
+            return ChatResponse.model_validate(result.model_dump(exclude_none=True))
+        except AIProviderUnavailableError:
+            raise
+        except asyncio.TimeoutError as exc:
+            telemetry["stage"] = "timeout"
+            logger.warning(
+                "Gemini video timed out source=%s models=%s calls=%d latency_ms=%d",
+                telemetry["source"], telemetry["models"], telemetry["calls"],
+                (time.perf_counter() - started_at) * 1000,
+            )
+            raise AIProviderUnavailableError(
+                "NutriBot xử lý video quá lâu, vui lòng thử lại sau"
+            ) from exc
+        except Exception as exc:
+            telemetry["stage"] = "failure"
+            logger.exception(
+                "Gemini video failed source=%s error_type=%s latency_ms=%d",
+                telemetry["source"], type(exc).__name__,
+                (time.perf_counter() - started_at) * 1000,
+            )
+            raise AIProviderUnavailableError(
+                "NutriBot không thể phân tích video lúc này, vui lòng thử lại sau"
+            ) from exc
+        finally:
+            await self._delete_uploaded_video(client, remote_file_name, telemetry)
+
+    async def chat(self, request: ChatRequest) -> ChatResponse:
+        if request.video_url is not None or request.video is not None:
+            try:
+                return await asyncio.wait_for(
+                    self._chat_with_video(request),
+                    timeout=self._settings.gemini_video_timeout_seconds,
+                )
+            except asyncio.TimeoutError as exc:
+                raise AIProviderUnavailableError(
+                    "NutriBot xử lý video quá lâu, vui lòng thử lại sau"
+                ) from exc
+
+        is_image_request = request.image is not None
+        has_image_context = self._has_context(request, "image_context:") or self._has_context(
+            request, "recognized_ingredients:"
+        )
+        has_video_context = self._has_context(request, "video_context:") or self._has_context(
+            request, "video_analysis:"
+        )
         use_image_controls = is_image_request or has_image_context
-        client = self._get_client(image_request=use_image_controls)
-        prompt = (build_image_prompt if is_image_request else build_user_prompt)(
+        use_video_controls = has_video_context
+        client = self._get_client(
+            image_request=use_image_controls,
+            video_request=use_video_controls,
+        )
+        prompt_builder = (
+            build_image_prompt
+            if is_image_request
+            else (build_video_prompt if has_video_context else build_user_prompt)
+        )
+        prompt = prompt_builder(
             request,
             max_history_messages=self._settings.max_history_messages,
         )
@@ -358,13 +594,17 @@ class GeminiService:
                 else (
                     IMAGE_CONTEXT_FOLLOWUP_SYSTEM_INSTRUCTION
                     if has_image_context
-                    else SYSTEM_INSTRUCTION
+                    else (
+                        VIDEO_CONTEXT_FOLLOWUP_SYSTEM_INSTRUCTION
+                        if has_video_context
+                        else SYSTEM_INSTRUCTION
+                    )
                 )
             ),
             temperature=0.35,
             max_output_tokens=1_000,
             response_mime_type="application/json",
-            response_schema=GeminiChatResult,
+            response_schema=GeminiTextChatResult,
         )
 
         started_at = time.perf_counter()
@@ -384,23 +624,33 @@ class GeminiService:
                 contents,
                 config,
                 telemetry=telemetry,
-                fallback_on_timeout=use_image_controls,
+                fallback_on_timeout=use_image_controls or use_video_controls,
             )
             response = (
                 await asyncio.wait_for(
                     generation, timeout=self._settings.gemini_image_timeout_seconds
                 )
                 if use_image_controls
-                else await generation
+                else (
+                    await asyncio.wait_for(
+                        generation, timeout=self._settings.gemini_video_timeout_seconds
+                    )
+                    if use_video_controls
+                    else await generation
+                )
             )
-            result = self._parse_response(response)
+            result = (
+                self._parse_video_followup_response(response)
+                if has_video_context and not is_image_request
+                else self._parse_response(response)
+            )
             if is_image_request:
                 result = _refine_image_result(result, request)
             usage = getattr(response, "usage_metadata", None)
             token_usage = getattr(usage, "total_token_count", None) if usage else None
             logger.info(
-                "Gemini chat completed image=%s models=%s calls=%d latency_ms=%d token_usage=%s",
-                use_image_controls,
+                "Gemini chat completed source=%s models=%s calls=%d latency_ms=%d token_usage=%s",
+                "image" if use_image_controls else ("video_context" if use_video_controls else "text"),
                 telemetry["models"],
                 telemetry["calls"],
                 (time.perf_counter() - started_at) * 1000,
@@ -411,8 +661,8 @@ class GeminiService:
             raise
         except asyncio.TimeoutError as exc:
             logger.warning(
-                "Gemini chat timed out image=%s models=%s calls=%d latency_ms=%d",
-                use_image_controls,
+                "Gemini chat timed out source=%s models=%s calls=%d latency_ms=%d",
+                "image" if use_image_controls else ("video_context" if use_video_controls else "text"),
                 telemetry["models"],
                 telemetry["calls"],
                 (time.perf_counter() - started_at) * 1000,
@@ -462,6 +712,7 @@ class GeminiService:
         config: types.GenerateContentConfig,
         telemetry: dict[str, Any] | None = None,
         fallback_on_timeout: bool = False,
+        video_request: bool = False,
     ) -> Any:
         telemetry = telemetry if telemetry is not None else {}
         telemetry.setdefault("models", [])
@@ -485,6 +736,14 @@ class GeminiService:
                     exc.code,
                     telemetry["calls"],
                 )
+                if exc.code == 429:
+                    retry_after = self._retry_after_seconds(exc)
+                    logger.warning(
+                        "Gemini quota/rate limit model=%s retry_after_seconds=%s",
+                        model,
+                        retry_after if retry_after is not None else "unavailable",
+                    )
+                    raise AIQuotaExceededError(retry_after) from exc
                 raise
             except Exception as exc:
                 telemetry["errors"].append(
@@ -502,6 +761,7 @@ class GeminiService:
                 exc.code not in transient_statuses
                 or not fallback_model
                 or fallback_model == self._settings.gemini_model
+                or (video_request and fallback_model not in _VIDEO_CAPABLE_MODELS)
             ):
                 raise
             logger.warning(
@@ -517,9 +777,15 @@ class GeminiService:
                 exc.code,
             )
             return await generate(fallback_model)
+
         except httpx.TimeoutException as exc:
             fallback_model = self._settings.gemini_fallback_model
-            if not fallback_on_timeout or not fallback_model or fallback_model == self._settings.gemini_model:
+            if (
+                not fallback_on_timeout
+                or not fallback_model
+                or fallback_model == self._settings.gemini_model
+                or (video_request and fallback_model not in _VIDEO_CAPABLE_MODELS)
+            ):
                 raise
             logger.info(
                 "Gemini fallback selected primary=%s fallback=%s reason=http_timeout",
@@ -527,6 +793,175 @@ class GeminiService:
                 fallback_model,
             )
             return await generate(fallback_model)
+
+    @staticmethod
+    def _retry_after_seconds(exc: errors.APIError) -> int | None:
+        """Read only an explicit Google RPC RetryInfo delay."""
+        details = getattr(exc, "details", None)
+        if not isinstance(details, dict):
+            return None
+
+        error = details.get("error")
+        candidates: list[Any] = []
+        if isinstance(error, dict):
+            candidates.append(error.get("details"))
+        candidates.append(details.get("details"))
+
+        for value in candidates:
+            if not isinstance(value, list):
+                continue
+            for item in value:
+                if not isinstance(item, dict):
+                    continue
+                type_name = str(item.get("@type", ""))
+                if not type_name.endswith("google.rpc.RetryInfo"):
+                    continue
+                delay = item.get("retryDelay")
+                if isinstance(delay, str):
+                    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)s\s*", delay)
+                    if match:
+                        return max(0, math.ceil(float(match.group(1))))
+                elif isinstance(delay, dict):
+                    seconds = delay.get("seconds")
+                    nanos = delay.get("nanos", 0)
+                    if isinstance(seconds, (int, float)) and isinstance(
+                        nanos, (int, float)
+                    ):
+                        return max(0, math.ceil(float(seconds) + float(nanos) / 1e9))
+        return None
+
+    @staticmethod
+    def _response_telemetry(response: Any) -> tuple[str, int | None]:
+        usage = getattr(response, "usage_metadata", None)
+        token_usage = getattr(usage, "total_token_count", None) if usage else None
+        if usage and token_usage is None:
+            token_usage = getattr(usage, "output_token_count", None)
+        candidates = getattr(response, "candidates", None) or []
+        finish = getattr(candidates[0], "finish_reason", None) if candidates else None
+        finish_name = getattr(finish, "name", None) or str(finish or "unavailable")
+        return finish_name, token_usage
+
+    @staticmethod
+    def _parse_video_extraction(response: Any) -> GeminiVideoExtraction:
+        parsed = getattr(response, "parsed", None)
+        try:
+            if isinstance(parsed, GeminiVideoExtraction):
+                return parsed
+            if isinstance(parsed, GeminiChatResult):
+                analysis = parsed.video_analysis
+                if analysis is None:
+                    raise ValueError("video_analysis missing")
+                return GeminiVideoExtraction(
+                    dish_name=analysis.dish_name,
+                    ingredients=[item.name for item in analysis.ingredients],
+                    steps=[item.instruction for item in analysis.steps],
+                    uncertainties=analysis.uncertainties,
+                )
+            if parsed is not None:
+                return GeminiVideoExtraction.model_validate(parsed)
+            text = getattr(response, "text", None)
+            if not text:
+                raise ValueError("empty model response")
+            payload_text = text.strip()
+            try:
+                payload = json.loads(payload_text)
+            except json.JSONDecodeError:
+                fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", payload_text, re.DOTALL)
+                if fenced:
+                    payload = json.loads(fenced.group(1))
+                else:
+                    start, end = payload_text.find("{"), payload_text.rfind("}")
+                    if start < 0 or end <= start:
+                        raise ValueError("response is not a JSON object")
+                    payload = json.loads(payload_text[start : end + 1])
+            return GeminiVideoExtraction.model_validate(payload)
+        except ValidationError as exc:
+            safe_errors = [
+                {"loc": error.get("loc"), "type": error.get("type")}
+                for error in exc.errors()
+            ]
+            logger.warning("Gemini video validation failed errors=%s", safe_errors)
+            raise AIProviderUnavailableError(
+                "NutriBot nhận được dữ liệu video không hợp lệ, vui lòng thử lại"
+            ) from exc
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            logger.warning(
+                "Gemini video response format failed error_type=%s", type(exc).__name__
+            )
+            raise AIProviderUnavailableError(
+                "NutriBot nhận được dữ liệu video không hợp lệ, vui lòng thử lại"
+            ) from exc
+
+    @staticmethod
+    def _build_video_result(extraction: GeminiVideoExtraction) -> ChatResponse:
+        dish_name = extraction.dish_name.strip() if extraction.dish_name else None
+        ingredients = []
+        seen_ingredients: set[str] = set()
+        for value in extraction.ingredients:
+            clean = value.strip()
+            if clean and clean.casefold() not in seen_ingredients:
+                ingredients.append(VideoIngredient(name=clean))
+                seen_ingredients.add(clean.casefold())
+        steps = [
+            VideoStep(order=index, instruction=value.strip())
+            for index, value in enumerate(extraction.steps, start=1)
+            if value.strip()
+        ]
+        uncertainties = []
+        seen_uncertainties: set[str] = set()
+        for value in extraction.uncertainties:
+            clean = value.strip()
+            if clean and clean.casefold() not in seen_uncertainties:
+                uncertainties.append(clean)
+                seen_uncertainties.add(clean.casefold())
+
+        analysis = VideoAnalysis(
+            dish_name=dish_name,
+            ingredients=ingredients,
+            steps=steps,
+            uncertainties=uncertainties,
+        )
+        if not dish_name and not ingredients and not steps:
+            reply = "Video không cho phép xác định đầy đủ một món ăn hoặc quy trình nấu."
+        else:
+            subject = f"món {dish_name}" if dish_name else "một món ăn"
+            reply = f"Video ghi nhận {subject}."
+            if ingredients:
+                reply += " Nguyên liệu: " + ", ".join(item.name for item in ingredients) + "."
+            if steps:
+                reply += " Đã ghi nhận " + str(len(steps)) + " bước theo thứ tự trong video."
+        if uncertainties:
+            reply += " Lưu ý: " + " ".join(uncertainties)
+
+        context_parts = []
+        if dish_name:
+            context_parts.append("Món được nhận diện: " + dish_name + ".")
+        if ingredients:
+            context_parts.append("Nguyên liệu: " + ", ".join(item.name for item in ingredients) + ".")
+        if steps:
+            context_parts.append("Số bước đã xác minh: " + str(len(steps)) + ".")
+        if uncertainties:
+            context_parts.append("Chưa chắc chắn: " + " ".join(uncertainties))
+        context = " ".join(context_parts) or "Chưa xác định được thông tin nấu ăn đáng tin cậy từ video."
+        return ChatResponse(
+            reply=reply,
+            recommendations=[],
+            video_analysis=analysis,
+            video_context=context[:2_000],
+        )
+    @staticmethod
+    def _parse_video_followup_response(response: Any) -> ChatResponse:
+        parsed = getattr(response, "parsed", None)
+        if isinstance(parsed, GeminiTextChatResult):
+            return ChatResponse.model_validate(parsed.model_dump(exclude_none=True))
+        try:
+            parsed = GeminiService._parse_response(response)
+            return ChatResponse.model_validate(parsed.model_dump(exclude_none=True))
+        except AIProviderUnavailableError:
+            text = (getattr(response, "text", None) or "").strip()
+            if text and not text.startswith(("{", "[", "```")):
+                return ChatResponse(reply=text, recommendations=[])
+            raise
 
     @staticmethod
     def _parse_meal_plan_response(response: Any) -> MealPlanResponse:
@@ -556,7 +991,19 @@ class GeminiService:
             text = getattr(response, "text", None)
             if not text:
                 raise ValueError("Gemini trả về nội dung rỗng")
-            return GeminiChatResult.model_validate_json(text)
+            try:
+                return GeminiChatResult.model_validate_json(text)
+            except ValidationError:
+                # Some Gemini model versions return a fenced JSON document even
+                # when application/json was requested. Accept only a bounded
+                # JSON object; free-form text still fails closed below.
+                fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+                if fenced:
+                    return GeminiChatResult.model_validate_json(fenced.group(1))
+                start, end = text.find("{"), text.rfind("}")
+                if start >= 0 and end > start:
+                    return GeminiChatResult.model_validate_json(text[start : end + 1])
+                raise
         except (ValidationError, ValueError) as exc:
             raise AIProviderUnavailableError(
                 "NutriBot nhận được phản hồi không hợp lệ, vui lòng thử lại"

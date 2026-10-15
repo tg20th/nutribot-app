@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from google.genai import errors
 
 from app.config import Settings
-from app.exceptions import AIProviderUnavailableError
+from app.exceptions import AIProviderUnavailableError, AIQuotaExceededError
 from app.prompts import SYSTEM_INSTRUCTION, build_user_prompt
 from app.schemas.chat import ChatRequest, GeminiChatResult
 from app.services.gemini_service import GeminiService
@@ -25,6 +25,19 @@ def test_service_uses_json_schema_and_server_instruction():
     assert response.reply
     assert models.call["config"].system_instruction == SYSTEM_INSTRUCTION
     assert models.call["config"].response_mime_type == "application/json"
+
+
+def test_sdk_retry_is_limited_to_one_attempt_for_text_requests(monkeypatch):
+    captured = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr("app.services.gemini_service.genai.Client", FakeClient)
+    service = GeminiService(Settings(gemini_api_key="test-key"))
+    service._get_client()
+    assert captured["http_options"].retry_options.attempts == 1
 
 
 def test_system_instruction_covers_scope_types_safety_language_and_injection():
@@ -77,8 +90,41 @@ def test_429_does_not_retry_the_fallback_model():
 
     models = QuotaModels()
     service = GeminiService(Settings(gemini_api_key="test-key"), client=SimpleNamespace(aio=SimpleNamespace(models=models)))
-    with pytest.raises(AIProviderUnavailableError):
+    with pytest.raises(AIQuotaExceededError) as caught:
         asyncio.run(service.chat(ChatRequest(message="nutrition", session_id="s")))
+    assert models.calls == 1
+    assert caught.value.retry_after_seconds is None
+
+
+def test_429_retry_info_is_exposed_without_fallback():
+    class QuotaModels:
+        calls = 0
+
+        async def generate_content(self, **_kwargs):
+            self.calls += 1
+            raise errors.APIError(
+                429,
+                {
+                    "error": {
+                        "status": "RESOURCE_EXHAUSTED",
+                        "details": [
+                            {
+                                "@type": "type.googleapis.com/google.rpc.RetryInfo",
+                                "retryDelay": "55898s",
+                            }
+                        ],
+                    }
+                },
+            )
+
+    models = QuotaModels()
+    service = GeminiService(
+        Settings(gemini_api_key="test-key", gemini_fallback_model="fallback"),
+        client=SimpleNamespace(aio=SimpleNamespace(models=models)),
+    )
+    with pytest.raises(AIQuotaExceededError) as caught:
+        asyncio.run(service.chat(ChatRequest(message="nutrition", session_id="s")))
+    assert caught.value.retry_after_seconds == 55898
     assert models.calls == 1
 
 

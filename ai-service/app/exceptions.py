@@ -11,3 +11,13 @@ class AIConfigurationError(AIServiceError):
 
 class AIProviderUnavailableError(AIServiceError):
     """Nhà cung cấp AI tạm thời không phản hồi."""
+
+
+class AIQuotaExceededError(AIProviderUnavailableError):
+    """Gemini từ chối do quota hoặc rate limit (HTTP 429)."""
+
+    def __init__(self, retry_after_seconds: int | None = None) -> None:
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(
+            "Dịch vụ AI đã đạt giới hạn sử dụng. Vui lòng thử lại sau."
+        )
