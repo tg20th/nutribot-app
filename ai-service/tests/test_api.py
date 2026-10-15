@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.exceptions import AIProviderUnavailableError
+from app.exceptions import AIProviderUnavailableError, AIQuotaExceededError
 from app.main import create_app
 from app.planner import MealPlanResponse
 from app.schemas.chat import ChatResponse
@@ -31,6 +31,11 @@ class StubMealPlannerService(StubGeminiService):
                 for index in range(7)
             ],
         )
+
+
+class QuotaGeminiService:
+    async def chat(self, _request):
+        raise AIQuotaExceededError(55898)
 
 
 class UnavailableGeminiService:
@@ -132,6 +137,21 @@ def test_provider_failure_returns_service_unavailable():
 
     assert response.status_code == 503
     assert response.json()["message"] == "NutriBot đang bận, vui lòng thử lại sau"
+
+
+def test_quota_failure_returns_429_with_structured_retry_delay():
+    app = create_app(
+        settings=Settings(gemini_api_key="test-key"),
+        gemini_service=QuotaGeminiService(),
+    )
+    response = TestClient(app).post(
+        "/api/ai/chat",
+        json={"message": "Goi y mon an", "session_id": "session-1"},
+    )
+    assert response.status_code == 429
+    assert response.json()["error"] == "AI_QUOTA_EXCEEDED"
+    assert response.json()["retry_after_seconds"] == 55898
+    assert response.json()["data"] is None
 
 
 def test_missing_api_key_returns_service_unavailable_without_breaking_health():

@@ -341,7 +341,7 @@ def test_explicit_image_context_follow_up_uses_bounded_image_controls():
         asyncio.run(service.chat(follow_up))
 
 
-def test_image_client_disables_sdk_retry_without_changing_text_client(monkeypatch):
+def test_all_gemini_clients_disable_sdk_retry(monkeypatch):
     clients = []
 
     def fake_client(**kwargs):
@@ -357,7 +357,7 @@ def test_image_client_disables_sdk_retry_without_changing_text_client(monkeypatc
     assert clients[0]["http_options"].timeout == 10_000
     assert clients[0]["http_options"].retry_options.attempts == 1
     assert clients[1]["http_options"].timeout == 14_000
-    assert clients[1]["http_options"].retry_options is None
+    assert clients[1]["http_options"].retry_options.attempts == 1
 
 
 def test_image_timeout_is_handled_as_provider_failure():
