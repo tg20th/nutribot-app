@@ -206,7 +206,15 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     finally { if (loaded) setHistoryState('ready'); }
   };
   const closeWidget = useCallback(() => {
-    if (displayMode === 'fullscreen' || !panelRef.current || prefersReducedMotion()) { setIsOpen(false); setIsMounted(false); requestAnimationFrame(() => launcherRef.current?.focus()); return; }
+    if (displayMode === 'fullscreen' || !panelRef.current || prefersReducedMotion()) {
+      setIsOpen(false);
+      setIsMounted(false);
+      setDisplayMode('compact');
+      setHistoryOpen(false);
+      setAttachmentMenuOpen(false);
+      requestAnimationFrame(() => launcherRef.current?.focus());
+      return;
+    }
     gsap.to(panelRef.current, { autoAlpha: 0, x: 22, y: 14, scale: .97, duration: .24, ease: 'power2.in', onComplete: () => { setIsOpen(false); setIsMounted(false); requestAnimationFrame(() => launcherRef.current?.focus()); } });
   }, [displayMode]);
 
@@ -327,7 +335,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     </div>
   </aside>;
 
-  return <div className={`chatbot-widget${displayMode === 'fullscreen' ? ' is-fullscreen' : ''}${isOpen ? ' is-open' : ''}`}>
+  return <div className={`chatbot-widget${displayMode === 'fullscreen' && isOpen ? ' is-fullscreen' : ''}${isOpen ? ' is-open' : ''}`}>
     {isMounted && !showLimitModal && <section ref={panelRef} id="nutribot-chat-panel" className={`chatbot-widget__panel${displayMode === 'fullscreen' ? ' chatbot-widget__panel--fullscreen' : ''}`} role="dialog" aria-label="NutriBot nutrition assistant" aria-modal={displayMode === 'fullscreen' ? 'true' : 'false'}>
       <header className="chatbot-widget__header">
         <div className="chatbot-widget__brand"><span className="chatbot-widget__brand-mark" aria-hidden="true"><BotMessageSquare size={20} /></span><span><strong>NutriBot AI</strong><small><i aria-hidden="true" /> {isLoading ? (attachment?.kind === 'video' ? 'Analyzing video...' : attachment?.kind === 'image' ? 'Analyzing image...' : 'Thinking...') : 'Ready to help'}</small></span></div>
