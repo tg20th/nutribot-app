@@ -1,10 +1,13 @@
 package com.fpt.swp391.nutribot.service;
 
+import com.fpt.swp391.nutribot.dto.request.ChatAttachmentRequest;
 import com.fpt.swp391.nutribot.dto.request.ChatMessageCreateRequest;
 import com.fpt.swp391.nutribot.dto.response.*;
 import com.fpt.swp391.nutribot.entity.*;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.*;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -12,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 
 @Slf4j
@@ -20,6 +24,7 @@ public class ChatHistoryService {
     private final ChatSessionRepository sessionRepository;
     private final ChatMessageRepository messageRepository;
     private final UserRepository userRepository;
+    private final ObjectMapper objectMapper;
 
     @Transactional public ChatSessionResponse createSession(String username) {
         User user = userRepository.findByUsername(username).orElseThrow(() -> new NotFoundException("Người dùng không tồn tại"));
@@ -66,14 +71,15 @@ public class ChatHistoryService {
 
     @Transactional public ChatMessageResponse addMessage(String username, Integer sessionId, ChatMessageCreateRequest request) {
         ChatSession session = ownedSession(username, sessionId);
+        String storedContent = encodeMessageContent(request);
         ChatMessage message = messageRepository.save(ChatMessage.builder()
                 .session(session)
                 .senderType(request.getSenderType())
-                .content(request.getContent().trim())
+                .content(storedContent)
                 .idempotencyKey(request.getIdempotencyKey())
                 .build());
         if ("Cuộc trò chuyện mới".equals(session.getTitle()) && "USER".equals(request.getSenderType())) {
-            session.setTitle(shortTitle(message.getContent()));
+            session.setTitle(shortTitle(extractDisplayText(request.getContent())));
         }
         sessionRepository.save(session);
         return toMessage(message);
@@ -94,22 +100,71 @@ public class ChatHistoryService {
         return ChatSessionResponse.builder()
                 .sessionId(s.getSessionId())
                 .title(s.getTitle())
-                .preview(latest == null ? "" : latest.getContent())
+                .preview(latest == null ? "" : extractDisplayText(latest.getContent()))
                 .messageCount(count)
                 .updatedAt(s.getUpdatedAt())
                 .build();
     }
 
     private ChatMessageResponse toMessage(ChatMessage m) {
+        StoredPayload stored = decodeMessageContent(m.getContent());
         return ChatMessageResponse.builder()
                 .messageId(m.getMessageId())
                 .senderType(m.getSenderType())
-                .content(m.getContent())
+                .content(stored.text())
                 .createdAt(m.getCreatedAt())
+                .attachments(stored.attachments())
                 .build();
+    }
+
+    private String encodeMessageContent(ChatMessageCreateRequest request) {
+        String text = request.getContent() == null ? "" : request.getContent().trim();
+        List<ChatAttachmentRequest> attachments = request.getAttachments();
+        if (attachments == null || attachments.isEmpty()) {
+            return text;
+        }
+        try {
+            StoredPayload payload = new StoredPayload(text, toAttachmentResponses(attachments));
+            return objectMapper.writeValueAsString(payload);
+        } catch (Exception ex) {
+            log.warn("Failed to serialize chat attachments; storing plain text only", ex);
+            return text;
+        }
+    }
+
+    private StoredPayload decodeMessageContent(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return new StoredPayload(raw, null);
+        }
+        String trimmed = raw.trim();
+        if (!trimmed.startsWith("{")) {
+            return new StoredPayload(raw, null);
+        }
+        try {
+            StoredPayload payload = objectMapper.readValue(trimmed, new TypeReference<StoredPayload>() {});
+            String text = payload.text() == null ? "" : payload.text();
+            return new StoredPayload(text, payload.attachments());
+        } catch (Exception ex) {
+            return new StoredPayload(raw, null);
+        }
+    }
+
+    private List<ChatAttachmentResponse> toAttachmentResponses(List<ChatAttachmentRequest> attachments) {
+        return attachments.stream().map(a -> ChatAttachmentResponse.builder()
+                .type(a.getType())
+                .mimeType(a.getMimeType())
+                .filename(a.getFilename())
+                .build()).toList();
+    }
+
+    private String extractDisplayText(String content) {
+        StoredPayload stored = decodeMessageContent(content);
+        return stored.text();
     }
 
     private String shortTitle(String value) {
         return value.length() <= 70 ? value : value.substring(0, 67).stripTrailing() + "...";
     }
+
+    private record StoredPayload(String text, List<ChatAttachmentResponse> attachments) { }
 }

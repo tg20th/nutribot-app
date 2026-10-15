@@ -12,6 +12,7 @@ import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.ChatMessageRepository;
 import com.fpt.swp391.nutribot.repository.ChatSessionRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,7 @@ class ChatHistoryServiceTest {
     private ChatSessionRepository sessionRepository;
     private ChatMessageRepository messageRepository;
     private UserRepository userRepository;
+    private ObjectMapper objectMapper;
     private ChatHistoryService chatHistoryService;
 
     private User testUser;
@@ -41,7 +43,8 @@ class ChatHistoryServiceTest {
         sessionRepository = mock(ChatSessionRepository.class);
         messageRepository = mock(ChatMessageRepository.class);
         userRepository = mock(UserRepository.class);
-        chatHistoryService = new ChatHistoryService(sessionRepository, messageRepository, userRepository);
+        objectMapper = new ObjectMapper();
+        chatHistoryService = new ChatHistoryService(sessionRepository, messageRepository, userRepository, objectMapper);
 
         testUser = User.builder()
                 .userId(1)

@@ -1,14 +1,18 @@
 package com.fpt.swp391.nutribot.controller;
 
+import com.fpt.swp391.nutribot.dto.request.ChatAttachmentRequest;
 import com.fpt.swp391.nutribot.dto.request.ChatMessageCreateRequest;
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
+import com.fpt.swp391.nutribot.dto.response.ChatAttachmentResponse;
 import com.fpt.swp391.nutribot.dto.response.ChatMessageResponse;
 import com.fpt.swp391.nutribot.dto.response.ChatSessionResponse;
 import com.fpt.swp391.nutribot.dto.response.HealthProfileResponse;
 import com.fpt.swp391.nutribot.entity.ChatMessage;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
+import com.fpt.swp391.nutribot.exception.InvalidMediaException;
 import com.fpt.swp391.nutribot.repository.ChatMessageRepository;
 import com.fpt.swp391.nutribot.service.ChatHistoryService;
+import com.fpt.swp391.nutribot.service.ChatMediaValidator;
 import com.fpt.swp391.nutribot.service.ChatbotGatewayService;
 import com.fpt.swp391.nutribot.service.ChatbotGatewayService.ConversationTurn;
 import com.fpt.swp391.nutribot.service.ChatbotHealthProfileCache;
@@ -18,7 +22,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -47,6 +50,7 @@ public class ChatbotController {
     private final ChatbotHealthProfileCache chatbotHealthProfileCache;
     private final ChatbotIntentRouter chatbotIntentRouter;
     private final ChatMessageRepository chatMessageRepository;
+    private final ChatMediaValidator chatMediaValidator;
 
     @PostMapping("/query")
     public ResponseEntity<ApiResponse<ChatbotQueryResponse>> query(
@@ -56,6 +60,20 @@ public class ChatbotController {
         boolean guest = isGuest(authentication);
         if (guest && (request.sessionId() == null || request.sessionId().isBlank())) {
             throw new BadRequestException("A guest session ID is required.");
+        }
+
+        List<ChatAttachmentRequest> attachments = request.attachments() == null
+                ? List.of() : request.attachments();
+        chatMediaValidator.validate(attachments);
+        ChatAttachmentRequest attachment = attachments.isEmpty() ? null : attachments.get(0);
+
+        if (guest && attachment != null) {
+            throw new InvalidMediaException("Guest users cannot send media. Please sign in to attach images or videos.");
+        }
+
+        boolean hasMessage = request.message() != null && !request.message().isBlank();
+        if (!hasMessage && attachment == null) {
+            throw new BadRequestException("Either a text message or a media attachment is required.");
         }
 
         Integer memberSessionId = null;
@@ -75,14 +93,14 @@ public class ChatbotController {
                     ChatMessage m = existing.get();
                     return ResponseEntity.ok(ApiResponse.success("Success",
                             new ChatbotQueryResponse(memberSessionId, m.getSenderType(), m.getContent(), m.getCreatedAt(),
-                                    m.getContent(), List.of(), null, false)));
+                                    m.getContent(), List.of(), null, false, null)));
                 }
             }
 
             history = loadMemberHistory(username, memberSessionId);
             profile = chatbotHealthProfileCache.get(username);
             userContext = toHealthContext(profile);
-            saveMessage(username, memberSessionId, "USER", request.message(), request.idempotencyKey());
+            saveMessage(username, memberSessionId, "USER", request.message(), request.idempotencyKey(), attachment);
         }
 
         String aiSessionId = guest ? request.sessionId() : memberSessionId.toString();
@@ -92,15 +110,15 @@ public class ChatbotController {
             reply = chatbotGatewayService.completeFastPath(httpRequest, guest, fastReply.get());
         } else {
             reply = chatbotGatewayService.getReply(
-                    httpRequest, aiSessionId, request.message(), guest, userContext, history);
+                    httpRequest, aiSessionId, request.message(), guest, userContext, history, attachment);
         }
-        log.info("Chatbot route={}", fastReply.isPresent() ? "FAST" : "AI");
+        log.info("Chatbot route={}, hasMedia={}", fastReply.isPresent() ? "FAST" : "AI", attachment != null);
 
         String assistantContent = toStoredAssistantContent(reply);
         LocalDateTime createdAt = null;
         if (!guest) {
             ChatMessageResponse savedReply = saveMessage(
-                    username(authentication), memberSessionId, "ASSISTANT", assistantContent, null);
+                    username(authentication), memberSessionId, "ASSISTANT", assistantContent, null, null);
             createdAt = savedReply.getCreatedAt();
         }
 
@@ -114,7 +132,8 @@ public class ChatbotController {
                         reply.reply(),
                         reply.recommendations(),
                         reply.remainingTrialCount(),
-                        reply.fallback())));
+                        reply.fallback(),
+                        reply.attachment())));
     }
 
     private Integer findOrCreateMemberSession(String username, String requestedSessionId) {
@@ -147,11 +166,14 @@ public class ChatbotController {
         return context;
     }
 
-    private ChatMessageResponse saveMessage(String username, Integer sessionId, String senderType, String content, String idempotencyKey) {
+    private ChatMessageResponse saveMessage(String username, Integer sessionId, String senderType, String content, String idempotencyKey, ChatAttachmentRequest attachment) {
         ChatMessageCreateRequest request = new ChatMessageCreateRequest();
         request.setSenderType(senderType);
         request.setContent(content);
         request.setIdempotencyKey(idempotencyKey);
+        if (attachment != null) {
+            request.setAttachments(new java.util.ArrayList<>(List.of(attachment)));
+        }
         return chatHistoryService.addMessage(username, sessionId, request);
     }
 
@@ -172,11 +194,12 @@ public class ChatbotController {
 
     public record ChatbotQueryRequest(
             @Size(max = 100, message = "Session ID cannot exceed 100 characters.") String sessionId,
-            @jakarta.validation.constraints.NotBlank(message = "Message is required.")
             @Size(max = 2_000, message = "Message cannot exceed 2000 characters.") String message,
             @Size(max = MAX_CONVERSATION_HISTORY, message = "Conversation history cannot exceed 50 messages.")
             List<@Valid ConversationTurn> conversationHistory,
-            @Size(max = 100, message = "Idempotency key cannot exceed 100 characters.") String idempotencyKey) { }
+            @Size(max = 100, message = "Idempotency key cannot exceed 100 characters.") String idempotencyKey,
+            @Size(max = 1, message = "Chỉ được gửi tối đa một đính kèm")
+            List<@Valid ChatAttachmentRequest> attachments) { }
 
     public record ChatbotQueryResponse(
             Integer sessionId,
@@ -186,5 +209,6 @@ public class ChatbotController {
             String reply,
             List<String> recommendations,
             Integer remainingTrialCount,
-            boolean fallback) { }
+            boolean fallback,
+            ChatAttachmentResponse attachment) { }
 }
