@@ -116,6 +116,7 @@ def create_app(
     @application.post(
         "/api/ai/chat",
         response_model=ChatResponse,
+        response_model_exclude_none=True,
         tags=["Chatbot"],
         summary="Tư vấn dinh dưỡng bằng Gemini",
     )
