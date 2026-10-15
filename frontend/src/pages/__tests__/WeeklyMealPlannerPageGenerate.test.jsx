@@ -80,35 +80,53 @@ const renderPlanner = async (saved = false, withMeals = false) => {
   await waitFor(() => expect(screen.getByRole('button', { name: saved ? 'Re-generate' : 'Generate' })).toBeInTheDocument());
 };
 
+const confirmGenerate = () => {
+  fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+  fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Create Meal Plan' }));
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   window.matchMedia = () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() });
 });
 
 describe('Weekly Planner AI generation flow', () => {
-  it('generates immediately with no saved plan', async () => {
+  it('requires confirmation before generating with no saved plan', async () => {
     mocks.generateMealPlan.mockResolvedValueOnce(plan());
     await renderPlanner(false);
 
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
-    expect(mocks.generateMealPlan).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('heading', { name: 'Generate a New Meal Plan?' })).not.toBeInTheDocument();
+    expect(mocks.generateMealPlan).toHaveBeenCalledTimes(0);
+    expect(screen.getByRole('heading', { name: 'Create an AI Meal Plan?' })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Create Meal Plan' }));
     expect(await screen.findByRole('heading', { name: 'Weekly meal plan preview' })).toBeInTheDocument();
   });
 
-  it('requires confirmation when a saved plan exists but no preview exists', async () => {
+  it('keeps Generate for an empty persisted weekly menu', async () => {
     mocks.generateMealPlan.mockResolvedValueOnce(plan());
     await renderPlanner(true);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Re-generate' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
     expect(mocks.generateMealPlan).toHaveBeenCalledTimes(0);
-    expect(screen.getByRole('heading', { name: 'Generate a New Meal Plan?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Create an AI Meal Plan?' })).toBeInTheDocument();
+  });
+
+  it('returns the outside action to Generate when an unsaved preview is dismissed', async () => {
+    mocks.generateMealPlan.mockResolvedValueOnce(plan());
+    await renderPlanner(false);
+
+    confirmGenerate();
+    await screen.findByRole('heading', { name: 'Weekly meal plan preview' });
+    fireEvent.click(screen.getByRole('button', { name: 'Close meal preview' }));
+
+    expect(screen.getByRole('button', { name: 'Generate' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Re-generate' })).not.toBeInTheDocument();
   });
 
   it('opens confirmation without calling the API when a preview exists', async () => {
     mocks.generateMealPlan.mockResolvedValueOnce(plan());
     await renderPlanner(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    confirmGenerate();
     await screen.findByRole('heading', { name: 'Weekly meal plan preview' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Re-generate' }));
@@ -158,8 +176,9 @@ describe('Weekly Planner AI generation flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Next week' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Generate' })).toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
-    expect(mocks.generateMealPlan).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('heading', { name: 'Generate a New Meal Plan?' })).not.toBeInTheDocument();
+    expect(mocks.generateMealPlan).toHaveBeenCalledTimes(0);
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Create Meal Plan' }));
+    expect(await screen.findByRole('heading', { name: 'Weekly meal plan preview' })).toBeInTheDocument();
   });
 
   it('does not send duplicate generation requests while loading', async () => {
@@ -169,7 +188,9 @@ describe('Weekly Planner AI generation flow', () => {
 
     const generateButton = screen.getByRole('button', { name: 'Generate' });
     fireEvent.click(generateButton);
-    fireEvent.click(generateButton);
+    const confirmButton = within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Create Meal Plan' });
+    fireEvent.click(confirmButton);
+    fireEvent.click(confirmButton);
     expect(mocks.generateMealPlan).toHaveBeenCalledTimes(1);
     resolveGeneration(plan());
     expect(await screen.findByRole('heading', { name: 'Weekly meal plan preview' })).toBeInTheDocument();
@@ -178,7 +199,7 @@ describe('Weekly Planner AI generation flow', () => {
   it('cancels without changing the preview and confirms exactly one re-generation', async () => {
     mocks.generateMealPlan.mockResolvedValueOnce(plan('Old preview')).mockResolvedValueOnce(plan('New preview'));
     await renderPlanner(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    confirmGenerate();
     await screen.findByRole('heading', { name: 'Weekly meal plan preview' });
     fireEvent.click(screen.getByRole('button', { name: 'Re-generate' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -195,7 +216,7 @@ describe('Weekly Planner AI generation flow', () => {
   it('preserves the previous preview when re-generation fails', async () => {
     mocks.generateMealPlan.mockResolvedValueOnce(plan('Old preview')).mockRejectedValueOnce(new Error('AI service is unavailable.'));
     await renderPlanner(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    confirmGenerate();
     await screen.findByRole('heading', { name: 'Weekly meal plan preview' });
     fireEvent.click(screen.getByRole('button', { name: 'Re-generate' }));
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Re-generate' }));
@@ -212,7 +233,7 @@ describe('Weekly Planner AI generation flow', () => {
       .mockRejectedValueOnce(new Error('The planner timed out before finding a feasible plan.'))
       .mockReturnValueOnce(new Promise((resolve) => { resolveRetry = resolve; }));
     await renderPlanner(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Generate' }));
+    confirmGenerate();
     await screen.findByRole('heading', { name: 'Weekly meal plan preview' });
     fireEvent.click(screen.getByRole('button', { name: 'Re-generate' }));
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Re-generate' }));

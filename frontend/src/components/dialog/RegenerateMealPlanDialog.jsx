@@ -3,6 +3,7 @@ import { AlertTriangle, Loader2, RefreshCw, X } from 'lucide-react';
 import useDialogAccessibility from '../../hooks/useDialogAccessibility';
 
 export default function RegenerateMealPlanDialog({
+  mode = 'regenerate',
   status = 'confirm',
   errorMessage = '',
   onConfirm,
@@ -12,12 +13,21 @@ export default function RegenerateMealPlanDialog({
   const dialogRef = useRef(null);
   const isLoading = status === 'loading';
   const isError = status === 'error';
-  const title = isLoading ? 'Generating Your Meal Plan' : isError ? 'Meal Plan Could Not Be Generated' : 'Generate a New Meal Plan?';
+  const isGenerate = mode === 'generate';
+  const title = isLoading
+    ? (isGenerate ? 'AI Is Preparing Your Meal Plan...' : 'Generating Your Meal Plan')
+    : isError
+      ? 'Meal Plan Could Not Be Generated'
+      : (isGenerate ? 'Create an AI Meal Plan?' : 'Generate a New Meal Plan?');
   const description = isLoading
-    ? "We're creating a new meal plan for you. This may take a moment."
+    ? (isGenerate
+      ? 'Please wait while AI builds a meal plan tailored to your nutritional needs.'
+      : "We're creating a new meal plan for you. This may take a moment.")
     : isError
       ? errorMessage || 'We could not generate a new meal plan. Please try again.'
-      : 'This will generate a new meal plan preview. Your current plan will remain unchanged until you choose to use the new one.';
+      : (isGenerate
+        ? "AI will create this week's meal plan based on your health profile, nutrition goals, and dietary preferences."
+        : 'This will generate a new meal plan preview. Your current plan will remain unchanged until you choose to use the new one.');
 
   useDialogAccessibility(dialogRef, onCancel, { closeOnEscape: !isLoading });
 
@@ -70,7 +80,7 @@ export default function RegenerateMealPlanDialog({
           ) : (
             <>
               <button type="button" className="planner-btn-ghost" onClick={onCancel}>Cancel</button>
-              <button type="button" className="planner-btn-primary" onClick={onConfirm}><RefreshCw size={15}/> Re-generate</button>
+              <button type="button" className="planner-btn-primary" onClick={onConfirm}><RefreshCw size={15}/> {isGenerate ? 'Create Meal Plan' : 'Re-generate'}</button>
             </>
           )}
         </footer>
