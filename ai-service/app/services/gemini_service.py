@@ -1,9 +1,12 @@
 """Tích hợp Google Gemini bằng SDK google-genai."""
 
+import asyncio
 import logging
+import re
 import time
 from typing import Any
 
+import httpx
 from google import genai
 from google.genai import errors, types
 from pydantic import ValidationError
@@ -18,32 +21,178 @@ from app.planner import (
     prepare_meal_plan_constraints,
     validate_meal_plan_safety,
 )
-from app.prompts import SYSTEM_INSTRUCTION, build_user_prompt
+from app.prompts import (
+    IMAGE_CONTEXT_FOLLOWUP_SYSTEM_INSTRUCTION,
+    IMAGE_SYSTEM_INSTRUCTION,
+    SYSTEM_INSTRUCTION,
+    build_image_prompt,
+    build_user_prompt,
+)
 from app.schemas.chat import ChatRequest, ChatResponse, GeminiChatResult
 
 
 logger = logging.getLogger(__name__)
 
 
+_UNAMBIGUOUS_INGREDIENT_FIXES = {
+    "tofu": "đậu phụ",
+    "peanut": "đậu phộng",
+    "đủ đủ": "đu đủ",
+}
+_UNCERTAINTY_MARKERS = (
+    "có thể",
+    "có khả năng",
+    "có lẽ",
+    "không chắc",
+    "khó phân biệt",
+    "chưa thể xác định",
+)
+_RECOMMENDATION_MARKERS = (
+    "nấu",
+    "làm món",
+    "món gì",
+    "công thức",
+    "phù hợp",
+    "chế độ ăn",
+    "protein",
+    "dinh dưỡng",
+    "bổ sung",
+    "thay thế",
+    "gợi ý",
+    "ăn gì",
+)
+
+
+def _normalize_ingredient_name(value: str) -> str:
+    normalized = value.strip()
+    for source, replacement in _UNAMBIGUOUS_INGREDIENT_FIXES.items():
+        normalized = re.sub(
+            re.escape(source), replacement, normalized, flags=re.IGNORECASE
+        )
+    return normalized
+
+
+def _normalize_ingredient_list(values: list[str] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values or []:
+        clean_value = _normalize_ingredient_name(value)
+        key = clean_value.casefold()
+        if clean_value and key not in seen:
+            normalized.append(clean_value)
+            seen.add(key)
+    return normalized
+
+
+def _has_nearby_uncertainty(reply: str, ingredient: str) -> bool:
+    reply_lower = _normalize_ingredient_name(reply).casefold()
+    ingredient_lower = ingredient.casefold()
+    clauses = re.split(r"[.;!?]\s+|;\s*", reply_lower)
+    for clause in clauses:
+        if ingredient_lower in clause and any(
+            marker in clause for marker in _UNCERTAINTY_MARKERS
+        ):
+            return True
+    return False
+
+
+def _is_recommendation_request(message: str) -> bool:
+    message_lower = message.casefold().strip()
+    return any(marker in message_lower for marker in _RECOMMENDATION_MARKERS)
+
+
+def _build_image_context(
+    recognized: list[str], uncertain: list[str], warnings: list[str]
+) -> str:
+    parts: list[str] = []
+    if recognized:
+        parts.append("Nhìn thấy rõ: " + ", ".join(recognized) + ".")
+    if uncertain:
+        parts.append("Chưa chắc chắn: " + ", ".join(uncertain) + ".")
+    if warnings:
+        parts.append("Lưu ý: " + " ".join(warnings))
+    return " ".join(parts) or "Chưa xác định được nguyên liệu từ hình ảnh."
+
+
+def _refine_image_result(result: GeminiChatResult, request: ChatRequest) -> GeminiChatResult:
+    recognized = _normalize_ingredient_list(result.recognized_ingredients)
+    uncertain = _normalize_ingredient_list(result.uncertain_ingredients)
+    warnings = _normalize_ingredient_list(result.warnings)
+
+    uncertain_keys = {value.casefold() for value in uncertain}
+    moved_to_uncertain: list[str] = []
+    kept_recognized: list[str] = []
+    for ingredient in recognized:
+        if ingredient.casefold() in uncertain_keys or _has_nearby_uncertainty(result.reply, ingredient):
+            if ingredient.casefold() not in uncertain_keys:
+                uncertain.append(ingredient)
+                uncertain_keys.add(ingredient.casefold())
+            moved_to_uncertain.append(ingredient)
+        else:
+            kept_recognized.append(ingredient)
+
+    reply = result.reply
+    if moved_to_uncertain and not any(
+        marker in reply.casefold() for marker in _UNCERTAINTY_MARKERS
+    ):
+        reply += " Lưu ý: các nguyên liệu này chưa thể xác nhận chắc chắn chỉ từ hình ảnh."
+
+    recommendations = (
+        result.recommendations
+        if _is_recommendation_request(request.message)
+        else []
+    )
+    image_context = _build_image_context(kept_recognized, uncertain, warnings)
+    return result.model_copy(
+        update={
+            "reply": reply,
+            "recommendations": recommendations,
+            "recognized_ingredients": kept_recognized,
+            "uncertain_ingredients": uncertain,
+            "warnings": warnings,
+            "image_context": image_context,
+        }
+    )
+
+
 class GeminiService:
     def __init__(self, settings: Settings, client: Any | None = None) -> None:
         self._settings = settings
         self._client = client
+        self._image_client = None
 
-    def _get_client(self) -> Any:
+    def _get_client(self, image_request: bool = False) -> Any:
         if self._client is not None:
             return self._client
+        if image_request and self._image_client is not None:
+            return self._image_client
         if not self._settings.gemini_configured:
             raise AIConfigurationError(
                 "AI service chưa được cấu hình GEMINI_API_KEY"
             )
-        self._client = genai.Client(
-            api_key=self._settings.gemini_api_key,
-            http_options=types.HttpOptions(
-                timeout=int(self._settings.gemini_timeout_seconds * 1_000)
-            ),
+        http_options = types.HttpOptions(
+            timeout=int(
+                (
+                    self._settings.gemini_image_attempt_timeout_seconds
+                    if image_request
+                    else self._settings.gemini_timeout_seconds
+                )
+                * 1_000
+            )
         )
-        return self._client
+        if image_request:
+            # Image fallback is owned by this service; avoid SDK's default
+            # five-attempt retry loop and keep primary + fallback bounded.
+            http_options.retry_options = types.HttpRetryOptions(attempts=1)
+        client = genai.Client(
+            api_key=self._settings.gemini_api_key,
+            http_options=http_options,
+        )
+        if image_request:
+            self._image_client = client
+        else:
+            self._client = client
+        return client
 
     @property
     def model_name(self): return self._settings.gemini_model
@@ -187,13 +336,31 @@ class GeminiService:
         return ImageRelevanceResponse.model_validate_json(text_content)
 
     async def chat(self, request: ChatRequest) -> ChatResponse:
-        client = self._get_client()
-        prompt = build_user_prompt(
+        is_image_request = request.image is not None
+        has_image_context = any(
+            message.sender == "ASSISTANT"
+            and (
+                "image_context:" in message.content.casefold()
+                or "recognized_ingredients:" in message.content.casefold()
+            )
+            for message in request.conversation_history
+        )
+        use_image_controls = is_image_request or has_image_context
+        client = self._get_client(image_request=use_image_controls)
+        prompt = (build_image_prompt if is_image_request else build_user_prompt)(
             request,
             max_history_messages=self._settings.max_history_messages,
         )
         config = types.GenerateContentConfig(
-            system_instruction=SYSTEM_INSTRUCTION,
+            system_instruction=(
+                IMAGE_SYSTEM_INSTRUCTION
+                if is_image_request
+                else (
+                    IMAGE_CONTEXT_FOLLOWUP_SYSTEM_INSTRUCTION
+                    if has_image_context
+                    else SYSTEM_INSTRUCTION
+                )
+            ),
             temperature=0.35,
             max_output_tokens=1_000,
             response_mime_type="application/json",
@@ -201,19 +368,58 @@ class GeminiService:
         )
 
         started_at = time.perf_counter()
+        telemetry: dict[str, Any] = {"models": [], "calls": 0, "errors": []}
         try:
-            response = await self._generate_with_fallback(client, prompt, config)
+            contents: Any = prompt
+            if request.image is not None:
+                contents = [
+                    prompt,
+                    types.Part.from_bytes(
+                        data=request.image.decoded_bytes(),
+                        mime_type=request.image.mime_type,
+                    ),
+                ]
+            generation = self._generate_with_fallback(
+                client,
+                contents,
+                config,
+                telemetry=telemetry,
+                fallback_on_timeout=use_image_controls,
+            )
+            response = (
+                await asyncio.wait_for(
+                    generation, timeout=self._settings.gemini_image_timeout_seconds
+                )
+                if use_image_controls
+                else await generation
+            )
             result = self._parse_response(response)
+            if is_image_request:
+                result = _refine_image_result(result, request)
             usage = getattr(response, "usage_metadata", None)
             token_usage = getattr(usage, "total_token_count", None) if usage else None
             logger.info(
-                "Gemini chat latency_ms=%d token_usage=%s",
+                "Gemini chat completed image=%s models=%s calls=%d latency_ms=%d token_usage=%s",
+                use_image_controls,
+                telemetry["models"],
+                telemetry["calls"],
                 (time.perf_counter() - started_at) * 1000,
                 token_usage if token_usage is not None else "unavailable",
             )
-            return ChatResponse.model_validate(result.model_dump())
+            return ChatResponse.model_validate(result.model_dump(exclude_none=True))
         except AIProviderUnavailableError:
             raise
+        except asyncio.TimeoutError as exc:
+            logger.warning(
+                "Gemini chat timed out image=%s models=%s calls=%d latency_ms=%d",
+                use_image_controls,
+                telemetry["models"],
+                telemetry["calls"],
+                (time.perf_counter() - started_at) * 1000,
+            )
+            raise AIProviderUnavailableError(
+                "NutriBot đang xử lý quá lâu, vui lòng thử lại sau"
+            ) from exc
         except Exception as exc:
             logger.exception("Gemini không thể xử lý yêu cầu: %s", type(exc).__name__)
             raise AIProviderUnavailableError(
@@ -254,13 +460,40 @@ class GeminiService:
         client: Any,
         prompt: Any,
         config: types.GenerateContentConfig,
+        telemetry: dict[str, Any] | None = None,
+        fallback_on_timeout: bool = False,
     ) -> Any:
+        telemetry = telemetry if telemetry is not None else {}
+        telemetry.setdefault("models", [])
+        telemetry.setdefault("calls", 0)
+        telemetry.setdefault("errors", [])
+
+        async def generate(model: str) -> Any:
+            telemetry["models"].append(model)
+            telemetry["calls"] += 1
+            try:
+                return await client.aio.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=config,
+                )
+            except errors.APIError as exc:
+                telemetry["errors"].append({"model": model, "status": exc.code})
+                logger.warning(
+                    "Gemini model failed model=%s status=%s call=%d",
+                    model,
+                    exc.code,
+                    telemetry["calls"],
+                )
+                raise
+            except Exception as exc:
+                telemetry["errors"].append(
+                    {"model": model, "type": type(exc).__name__}
+                )
+                raise
+
         try:
-            return await client.aio.models.generate_content(
-                model=self._settings.gemini_model,
-                contents=prompt,
-                config=config,
-            )
+            return await generate(self._settings.gemini_model)
         except errors.APIError as exc:
             fallback_model = self._settings.gemini_fallback_model
             # A 429 is an exhausted quota: retrying only adds latency.
@@ -277,11 +510,23 @@ class GeminiService:
                 exc.code,
                 fallback_model,
             )
-            return await client.aio.models.generate_content(
-                model=fallback_model,
-                contents=prompt,
-                config=config,
+            logger.info(
+                "Gemini fallback selected primary=%s fallback=%s status=%s",
+                self._settings.gemini_model,
+                fallback_model,
+                exc.code,
             )
+            return await generate(fallback_model)
+        except httpx.TimeoutException as exc:
+            fallback_model = self._settings.gemini_fallback_model
+            if not fallback_on_timeout or not fallback_model or fallback_model == self._settings.gemini_model:
+                raise
+            logger.info(
+                "Gemini fallback selected primary=%s fallback=%s reason=http_timeout",
+                self._settings.gemini_model,
+                fallback_model,
+            )
+            return await generate(fallback_model)
 
     @staticmethod
     def _parse_meal_plan_response(response: Any) -> MealPlanResponse:
