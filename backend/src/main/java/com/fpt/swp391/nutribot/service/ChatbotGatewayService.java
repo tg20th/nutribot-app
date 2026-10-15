@@ -54,12 +54,13 @@ public class ChatbotGatewayService {
 
     public ChatbotGatewayService(
             @Value("${ai-service.base-url:http://localhost:8000}") String aiServiceBaseUrl,
+            @Value("${ai-service.chatbot-timeout-seconds:75}") long chatbotTimeoutSeconds,
             GuestRateLimitFilter rateLimitFilter) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(3));
-        // Two bounded Gemini attempts (primary + fallback) must complete before this deadline.
-        // Video path may take longer; consider raising in production.
-        requestFactory.setReadTimeout(Duration.ofSeconds(32));
+        // Video analysis (URL or upload) can take up to 60s in the AI service,
+        // so the read deadline must cover the longest video path.
+        requestFactory.setReadTimeout(Duration.ofSeconds(chatbotTimeoutSeconds));
 
         this.aiClient = RestClient.builder()
                 .baseUrl(aiServiceBaseUrl.replaceAll("/$", ""))
@@ -155,6 +156,11 @@ public class ChatbotGatewayService {
             image.put("mime_type", attachment.getMimeType());
             aiRequest.put("image", image);
         } else if ("VIDEO".equalsIgnoreCase(attachment.getType())) {
+            String url = attachment.getUrl();
+            if (url != null && !url.isBlank()) {
+                aiRequest.put("video_url", url.trim());
+                return;
+            }
             Map<String, String> video = new LinkedHashMap<>();
             video.put("data_base64", attachment.getDataBase64());
             video.put("mime_type", attachment.getMimeType());
@@ -172,6 +178,7 @@ public class ChatbotGatewayService {
                 : (ai != null ? ai.imageContext() : null);
         return ChatAttachmentResponse.builder()
                 .type(sent.getType())
+                .url(sent.getUrl())
                 .mimeType(sent.getMimeType())
                 .filename(sent.getFilename())
                 .recognizedIngredients(ai != null ? ai.recognizedIngredients() : null)
