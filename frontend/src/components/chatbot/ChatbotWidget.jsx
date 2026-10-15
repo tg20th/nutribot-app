@@ -67,12 +67,17 @@ const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion:
 const formatBytes = (value) => `${(value / (1024 * 1024)).toFixed(value >= 1024 * 1024 ? 1 : 2)} MB`;
 const normalizeList = (value) => Array.isArray(value) ? value.filter(Boolean) : [];
 
+const YOUTUBE_HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'];
+const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const isValidYoutubeUrl = (value) => {
   try {
     const url = new URL(value);
-    if (!['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be', 'www.youtu.be'].includes(url.hostname.toLowerCase())) return false;
-    if (url.hostname.toLowerCase().includes('youtu.be')) return /^\/[A-Za-z0-9_-]{11}$/.test(url.pathname);
-    return /^[A-Za-z0-9_-]{11}$/.test(url.searchParams.get('v') || '');
+    const host = url.hostname.toLowerCase();
+    if (!YOUTUBE_HOSTS.includes(host)) return false;
+    if (host === 'youtu.be') return YOUTUBE_VIDEO_ID.test(url.pathname.slice(1));
+    if (url.pathname === '/watch') return YOUTUBE_VIDEO_ID.test(url.searchParams.get('v') || '');
+    const segments = url.pathname.split('/').filter(Boolean);
+    return segments.length === 2 && ['shorts', 'embed', 'live'].includes(segments[0]) && YOUTUBE_VIDEO_ID.test(segments[1]);
   } catch {
     return false;
   }
@@ -276,12 +281,25 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     } catch (error) { setMediaError(error.message || 'Unable to read the selected file.'); }
   };
   const clearAttachment = () => { if (attachment?.preview) URL.revokeObjectURL(attachment.preview); setAttachment(null); setMediaError(''); };
-  const chooseYoutube = () => { setAttachmentMenuOpen(false); setMediaError('The current Backend contract does not accept YouTube video URLs. NB-75 must add this contract before sending.'); setYoutubeUrl(''); };
+  const chooseYoutube = () => {
+    setAttachmentMenuOpen(false);
+    if (isGuest) { setMediaError('Sign in to send an image or video for analysis.'); return; }
+    const entered = window.prompt('Paste a YouTube video link (https://youtu.be/...):');
+    if (entered == null) return;
+    const value = entered.trim();
+    if (!value) { setYoutubeUrl(''); return; }
+    if (!isValidYoutubeUrl(value)) { setMediaError('Enter a valid YouTube video URL.'); return; }
+    setMediaError('');
+    if (attachment?.preview) URL.revokeObjectURL(attachment.preview);
+    setAttachment(null);
+    setYoutubeUrl(value);
+  };
 
   const submitMessage = async (value = draft, retryContext = null) => {
     const message = value.trim(); const selectedAttachment = retryContext?.attachment ?? attachment;
-    if ((!message && !selectedAttachment) || message.length > MAX_MESSAGE_LENGTH || isLoading || sendingRef.current) return;
-    if (selectedAttachment && isGuest) { setMediaError('Sign in to send an image or video for analysis.'); return; }
+    const selectedYoutube = retryContext?.youtubeUrl ?? youtubeUrl;
+    if ((!message && !selectedAttachment && !selectedYoutube) || message.length > MAX_MESSAGE_LENGTH || isLoading || sendingRef.current) return;
+    if ((selectedAttachment || selectedYoutube) && isGuest) { setMediaError('Sign in to send an image or video for analysis.'); return; }
     sendingRef.current = true;
     const conversationHistory = retryContext?.conversationHistory ?? messages.filter((item) => item.id !== 'welcome' && !item.pending && !item.error).slice(-40).map((item) => ({ sender: item.sender === 'user' ? 'USER' : 'ASSISTANT', content: item.text }));
     const guest = retryContext?.guest ?? isGuest;
@@ -289,15 +307,15 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     const conversationKey = retryContext?.conversationKey ?? conversationKeyRef.current;
     if (conversationKey !== conversationKeyRef.current) { sendingRef.current = false; return; }
     const requestId = ++requestSequenceRef.current;
-    const userMessage = { id: `user-${Date.now()}`, sender: 'user', text: message, attachment: selectedAttachment ? { type: selectedAttachment.type, filename: selectedAttachment.filename, mimeType: selectedAttachment.mimeType, preview: selectedAttachment.preview, size: selectedAttachment.size } : null };
+    const userMessage = { id: `user-${Date.now()}`, sender: 'user', text: message, attachment: selectedAttachment ? { type: selectedAttachment.type, filename: selectedAttachment.filename, mimeType: selectedAttachment.mimeType, preview: selectedAttachment.preview, size: selectedAttachment.size } : (selectedYoutube ? { type: 'VIDEO', url: selectedYoutube } : null) };
     const pendingId = `pending-${Date.now()}`;
-    setMessages((current) => [...current.filter((item) => item.id !== retryContext?.errorId), ...(retryContext ? [] : [userMessage]), { id: pendingId, sender: 'assistant', text: '', pending: true, mediaKind: selectedAttachment?.kind }]);
+    setMessages((current) => [...current.filter((item) => item.id !== retryContext?.errorId), ...(retryContext ? [] : [userMessage]), { id: pendingId, sender: 'assistant', text: '', pending: true, mediaKind: selectedAttachment?.kind ?? (selectedYoutube ? 'video' : undefined) }]);
     setDraft(''); setAttachment(null); setYoutubeUrl(''); setMediaError(''); setIsLoading(true); setAttachmentMenuOpen(false); onSend?.(message);
     const controller = new AbortController(); requestControllerRef.current = controller; activeRequestRef.current = { id: requestId, conversationKey };
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => { timeoutId = window.setTimeout(() => { const timeoutError = new Error('NutriBot request timed out.'); timeoutError.code = 'CHATBOT_TIMEOUT'; controller.abort(); reject(timeoutError); }, REQUEST_TIMEOUT_MS); });
     try {
-      const response = await Promise.race([requestNutritionAdvice({ message, sessionId, conversationHistory: guest ? conversationHistory : [], attachment: selectedAttachment ? { type: selectedAttachment.type, dataBase64: selectedAttachment.dataBase64, mimeType: selectedAttachment.mimeType, filename: selectedAttachment.filename } : undefined, signal: controller.signal }), timeoutPromise]);
+      const response = await Promise.race([requestNutritionAdvice({ message, sessionId, conversationHistory: guest ? conversationHistory : [], attachment: selectedAttachment ? { type: selectedAttachment.type, dataBase64: selectedAttachment.dataBase64, mimeType: selectedAttachment.mimeType, filename: selectedAttachment.filename } : (selectedYoutube ? { type: 'VIDEO', url: selectedYoutube } : undefined), signal: controller.signal }), timeoutPromise]);
       if (activeRequestRef.current?.id !== requestId || conversationKey !== conversationKeyRef.current) return;
       const assistantText = typeof (response.content || response.reply) === 'string' ? (response.content || response.reply).trim() : '';
       if (!assistantText) { const invalid = new Error('NutriBot returned an incomplete response.'); invalid.code = 'CHATBOT_INVALID_RESPONSE'; throw invalid; }
@@ -309,7 +327,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
       if (error.name === 'AbortError') { setMessages((current) => current.filter((item) => item.id !== pendingId)); return; }
       if (error.status === 429 && isGuest) syncGuestTrialCount(0);
       const messageText = error.status === 429 ? 'The AI service has reached its usage limit. Please try again later.' : error.code === 'CHATBOT_TIMEOUT' ? 'NutriBot is taking too long to respond. Please try again.' : error.code === 'CHATBOT_INVALID_RESPONSE' ? 'NutriBot returned an incomplete response. Please try again.' : error.status === 503 || error.status === 504 ? 'NutriBot is temporarily unavailable. Please try again shortly.' : error.status === 413 ? 'The attachment exceeds the allowed size.' : 'NutriBot could not respond right now. Please try again.';
-      setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `error-${Date.now()}`, sender: 'assistant', text: messageText, error: true, retry: { message, sessionId, guest, conversationHistory, conversationKey, attachment: selectedAttachment } }]);
+      setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `error-${Date.now()}`, sender: 'assistant', text: messageText, error: true, retry: { message, sessionId, guest, conversationHistory, conversationKey, attachment: selectedAttachment, youtubeUrl: selectedYoutube } }]);
     } finally { window.clearTimeout(timeoutId); if (activeRequestRef.current?.id === requestId) { requestControllerRef.current = null; activeRequestRef.current = null; sendingRef.current = false; setIsLoading(false); } }
   };
   const retryMessage = (item) => item.retry && submitMessage(item.retry.message, { ...item.retry, errorId: item.id });
@@ -353,7 +371,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
             <div className="chatbot-widget__conversation-inner">
               <div className="chatbot-widget__welcome"><span className="chatbot-widget__identity-mark" aria-hidden="true"><Sparkles size={23} /></span><div><p>Your everyday nutrition companion</p><h2>Small choices, made clearer.</h2></div></div>
               <div className="chatbot-widget__messages">{messages.map((item, index) => <div key={item.id} className={`chatbot-widget__message-row chatbot-widget__message-row--${item.sender}`} data-latest-message={index === messages.length - 1 ? 'true' : undefined}>
-                {item.attachment && <div className="chatbot-widget__sent-media">{item.attachment.type === 'IMAGE' && item.attachment.preview ? <img src={item.attachment.preview} alt={item.attachment.filename || 'Ingredient image'} /> : <><FileVideo size={17} /><span>{item.attachment.filename}</span><small>{formatBytes(item.attachment.size || 0)}</small></>}</div>}
+                {item.attachment && <div className="chatbot-widget__sent-media">{item.attachment.type === 'IMAGE' && item.attachment.preview ? <img src={item.attachment.preview} alt={item.attachment.filename || 'Ingredient image'} /> : item.attachment.url ? <><Link2 size={17} /><span>{item.attachment.url}</span></> : <><FileVideo size={17} /><span>{item.attachment.filename}</span><small>{formatBytes(item.attachment.size || 0)}</small></>}</div>}
                 <div className={`chatbot-widget__message chatbot-widget__message--${item.sender}`}>{item.pending ? <span className="chatbot-widget__typing" aria-label={item.mediaKind === 'video' ? 'Analyzing video' : item.mediaKind === 'image' ? 'Analyzing image' : 'NutriBot is thinking'}><i /><i /><i /></span> : <>{item.text}{item.analysis && <AnalysisCard attachment={item.analysis} videoAnalysis={item.videoAnalysis} />}{item.videoAnalysis && !item.analysis && <AnalysisCard videoAnalysis={item.videoAnalysis} />}{item.error && item.retry && <button type="button" className="chatbot-widget__retry" onClick={() => retryMessage(item)}>Retry</button>}</>}</div>
               </div>)}</div>
               {messages.length === INITIAL_MESSAGES.length && <div className="chatbot-widget__prompts" aria-label="Suggested questions">{QUICK_PROMPTS.map((prompt) => <button key={prompt} type="button" className="chatbot-widget__prompt" onClick={() => submitMessage(prompt)} disabled={isLoading}><span>{prompt}</span><span aria-hidden="true">+</span></button>)}</div>}
@@ -365,7 +383,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
             {attachment && <div className="chatbot-widget__attachment-preview">{attachment.kind === 'image' && attachment.preview ? <img src={attachment.preview} alt="Selected image" /> : <FileVideo size={17} />}<span>{attachment.filename}<small>{formatBytes(attachment.size)}</small></span><button type="button" onClick={clearAttachment} aria-label="Remove attachment"><Trash2 size={15} /></button></div>}
             <form className="chatbot-widget__composer" onSubmit={(event) => { event.preventDefault(); submitMessage(); }}>
               <div ref={attachmentMenuRef} className="chatbot-widget__attach-wrap"><button type="button" className="chatbot-widget__attach-button" onClick={() => setAttachmentMenuOpen((current) => !current)} aria-label="Add attachment" aria-expanded={attachmentMenuOpen}><Paperclip size={18} /></button>{attachmentMenuOpen && <div className="chatbot-widget__attach-menu"><button type="button" onClick={() => imageInputRef.current?.click()}><ImageIcon size={16} /> Upload ingredient image</button><button type="button" onClick={() => videoInputRef.current?.click()}><Video size={16} /> Upload cooking video</button><button type="button" onClick={chooseYoutube}><Link2 size={16} /> Paste YouTube link</button></div>}</div>
-              <label htmlFor="nutribot-message" className="chatbot-widget__sr-only">Message NutriBot</label><input ref={inputRef} id="nutribot-message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask about food or nutrition..." autoComplete="off" maxLength={MAX_MESSAGE_LENGTH} disabled={isLoading} /><button type="submit" disabled={(!draft.trim() && !attachment) || isLoading} aria-label="Send message"><Send size={18} /></button>
+              <label htmlFor="nutribot-message" className="chatbot-widget__sr-only">Message NutriBot</label><input ref={inputRef} id="nutribot-message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask about food or nutrition..." autoComplete="off" maxLength={MAX_MESSAGE_LENGTH} disabled={isLoading} /><button type="submit" disabled={(!draft.trim() && !attachment && !youtubeUrl) || isLoading} aria-label="Send message"><Send size={18} /></button>
             </form>
             <input ref={imageInputRef} className="chatbot-widget__file-input" type="file" accept={IMAGE_TYPES.join(',')} onChange={(event) => chooseMedia(event, 'image')} /><input ref={videoInputRef} className="chatbot-widget__file-input" type="file" accept={VIDEO_TYPES.join(',')} onChange={(event) => chooseMedia(event, 'video')} />
             {showTrialBadge && <div className={`chatbot-widget__trial-badge${guestTrialsLeft === 1 ? ' is-warning' : ''}`} aria-live="polite"><AlertCircle size={13} aria-hidden="true" /><span><strong>{guestTrialsLeft} of {GUEST_TRIAL_LIMIT}</strong> questions left</span></div>}

@@ -195,6 +195,22 @@ describe('ChatbotWidget', () => {
     expect(requestNutritionAdvice).toHaveBeenCalledTimes(2);
   });
 
+  it('sends a YouTube link as a video url attachment', async () => {
+    const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('https://youtu.be/dQw4w9WgXcQ');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add attachment/i }));
+    fireEvent.click(screen.getByRole('button', { name: /paste youtube link/i }));
+    fireEvent.click(screen.getByRole('button', { name: /send message/i }));
+
+    await waitFor(() => expect(requestNutritionAdvice).toHaveBeenCalledWith(expect.objectContaining({
+      attachment: { type: 'VIDEO', url: 'https://youtu.be/dQw4w9WgXcQ' },
+    })));
+    promptSpy.mockRestore();
+  });
+
   it('does not append an old response after a member switches sessions', async () => {
     const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
     let resolveRequest;
