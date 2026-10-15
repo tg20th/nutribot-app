@@ -23,6 +23,27 @@ const getCategories = async (signal) => {
   const categories = unwrapData(await apiRequest('/api/v1/categories', { signal }), []);
   return categories.map(mapCategory);
 };
+const getAllPublishedContent = async (path, signal) => {
+  const firstPage = unwrapData(await apiRequest(`${path}?page=0&size=50`, { signal }), {});
+  const totalPages = Math.max(1, Number(firstPage.totalPages ?? 1));
+  const remainingPages = await Promise.all(
+    Array.from({ length: totalPages - 1 }, (_, index) => apiRequest(`${path}?page=${index + 1}&size=50`, { signal })
+      .then((payload) => unwrapData(payload, {}))),
+  );
+  return [firstPage, ...remainingPages].flatMap((page) => page.content ?? []);
+};
+const getCategoryContentCounts = async (signal) => {
+  const [blogs, videos] = await Promise.all([
+    getAllPublishedContent('/api/v1/blogs', signal),
+    getAllPublishedContent('/api/v1/videos', signal),
+  ]);
+  return [...blogs, ...videos].reduce((counts, content) => {
+    if (content.categoryId !== null && content.categoryId !== undefined) {
+      counts[content.categoryId] = (counts[content.categoryId] ?? 0) + 1;
+    }
+    return counts;
+  }, {});
+};
 const toCategoryRequest = (data) => ({
   categoryName: data.name.trim(),
   slug: categorySlug(data.name),
@@ -144,7 +165,7 @@ export const adminApi = {
   getDashboard,
   getUsers: (params, signal) => apiRequest(adminUserQuery(params), { signal }).then((payload) => mapAdminUserPage(unwrapData(payload, {}))), getMemberContentCounts, getUserById: one('/api/admin/users'), updateUserStatus: (id, value) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: value }) }).then((payload) => mapAdminUser(unwrapData(payload, {}))), lockUser: (id) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'BANNED' }) }),
   getModerationQueue, moderateContent,
-  getCategories, createCategory, updateCategory, deleteCategory,
+  getCategories, getCategoryContentCounts, createCategory, updateCategory, deleteCategory,
   getBlogs: list('/api/admin/blogs'), getBlogById: one('/api/admin/blogs'), hideBlog: (id) => status('/api/admin/blogs')(id, 'Hidden'), deleteBlog: (id) => apiRequest(`/api/admin/blogs/${id}`, { method: 'DELETE' }),
   getVideos: list('/api/admin/videos'), getVideoById: one('/api/admin/videos'), hideVideo: (id) => status('/api/admin/videos')(id, 'Hidden'), deleteVideo: (id) => apiRequest(`/api/admin/videos/${id}`, { method: 'DELETE' }),
   getComments: list('/api/admin/comments'), deleteComment: (id) => apiRequest(`/api/admin/comments/${id}`, { method: 'DELETE' })
