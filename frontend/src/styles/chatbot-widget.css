@@ -7,8 +7,8 @@
   --chat-line: rgba(24, 61, 45, 0.14);
   position: fixed;
   z-index: 80;
-  right: 24px;
-  bottom: 24px;
+  right: calc(24px + env(safe-area-inset-right, 0px));
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   font-family: 'Outfit', Arial, sans-serif;
   pointer-events: none;
 }
@@ -653,8 +653,8 @@
 
 @media (max-width: 600px) {
   .chatbot-widget {
-    right: 16px;
-    bottom: 16px;
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   .chatbot-widget__launcher {
@@ -715,6 +715,14 @@
   height: 100dvh;
   z-index: 1000;
   background: rgba(16, 47, 35, .22);
+}
+
+/* A closed widget must always return to the fixed compact anchor context. */
+.chatbot-widget:not(.is-open) {
+  inset: auto calc(24px + env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) auto;
+  width: auto;
+  height: auto;
+  background: transparent;
 }
 
 /* The header close control owns closing while the panel is open. */
@@ -1139,6 +1147,10 @@
 }
 
 @media (max-width: 700px) {
+  .chatbot-widget:not(.is-open) {
+    inset: auto calc(16px + env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) auto;
+  }
+
   .chatbot-widget.is-fullscreen .chatbot-widget__history--sidebar {
     position: absolute;
     inset: 76px auto 0 0;

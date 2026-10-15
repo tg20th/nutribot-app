@@ -87,6 +87,26 @@ describe('ChatbotWidget', () => {
     expect(panel).toBeInTheDocument();
   });
 
+  it('returns the launcher to the compact viewport anchor after closing fullscreen', async () => {
+    renderWithRouter(<ChatbotWidget />);
+    const launcher = screen.getByRole('button', { name: /open nutribot chat/i });
+
+    fireEvent.click(launcher);
+    fireEvent.click(screen.getByRole('button', { name: /expand nutribot chat/i }));
+    expect(document.querySelector('.chatbot-widget')).toHaveClass('is-fullscreen');
+
+    fireEvent.click(screen.getByRole('button', { name: /close nutribot chat/i }));
+
+    await waitFor(() => {
+      expect(document.getElementById('nutribot-chat-panel')).not.toBeInTheDocument();
+      expect(document.querySelector('.chatbot-widget')).not.toHaveClass('is-fullscreen');
+      expect(screen.getByRole('button', { name: /open nutribot chat/i })).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    expect(document.querySelector('.chatbot-widget')).not.toHaveClass('is-fullscreen');
+  });
+
   it('shows welcome message in the widget', async () => {
     renderWithRouter(<ChatbotWidget />);
     const launcher = screen.getByRole('button', { name: /open nutribot chat/i });
