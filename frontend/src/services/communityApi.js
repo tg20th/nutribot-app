@@ -394,7 +394,14 @@ export async function getPosts(signal) {
   return result.posts;
 }
 
-export async function getPost(id, signal) {
+export async function getPost(id, signal, contentType = '') {
+  const normalizedType = String(contentType).trim().toUpperCase();
+  if (normalizedType === 'VIDEO') {
+    return normalizePost(unwrapData(await apiRequest(`/api/v1/videos/id/${id}`, { signal }), {}), 'VIDEO');
+  }
+  if (normalizedType === 'BLOG') {
+    return normalizePost(unwrapData(await apiRequest(`/api/v1/blogs/id/${id}`, { signal }), {}), 'BLOG');
+  }
   try {
     return normalizePost(unwrapData(await apiRequest(`/api/v1/blogs/id/${id}`, { signal }), {}), 'BLOG');
   } catch (blogError) {
