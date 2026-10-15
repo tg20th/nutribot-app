@@ -423,7 +423,14 @@ export default function MyBlogsPage() {
     headingRef.current?.focus();
   }
 
-  const displayedContent = result.content.filter((item) => statusFilter === 'all' || item.status === statusFilter);
+  const displayedContent = result.content.filter((item) => {
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'under_review') {
+      // Gộp 'under_review' (chờ Admin duyệt) và 'ai_processing' (đang AI duyệt) thành 1 tab
+      return item.status === 'under_review' || item.status === 'ai_processing';
+    }
+    return item.status === statusFilter;
+  });
 
   return <div className="community-page my-blogs-page">
     <CommunityTopBar/><div className="community-shell"><CommunitySideNav/><span className="community-sidenav-spacer" aria-hidden="true"/>
@@ -437,8 +444,7 @@ export default function MyBlogsPage() {
         <div className="my-blogs-tabs" role="tablist" aria-label="Lọc theo trạng thái">
           <button type="button" className={statusFilter === 'all' ? 'is-active' : ''} onClick={() => setStatusFilter('all')}>All ({result.content.length})</button>
           <button type="button" className={statusFilter === 'published' ? 'is-active' : ''} onClick={() => setStatusFilter('published')}>Published ({result.content.filter((x) => x.status === 'published').length})</button>
-          <button type="button" className={statusFilter === 'ai_processing' ? 'is-active' : ''} onClick={() => setStatusFilter('ai_processing')}>Đang kiểm duyệt ({result.content.filter((x) => x.status === 'ai_processing').length})</button>
-          <button type="button" className={statusFilter === 'under_review' ? 'is-active' : ''} onClick={() => setStatusFilter('under_review')}>Under review ({result.content.filter((x) => x.status === 'under_review').length})</button>
+          <button type="button" className={statusFilter === 'under_review' ? 'is-active' : ''} onClick={() => setStatusFilter('under_review')}>Under review ({result.content.filter((x) => x.status === 'under_review' || x.status === 'ai_processing').length})</button>
           <button type="button" className={statusFilter === 'draft' ? 'is-active' : ''} onClick={() => setStatusFilter('draft')}>Draft ({result.content.filter((x) => x.status === 'draft').length})</button>
           <button type="button" className={statusFilter === 'rejected' ? 'is-active' : ''} onClick={() => setStatusFilter('rejected')}>Rejected ({result.content.filter((x) => x.status === 'rejected').length})</button>
         </div>
