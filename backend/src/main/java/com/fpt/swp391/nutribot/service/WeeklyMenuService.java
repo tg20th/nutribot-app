@@ -164,7 +164,13 @@ public class WeeklyMenuService {
 
         // --- NB-55: Trust boundary revalidation ---
         UserProfile profile = userProfileRepository.findById(user.getUserId()).orElse(null);
-        String userVegetarianType = profile != null ? profile.getVegetarianType() : null;
+        // Dùng vegetarianType đã được AI dùng để sinh (ưu tiên) để tránh lệch
+        // giữa lúc generate và lúc save khi request.vegetarianType khác profile.
+        // Nếu frontend cũ chưa gửi kèm field này thì fallback về profile.
+        String userVegetarianType = generatedMenu.getVegetarianType();
+        if (userVegetarianType == null || userVegetarianType.isBlank()) {
+            userVegetarianType = profile != null ? profile.getVegetarianType() : null;
+        }
 
         // 1. Validate vegetarian compatibility
         if (userVegetarianType != null) {

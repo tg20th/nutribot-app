@@ -87,6 +87,26 @@ describe('ChatbotWidget', () => {
     expect(panel).toBeInTheDocument();
   });
 
+  it('returns the launcher to the compact viewport anchor after closing fullscreen', async () => {
+    renderWithRouter(<ChatbotWidget />);
+    const launcher = screen.getByRole('button', { name: /open nutribot chat/i });
+
+    fireEvent.click(launcher);
+    fireEvent.click(screen.getByRole('button', { name: /expand nutribot chat/i }));
+    expect(document.querySelector('.chatbot-widget')).toHaveClass('is-fullscreen');
+
+    fireEvent.click(screen.getByRole('button', { name: /close nutribot chat/i }));
+
+    await waitFor(() => {
+      expect(document.getElementById('nutribot-chat-panel')).not.toBeInTheDocument();
+      expect(document.querySelector('.chatbot-widget')).not.toHaveClass('is-fullscreen');
+      expect(screen.getByRole('button', { name: /open nutribot chat/i })).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    expect(document.querySelector('.chatbot-widget')).not.toHaveClass('is-fullscreen');
+  });
+
   it('shows welcome message in the widget', async () => {
     renderWithRouter(<ChatbotWidget />);
     const launcher = screen.getByRole('button', { name: /open nutribot chat/i });
@@ -173,6 +193,22 @@ describe('ChatbotWidget', () => {
     await waitFor(() => expect(screen.getByText('Recovered answer')).toBeInTheDocument());
     expect(screen.getAllByText('Can I retry this?')).toHaveLength(1);
     expect(requestNutritionAdvice).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends a YouTube link as a video url attachment', async () => {
+    const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('https://youtu.be/dQw4w9WgXcQ');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add attachment/i }));
+    fireEvent.click(screen.getByRole('button', { name: /paste youtube link/i }));
+    fireEvent.click(screen.getByRole('button', { name: /send message/i }));
+
+    await waitFor(() => expect(requestNutritionAdvice).toHaveBeenCalledWith(expect.objectContaining({
+      attachment: { type: 'VIDEO', url: 'https://youtu.be/dQw4w9WgXcQ' },
+    })));
+    promptSpy.mockRestore();
   });
 
   it('does not append an old response after a member switches sessions', async () => {

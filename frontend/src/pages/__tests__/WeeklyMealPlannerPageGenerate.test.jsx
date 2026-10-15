@@ -43,13 +43,13 @@ const profile = {
   allergyIngredientIds: []
 };
 
-const plan = (name = 'First preview') => ({
+const plan = (name = 'First preview', dishId = null, vegetarianType = undefined) => ({
   vegetarianType: 'VEGAN',
   weeklyPlan: Array.from({ length: 7 }, (_, index) => ({
     day: `Day ${index + 1}`,
-    breakfast: { dishName: name, calories: 500, servings: 1 },
-    lunch: { dishName: name, calories: 600, servings: 1 },
-    dinner: { dishName: name, calories: 700, servings: 1 }
+    breakfast: { dishId, dishName: name, calories: 500, servings: 1, vegetarianType },
+    lunch: { dishId, dishName: name, calories: 600, servings: 1, vegetarianType },
+    dinner: { dishId, dishName: name, calories: 700, servings: 1, vegetarianType }
   }))
 });
 
@@ -91,6 +91,35 @@ beforeEach(() => {
 });
 
 describe('Weekly Planner AI generation flow', () => {
+  it('saves an allergy plan whose dishes have no verifiable ingredients', async () => {
+    mocks.getMyProfile.mockResolvedValueOnce({ heightCm: 170, weightKg: 65, healthGoal: 'MAINTAIN', vegetarianType: 'VEGAN' });
+    mocks.getHealthProfile.mockResolvedValueOnce({ ...profile, allergyIngredientIds: [7] });
+    mocks.getWeeklyMenuDishes.mockResolvedValueOnce([{ dishId: 61, name: 'Món chay', vegetarianType: 'VEGAN' }]);
+    mocks.getDishCompatibilityDetails.mockResolvedValueOnce({ ingredientIds: null, ingredients: null });
+    mocks.generateMealPlan.mockResolvedValueOnce(plan('Món chay', 61, 'VEGAN'));
+    mocks.saveAiGeneratedMenu.mockResolvedValueOnce({ menuId: 1, days: [] });
+    await renderPlanner(false);
+    confirmGenerate();
+    await screen.findByRole('heading', { name: 'Weekly meal plan preview' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save meal plan' }));
+
+    await waitFor(() => expect(mocks.saveAiGeneratedMenu).toHaveBeenCalledTimes(1));
+  });
+
+  it('still blocks saving a dish that is incompatible with the diet', async () => {
+    mocks.getWeeklyMenuDishes.mockResolvedValueOnce([{ dishId: 99, name: 'Món sữa', vegetarianType: 'LACTO' }]);
+    mocks.generateMealPlan.mockResolvedValueOnce(plan('Món sữa', 99, 'LACTO'));
+    await renderPlanner(false);
+    confirmGenerate();
+    await screen.findByRole('heading', { name: 'Weekly meal plan preview' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save meal plan' }));
+
+    expect(mocks.saveAiGeneratedMenu).not.toHaveBeenCalled();
+    expect(await screen.findByText(/not compatible with your VEGAN diet/i)).toBeInTheDocument();
+  });
+
   it('requires confirmation before generating with no saved plan', async () => {
     mocks.generateMealPlan.mockResolvedValueOnce(plan());
     await renderPlanner(false);
