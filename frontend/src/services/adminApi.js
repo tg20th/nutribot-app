@@ -94,7 +94,8 @@ const moderateContent = async (contentId, action) => {
   });
   return mapModerationItem(unwrapData(payload, {}));
 };
-const mapAdminUser = (user) => ({ id: user.userId, username: user.username, email: user.email, name: user.fullName || user.username, role: user.roleName, status: user.status, joinedAt: user.createdAt ? new Date(user.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '', strikeCount: user.strikeCount });
+const formatAdminDate = (value) => value ? new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+const mapAdminUser = (user) => ({ id: user.userId, username: user.username, email: user.email, name: user.fullName || user.username, avatarUrl: user.avatarUrl ?? null, role: user.roleName, status: user.status, joinedAt: formatAdminDate(user.createdAt), updatedAt: formatAdminDate(user.updatedAt), strikeCount: user.strikeCount ?? 0 });
 const mapAdminUserPage = (page) => ({ ...page, content: (page.content ?? []).map(mapAdminUser) });
 const adminUserQuery = ({ keyword = '', status = '', page = 0, size = 10 } = {}) => {
   const params = new URLSearchParams({ page: String(page), size: String(size) });
@@ -105,6 +106,25 @@ const adminUserQuery = ({ keyword = '', status = '', page = 0, size = 10 } = {})
 const publicContentTotal = async (path, signal) => {
   const page = unwrapData(await apiRequest(path + '?page=0&size=1', { signal }), {});
   return Number(page.totalElements ?? 0);
+};
+const getAllPublicContent = async (path, signal) => {
+  const first = unwrapData(await apiRequest(`${path}?page=0&size=50`, { signal }), {});
+  const totalPages = Math.max(Number(first.totalPages) || 1, 1);
+  const remaining = await Promise.all(Array.from(
+    { length: totalPages - 1 },
+    (_, index) => apiRequest(`${path}?page=${index + 1}&size=50`, { signal }).then((payload) => unwrapData(payload, {})),
+  ));
+  return [first, ...remaining].flatMap((page) => page.content ?? []);
+};
+const getMemberContentCounts = async (signal) => {
+  const [blogs, videos] = await Promise.all([
+    getAllPublicContent('/api/v1/blogs', signal),
+    getAllPublicContent('/api/v1/videos', signal),
+  ]);
+  return [...blogs, ...videos].reduce((counts, content) => {
+    if (content.authorId != null) counts[content.authorId] = (counts[content.authorId] ?? 0) + 1;
+    return counts;
+  }, {});
 };
 const getDashboard = async (signal) => {
   const [users, moderation, blogs, videos, categories] = await Promise.all([
@@ -122,7 +142,7 @@ const getDashboard = async (signal) => {
 };
 export const adminApi = {
   getDashboard,
-  getUsers: (params, signal) => apiRequest(adminUserQuery(params), { signal }).then((payload) => mapAdminUserPage(unwrapData(payload, {}))), getUserById: one('/api/admin/users'), updateUserStatus: (id, value) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: value }) }).then((payload) => mapAdminUser(unwrapData(payload, {}))), lockUser: (id) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'BANNED' }) }),
+  getUsers: (params, signal) => apiRequest(adminUserQuery(params), { signal }).then((payload) => mapAdminUserPage(unwrapData(payload, {}))), getMemberContentCounts, getUserById: one('/api/admin/users'), updateUserStatus: (id, value) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: value }) }).then((payload) => mapAdminUser(unwrapData(payload, {}))), lockUser: (id) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'BANNED' }) }),
   getModerationQueue, moderateContent,
   getCategories, createCategory, updateCategory, deleteCategory,
   getBlogs: list('/api/admin/blogs'), getBlogById: one('/api/admin/blogs'), hideBlog: (id) => status('/api/admin/blogs')(id, 'Hidden'), deleteBlog: (id) => apiRequest(`/api/admin/blogs/${id}`, { method: 'DELETE' }),
