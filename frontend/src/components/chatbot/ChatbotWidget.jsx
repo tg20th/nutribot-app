@@ -143,6 +143,8 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const [historySidebarOpen, setHistorySidebarOpen] = useState(true);
   const [draft, setDraft] = useState('');
   const [messages, setMessages] = useState(INITIAL_MESSAGES);
+  const [conversationState, setConversationState] = useState('new');
+  const [conversationError, setConversationError] = useState('');
   const [sessions, setSessions] = useState([]);
   const [historyState, setHistoryState] = useState('idle');
   const [historyError, setHistoryError] = useState('');
@@ -196,18 +198,39 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     requestControllerRef.current?.abort();
     requestControllerRef.current = null; activeRequestRef.current = null; sendingRef.current = false; setIsLoading(false);
   }, []);
-  const startNewConversation = () => { abortActiveRequest(); sessionIdRef.current = null; setMessages(INITIAL_MESSAGES); setHistoryOpen(false); setAttachmentMenuOpen(false); };
+  const startNewConversation = () => {
+    abortActiveRequest();
+    sessionIdRef.current = null;
+    setConversationState('new');
+    setConversationError('');
+    setMessages(INITIAL_MESSAGES);
+    setHistoryOpen(false);
+    setAttachmentMenuOpen(false);
+  };
   const selectSession = async (sessionId) => {
-    abortActiveRequest(); const key = conversationKeyRef.current; setHistoryState('loading'); setHistoryError(''); setMessages(INITIAL_MESSAGES); setAttachmentMenuOpen(false);
+    abortActiveRequest();
+    const key = conversationKeyRef.current;
+    setConversationState('loading');
+    setConversationError('');
+    setHistoryState('loading');
+    setHistoryError('');
+    setMessages([]);
+    setAttachmentMenuOpen(false);
     let loaded = false;
     try {
       const persisted = await getChatMessages(sessionId);
       if (key !== conversationKeyRef.current) return;
       sessionIdRef.current = sessionId;
-      setMessages(persisted.length ? persisted.map((item) => ({ id: item.messageId, sender: item.senderType === 'USER' ? 'user' : 'assistant', text: item.content, createdAt: item.createdAt, persistedAttachment: item.attachments?.[0] })) : INITIAL_MESSAGES);
+      setMessages(persisted.map((item) => ({ id: item.messageId, sender: item.senderType === 'USER' ? 'user' : 'assistant', text: item.content, createdAt: item.createdAt, attachment: item.attachments?.[0] })));
+      setConversationState('existing');
       setHistoryOpen(false);
       loaded = true;
-    } catch { setHistoryError('Unable to load this conversation. Please try again.'); setHistoryState('error'); }
+    } catch {
+      setConversationError('Unable to load this conversation. Please try again.');
+      setConversationState('existing');
+      setHistoryError('Unable to load this conversation. Please try again.');
+      setHistoryState('error');
+    }
     finally { if (loaded) setHistoryState('ready'); }
   };
   const closeWidget = useCallback(() => {
@@ -258,7 +281,12 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   }, [attachmentMenuOpen]);
   useEffect(() => () => requestControllerRef.current?.abort(), []);
   useEffect(() => { if (!isGuest) { setShowLimitModal(false); setHistoryOpen(false); } }, [isGuest]);
-  useEffect(() => { threadRef.current?.scrollTo?.({ top: threadRef.current.scrollHeight, behavior: 'smooth' }); }, [messages]);
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (!thread) return undefined;
+    const frame = requestAnimationFrame(() => thread.scrollTo?.({ top: thread.scrollHeight, behavior: conversationState === 'existing' ? 'auto' : 'smooth' }));
+    return () => cancelAnimationFrame(frame);
+  }, [conversationState, messages]);
   useGSAP(() => {
     if (!isMounted || !isOpen || !panelRef.current) return;
     if (prefersReducedMotion()) { gsap.set(panelRef.current, { autoAlpha: 1, x: 0, y: 0, scale: 1 }); inputRef.current?.focus(); return; }
@@ -309,6 +337,8 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     const requestId = ++requestSequenceRef.current;
     const userMessage = { id: `user-${Date.now()}`, sender: 'user', text: message, attachment: selectedAttachment ? { type: selectedAttachment.type, filename: selectedAttachment.filename, mimeType: selectedAttachment.mimeType, preview: selectedAttachment.preview, size: selectedAttachment.size } : (selectedYoutube ? { type: 'VIDEO', url: selectedYoutube } : null) };
     const pendingId = `pending-${Date.now()}`;
+    setConversationState('active');
+    setConversationError('');
     setMessages((current) => [...current.filter((item) => item.id !== retryContext?.errorId), ...(retryContext ? [] : [userMessage]), { id: pendingId, sender: 'assistant', text: '', pending: true, mediaKind: selectedAttachment?.kind ?? (selectedYoutube ? 'video' : undefined) }]);
     setDraft(''); setAttachment(null); setYoutubeUrl(''); setMediaError(''); setIsLoading(true); setAttachmentMenuOpen(false); onSend?.(message);
     const controller = new AbortController(); requestControllerRef.current = controller; activeRequestRef.current = { id: requestId, conversationKey };
@@ -341,6 +371,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   };
   const sessionTitle = (session) => trimText(session.title || session.preview || 'New conversation', 58);
   const sessionPreview = (session) => trimText(session.title ? (session.preview || 'No messages yet') : '', 92);
+  const showWelcome = conversationState === 'new';
 
   const historyPanel = <aside className={`chatbot-widget__history${displayMode === 'fullscreen' ? ' chatbot-widget__history--sidebar' : ''}`} aria-label="Chat history">
     <div className="chatbot-widget__history-head"><div><span>YOUR CONVERSATIONS</span><h2>Pick up where you left off.</h2></div><button type="button" onClick={startNewConversation}><Plus size={16} /> <span>NEW CONVERSATION</span></button></div>
@@ -369,12 +400,14 @@ export default function ChatbotWidget({ onSend, onAuth }) {
         <div className="chatbot-widget__conversation">
           <div ref={threadRef} className="chatbot-widget__thread" aria-live="polite">
             <div className="chatbot-widget__conversation-inner">
-              <div className="chatbot-widget__welcome"><span className="chatbot-widget__identity-mark" aria-hidden="true"><Sparkles size={23} /></span><div><p>Your everyday nutrition companion</p><h2>Small choices, made clearer.</h2></div></div>
+              {showWelcome && <div className="chatbot-widget__welcome"><span className="chatbot-widget__identity-mark" aria-hidden="true"><Sparkles size={23} /></span><div><p>Your everyday nutrition companion</p><h2>Small choices, made clearer.</h2></div></div>}
+              {conversationState === 'loading' && <p className="chatbot-widget__conversation-status"><Loader2 className="is-spinning" size={17} /> Loading conversation...</p>}
+              {conversationError && conversationState !== 'loading' && <p className="chatbot-widget__conversation-status is-error" role="alert">{conversationError}</p>}
               <div className="chatbot-widget__messages">{messages.map((item, index) => <div key={item.id} className={`chatbot-widget__message-row chatbot-widget__message-row--${item.sender}`} data-latest-message={index === messages.length - 1 ? 'true' : undefined}>
                 {item.attachment && <div className="chatbot-widget__sent-media">{item.attachment.type === 'IMAGE' && item.attachment.preview ? <img src={item.attachment.preview} alt={item.attachment.filename || 'Ingredient image'} /> : item.attachment.url ? <><Link2 size={17} /><span>{item.attachment.url}</span></> : <><FileVideo size={17} /><span>{item.attachment.filename}</span><small>{formatBytes(item.attachment.size || 0)}</small></>}</div>}
                 <div className={`chatbot-widget__message chatbot-widget__message--${item.sender}`}>{item.pending ? <span className="chatbot-widget__typing" aria-label={item.mediaKind === 'video' ? 'Analyzing video' : item.mediaKind === 'image' ? 'Analyzing image' : 'NutriBot is thinking'}><i /><i /><i /></span> : <>{item.text}{item.analysis && <AnalysisCard attachment={item.analysis} videoAnalysis={item.videoAnalysis} />}{item.videoAnalysis && !item.analysis && <AnalysisCard videoAnalysis={item.videoAnalysis} />}{item.error && item.retry && <button type="button" className="chatbot-widget__retry" onClick={() => retryMessage(item)}>Retry</button>}</>}</div>
               </div>)}</div>
-              {messages.length === INITIAL_MESSAGES.length && <div className="chatbot-widget__prompts" aria-label="Suggested questions">{QUICK_PROMPTS.map((prompt) => <button key={prompt} type="button" className="chatbot-widget__prompt" onClick={() => submitMessage(prompt)} disabled={isLoading}><span>{prompt}</span><span aria-hidden="true">+</span></button>)}</div>}
+              {showWelcome && <div className="chatbot-widget__prompts" aria-label="Suggested questions">{QUICK_PROMPTS.map((prompt) => <button key={prompt} type="button" className="chatbot-widget__prompt" onClick={() => submitMessage(prompt)} disabled={isLoading}><span>{prompt}</span><span aria-hidden="true">+</span></button>)}</div>}
             </div>
           </div>
           <div className="chatbot-widget__composer-wrap">

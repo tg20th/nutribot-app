@@ -252,6 +252,60 @@ describe('ChatbotWidget', () => {
     expect(prompts.length).toBe(4);
   });
 
+  it('renders an existing conversation without the welcome state or prompts', async () => {
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(document.querySelector('.chatbot-widget__history-toggle'));
+
+    await waitFor(() => expect(screen.getByText('Test Session')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Test Session'));
+
+    await waitFor(() => expect(screen.getByText('Hi there!')).toBeInTheDocument());
+    expect(screen.queryByText('Small choices, made clearer.')).not.toBeInTheDocument();
+    expect(document.querySelector('.chatbot-widget__prompts')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/message nutribot/i)).toBeInTheDocument();
+  });
+
+  it('shows conversation loading without inserting the welcome message', async () => {
+    const { getChatMessages } = await import('../../../services/chatbotApi');
+    let resolveMessages;
+    getChatMessages.mockImplementationOnce(() => new Promise((resolve) => { resolveMessages = resolve; }));
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(document.querySelector('.chatbot-widget__history-toggle'));
+    await waitFor(() => expect(screen.getByText('Test Session')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Test Session'));
+
+    expect(screen.getByText('Loading conversation...')).toBeInTheDocument();
+    expect(screen.queryByText('Small choices, made clearer.')).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveMessages([
+        { messageId: 1, senderType: 'USER', content: 'History question', createdAt: '2024-01-01' },
+      ]);
+    });
+    await waitFor(() => expect(screen.getByText('History question')).toBeInTheDocument());
+  });
+
+  it('restores the welcome state when starting a new conversation after history', async () => {
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(document.querySelector('.chatbot-widget__history-toggle'));
+    await waitFor(() => expect(screen.getByText('Test Session')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Test Session'));
+    await waitFor(() => expect(screen.getByText('Hi there!')).toBeInTheDocument());
+
+    fireEvent.click(document.querySelector('.chatbot-widget__history-toggle'));
+    await waitFor(() => expect(screen.getByText('NEW CONVERSATION')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('NEW CONVERSATION'));
+
+    expect(screen.getByText('Small choices, made clearer.')).toBeInTheDocument();
+    expect(document.querySelectorAll('.chatbot-widget__prompt')).toHaveLength(4);
+  });
+
   describe('Guest and member behavior', () => {
     it('does not show trial badge for logged in users', () => {
       localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
