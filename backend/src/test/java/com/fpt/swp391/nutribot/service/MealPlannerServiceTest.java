@@ -22,9 +22,11 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -85,5 +87,33 @@ class MealPlannerServiceTest {
                     ProfileIncompleteException pie = (ProfileIncompleteException) ex;
                     assertThat(pie.getMissingFields()).contains("heightCm", "weightKg");
                 });
+    }
+
+    @Test
+    @DisplayName("Loại bỏ món thiếu loại ăn chay khỏi pool sinh thực đơn")
+    @SuppressWarnings("unchecked")
+    void buildCanonicalDishes_excludesNullVegetarianType() throws Exception {
+        Dish veganDish = Dish.builder()
+                .dishId(1).name("Salad").calories(200).proteinG(new BigDecimal("8"))
+                .carbsG(new BigDecimal("10")).healthyFatsG(new BigDecimal("5"))
+                .vegetarianType("VEGAN").build();
+        Dish unknownTypeDish = Dish.builder()
+                .dishId(2).name("Món lạ").calories(300).proteinG(new BigDecimal("12"))
+                .carbsG(new BigDecimal("20")).healthyFatsG(new BigDecimal("6"))
+                .vegetarianType(null).build();
+
+        Method method = MealPlannerService.class
+                .getDeclaredMethod("buildCanonicalDishes", List.class, Map.class);
+        method.setAccessible(true);
+
+        List<Map<String, Object>> canonical = (List<Map<String, Object>>) method.invoke(
+                mealPlannerService,
+                List.of(veganDish, unknownTypeDish),
+                Map.of(1, List.of(10, 11)));
+
+        assertThat(canonical).hasSize(1);
+        assertThat(canonical.get(0))
+                .containsEntry("dishId", 1)
+                .containsEntry("vegetarianType", "VEGAN");
     }
 }
