@@ -1,0 +1,37 @@
+/* Meal Details uses the same serif nutrition treatment as Recipe Details. */
+body:not(:has(.admin-shell)) #root .dish-detail-dialog .dish-detail-nutrition b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--community-ink, #18382d);
+  font-family: var(--nutribot-brand-font, 'Playfair Display', Georgia, serif) !important;
+  font-size: 36px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  letter-spacing: 0 !important;
+}
+
+body:not(:has(.admin-shell)) #root .dish-detail-dialog .dish-detail-nutrition b {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+body:not(:has(.admin-shell)) #root .dish-detail-dialog .dish-detail-nutrition .dish-detail-nutrition-value {
+  color: inherit !important;
+  font: inherit !important;
+}
+
+body:not(:has(.admin-shell)) #root .dish-detail-dialog .dish-detail-nutrition .dish-detail-nutrition-unit {
+  color: #718077 !important;
+  font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif) !important;
+  font-size: 12px !important;
+  font-weight: 650 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0 !important;
+}
+
+@media (max-width: 650px) {
+  body:not(:has(.admin-shell)) #root .dish-detail-dialog .dish-detail-nutrition b {
+    font-size: 30px !important;
+  }
+}
