@@ -2,25 +2,24 @@ import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import {
   AlertCircle,
+  ArrowLeft,
   BotMessageSquare,
+  Check,
   ChevronDown,
   ChevronRight,
   Clock3,
-  FileVideo,
   History,
   Image as ImageIcon,
-  Link2,
   Loader2,
   Maximize2,
   Minimize2,
   PanelLeftClose,
   PanelLeftOpen,
-  Paperclip,
+  Play,
   Plus,
   Search,
   Send,
   Sparkles,
-  Trash2,
   Video,
   X,
 } from 'lucide-react';
@@ -145,6 +144,40 @@ function AnalysisCard({ attachment, videoAnalysis }) {
   </section>;
 }
 
+function YoutubeIcon() {
+  return <span className="chatbot-widget__youtube-icon" aria-hidden="true">▶</span>;
+}
+
+function SentMedia({ attachment }) {
+  if (!attachment?.type) return null;
+  const isImage = attachment.type === 'IMAGE';
+  const isYoutube = attachment.type === 'VIDEO' && Boolean(attachment.url);
+  const hasSize = Number.isFinite(attachment.size) && attachment.size > 0;
+  const label = attachment.filename || (isImage ? 'Ingredient image' : 'Cooking video');
+
+  return <div className={`chatbot-widget__sent-media${isYoutube ? ' chatbot-widget__sent-media--youtube' : ''}`}>
+    {isImage && attachment.preview ? <img src={attachment.preview} alt={attachment.filename || 'Ingredient image'} /> : isImage ? <ImageIcon size={17} aria-hidden="true" /> : isYoutube ? <YoutubeIcon /> : <span className="chatbot-widget__video-placeholder"><Play size={16} fill="currentColor" aria-hidden="true" /></span>}
+    <span title={attachment.url || label}>{attachment.url || label}</span>
+    {hasSize && <small>{formatBytes(attachment.size)}</small>}
+  </div>;
+}
+
+function ComposerAttachmentPreview({ attachment, youtubeUrl, onRemoveAttachment, onRemoveYoutube }) {
+  if (youtubeUrl) {
+    return <div className="chatbot-widget__attachment-preview chatbot-widget__attachment-preview--youtube">
+      <YoutubeIcon />
+      <span><strong>YouTube video</strong><small title={youtubeUrl}>{youtubeUrl}</small></span>
+      <button type="button" onClick={onRemoveYoutube} aria-label="Remove YouTube URL"><X size={15} /></button>
+    </div>;
+  }
+  if (!attachment) return null;
+  return <div className="chatbot-widget__attachment-preview">
+    {attachment.kind === 'image' && attachment.preview ? <img src={attachment.preview} alt="Selected image" /> : <span className="chatbot-widget__attachment-video-icon"><Play size={18} fill="currentColor" aria-hidden="true" /></span>}
+    <span><strong>{attachment.filename}</strong><small>{formatBytes(attachment.size)}</small></span>
+    <button type="button" onClick={onRemoveAttachment} aria-label="Remove attachment"><X size={15} /></button>
+  </div>;
+}
+
 export default function ChatbotWidget({ onSend, onAuth }) {
   const navigate = useNavigate();
   const [isMounted, setIsMounted] = useState(false);
@@ -168,14 +201,17 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const [guestTrialsLeft, setGuestTrialsLeft] = useState(null);
   const [attachment, setAttachment] = useState(null);
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [youtubeEditorOpen, setYoutubeEditorOpen] = useState(false);
+  const [youtubeDraft, setYoutubeDraft] = useState('');
+  const [youtubeEditorError, setYoutubeEditorError] = useState('');
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [mediaError, setMediaError] = useState('');
   const panelRef = useRef(null);
   const threadRef = useRef(null);
   const inputRef = useRef(null);
   const launcherRef = useRef(null);
-  const imageInputRef = useRef(null);
-  const videoInputRef = useRef(null);
+  const mediaInputRef = useRef(null);
+  const youtubeInputRef = useRef(null);
   const attachmentMenuRef = useRef(null);
   const requestControllerRef = useRef(null);
   const activeRequestRef = useRef(null);
@@ -262,17 +298,23 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     const externalOpen = () => openWidget();
     const keydown = (event) => {
       if (event.key !== 'Escape' || !isOpen) return;
+      if (youtubeEditorOpen) { setYoutubeEditorOpen(false); setYoutubeEditorError(''); return; }
       if (attachmentMenuOpen) { setAttachmentMenuOpen(false); return; }
       closeWidget();
     };
     window.addEventListener('open-nutribot-chat', externalOpen); window.addEventListener('keydown', keydown);
     return () => { window.removeEventListener('open-nutribot-chat', externalOpen); window.removeEventListener('keydown', keydown); };
-  }, [attachmentMenuOpen, closeWidget, isOpen, openWidget]);
+  }, [attachmentMenuOpen, closeWidget, isOpen, openWidget, youtubeEditorOpen]);
   useEffect(() => {
     const storage = (event) => { if (event.key === 'nutribot-auth-token') refreshAuthState(); };
     window.addEventListener('storage', storage); window.addEventListener('focus', refreshAuthState); window.addEventListener('nutribot-auth-changed', refreshAuthState);
     return () => { window.removeEventListener('storage', storage); window.removeEventListener('focus', refreshAuthState); window.removeEventListener('nutribot-auth-changed', refreshAuthState); };
   }, [refreshAuthState]);
+  useEffect(() => {
+    if (!youtubeEditorOpen) return undefined;
+    youtubeInputRef.current?.focus();
+    return undefined;
+  }, [youtubeEditorOpen]);
   useEffect(() => {
     if (displayMode === 'fullscreen' && !isGuest && historyState === 'idle') loadSessions();
   }, [displayMode, historyState, isGuest, loadSessions]);
@@ -324,16 +366,38 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const chooseYoutube = () => {
     setAttachmentMenuOpen(false);
     if (isGuest) { setMediaError('Sign in to send an image or video for analysis.'); return; }
-    const entered = window.prompt('Paste a YouTube video link (https://youtu.be/...):');
-    if (entered == null) return;
-    const value = entered.trim();
-    if (!value) { setYoutubeUrl(''); return; }
-    if (!isValidYoutubeUrl(value)) { setMediaError('Enter a valid YouTube video URL.'); return; }
+    setYoutubeDraft(youtubeUrl);
+    setYoutubeEditorError('');
+    setYoutubeEditorOpen(true);
+  };
+  const choosePhotoOrVideo = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    chooseMedia(event, IMAGE_TYPES.includes(file.type) ? 'image' : 'video');
+  };
+  const closeYoutubeEditor = () => {
+    setYoutubeEditorOpen(false);
+    setYoutubeEditorError('');
+  };
+  const confirmYoutube = (event) => {
+    event.preventDefault();
+    const value = youtubeDraft.trim();
+    if (!value) {
+      setYoutubeEditorError('Paste a YouTube video URL to continue.');
+      return;
+    }
+    if (!isValidYoutubeUrl(value)) {
+      setYoutubeEditorError('Enter a valid YouTube video URL.');
+      return;
+    }
     setMediaError('');
     if (attachment?.preview) URL.revokeObjectURL(attachment.preview);
     setAttachment(null);
     setYoutubeUrl(value);
+    closeYoutubeEditor();
   };
+  const youtubeValue = youtubeDraft.trim();
+  const canConfirmYoutube = Boolean(youtubeValue && isValidYoutubeUrl(youtubeValue));
 
   const submitMessage = async (value = draft, retryContext = null) => {
     const message = value.trim(); const selectedAttachment = retryContext?.attachment ?? attachment;
@@ -418,22 +482,39 @@ export default function ChatbotWidget({ onSend, onAuth }) {
               {showWelcome && <div className="chatbot-widget__welcome"><span className="chatbot-widget__identity-mark" aria-hidden="true"><Sparkles size={23} /></span><div><p>Your everyday nutrition companion</p><h2>Small choices, made clearer.</h2></div></div>}
               {conversationState === 'loading' && <p className="chatbot-widget__conversation-status"><Loader2 className="is-spinning" size={17} /> Loading conversation...</p>}
               {conversationError && conversationState !== 'loading' && <p className="chatbot-widget__conversation-status is-error" role="alert">{conversationError}</p>}
-              <div className="chatbot-widget__messages">{messages.map((item, index) => <div key={item.id} className={`chatbot-widget__message-row chatbot-widget__message-row--${item.sender}`} data-latest-message={index === messages.length - 1 ? 'true' : undefined}>
-                {item.attachment && <div className="chatbot-widget__sent-media">{item.attachment.type === 'IMAGE' && item.attachment.preview ? <img src={item.attachment.preview} alt={item.attachment.filename || 'Ingredient image'} /> : item.attachment.url ? <><Link2 size={17} /><span>{item.attachment.url}</span></> : <><FileVideo size={17} /><span>{item.attachment.filename}</span><small>{formatBytes(item.attachment.size || 0)}</small></>}</div>}
-                <div className={`chatbot-widget__message chatbot-widget__message--${item.sender}`}>{item.pending ? <span className="chatbot-widget__typing" aria-label={item.mediaKind === 'video' ? 'Analyzing video' : item.mediaKind === 'image' ? 'Analyzing image' : 'NutriBot is thinking'}><i /><i /><i /></span> : <>{item.text}{item.analysis && <AnalysisCard attachment={item.analysis} videoAnalysis={item.videoAnalysis} />}{item.videoAnalysis && !item.analysis && <AnalysisCard videoAnalysis={item.videoAnalysis} />}{item.error && item.retry && <button type="button" className="chatbot-widget__retry" onClick={() => retryMessage(item)}>Retry</button>}</>}</div>
-              </div>)}</div>
+              <div className="chatbot-widget__messages">{messages.map((item, index) => {
+                const hasText = typeof item.text === 'string' ? item.text.trim().length > 0 : Boolean(item.text);
+                const hasMedia = Boolean(item.attachment?.type);
+                const hasMessageContent = item.pending || hasText || item.analysis || item.videoAnalysis || item.error;
+                if (!hasMedia && !hasMessageContent) return null;
+                return <div key={item.id} className={`chatbot-widget__message-row chatbot-widget__message-row--${item.sender}`} data-latest-message={index === messages.length - 1 ? 'true' : undefined}>
+                  {hasMedia && <SentMedia attachment={item.attachment} />}
+                  {hasMessageContent && <div className={`chatbot-widget__message chatbot-widget__message--${item.sender}`}>{item.pending ? <span className="chatbot-widget__typing" aria-label={item.mediaKind === 'video' ? 'Analyzing video' : item.mediaKind === 'image' ? 'Analyzing image' : 'NutriBot is thinking'}><i /><i /><i /></span> : <>{item.text}{item.analysis && <AnalysisCard attachment={item.analysis} videoAnalysis={item.videoAnalysis} />}{item.videoAnalysis && !item.analysis && <AnalysisCard videoAnalysis={item.videoAnalysis} />}{item.error && item.retry && <button type="button" className="chatbot-widget__retry" onClick={() => retryMessage(item)}>Retry</button>}</>}</div>}
+                </div>;
+              })}</div>
               {showWelcome && <div className="chatbot-widget__prompts" aria-label="Suggested questions">{QUICK_PROMPTS.map((prompt) => <button key={prompt} type="button" className="chatbot-widget__prompt" onClick={() => submitMessage(prompt)} disabled={isLoading}><span>{prompt}</span><span aria-hidden="true">+</span></button>)}</div>}
             </div>
           </div>
           <div className="chatbot-widget__composer-wrap">
             {mediaError && <p className="chatbot-widget__media-error" role="alert"><AlertCircle size={14} />{mediaError}</p>}
-            {youtubeUrl && <div className="chatbot-widget__attachment-preview"><Link2 size={17} /><span>{youtubeUrl}</span><button type="button" onClick={() => setYoutubeUrl('')} aria-label="Remove YouTube URL"><X size={15} /></button></div>}
-            {attachment && <div className="chatbot-widget__attachment-preview">{attachment.kind === 'image' && attachment.preview ? <img src={attachment.preview} alt="Selected image" /> : <FileVideo size={17} />}<span>{attachment.filename}<small>{formatBytes(attachment.size)}</small></span><button type="button" onClick={clearAttachment} aria-label="Remove attachment"><Trash2 size={15} /></button></div>}
             <form className="chatbot-widget__composer" onSubmit={(event) => { event.preventDefault(); submitMessage(); }}>
-              <div ref={attachmentMenuRef} className="chatbot-widget__attach-wrap"><button type="button" className="chatbot-widget__attach-button" onClick={() => setAttachmentMenuOpen((current) => !current)} aria-label="Add attachment" aria-expanded={attachmentMenuOpen}><Paperclip size={18} /></button>{attachmentMenuOpen && <div className="chatbot-widget__attach-menu"><button type="button" onClick={() => imageInputRef.current?.click()}><ImageIcon size={16} /> Upload ingredient image</button><button type="button" onClick={() => videoInputRef.current?.click()}><Video size={16} /> Upload cooking video</button><button type="button" onClick={chooseYoutube}><Link2 size={16} /> Paste YouTube link</button></div>}</div>
-              <label htmlFor="nutribot-message" className="chatbot-widget__sr-only">Message NutriBot</label><input ref={inputRef} id="nutribot-message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask about food or nutrition..." autoComplete="off" maxLength={MAX_MESSAGE_LENGTH} disabled={isLoading} /><button type="submit" disabled={(!draft.trim() && !attachment && !youtubeUrl) || isLoading} aria-label="Send message"><Send size={18} /></button>
+              <ComposerAttachmentPreview attachment={attachment} youtubeUrl={youtubeUrl} onRemoveAttachment={clearAttachment} onRemoveYoutube={() => setYoutubeUrl('')} />
+              <div className="chatbot-widget__composer-row">
+                {youtubeEditorOpen ? <>
+                  <button type="button" className="chatbot-widget__composer-back" onClick={closeYoutubeEditor} aria-label="Back to message composer"><ArrowLeft size={17} /></button>
+                  <label htmlFor="nutribot-youtube-url" className="chatbot-widget__sr-only">YouTube URL</label>
+                  <div className={`chatbot-widget__youtube-input${youtubeEditorError ? ' is-error' : ''}`}>
+                    <input ref={youtubeInputRef} id="nutribot-youtube-url" value={youtubeDraft} onChange={(event) => { setYoutubeDraft(event.target.value); if (youtubeEditorError) setYoutubeEditorError(''); }} onBlur={() => { if (youtubeValue && !isValidYoutubeUrl(youtubeValue)) setYoutubeEditorError('Enter a valid YouTube URL.'); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (canConfirmYoutube) confirmYoutube(event); else if (youtubeValue) setYoutubeEditorError('Enter a valid YouTube URL.'); } }} placeholder="Paste YouTube URL..." autoComplete="off" />
+                  </div>
+                  <button type="button" className="chatbot-widget__youtube-confirm" onClick={confirmYoutube} disabled={!canConfirmYoutube} aria-label="Confirm YouTube URL"><Check size={15} /></button>
+                </> : <>
+                  <div ref={attachmentMenuRef} className="chatbot-widget__attach-wrap"><button type="button" className="chatbot-widget__attach-button" onClick={() => setAttachmentMenuOpen((current) => !current)} aria-label="Add attachment" aria-expanded={attachmentMenuOpen}><Plus size={18} /></button>{attachmentMenuOpen && <div className="chatbot-widget__attach-menu"><button type="button" onClick={() => mediaInputRef.current?.click()}><ImageIcon size={16} /> Photo or video</button><button type="button" onClick={chooseYoutube}><YoutubeIcon /> YouTube link</button></div>}</div>
+                  <label htmlFor="nutribot-message" className="chatbot-widget__sr-only">Message NutriBot</label><input ref={inputRef} id="nutribot-message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask about food or nutrition..." autoComplete="off" maxLength={MAX_MESSAGE_LENGTH} disabled={isLoading} /><button type="submit" disabled={(!draft.trim() && !attachment && !youtubeUrl) || isLoading} aria-label="Send message"><Send size={18} /></button>
+                </>}
+              </div>
+              {youtubeEditorError && <p className="chatbot-widget__youtube-error" role="alert">{youtubeEditorError}</p>}
             </form>
-            <input ref={imageInputRef} className="chatbot-widget__file-input" type="file" accept={IMAGE_TYPES.join(',')} onChange={(event) => chooseMedia(event, 'image')} /><input ref={videoInputRef} className="chatbot-widget__file-input" type="file" accept={VIDEO_TYPES.join(',')} onChange={(event) => chooseMedia(event, 'video')} />
+            <input ref={mediaInputRef} className="chatbot-widget__file-input" type="file" accept={[...IMAGE_TYPES, ...VIDEO_TYPES].join(',')} onChange={choosePhotoOrVideo} />
             {showTrialBadge && <div className={`chatbot-widget__trial-badge${guestTrialsLeft === 1 ? ' is-warning' : ''}`} aria-live="polite"><AlertCircle size={13} aria-hidden="true" /><span><strong>{guestTrialsLeft} of {GUEST_TRIAL_LIMIT}</strong> questions left</span></div>}
             <p className="chatbot-widget__notice">NutriBot offers general guidance, not medical advice.</p>
           </div>

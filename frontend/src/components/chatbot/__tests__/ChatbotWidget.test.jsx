@@ -185,12 +185,13 @@ describe('ChatbotWidget', () => {
     const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
     requestNutritionAdvice.mockImplementationOnce(() => new Promise(() => {}));
     localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('https://youtu.be/dQw4w9WgXcQ');
     vi.useFakeTimers();
     renderWithRouter(<ChatbotWidget />);
     fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
     fireEvent.click(screen.getByRole('button', { name: /add attachment/i }));
-    fireEvent.click(screen.getByRole('button', { name: /paste youtube link/i }));
+    fireEvent.click(screen.getByRole('button', { name: /youtube link/i }));
+    fireEvent.change(screen.getByPlaceholderText('Paste YouTube URL...'), { target: { value: ' https://youtu.be/dQw4w9WgXcQ ' } });
+    fireEvent.click(screen.getByRole('button', { name: /confirm youtube url/i }));
     fireEvent.click(screen.getByRole('button', { name: /send message/i }));
 
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
@@ -200,7 +201,6 @@ describe('ChatbotWidget', () => {
     expect(screen.queryByText(/taking too long/i)).not.toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(screen.getByText(/phản hồi quá lâu/i)).toBeInTheDocument();
-    promptSpy.mockRestore();
   });
 
   it('retries without adding another user message', async () => {
@@ -226,17 +226,72 @@ describe('ChatbotWidget', () => {
   it('sends a YouTube link as a video url attachment', async () => {
     const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
     localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('https://youtu.be/dQw4w9WgXcQ');
     renderWithRouter(<ChatbotWidget />);
     fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
     fireEvent.click(screen.getByRole('button', { name: /add attachment/i }));
-    fireEvent.click(screen.getByRole('button', { name: /paste youtube link/i }));
+    fireEvent.click(screen.getByRole('button', { name: /youtube link/i }));
+    fireEvent.change(screen.getByPlaceholderText('Paste YouTube URL...'), { target: { value: 'https://youtu.be/dQw4w9WgXcQ' } });
+    fireEvent.click(screen.getByRole('button', { name: /confirm youtube url/i }));
     fireEvent.click(screen.getByRole('button', { name: /send message/i }));
 
     await waitFor(() => expect(requestNutritionAdvice).toHaveBeenCalledWith(expect.objectContaining({
       attachment: { type: 'VIDEO', url: 'https://youtu.be/dQw4w9WgXcQ' },
     })));
-    promptSpy.mockRestore();
+  });
+
+  it('validates the YouTube URL in the inline editor and supports Escape', async () => {
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add attachment/i }));
+    fireEvent.click(screen.getByRole('button', { name: /youtube link/i }));
+
+    const youtubeInput = screen.getByPlaceholderText('Paste YouTube URL...');
+    const confirmButton = screen.getByRole('button', { name: /confirm youtube url/i });
+    expect(confirmButton).toBeDisabled();
+    fireEvent.change(youtubeInput, { target: { value: 'https://example.com/video' } });
+    fireEvent.blur(youtubeInput);
+    expect(screen.getByRole('alert')).toHaveTextContent(/valid youtube url/i);
+    expect(confirmButton).toBeDisabled();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByPlaceholderText('Paste YouTube URL...')).not.toBeInTheDocument();
+  });
+
+  it('renders a YouTube-only optimistic message without an empty user bubble', async () => {
+    const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+    requestNutritionAdvice.mockImplementationOnce(() => new Promise(() => {}));
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add attachment/i }));
+    fireEvent.click(screen.getByRole('button', { name: /youtube link/i }));
+    fireEvent.change(screen.getByPlaceholderText('Paste YouTube URL...'), { target: { value: 'https://youtu.be/dQw4w9WgXcQ' } });
+    fireEvent.click(screen.getByRole('button', { name: /confirm youtube url/i }));
+    fireEvent.click(screen.getByRole('button', { name: /send message/i }));
+
+    expect(document.querySelector('.chatbot-widget__sent-media--youtube')).toHaveTextContent('https://youtu.be/dQw4w9WgXcQ');
+    expect(document.querySelector('.chatbot-widget__message--user')).not.toBeInTheDocument();
+  });
+
+  it('renders media-only history without empty bubbles and preserves text with media', async () => {
+    const { getChatMessages } = await import('../../../services/chatbotApi');
+    getChatMessages.mockResolvedValueOnce([
+      { messageId: 1, senderType: 'USER', content: '', attachments: [{ type: 'IMAGE', filename: 'ingredients.png' }] },
+      { messageId: 2, senderType: 'USER', content: 'Please analyze this video', attachments: [{ type: 'VIDEO', filename: 'recipe.mp4' }] },
+      { messageId: 3, senderType: 'USER', content: '', attachments: [{ type: 'VIDEO', url: 'https://youtu.be/dQw4w9WgXcQ' }] },
+      { messageId: 4, senderType: 'USER', content: '   ' },
+    ]);
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(document.querySelector('.chatbot-widget__history-toggle'));
+    await waitFor(() => expect(screen.getByText('Test Session')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Test Session'));
+
+    await waitFor(() => expect(screen.getByText('Please analyze this video')).toBeInTheDocument());
+    expect(document.querySelectorAll('.chatbot-widget__sent-media')).toHaveLength(3);
+    expect(document.querySelector('.chatbot-widget__sent-media--youtube')).toHaveTextContent('https://youtu.be/dQw4w9WgXcQ');
+    expect(document.querySelectorAll('.chatbot-widget__message--user')).toHaveLength(1);
   });
 
   it('does not append an old response after a member switches sessions', async () => {
