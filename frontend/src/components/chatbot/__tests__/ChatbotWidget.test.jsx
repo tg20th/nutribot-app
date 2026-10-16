@@ -172,9 +172,35 @@ describe('ChatbotWidget', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });
-    expect(screen.getByText(/taking too long/i)).toBeInTheDocument();
+    expect(screen.queryByText(/phản hồi quá lâu/i)).not.toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    expect(screen.getByText(/phản hồi quá lâu/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /retry/i })).toBeEnabled();
     expect(document.querySelector('.chatbot-widget__typing')).not.toBeInTheDocument();
+  });
+
+  it('keeps a YouTube video request alive beyond the text timeout', async () => {
+    const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+    requestNutritionAdvice.mockImplementationOnce(() => new Promise(() => {}));
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('https://youtu.be/dQw4w9WgXcQ');
+    vi.useFakeTimers();
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add attachment/i }));
+    fireEvent.click(screen.getByRole('button', { name: /paste youtube link/i }));
+    fireEvent.click(screen.getByRole('button', { name: /send message/i }));
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(screen.queryByText(/taking too long/i)).not.toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(109_999); });
+    expect(screen.queryByText(/taking too long/i)).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(screen.getByText(/phản hồi quá lâu/i)).toBeInTheDocument();
+    promptSpy.mockRestore();
   });
 
   it('retries without adding another user message', async () => {
@@ -193,6 +219,8 @@ describe('ChatbotWidget', () => {
     await waitFor(() => expect(screen.getByText('Recovered answer')).toBeInTheDocument());
     expect(screen.getAllByText('Can I retry this?')).toHaveLength(1);
     expect(requestNutritionAdvice).toHaveBeenCalledTimes(2);
+    expect(requestNutritionAdvice.mock.calls[0][0].idempotencyKey)
+      .toBe(requestNutritionAdvice.mock.calls[1][0].idempotencyKey);
   });
 
   it('sends a YouTube link as a video url attachment', async () => {

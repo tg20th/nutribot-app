@@ -3,6 +3,7 @@
 from typing import Literal
 from urllib.parse import parse_qs, urlparse
 import re
+import json
 
 import base64
 import binascii
@@ -73,13 +74,97 @@ class ConversationMessage(BaseModel):
     def normalize_sender(cls, value: object) -> object:
         return value.upper() if isinstance(value, str) else value
 
-    @field_validator("content")
+    @field_validator("content", mode="before")
     @classmethod
-    def normalize_content(cls, value: str) -> str:
-        normalized = value.strip()
+    def normalize_content(cls, value: object) -> str:
+        normalized = _normalize_legacy_history_content(value)
         if not normalized:
             raise ValueError("Nội dung hội thoại không được để trống")
         return normalized
+
+
+def _normalize_legacy_history_content(value: object) -> str:
+    """Convert only known legacy media envelopes into bounded text history."""
+    if isinstance(value, str):
+        normalized = value.strip()
+        # Only parse JSON-looking strings when they contain a known media
+        # envelope. Ordinary text such as "{calories: ...}" remains unchanged.
+        if normalized[:1] in {"{", "["}:
+            try:
+                parsed = json.loads(normalized)
+            except (TypeError, ValueError):
+                parsed = None
+            if _is_legacy_media_value(parsed):
+                return _normalize_legacy_history_content(parsed)
+        return normalized
+    if isinstance(value, list):
+        parts = [_normalize_legacy_history_content(item) for item in value]
+        if all(parts):
+            return " ".join(parts).strip()
+        raise ValueError("History content must use supported text parts")
+    if not isinstance(value, dict):
+        raise ValueError("History content must be text or a supported media envelope")
+
+    parts: list[str] = []
+    for key in ("content", "reply", "text", "message"):
+        if isinstance(value.get(key), str) and value[key].strip():
+            parts.append(value[key].strip())
+            break
+    for key in ("image_context", "video_context"):
+        if isinstance(value.get(key), str) and value[key].strip():
+            parts.append(f"{key}: {value[key].strip()}")
+    for key in ("recognized_ingredients", "uncertain_ingredients", "warnings"):
+        items = value.get(key)
+        if isinstance(items, list) and all(isinstance(item, str) for item in items):
+            clean_items = [item.strip() for item in items if item.strip()]
+            if clean_items:
+                parts.append(f"{key}: {', '.join(clean_items)}")
+
+    attachments = value.get("attachments")
+    if isinstance(attachments, list):
+        for attachment in attachments:
+            if not isinstance(attachment, dict):
+                continue
+            attachment_type = attachment.get("type")
+            if isinstance(attachment_type, str) and attachment_type.strip():
+                parts.append(f"media_attachment: {attachment_type.strip().upper()}")
+
+    analysis = value.get("video_analysis")
+    if isinstance(analysis, dict):
+        dish_name = analysis.get("dish_name") or analysis.get("dishName")
+        if isinstance(dish_name, str) and dish_name.strip():
+            parts.append(f"Video dish: {dish_name.strip()}")
+        for key in ("ingredients", "steps", "uncertainties"):
+            items = analysis.get(key)
+            if isinstance(items, list):
+                names = []
+                for item in items:
+                    if isinstance(item, str) and item.strip():
+                        names.append(item.strip())
+                    elif isinstance(item, dict):
+                        text = item.get("name") or item.get("instruction")
+                        if isinstance(text, str) and text.strip():
+                            names.append(text.strip())
+                if names:
+                    parts.append(f"video_{key}: {', '.join(names)}")
+    if parts:
+        return " ".join(parts).strip()
+    raise ValueError("History content is not a supported legacy format")
+
+
+def _is_legacy_media_value(value: object) -> bool:
+    if isinstance(value, list):
+        return bool(value) and any(_is_legacy_media_value(item) for item in value)
+    if not isinstance(value, dict):
+        return False
+    media_keys = {
+        "image_context", "video_context", "recognized_ingredients",
+        "uncertain_ingredients", "warnings", "video_analysis", "attachments",
+    }
+    if media_keys.intersection(value):
+        return True
+    analysis = value.get("video_analysis")
+    return isinstance(analysis, dict)
 
 
 class UserContext(BaseModel):

@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from app.config import Settings
 from app.exceptions import AIProviderUnavailableError
 from app.main import create_app
-from app.schemas.chat import ChatRequest, GeminiChatResult
+from app.schemas.chat import ChatRequest, GeminiChatResult, GeminiTextChatResult
 from app.services.gemini_service import GeminiService
 from app.prompts import IMAGE_SYSTEM_INSTRUCTION
 
@@ -279,8 +279,69 @@ def test_image_503_uses_one_application_fallback_and_logs_telemetry(caplog):
 
     assert result.reply == "Đã phân tích."
     assert models.calls == 2
-    assert "models=['gemini-3.8-flash', 'fallback']" in caplog.text
-    assert "calls=2" in caplog.text
+    assert "models=['gemini-3.5-flash-lite', 'gemini-3.6-flash']" in caplog.text
+
+
+def test_image_503_fallback_is_limited_to_one_attempt():
+    class UnavailableModels:
+        calls = 0
+
+        async def generate_content(self, **_kwargs):
+            self.calls += 1
+            raise errors.APIError(503, {"error": {"message": "unavailable"}})
+
+    models = UnavailableModels()
+    service = GeminiService(
+        Settings(gemini_api_key="test-key", gemini_fallback_model="fallback"),
+        client=SimpleNamespace(aio=SimpleNamespace(models=models)),
+    )
+
+    with pytest.raises(AIProviderUnavailableError):
+        asyncio.run(service.chat(request()))
+
+    assert models.calls == 2
+
+
+def test_image_response_parsed_as_json_string_is_accepted():
+    class StringParsedModels:
+        calls = 0
+
+        async def generate_content(self, **_kwargs):
+            self.calls += 1
+            return SimpleNamespace(
+                parsed='{"reply":"Image analyzed.","recommendations":[]}'
+            )
+
+    models = StringParsedModels()
+    service = GeminiService(
+        Settings(gemini_api_key="test-key"),
+        client=SimpleNamespace(aio=SimpleNamespace(models=models)),
+    )
+    result = asyncio.run(service.chat(request()))
+
+    assert result.reply == "Image analyzed."
+    assert models.calls == 1
+
+
+def test_image_response_parsed_as_text_chat_schema_is_accepted():
+    class TypedParsedModels:
+        calls = 0
+
+        async def generate_content(self, **_kwargs):
+            self.calls += 1
+            return SimpleNamespace(
+                parsed=GeminiTextChatResult(reply="Image analyzed.", recommendations=[])
+            )
+
+    models = TypedParsedModels()
+    service = GeminiService(
+        Settings(gemini_api_key="test-key"),
+        client=SimpleNamespace(aio=SimpleNamespace(models=models)),
+    )
+    result = asyncio.run(service.chat(request()))
+
+    assert result.reply == "Image analyzed."
+    assert models.calls == 1
 
 
 def test_image_http_timeout_uses_one_fallback_attempt():
@@ -318,13 +379,13 @@ def test_image_end_to_end_timeout_cancels_provider_call():
     assert time.perf_counter() - started < 0.5
 
 
-def test_explicit_image_context_follow_up_uses_bounded_image_controls():
+def test_explicit_image_context_follow_up_uses_bounded_text_controls():
     class SlowModels:
         async def generate_content(self, **_kwargs):
             await asyncio.sleep(1)
 
     service = GeminiService(
-        Settings(gemini_api_key="test-key", gemini_image_timeout_seconds=0.02),
+        Settings(gemini_api_key="test-key", gemini_timeout_seconds=0.02),
         client=SimpleNamespace(aio=SimpleNamespace(models=SlowModels())),
     )
     follow_up = ChatRequest(
@@ -354,9 +415,9 @@ def test_all_gemini_clients_disable_sdk_retry(monkeypatch):
     text_service = GeminiService(Settings(gemini_api_key="test-key"))
     text_service._get_client()
 
-    assert clients[0]["http_options"].timeout == 10_000
+    assert clients[0]["http_options"].timeout == 45_000
     assert clients[0]["http_options"].retry_options.attempts == 1
-    assert clients[1]["http_options"].timeout == 14_000
+    assert clients[1]["http_options"].timeout == 30_000
     assert clients[1]["http_options"].retry_options.attempts == 1
 
 

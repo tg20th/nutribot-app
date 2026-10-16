@@ -7,7 +7,7 @@ from google.genai import errors
 from pydantic import ValidationError
 
 from app.config import Settings
-from app.exceptions import AIProviderUnavailableError
+from app.exceptions import AIProviderUnavailableError, AIResponseInvalidError
 from app.schemas.chat import ChatRequest, GeminiChatResult
 from app.services.gemini_service import GeminiService
 
@@ -151,6 +151,58 @@ def test_503_uses_one_video_capable_fallback():
     assert len(models.calls) == 2
 
 
+def test_video_two_503_responses_stop_after_one_fallback():
+    class UnavailableModels(FakeModels):
+        async def generate_content(self, **kwargs):
+            self.calls.append(kwargs)
+            raise errors.APIError(503, {"error": {"message": "unavailable"}})
+
+    models = UnavailableModels()
+    with pytest.raises(AIProviderUnavailableError):
+        asyncio.run(
+            service_for(models, gemini_fallback_model="gemini-3.5-flash-lite").chat(video_request())
+        )
+
+    assert len(models.calls) == 2
+
+
+def test_video_primary_503_fallback_504_stops_after_two_calls():
+    class HighDemandThenDeadline:
+        def __init__(self):
+            self.calls = []
+
+        async def generate_content(self, **kwargs):
+            self.calls.append(kwargs["model"])
+            status = 503 if len(self.calls) == 1 else 504
+            raise errors.APIError(status, {"error": {"message": "provider failure"}})
+
+    models = HighDemandThenDeadline()
+    with pytest.raises(AIProviderUnavailableError):
+        asyncio.run(service_for(models).chat(
+            ChatRequest(message="analyze", session_id="s", video_url="https://youtu.be/9hE5-98ZeCg")
+        ))
+
+    assert models.calls == ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
+
+
+def test_video_application_deadline_does_not_start_fallback():
+    class SlowProvider:
+        def __init__(self):
+            self.calls = []
+
+        async def generate_content(self, **kwargs):
+            self.calls.append(kwargs["model"])
+            await asyncio.sleep(1)
+
+    models = SlowProvider()
+    with pytest.raises(AIProviderUnavailableError):
+        asyncio.run(service_for(models, gemini_video_timeout_seconds=0.02).chat(
+            ChatRequest(message="analyze", session_id="s", video_url="https://youtu.be/9hE5-98ZeCg")
+        ))
+
+    assert models.calls == ["gemini-3.5-flash-lite"]
+
+
 def test_429_is_not_retried_or_fallback():
     models = FakeModels(error=errors.APIError(429, {"error": {"message": "quota"}}))
     with pytest.raises(AIProviderUnavailableError):
@@ -199,12 +251,25 @@ def test_minimal_json_is_parsed_and_optional_recipe_data_is_preserved():
     assert "unknown" in result.video_context
 
 
+def test_youtube_url_is_sent_as_video_uri_without_backend_download():
+    models = FakeModels()
+    url = "https://youtu.be/9hE5-98ZeCg"
+
+    asyncio.run(service_for(models).chat(
+        ChatRequest(message="analyze", session_id="s", video_url=url)
+    ))
+
+    part = models.calls[0]["contents"][0]
+    assert part.file_data.file_uri == url
+    assert part.file_data.mime_type == "video/mp4"
+
+
 def test_malformed_or_truncated_json_fails_closed():
     class BrokenModel:
         async def generate_content(self, **_kwargs):
             return SimpleNamespace(text='{"dish_name":"dish","ingredients":["tofu"]')
 
-    with pytest.raises(AIProviderUnavailableError):
+    with pytest.raises(AIResponseInvalidError):
         asyncio.run(service_for(BrokenModel()).chat(
             ChatRequest(message="analyze", session_id="s", video_url="https://youtu.be/9hE5-98ZeCg")
         ))

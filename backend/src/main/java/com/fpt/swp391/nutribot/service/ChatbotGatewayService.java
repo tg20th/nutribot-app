@@ -5,6 +5,9 @@ import com.fpt.swp391.nutribot.config.CorrelationIdFilter;
 import com.fpt.swp391.nutribot.dto.request.ChatAttachmentRequest;
 import com.fpt.swp391.nutribot.dto.response.ChatAttachmentResponse;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
+import com.fpt.swp391.nutribot.exception.AIQuotaExceededException;
+import com.fpt.swp391.nutribot.exception.AIServiceProtocolException;
+import com.fpt.swp391.nutribot.exception.AIServiceUnavailableException;
 import com.fpt.swp391.nutribot.filter.GuestRateLimitFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.NotBlank;
@@ -19,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
+import org.springframework.web.client.ResourceAccessException;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.nio.charset.StandardCharsets;
@@ -27,7 +31,6 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
@@ -41,6 +44,7 @@ public class ChatbotGatewayService {
     private static final Duration CB_WINDOW = Duration.ofSeconds(30);
     private static final Duration CB_COOLDOWN = Duration.ofSeconds(30);
     private static final int MAX_AI_HISTORY = 6;
+    private static final String HISTORY_TRUNCATION_MARKER = "\n[Earlier history truncated]";
 
     private final RestClient aiClient;
     private final GuestRateLimitFilter rateLimitFilter;
@@ -49,17 +53,17 @@ public class ChatbotGatewayService {
     private int failureCount;
     private Instant failureWindowStart;
     private Instant lastFailureAt;
+    private boolean halfOpenProbeInFlight;
     private final Object cbLock = new Object();
-    private final AtomicLong fallbackCount = new AtomicLong();
 
     public ChatbotGatewayService(
             @Value("${ai-service.base-url:http://localhost:8000}") String aiServiceBaseUrl,
-            @Value("${ai-service.chatbot-timeout-seconds:75}") long chatbotTimeoutSeconds,
+            @Value("${ai-service.chatbot-timeout-seconds:135}") long chatbotTimeoutSeconds,
             GuestRateLimitFilter rateLimitFilter) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(3));
-        // Video analysis (URL or upload) can take up to 60s in the AI service,
-        // so the read deadline must cover the longest video path.
+        // Video analysis (URL or upload) can take up to 120s in the AI service,
+        // so the shared gateway read deadline includes network overhead.
         requestFactory.setReadTimeout(Duration.ofSeconds(chatbotTimeoutSeconds));
 
         this.aiClient = RestClient.builder()
@@ -92,7 +96,7 @@ public class ChatbotGatewayService {
         if (!canAttemptAiCall()) {
             if (quotaKey != null) rateLimitFilter.releaseReservedTurn(quotaKey);
             log.warn("[{}] Gateway: circuit OPEN, returning fallback immediately", correlationId);
-            return fallback(quotaKey, guest, correlationId);
+            throw new AIServiceUnavailableException("AI is temporarily unavailable. Please try again later.");
         }
 
         Instant startedAt = Instant.now();
@@ -119,7 +123,8 @@ public class ChatbotGatewayService {
             recordAiSuccess();
             if (quotaKey != null) rateLimitFilter.consumeReservedTurn(quotaKey);
             Integer remaining = guest ? rateLimitFilter.remainingForKey(quotaKey) : null;
-            log.info("[{}] Gateway: route=AI latencyMs={}", correlationId,
+            log.info("[{}] Gateway: route=AI mediaType={} latencyMs={}", correlationId,
+                    mediaType(attachment),
                     Duration.between(startedAt, Instant.now()).toMillis());
 
             ChatAttachmentResponse parsedAttachment = toAttachmentResponse(attachment, response);
@@ -130,13 +135,38 @@ public class ChatbotGatewayService {
                     false,
                     parsedAttachment);
         } catch (RestClientException exception) {
-            recordAiFailure();
             if (quotaKey != null) rateLimitFilter.releaseReservedTurn(quotaKey);
             String errorCode = exception instanceof RestClientResponseException responseException
                     ? String.valueOf(responseException.getStatusCode().value()) : exception.getClass().getSimpleName();
-            log.warn("[{}] Gateway: route=AI errorCode={} latencyMs={}, returning fallback",
-                    correlationId, errorCode, Duration.between(startedAt, Instant.now()).toMillis());
-            return fallback(quotaKey, guest, correlationId);
+            log.warn("[{}] Gateway: route=AI mediaType={} errorCode={} latencyMs={}",
+                    correlationId, mediaType(attachment), errorCode,
+                    Duration.between(startedAt, Instant.now()).toMillis());
+            if (exception instanceof RestClientResponseException responseException) {
+                int status = responseException.getStatusCode().value();
+                if (status == 429) {
+                    releaseHalfOpenProbe();
+                    throw new AIQuotaExceededException(
+                        "AI is temporarily unavailable. We have reached the current AI usage limit. Please try again later.");
+                }
+                if (status == 400 || status == 401 || status == 403 || status == 422
+                        || isInvalidResponsePayload(responseException)) {
+                    releaseHalfOpenProbe();
+                    throw new AIServiceProtocolException(
+                            "The AI service rejected the chatbot request. Please try again.");
+                }
+            }
+            if (!(exception instanceof RestClientResponseException)
+                    && !(exception instanceof ResourceAccessException)) {
+                releaseHalfOpenProbe();
+                throw new AIServiceProtocolException(
+                        "The AI service returned an invalid chatbot response. Please try again.");
+            }
+            if (isTransientFailure(exception)) {
+                recordAiFailure();
+            }
+            if (!isTransientFailure(exception)) releaseHalfOpenProbe();
+            throw new AIServiceUnavailableException(
+                "AI is temporarily unavailable. Please try again later.");
         }
     }
 
@@ -171,6 +201,12 @@ public class ChatbotGatewayService {
         }
     }
 
+    private String mediaType(ChatAttachmentRequest attachment) {
+        if (attachment == null) return "TEXT";
+        if (attachment.getUrl() != null && !attachment.getUrl().isBlank()) return "VIDEO_URL";
+        return attachment.getType() == null ? "UNKNOWN" : attachment.getType().toUpperCase();
+    }
+
     private ChatAttachmentResponse toAttachmentResponse(ChatAttachmentRequest sent, AiChatResponse ai) {
         if (sent == null) return null;
         String context = ai != null && ai.videoContext() != null
@@ -201,11 +237,14 @@ public class ChatbotGatewayService {
             if (circuitState == CircuitState.OPEN) {
                 if (lastFailureAt != null && lastFailureAt.plus(CB_COOLDOWN).isBefore(now)) {
                     circuitState = CircuitState.HALF_OPEN;
+                    halfOpenProbeInFlight = true;
                     log.info("Circuit transitioned OPEN -> HALF_OPEN");
                     return true;
                 }
                 return false;
             }
+            if (halfOpenProbeInFlight) return false;
+            halfOpenProbeInFlight = true;
             return true;
         }
     }
@@ -215,6 +254,7 @@ public class ChatbotGatewayService {
             lastFailureAt = Instant.now();
             if (circuitState == CircuitState.HALF_OPEN) {
                 circuitState = CircuitState.OPEN;
+                halfOpenProbeInFlight = false;
                 log.info("Circuit transitioned HALF_OPEN -> OPEN (probe failed)");
                 return;
             }
@@ -235,22 +275,33 @@ public class ChatbotGatewayService {
         synchronized (cbLock) {
             if (circuitState == CircuitState.HALF_OPEN) {
                 circuitState = CircuitState.CLOSED;
+                halfOpenProbeInFlight = false;
                 failureCount = 0;
                 log.info("Circuit transitioned HALF_OPEN -> CLOSED (probe succeeded)");
             }
         }
     }
 
-    private ChatbotReply fallback(String quotaKey, boolean guest, String correlationId) {
-        Integer remaining = guest && quotaKey != null ? rateLimitFilter.remainingForKey(quotaKey) : null;
-        long totalFallbacks = fallbackCount.incrementAndGet();
-        log.warn("[{}] Gateway: fallbackCount={}", correlationId, totalFallbacks);
-        return new ChatbotReply(
-                "NutriBot is temporarily unavailable. Please try again shortly.",
-                List.of(),
-                remaining,
-                true,
-                null);
+    static boolean isTransientFailure(RestClientException exception) {
+        if (exception instanceof ResourceAccessException) return true;
+        if (!(exception instanceof RestClientResponseException responseException)) return false;
+        int status = responseException.getStatusCode().value();
+        return status == 408 || status == 425 || (status >= 500 && status <= 599);
+    }
+
+    private boolean isInvalidResponsePayload(RestClientResponseException exception) {
+        return exception.getStatusCode().value() == 502
+                && exception.getResponseBodyAsString().contains("AI_RESPONSE_INVALID");
+    }
+
+    private void releaseHalfOpenProbe() {
+        synchronized (cbLock) {
+            if (circuitState == CircuitState.HALF_OPEN) {
+                circuitState = CircuitState.OPEN;
+                halfOpenProbeInFlight = false;
+                lastFailureAt = Instant.now();
+            }
+        }
     }
 
     private void validateRequest(String sessionId, String message) {
@@ -273,8 +324,21 @@ public class ChatbotGatewayService {
         if (conversationHistory == null) return List.of();
         int start = Math.max(0, conversationHistory.size() - MAX_AI_HISTORY);
         return conversationHistory.subList(start, conversationHistory.size()).stream()
-                .map(turn -> Map.of("sender", turn.sender(), "content", turn.content()))
+                .map(turn -> Map.of("sender", turn.sender(), "content", normalizeAiHistoryContent(turn.content())))
                 .toList();
+    }
+
+    /**
+     * Stored messages predate the current 2,000-character API contract. Keep
+     * the turn and an explicit prefix, but never send an invalid AI payload.
+     */
+    static String normalizeAiHistoryContent(String content) {
+        String normalized = content == null ? "" : content.strip();
+        if (normalized.length() <= MAX_MESSAGE_LENGTH) return normalized;
+        log.warn("AI history content exceeded contract; sender contentLength={} truncated=true",
+                normalized.length());
+        int prefixLength = MAX_MESSAGE_LENGTH - HISTORY_TRUNCATION_MARKER.length();
+        return normalized.substring(0, prefixLength) + HISTORY_TRUNCATION_MARKER;
     }
 
     public record ConversationTurn(

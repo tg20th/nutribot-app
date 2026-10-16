@@ -35,7 +35,13 @@ import '../../styles/chatbot-widget.css';
 const GUEST_TRIAL_LIMIT = 3;
 const GUEST_SESSION_KEY = 'nutribot_guest_chat_session_id';
 const MAX_MESSAGE_LENGTH = 2_000;
-const REQUEST_TIMEOUT_MS = 30_000;
+const CHATBOT_TIMEOUTS = {
+  // AI text processing is bounded at 30s; leave room for the backend
+  // gateway and network response without changing image/video deadlines.
+  text: 45_000,
+  image: 55_000,
+  video: 140_000,
+};
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -66,6 +72,11 @@ const getGuestSessionId = () => {
 const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 const formatBytes = (value) => `${(value / (1024 * 1024)).toFixed(value >= 1024 * 1024 ? 1 : 2)} MB`;
 const normalizeList = (value) => Array.isArray(value) ? value.filter(Boolean) : [];
+const getRequestType = (attachment, youtubeUrl) => {
+  if (attachment?.type === 'IMAGE') return 'image';
+  if (attachment?.type === 'VIDEO' || youtubeUrl) return 'video';
+  return 'text';
+};
 
 const YOUTUBE_HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'];
 const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
@@ -150,6 +161,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const [historyError, setHistoryError] = useState('');
   const [historyQuery, setHistoryQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [activeRequestType, setActiveRequestType] = useState('text');
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [authMode, setAuthMode] = useState(null);
   const [authToken, setAuthToken] = useState(() => localStorage.getItem('nutribot-auth-token'));
@@ -196,7 +208,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const abortActiveRequest = useCallback(() => {
     conversationKeyRef.current += 1;
     requestControllerRef.current?.abort();
-    requestControllerRef.current = null; activeRequestRef.current = null; sendingRef.current = false; setIsLoading(false);
+    requestControllerRef.current = null; activeRequestRef.current = null; sendingRef.current = false; setIsLoading(false); setActiveRequestType('text');
   }, []);
   const startNewConversation = () => {
     abortActiveRequest();
@@ -326,6 +338,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const submitMessage = async (value = draft, retryContext = null) => {
     const message = value.trim(); const selectedAttachment = retryContext?.attachment ?? attachment;
     const selectedYoutube = retryContext?.youtubeUrl ?? youtubeUrl;
+    const requestType = getRequestType(selectedAttachment, selectedYoutube);
     if ((!message && !selectedAttachment && !selectedYoutube) || message.length > MAX_MESSAGE_LENGTH || isLoading || sendingRef.current) return;
     if ((selectedAttachment || selectedYoutube) && isGuest) { setMediaError('Sign in to send an image or video for analysis.'); return; }
     sendingRef.current = true;
@@ -333,6 +346,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     const guest = retryContext?.guest ?? isGuest;
     const sessionId = retryContext?.sessionId ?? (guest ? getGuestSessionId() : sessionIdRef.current);
     const conversationKey = retryContext?.conversationKey ?? conversationKeyRef.current;
+    const idempotencyKey = retryContext?.idempotencyKey ?? `chat-${Date.now()}-${requestSequenceRef.current + 1}`;
     if (conversationKey !== conversationKeyRef.current) { sendingRef.current = false; return; }
     const requestId = ++requestSequenceRef.current;
     const userMessage = { id: `user-${Date.now()}`, sender: 'user', text: message, attachment: selectedAttachment ? { type: selectedAttachment.type, filename: selectedAttachment.filename, mimeType: selectedAttachment.mimeType, preview: selectedAttachment.preview, size: selectedAttachment.size } : (selectedYoutube ? { type: 'VIDEO', url: selectedYoutube } : null) };
@@ -340,12 +354,12 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     setConversationState('active');
     setConversationError('');
     setMessages((current) => [...current.filter((item) => item.id !== retryContext?.errorId), ...(retryContext ? [] : [userMessage]), { id: pendingId, sender: 'assistant', text: '', pending: true, mediaKind: selectedAttachment?.kind ?? (selectedYoutube ? 'video' : undefined) }]);
-    setDraft(''); setAttachment(null); setYoutubeUrl(''); setMediaError(''); setIsLoading(true); setAttachmentMenuOpen(false); onSend?.(message);
+    setDraft(''); setAttachment(null); setYoutubeUrl(''); setMediaError(''); setIsLoading(true); setActiveRequestType(requestType); setAttachmentMenuOpen(false); onSend?.(message);
     const controller = new AbortController(); requestControllerRef.current = controller; activeRequestRef.current = { id: requestId, conversationKey };
     let timeoutId;
-    const timeoutPromise = new Promise((_, reject) => { timeoutId = window.setTimeout(() => { const timeoutError = new Error('NutriBot request timed out.'); timeoutError.code = 'CHATBOT_TIMEOUT'; controller.abort(); reject(timeoutError); }, REQUEST_TIMEOUT_MS); });
+    const timeoutPromise = new Promise((_, reject) => { timeoutId = window.setTimeout(() => { const timeoutError = new Error('NutriBot request timed out.'); timeoutError.code = 'CHATBOT_TIMEOUT'; controller.abort(); reject(timeoutError); }, CHATBOT_TIMEOUTS[requestType]); });
     try {
-      const response = await Promise.race([requestNutritionAdvice({ message, sessionId, conversationHistory: guest ? conversationHistory : [], attachment: selectedAttachment ? { type: selectedAttachment.type, dataBase64: selectedAttachment.dataBase64, mimeType: selectedAttachment.mimeType, filename: selectedAttachment.filename } : (selectedYoutube ? { type: 'VIDEO', url: selectedYoutube } : undefined), signal: controller.signal }), timeoutPromise]);
+      const response = await Promise.race([requestNutritionAdvice({ message, sessionId, conversationHistory: guest ? conversationHistory : [], attachment: selectedAttachment ? { type: selectedAttachment.type, dataBase64: selectedAttachment.dataBase64, mimeType: selectedAttachment.mimeType, filename: selectedAttachment.filename } : (selectedYoutube ? { type: 'VIDEO', url: selectedYoutube } : undefined), idempotencyKey, signal: controller.signal }), timeoutPromise]);
       if (activeRequestRef.current?.id !== requestId || conversationKey !== conversationKeyRef.current) return;
       const assistantText = typeof (response.content || response.reply) === 'string' ? (response.content || response.reply).trim() : '';
       if (!assistantText) { const invalid = new Error('NutriBot returned an incomplete response.'); invalid.code = 'CHATBOT_INVALID_RESPONSE'; throw invalid; }
@@ -354,11 +368,12 @@ export default function ChatbotWidget({ onSend, onAuth }) {
       setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `assistant-${Date.now()}`, sender: 'assistant', text: assistantText, analysis: response.attachment, videoAnalysis: response.videoAnalysis || response.video_analysis }]);
     } catch (error) {
       if (activeRequestRef.current?.id !== requestId || conversationKey !== conversationKeyRef.current) return;
-      if (error.name === 'AbortError') { setMessages((current) => current.filter((item) => item.id !== pendingId)); return; }
+      if (error.name === 'AbortError') { setMessages((current) => current.filter((item) => item.id !== pendingId)); setDraft(message); setAttachment(selectedAttachment); setYoutubeUrl(selectedYoutube); return; }
       if (error.status === 429 && isGuest) syncGuestTrialCount(0);
-      const messageText = error.status === 429 ? 'The AI service has reached its usage limit. Please try again later.' : error.code === 'CHATBOT_TIMEOUT' ? 'NutriBot is taking too long to respond. Please try again.' : error.code === 'CHATBOT_INVALID_RESPONSE' ? 'NutriBot returned an incomplete response. Please try again.' : error.status === 503 || error.status === 504 ? 'NutriBot is temporarily unavailable. Please try again shortly.' : error.status === 413 ? 'The attachment exceeds the allowed size.' : 'NutriBot could not respond right now. Please try again.';
-      setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `error-${Date.now()}`, sender: 'assistant', text: messageText, error: true, retry: { message, sessionId, guest, conversationHistory, conversationKey, attachment: selectedAttachment, youtubeUrl: selectedYoutube } }]);
-    } finally { window.clearTimeout(timeoutId); if (activeRequestRef.current?.id === requestId) { requestControllerRef.current = null; activeRequestRef.current = null; sendingRef.current = false; setIsLoading(false); } }
+      setDraft(message); setAttachment(selectedAttachment); setYoutubeUrl(selectedYoutube);
+      const messageText = error.status === 429 ? "AI is temporarily unavailable\n\nWe've reached the current AI usage limit. You can still view your previous conversations and analysis results. Please try again later." : error.code === 'CHATBOT_TIMEOUT' ? 'NutriBot phản hồi quá lâu. Vui lòng thử lại.' : error.code === 'CHATBOT_INVALID_RESPONSE' ? 'NutriBot returned an incomplete response. Please try again.' : error.status === 503 || error.status === 504 ? 'AI is temporarily unavailable. Please try again later.' : error.status === 413 ? 'The attachment exceeds the allowed size.' : 'NutriBot could not respond right now. Please try again.';
+      setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `error-${Date.now()}`, sender: 'assistant', text: messageText, error: true, retry: { message, sessionId, guest, conversationHistory, conversationKey, idempotencyKey, attachment: selectedAttachment, youtubeUrl: selectedYoutube } }]);
+    } finally { window.clearTimeout(timeoutId); if (activeRequestRef.current?.id === requestId) { requestControllerRef.current = null; activeRequestRef.current = null; sendingRef.current = false; setIsLoading(false); setActiveRequestType('text'); } }
   };
   const retryMessage = (item) => item.retry && submitMessage(item.retry.message, { ...item.retry, errorId: item.id });
   const openAuth = (mode) => { setShowLimitModal(false); setIsOpen(false); setIsMounted(false); onAuth ? onAuth(mode) : navigate('/', { state: { authMode: mode } }); };
@@ -387,7 +402,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   return <div className={`chatbot-widget${displayMode === 'fullscreen' && isOpen ? ' is-fullscreen' : ''}${isOpen ? ' is-open' : ''}`}>
     {isMounted && !showLimitModal && <section ref={panelRef} id="nutribot-chat-panel" className={`chatbot-widget__panel${displayMode === 'fullscreen' ? ' chatbot-widget__panel--fullscreen' : ''}`} role="dialog" aria-label="NutriBot nutrition assistant" aria-modal={displayMode === 'fullscreen' ? 'true' : 'false'}>
       <header className="chatbot-widget__header">
-        <div className="chatbot-widget__brand"><span className="chatbot-widget__brand-mark" aria-hidden="true"><BotMessageSquare size={20} /></span><span><strong>NutriBot AI</strong><small><i aria-hidden="true" /> {isLoading ? (attachment?.kind === 'video' ? 'Analyzing video...' : attachment?.kind === 'image' ? 'Analyzing image...' : 'Thinking...') : 'Ready to help'}</small></span></div>
+        <div className="chatbot-widget__brand"><span className="chatbot-widget__brand-mark" aria-hidden="true"><BotMessageSquare size={20} /></span><span><strong>NutriBot AI</strong><small><i aria-hidden="true" /> {isLoading ? (activeRequestType === 'video' ? 'Analyzing video...' : activeRequestType === 'image' ? 'Analyzing image...' : 'Thinking...') : 'Ready to help'}</small></span></div>
         <div className="chatbot-widget__header-actions">
           {!isGuest && <button type="button" className="chatbot-widget__history-toggle" onClick={displayMode === 'fullscreen' ? () => setHistorySidebarOpen((current) => !current) : openHistory} aria-label={displayMode === 'fullscreen' ? (historySidebarOpen ? 'Hide chat history' : 'Show chat history') : 'Open chat history'}>{displayMode === 'fullscreen' ? (historySidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />) : <History size={18} />}</button>}
           <button type="button" className="chatbot-widget__expand-toggle" onClick={toggleFullscreen} aria-label={displayMode === 'fullscreen' ? 'Minimize NutriBot chat' : 'Expand NutriBot chat'}>{displayMode === 'fullscreen' ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>

@@ -9,7 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.config import Settings
-from app.exceptions import AIQuotaExceededError, AIServiceError
+from app.exceptions import AIQuotaExceededError, AIResponseInvalidError, AIServiceError
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.gemini_service import GeminiService
 from app.services.recommender import ContentRecommender
@@ -82,10 +82,14 @@ def create_app(
         first_error = exc.errors()[0] if exc.errors() else {}
         location = ".".join(str(part) for part in first_error.get("loc", [])[1:])
         detail = first_error.get("msg", "Dữ liệu không hợp lệ")
+        error_type = first_error.get("type", "unknown")
+        invalid_input = first_error.get("input")
         body_keys = sorted(exc.body.keys()) if isinstance(exc.body, dict) else None
         logger.warning(
-            "Chat request validation failed at '%s'; body type=%s, body keys=%s",
+            "Chat request validation failed at '%s'; error_type=%s, input type=%s, expected=string(max_length=2000), normalization=ConversationMessage.before, body type=%s, body keys=%s",
             location or "body",
+            error_type,
+            type(invalid_input).__name__,
             type(exc.body).__name__,
             body_keys,
         )
@@ -103,6 +107,12 @@ def create_app(
                 status.HTTP_429_TOO_MANY_REQUESTS,
                 error="AI_QUOTA_EXCEEDED",
                 retry_after_seconds=exc.retry_after_seconds,
+            )
+        if isinstance(exc, AIResponseInvalidError):
+            return _error_response(
+                str(exc),
+                status.HTTP_502_BAD_GATEWAY,
+                error="AI_RESPONSE_INVALID",
             )
         return _error_response(str(exc), status.HTTP_503_SERVICE_UNAVAILABLE)
 
