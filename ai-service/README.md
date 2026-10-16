@@ -17,7 +17,7 @@ cd ai-service
 powershell -ExecutionPolicy Bypass -File .\start.ps1
 ```
 
-Script tự tạo môi trường Python, cài dependency và mở service tại `http://localhost:8000`. Model chính là `gemini-3.8-flash`; khi model mới nhất quá tải, service tự chuyển sang `gemini-3.5-flash-lite` để ưu tiên khả năng phản hồi. Có thể thay đổi bằng `GEMINI_MODEL` và `GEMINI_FALLBACK_MODEL` trong `.env`.
+Script tự tạo môi trường Python, cài dependency và mở service tại `http://localhost:8000`. Chatbot ưu tiên `gemini-3.5-flash-lite` và chỉ fallback tối đa một lần sang `gemini-3.6-flash`. Có thể thay đổi bằng các biến model trong `.env`, nhưng không dùng model đã deprecated.
 
 ## Cài đặt thủ công
 

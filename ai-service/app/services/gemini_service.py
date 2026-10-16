@@ -20,6 +20,7 @@ from app.config import Settings
 from app.exceptions import (
     AIConfigurationError,
     AIProviderUnavailableError,
+    AIResponseInvalidError,
     AIQuotaExceededError,
 )
 from app.planner import (
@@ -50,6 +51,12 @@ from app.schemas.chat import (
     VideoIngredient,
     VideoStep,
 )
+from app.services.model_router import (
+    IMAGE_TASK,
+    TEXT_TASK,
+    VIDEO_TASK,
+    GeminiModelRouter,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -75,7 +82,6 @@ _RECOMMENDATION_MARKERS = (
     "công thức",
     "phù hợp",
     "chế độ ăn",
-    "protein",
     "dinh dưỡng",
     "bổ sung",
     "thay thế",
@@ -88,8 +94,6 @@ _VIDEO_CAPABLE_MODELS = {
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
     "gemini-3.6-flash",
-    "gemini-3.7-flash",
-    "gemini-3.8-flash",
 }
 
 
@@ -191,6 +195,7 @@ class GeminiService:
         self._client = client
         self._image_client = None
         self._video_client = None
+        self._model_router = GeminiModelRouter(settings)
 
     def _get_client(self, image_request: bool = False, video_request: bool = False) -> Any:
         if self._client is not None:
@@ -402,21 +407,26 @@ class GeminiService:
         temporary_path: str | None = None
         uploaded: Any | None = None
         ready = False
+        upload_started: float | None = None
+        processing_started: float | None = None
         try:
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temporary:
                 temporary.write(video_bytes)
                 temporary_path = temporary.name
             telemetry["stage"] = "upload"
             upload_config = types.UploadFileConfig(mime_type=video.mime_type)
+            upload_started = time.perf_counter()
             uploaded = await self._maybe_await(
                 client.aio.files.upload(file=temporary_path, config=upload_config)
             )
+            telemetry["upload_duration_ms"] = round((time.perf_counter() - upload_started) * 1000)
             file_name = getattr(uploaded, "name", None)
             file_uri = getattr(uploaded, "uri", None)
             if not file_name or not file_uri:
                 raise AIProviderUnavailableError("Gemini không trả về định danh video hợp lệ")
 
             telemetry["stage"] = "processing"
+            processing_started = time.perf_counter()
             deadline = time.monotonic() + self._settings.gemini_video_max_poll_seconds
             current = uploaded
             while True:
@@ -425,6 +435,7 @@ class GeminiService:
                 ).upper()
                 if state == "ACTIVE":
                     ready = True
+                    telemetry["processing_duration_ms"] = round((time.perf_counter() - processing_started) * 1000)
                     return types.Part.from_uri(
                         file_uri=file_uri,
                         mime_type=getattr(uploaded, "mime_type", None) or video.mime_type,
@@ -436,6 +447,8 @@ class GeminiService:
                 await asyncio.sleep(self._settings.gemini_video_poll_interval_seconds)
                 current = await self._maybe_await(client.aio.files.get(name=file_name))
         finally:
+            if processing_started is not None and "processing_duration_ms" not in telemetry:
+                telemetry["processing_duration_ms"] = round((time.perf_counter() - processing_started) * 1000)
             if uploaded is not None and not ready:
                 failed_name = getattr(uploaded, "name", None)
                 if failed_name:
@@ -475,6 +488,7 @@ class GeminiService:
     async def _chat_with_video(self, request: ChatRequest) -> ChatResponse:
         client = self._get_client(video_request=True)
         started_at = time.perf_counter()
+        video_deadline = asyncio.get_running_loop().time() + self._settings.gemini_video_timeout_seconds
         telemetry: dict[str, Any] = {
             "models": [],
             "calls": 0,
@@ -508,6 +522,7 @@ class GeminiService:
                 response_schema=GeminiVideoExtraction,
             )
             telemetry["stage"] = "inference"
+            inference_started = time.perf_counter()
             response = await self._generate_with_fallback(
                 client,
                 [video_part, prompt],
@@ -515,20 +530,26 @@ class GeminiService:
                 telemetry=telemetry,
                 fallback_on_timeout=True,
                 video_request=True,
+                task=VIDEO_TASK,
+                deadline=video_deadline,
             )
+            telemetry["inference_duration_ms"] = round((time.perf_counter() - inference_started) * 1000)
             extraction = self._parse_video_extraction(response)
             result = self._build_video_result(extraction)
             finish_reason, token_usage = self._response_telemetry(response)
             logger.info(
-                "Gemini video completed source=%s size_bytes=%s duration=%s models=%s calls=%d latency_ms=%d finish_reason=%s token_usage=%s",
+                "Gemini video completed source=%s size_bytes=%s duration=%s upload_ms=%s processing_ms=%s inference_ms=%s models=%s calls=%d latency_ms=%d finish_reason=%s token_usage=%s",
                 telemetry["source"], telemetry.get("size_bytes", "unknown"),
-                telemetry.get("duration_seconds", "unverified"), telemetry["models"], telemetry["calls"],
+                telemetry.get("duration_seconds", "unverified"),
+                telemetry.get("upload_duration_ms", "n/a"), telemetry.get("processing_duration_ms", "n/a"),
+                telemetry.get("inference_duration_ms", "n/a"),
+                telemetry["models"], telemetry["calls"],
                 (time.perf_counter() - started_at) * 1000,
                 finish_reason,
                 token_usage if token_usage is not None else "unavailable",
             )
             return ChatResponse.model_validate(result.model_dump(exclude_none=True))
-        except AIProviderUnavailableError:
+        except (AIProviderUnavailableError, AIResponseInvalidError):
             raise
         except asyncio.TimeoutError as exc:
             telemetry["stage"] = "timeout"
@@ -572,8 +593,19 @@ class GeminiService:
         has_video_context = self._has_context(request, "video_context:") or self._has_context(
             request, "video_analysis:"
         )
-        use_image_controls = is_image_request or has_image_context
-        use_video_controls = has_video_context
+        # A follow-up only needs the saved semantic media context. Media
+        # controls, media deadlines and media-capable routing are reserved for
+        # a new upload/URL request so recipe suggestions do not consume the
+        # scarcer media model path.
+        use_image_controls = is_image_request
+        use_video_controls = request.video_url is not None or request.video is not None
+        task = (
+            IMAGE_TASK
+            if use_image_controls
+            else VIDEO_TASK
+            if use_video_controls
+            else TEXT_TASK
+        )
         client = self._get_client(
             image_request=use_image_controls,
             video_request=use_video_controls,
@@ -619,26 +651,24 @@ class GeminiService:
                         mime_type=request.image.mime_type,
                     ),
                 ]
+            inference_started = time.perf_counter()
             generation = self._generate_with_fallback(
                 client,
                 contents,
                 config,
                 telemetry=telemetry,
-                fallback_on_timeout=use_image_controls or use_video_controls,
+                fallback_on_timeout=True,
+                task=task,
             )
-            response = (
-                await asyncio.wait_for(
-                    generation, timeout=self._settings.gemini_image_timeout_seconds
-                )
+            request_timeout = (
+                self._settings.gemini_image_timeout_seconds
                 if use_image_controls
-                else (
-                    await asyncio.wait_for(
-                        generation, timeout=self._settings.gemini_video_timeout_seconds
-                    )
-                    if use_video_controls
-                    else await generation
-                )
+                else self._settings.gemini_video_timeout_seconds
+                if use_video_controls
+                else self._settings.gemini_timeout_seconds
             )
+            response = await asyncio.wait_for(generation, timeout=request_timeout)
+            telemetry["inference_duration_ms"] = round((time.perf_counter() - inference_started) * 1000)
             result = (
                 self._parse_video_followup_response(response)
                 if has_video_context and not is_image_request
@@ -649,15 +679,27 @@ class GeminiService:
             usage = getattr(response, "usage_metadata", None)
             token_usage = getattr(usage, "total_token_count", None) if usage else None
             logger.info(
-                "Gemini chat completed source=%s models=%s calls=%d latency_ms=%d token_usage=%s",
+                "Gemini chat completed source=%s inference_ms=%s models=%s calls=%d latency_ms=%d token_usage=%s",
                 "image" if use_image_controls else ("video_context" if use_video_controls else "text"),
+                telemetry.get("inference_duration_ms", "n/a"),
                 telemetry["models"],
                 telemetry["calls"],
                 (time.perf_counter() - started_at) * 1000,
                 token_usage if token_usage is not None else "unavailable",
             )
             return ChatResponse.model_validate(result.model_dump(exclude_none=True))
-        except AIProviderUnavailableError:
+        except AIResponseInvalidError:
+            raise
+        except AIProviderUnavailableError as exc:
+            logger.warning(
+                "Gemini chat unavailable source=%s task=%s models=%s calls=%d error_type=%s cause_type=%s",
+                "image" if use_image_controls else ("video_context" if use_video_controls else "text"),
+                task,
+                telemetry["models"],
+                telemetry["calls"],
+                type(exc).__name__,
+                type(exc.__cause__).__name__ if exc.__cause__ else "none",
+            )
             raise
         except asyncio.TimeoutError as exc:
             logger.warning(
@@ -706,6 +748,92 @@ class GeminiService:
             ) from exc
 
     async def _generate_with_fallback(
+        self,
+        client: Any,
+        prompt: Any,
+        config: types.GenerateContentConfig,
+        telemetry: dict[str, Any] | None = None,
+        fallback_on_timeout: bool = False,
+        video_request: bool = False,
+        task: str | None = None,
+        deadline: float | None = None,
+    ) -> Any:
+        telemetry = telemetry if telemetry is not None else {}
+        telemetry.setdefault("models", [])
+        telemetry.setdefault("calls", 0)
+        telemetry.setdefault("errors", [])
+        routing_task = task or "legacy"
+        candidates = self._model_router.candidates(routing_task)
+        if not candidates:
+            logger.warning(
+                "Gemini model routing rejected task=%s reason=no_eligible_model",
+                routing_task,
+            )
+            raise self._model_router.unavailable_error(routing_task)
+        logger.info(
+            "Gemini model routing task=%s candidates=%s selected=%s",
+            routing_task, candidates, candidates[0],
+        )
+
+        for index, model in enumerate(candidates):
+            telemetry["models"].append(model)
+            telemetry["calls"] += 1
+            try:
+                if deadline is not None:
+                    remaining = deadline - asyncio.get_running_loop().time()
+                    if remaining <= 0:
+                        raise asyncio.TimeoutError
+                    response = await asyncio.wait_for(
+                        client.aio.models.generate_content(
+                            model=model, contents=prompt, config=config
+                        ),
+                        timeout=remaining,
+                    )
+                else:
+                    response = await client.aio.models.generate_content(
+                        model=model, contents=prompt, config=config
+                    )
+                self._model_router.mark_success(model)
+                return response
+            except errors.APIError as exc:
+                telemetry["errors"].append({"model": model, "status": exc.code})
+                logger.warning(
+                    "Gemini provider error task=%s model=%s status=%s error=%s",
+                    routing_task, model, exc.code, GeminiService._safe_provider_error(exc),
+                )
+                if exc.code == 429:
+                    retry_after = self._retry_after_seconds(exc)
+                    self._model_router.mark_failure(
+                        model, 429, "quota_exceeded", retry_after
+                    )
+                    logger.warning(
+                        "Gemini model cooldown model=%s reason=quota retry_after_seconds=%s fallback=not_attempted",
+                        model, retry_after if retry_after is not None else "unavailable",
+                    )
+                    raise AIQuotaExceededError(retry_after) from exc
+                self._model_router.mark_failure(model, exc.code, type(exc).__name__)
+                if exc.code in {500, 502, 503, 504} and index == 0 and len(candidates) > 1:
+                    logger.info(
+                        "Gemini fallback selected task=%s primary=%s fallback=%s status=%s",
+                        routing_task, model, candidates[1], exc.code
+                    )
+                    continue
+                raise
+            except httpx.TimeoutException:
+                self._model_router.mark_failure(model, None, "timeout")
+                if fallback_on_timeout and index == 0 and len(candidates) > 1:
+                    logger.info(
+                        "Gemini fallback selected primary=%s fallback=%s reason=http_timeout",
+                        model, candidates[1]
+                    )
+                    continue
+                raise
+            except Exception as exc:
+                telemetry["errors"].append({"model": model, "type": type(exc).__name__})
+                raise
+        raise self._model_router.unavailable_error(routing_task)
+
+    async def _legacy_generate_with_fallback(
         self,
         client: Any,
         prompt: Any,
@@ -881,14 +1009,14 @@ class GeminiService:
                 for error in exc.errors()
             ]
             logger.warning("Gemini video validation failed errors=%s", safe_errors)
-            raise AIProviderUnavailableError(
+            raise AIResponseInvalidError(
                 "NutriBot nhận được dữ liệu video không hợp lệ, vui lòng thử lại"
             ) from exc
         except (TypeError, ValueError, json.JSONDecodeError) as exc:
             logger.warning(
                 "Gemini video response format failed error_type=%s", type(exc).__name__
             )
-            raise AIProviderUnavailableError(
+            raise AIResponseInvalidError(
                 "NutriBot nhận được dữ liệu video không hợp lệ, vui lòng thử lại"
             ) from exc
 
@@ -976,19 +1104,48 @@ class GeminiService:
                 raise ValueError("Gemini returned empty content")
             return MealPlanResponse.model_validate_json(content)
         except (ValidationError, ValueError) as exc:
-            raise AIProviderUnavailableError(
+            logger.warning(
+                "Gemini response validation failed error_type=%s details=%s",
+                type(exc).__name__,
+                GeminiService._safe_validation_errors(exc),
+            )
+            raise AIResponseInvalidError(
                 "NutriBot nhan duoc phan hoi thuc don khong hop le, vui long thu lai"
             ) from exc
 
     @staticmethod
+    def _safe_provider_error(exc: Exception) -> str:
+        message = str(exc).replace("\n", " ")
+        message = re.sub(r"AIza[0-9A-Za-z_-]+", "<redacted>", message)
+        return message[:240]
+
+    @staticmethod
+    def _safe_validation_errors(exc: Exception) -> list[dict[str, Any]]:
+        if isinstance(exc, ValidationError):
+            return [
+                {"loc": item.get("loc"), "type": item.get("type")}
+                for item in exc.errors()
+            ][:5]
+        return [{"type": type(exc).__name__}]
+
+    @staticmethod
     def _parse_response(response: Any) -> GeminiChatResult:
         parsed = getattr(response, "parsed", None)
+        logger.info("Gemini response parsed_type=%s", type(parsed).__name__)
         try:
-            if isinstance(parsed, GeminiChatResult):
+            if isinstance(parsed, (GeminiChatResult, GeminiTextChatResult)):
+                if isinstance(parsed, GeminiTextChatResult):
+                    return GeminiChatResult.model_validate(
+                        parsed.model_dump(exclude_none=True)
+                    )
                 return parsed
-            if parsed is not None:
+            text = None
+            if parsed is not None and not isinstance(parsed, str):
                 return GeminiChatResult.model_validate(parsed)
-            text = getattr(response, "text", None)
+            if isinstance(parsed, str):
+                text = parsed
+            else:
+                text = getattr(response, "text", None)
             if not text:
                 raise ValueError("Gemini trả về nội dung rỗng")
             try:
@@ -1005,6 +1162,11 @@ class GeminiService:
                     return GeminiChatResult.model_validate_json(text[start : end + 1])
                 raise
         except (ValidationError, ValueError) as exc:
-            raise AIProviderUnavailableError(
+            logger.warning(
+                "Gemini chat response validation failed error_type=%s details=%s",
+                type(exc).__name__,
+                GeminiService._safe_validation_errors(exc),
+            )
+            raise AIResponseInvalidError(
                 "NutriBot nhận được phản hồi không hợp lệ, vui lòng thử lại"
             ) from exc

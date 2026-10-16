@@ -13,6 +13,10 @@ class AIProviderUnavailableError(AIServiceError):
     """Nhà cung cấp AI tạm thời không phản hồi."""
 
 
+class AIResponseInvalidError(AIServiceError):
+    """Provider response did not match the requested application schema."""
+
+
 class AIQuotaExceededError(AIProviderUnavailableError):
     """Gemini từ chối do quota hoặc rate limit (HTTP 429)."""
 
