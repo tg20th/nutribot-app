@@ -11,4 +11,6 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Intege
     List<ChatMessage> findBySessionSessionIdOrderByCreatedAtAsc(Integer sessionId);
     Page<ChatMessage> findBySessionSessionIdOrderByCreatedAtAsc(Integer sessionId, Pageable pageable);
     Optional<ChatMessage> findByIdempotencyKey(String idempotencyKey);
+    Optional<ChatMessage> findFirstBySessionSessionIdAndIdempotencyKeyAndSenderTypeOrderByCreatedAtDesc(
+            Integer sessionId, String idempotencyKey, String senderType);
 }

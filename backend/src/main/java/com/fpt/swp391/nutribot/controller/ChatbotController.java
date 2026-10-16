@@ -87,20 +87,28 @@ public class ChatbotController {
             String username = authentication.getName();
             memberSessionId = findOrCreateMemberSession(username, request.sessionId());
 
+            boolean userMessageAlreadySaved = false;
             if (request.idempotencyKey() != null && !request.idempotencyKey().isBlank()) {
-                var existing = chatMessageRepository.findByIdempotencyKey(request.idempotencyKey());
+                var existingAssistant = findCompletedAssistant(memberSessionId, request.idempotencyKey());
+                if (existingAssistant.isPresent()) {
+                    return ResponseEntity.ok(ApiResponse.success(
+                            "Success", recoveredResponse(memberSessionId, existingAssistant.get())));
+                }
+                var existing = chatMessageRepository
+                        .findFirstBySessionSessionIdAndIdempotencyKeyAndSenderTypeOrderByCreatedAtDesc(
+                                memberSessionId, request.idempotencyKey(), "USER");
                 if (existing.isPresent()) {
                     ChatMessage m = existing.get();
-                    return ResponseEntity.ok(ApiResponse.success("Success",
-                            new ChatbotQueryResponse(memberSessionId, m.getSenderType(), m.getContent(), m.getCreatedAt(),
-                                    m.getContent(), List.of(), null, false, null)));
+                    userMessageAlreadySaved = "USER".equalsIgnoreCase(m.getSenderType());
                 }
             }
 
             history = loadMemberHistory(username, memberSessionId);
             profile = chatbotHealthProfileCache.get(username);
             userContext = toHealthContext(profile);
-            saveMessage(username, memberSessionId, "USER", request.message(), request.idempotencyKey(), attachment);
+            if (!userMessageAlreadySaved) {
+                saveMessage(username, memberSessionId, "USER", request.message(), request.idempotencyKey(), attachment);
+            }
         }
 
         String aiSessionId = guest ? request.sessionId() : memberSessionId.toString();
@@ -118,7 +126,8 @@ public class ChatbotController {
         LocalDateTime createdAt = null;
         if (!guest) {
             ChatMessageResponse savedReply = saveMessage(
-                    username(authentication), memberSessionId, "ASSISTANT", assistantContent, null, null);
+                    username(authentication), memberSessionId, "ASSISTANT", assistantContent,
+                    request.idempotencyKey(), null);
             createdAt = savedReply.getCreatedAt();
         }
 
@@ -153,8 +162,61 @@ public class ChatbotController {
         int start = Math.max(0, messages.size() - MAX_AI_HISTORY);
         return messages.subList(start, messages.size()).stream()
                 .map(message -> new ChatbotGatewayService.ConversationTurn(
-                        message.getSenderType(), message.getContent()))
+                        message.getSenderType(), canonicalHistoryContent(message)))
                 .toList();
+    }
+
+    private Optional<ChatMessage> findCompletedAssistant(Integer sessionId, String idempotencyKey) {
+        Optional<ChatMessage> keyedAssistant = chatMessageRepository
+                .findFirstBySessionSessionIdAndIdempotencyKeyAndSenderTypeOrderByCreatedAtDesc(
+                        sessionId, idempotencyKey, "ASSISTANT");
+        if (keyedAssistant.isPresent()) return keyedAssistant;
+
+        // Compatibility for responses saved before assistant idempotency keys
+        // were persisted: locate the assistant turn immediately after the
+        // matching user turn without changing stored data.
+        Optional<ChatMessage> userMessage = chatMessageRepository
+                .findFirstBySessionSessionIdAndIdempotencyKeyAndSenderTypeOrderByCreatedAtDesc(
+                        sessionId, idempotencyKey, "USER");
+        if (userMessage.isEmpty()) return Optional.empty();
+
+        List<ChatMessage> messages = chatMessageRepository
+                .findBySessionSessionIdOrderByCreatedAtAsc(sessionId);
+        boolean foundUser = false;
+        for (ChatMessage message : messages) {
+            if (message.getMessageId().equals(userMessage.get().getMessageId())) {
+                foundUser = true;
+                continue;
+            }
+            if (foundUser && "ASSISTANT".equalsIgnoreCase(message.getSenderType())) {
+                return Optional.of(message);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private ChatbotQueryResponse recoveredResponse(Integer sessionId, ChatMessage assistant) {
+        String content = assistant.getContent() == null ? "" : assistant.getContent();
+        return new ChatbotQueryResponse(
+                sessionId, "ASSISTANT", content, assistant.getCreatedAt(), content,
+                List.of(), null, false, null);
+    }
+
+    /** Keep media-only turns valid for the AI contract without changing stored data. */
+    private String canonicalHistoryContent(ChatMessageResponse message) {
+        return canonicalHistoryContent(message.getContent(), message.getAttachments());
+    }
+
+    static String canonicalHistoryContent(String content, List<ChatAttachmentResponse> attachments) {
+        if (content != null && !content.isBlank()) {
+            return content;
+        }
+        if (attachments != null && !attachments.isEmpty()) {
+            String type = attachments.get(0).getType();
+            return "User attached " + ("VIDEO".equalsIgnoreCase(type) ? "a video" : "an image")
+                    + " for analysis.";
+        }
+        return "[Empty conversation message]";
     }
 
     private Map<String, Object> toHealthContext(HealthProfileResponse profile) {
@@ -178,8 +240,32 @@ public class ChatbotController {
     }
 
     private String toStoredAssistantContent(ChatbotGatewayService.ChatbotReply reply) {
-        if (reply.recommendations().isEmpty()) return reply.reply();
-        return reply.reply() + "\n\nQuick suggestions:\n- " + String.join("\n- ", reply.recommendations());
+        StringBuilder content = new StringBuilder(reply.reply());
+        if (!reply.recommendations().isEmpty()) {
+            content.append("\n\nQuick suggestions:\n- ")
+                    .append(String.join("\n- ", reply.recommendations()));
+        }
+        ChatAttachmentResponse attachment = reply.attachment();
+        if (attachment != null) {
+            if (attachment.getImageContext() != null && !attachment.getImageContext().isBlank()) {
+                String contextKey = "VIDEO".equalsIgnoreCase(attachment.getType())
+                        ? "video_context" : "image_context";
+                content.append("\n\n").append(contextKey).append(": ")
+                        .append(attachment.getImageContext());
+            }
+            if (attachment.getRecognizedIngredients() != null && !attachment.getRecognizedIngredients().isEmpty()) {
+                content.append("\nrecognized_ingredients: ")
+                        .append(String.join(", ", attachment.getRecognizedIngredients()));
+            }
+            if (attachment.getUncertainIngredients() != null && !attachment.getUncertainIngredients().isEmpty()) {
+                content.append("\nuncertain_ingredients: ")
+                        .append(String.join(", ", attachment.getUncertainIngredients()));
+            }
+            if (attachment.getWarnings() != null && !attachment.getWarnings().isEmpty()) {
+                content.append("\nwarnings: ").append(String.join(" ", attachment.getWarnings()));
+            }
+        }
+        return content.toString();
     }
 
     private boolean isGuest(Authentication authentication) {

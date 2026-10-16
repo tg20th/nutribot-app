@@ -116,6 +116,22 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
+    @ExceptionHandler(AIServiceProtocolException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAiServiceProtocol(AIServiceProtocolException ex) {
+        log.error("AI Service protocol error: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_GATEWAY)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(AIQuotaExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAiQuotaExceeded(AIQuotaExceededException ex) {
+        log.warn("AI quota exhausted: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
     @ExceptionHandler(ProfileIncompleteException.class)
     public ResponseEntity<ApiResponse<List<String>>> handleProfileIncomplete(ProfileIncompleteException ex) {
         log.info("Profile incomplete: {}", ex.getMissingFields());

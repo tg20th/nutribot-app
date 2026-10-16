@@ -20,9 +20,9 @@ export const saveChatMessage = async (sessionId, senderType, content) => unwrapD
   method: 'POST', body: JSON.stringify({ senderType, content }),
 }), null);
 
-export async function requestNutritionAdvice({ message, sessionId, conversationHistory = [], attachment, signal }) {
+export async function requestNutritionAdvice({ message, sessionId, conversationHistory = [], attachment, idempotencyKey, signal }) {
   try {
-    const body = { sessionId, message, conversationHistory };
+    const body = { sessionId, message, conversationHistory, idempotencyKey };
     if (attachment) body.attachments = [attachment];
     const response = await apiRequest('/api/v1/chatbot/query', {
       method: 'POST',

@@ -1,7 +1,9 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from app.config import Settings
-from app.exceptions import AIProviderUnavailableError, AIQuotaExceededError
+from app.exceptions import AIProviderUnavailableError, AIQuotaExceededError, AIResponseInvalidError
 from app.main import create_app
 from app.planner import MealPlanResponse
 from app.schemas.chat import ChatResponse
@@ -31,6 +33,11 @@ class StubMealPlannerService(StubGeminiService):
                 for index in range(7)
             ],
         )
+
+
+class InvalidResponseGeminiService:
+    async def chat(self, _request):
+        raise AIResponseInvalidError("AI response did not match the expected schema")
 
 
 class QuotaGeminiService:
@@ -154,6 +161,21 @@ def test_quota_failure_returns_429_with_structured_retry_delay():
     assert response.json()["data"] is None
 
 
+def test_invalid_provider_response_returns_bad_gateway_not_service_unavailable():
+    app = create_app(
+        settings=Settings(gemini_api_key="test-key"),
+        gemini_service=InvalidResponseGeminiService(),
+    )
+
+    response = TestClient(app).post(
+        "/api/ai/chat",
+        json={"message": "What should I eat?", "session_id": "session-1"},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["error"] == "AI_RESPONSE_INVALID"
+
+
 def test_missing_api_key_returns_service_unavailable_without_breaking_health():
     app = create_app(settings=Settings(gemini_api_key=None))
     client = TestClient(app)
@@ -168,6 +190,66 @@ def test_missing_api_key_returns_service_unavailable_without_breaking_health():
         "AI service chưa được cấu hình GEMINI_API_KEY"
     )
     assert client.get("/health").status_code == 200
+
+
+def test_chat_accepts_plain_json_looking_history_text_without_parsing_it():
+    service = StubGeminiService()
+    client = TestClient(create_app(settings=Settings(gemini_api_key="test-key"), gemini_service=service))
+    text = "{calories: 500, note: this is ordinary text}"
+
+    response = client.post(
+        "/api/ai/chat",
+        json={
+            "message": "Please continue",
+            "session_id": "session-1",
+            "conversation_history": [{"sender": "ASSISTANT", "content": text}],
+        },
+    )
+
+    assert response.status_code == 200
+    assert service.request.conversation_history[0].content == text
+
+
+def test_chat_normalizes_legacy_media_json_string_and_repeated_requests():
+    service = StubGeminiService()
+    client = TestClient(create_app(settings=Settings(gemini_api_key="test-key"), gemini_service=service))
+    legacy = json.dumps({
+        "reply": "The photo contains tofu.",
+        "image_context": "A tofu bowl with vegetables.",
+        "recognized_ingredients": ["tofu", "carrot"],
+    })
+    payload = {
+        "message": "What can I add next?",
+        "session_id": "session-1",
+        "conversation_history": [{"sender": "ASSISTANT", "content": legacy}],
+    }
+
+    for _ in range(3):
+        response = client.post("/api/ai/chat", json=payload)
+        assert response.status_code == 200
+        content = service.request.conversation_history[0].content
+        assert "image_context: A tofu bowl with vegetables." in content
+        assert "recognized_ingredients: tofu, carrot" in content
+
+
+def test_chat_accepts_legacy_attachment_only_history_json():
+    service = StubGeminiService()
+    client = TestClient(create_app(settings=Settings(gemini_api_key="test-key"), gemini_service=service))
+
+    response = client.post(
+        "/api/ai/chat",
+        json={
+            "message": "What did I attach?",
+            "session_id": "session-1",
+            "conversation_history": [{
+                "sender": "USER",
+                "content": json.dumps({"attachments": [{"type": "VIDEO", "filename": "meal.mp4"}]}),
+            }],
+        },
+    )
+
+    assert response.status_code == 200
+    assert service.request.conversation_history[0].content == "media_attachment: VIDEO"
 
 
 def test_generate_meal_plan_matches_internal_contract():
