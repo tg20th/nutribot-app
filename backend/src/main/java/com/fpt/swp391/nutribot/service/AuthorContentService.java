@@ -8,6 +8,7 @@ import com.fpt.swp391.nutribot.entity.Category;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentModeration;
 import com.fpt.swp391.nutribot.entity.User;
+import com.fpt.swp391.nutribot.event.ContentModerationRequestedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ForbiddenException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
@@ -17,6 +18,7 @@ import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -43,10 +45,12 @@ public class AuthorContentService {
     private final CloudinaryMediaService cloudinaryMediaService;
     private final ContentModerationGatewayService contentModerationGatewayService;
     private final ContentModerationRepository contentModerationRepository;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     private static final String STATUS_DRAFT = "draft";
-    private static final String STATUS_UNDER_REVIEW = "under_review";
-    private static final String STATUS_PUBLISHED = "published";
+    public static final String STATUS_UNDER_REVIEW = "under_review";
+    public static final String STATUS_AI_PROCESSING = "ai_processing";
+    public static final String STATUS_PUBLISHED = "published";
     private static final String STATUS_REJECTED = "rejected";
     private static final List<String> AUTHOR_ALLOWED_STATUSES = List.of(STATUS_DRAFT, STATUS_UNDER_REVIEW);
 
@@ -198,6 +202,17 @@ public class AuthorContentService {
         return submitContent(username, contentId, null);
     }
 
+    /**
+     * Nộp bài để chờ duyệt. Phương thức chỉ:
+     * <ol>
+     *   <li>Set trạng thái {@code ai_processing} (không chờ AI)</li>
+     *   <li>Phát sự kiện {@link ContentModerationRequestedEvent} để listener bất đồng bộ
+     *       gọi AI moderation và cập nhật trạng thái cuối cùng</li>
+     *   <li>Trả về response ngay lập tức (vài chục ms) — không block request</li>
+     * </ol>
+     * Nhờ vậy, khi tác giả bấm "Post", UI không phải chờ AI service (timeout 30s)
+     * và vòng loading không quay liên tục.
+     */
     @Transactional
     public AuthorContentResponse submitContent(String username, Integer contentId, String expectedContentType) {
         User user = userRepository.findByUsername(username)
@@ -214,47 +229,20 @@ public class AuthorContentService {
             throw new ForbiddenException("Bạn không có quyền thao tác trên nội dung này");
         }
 
-        // Step 1: Set to UNDER_REVIEW
-        content.setStatus(STATUS_UNDER_REVIEW);
-        contentRepository.save(content);
+        // Set sang AI_PROCESSING để FE phân biệt đang chờ AI vs chờ Admin duyệt
+        content.setStatus(STATUS_AI_PROCESSING);
+        Content saved = contentRepository.save(content);
+        log.info("Content {} chuyển sang {} (author: {})", contentId, STATUS_AI_PROCESSING, username);
 
-        // Step 2: Call AI moderation
-        ContentModerationGatewayService.ModerationResult moderation = contentModerationGatewayService.moderateContent(
-                content.getContentId(),
-                content.getContentType(),
-                content.getTitle(),
-                extractDescription(content.getBody()),
-                content.getBody(),
-                getCategoryName(content.getCategoryId()),
-                java.util.List.of(),
-                content.getThumbnailUrl(),
-                content.getMediaUrl()
+        // Phát event để listener xử lý AI moderation bất đồng bộ
+        applicationEventPublisher.publishEvent(
+                new ContentModerationRequestedEvent(
+                        content.getContentId(),
+                        content.getContentType(),
+                        user.getUserId()
+                )
         );
 
-        log.info("AI moderation result for content {}: decision={}, reason={}, confidence={}",
-                contentId, moderation.decision(), moderation.reason(), moderation.confidence());
-
-        // Step 3: Process based on AI decision
-        // QUY TẮC: Chỉ khi AI duyệt đạt APPROVE thì tự động xuất bản (STATUS_PUBLISHED).
-        // Mọi trường hợp còn lại (REJECT, NEEDS_REVIEW, ảnh lỗi, AI timeout...), bài viết
-        // BẮT BUỘC giữ trạng thái STATUS_UNDER_REVIEW để đưa vào hàng đợi Admin duyệt lần 2,
-        // tránh việc tự động reject khiến bài biến mất khỏi hàng đợi kiểm duyệt của Admin.
-        String finalStatus;
-        boolean isApproved = "APPROVE".equalsIgnoreCase(moderation.decision());
-        if (isApproved) {
-            finalStatus = STATUS_PUBLISHED;
-            log.info("Content {} auto-approved by AI", contentId);
-        } else {
-            finalStatus = STATUS_UNDER_REVIEW;
-            log.info("Content {} chuyển sang hàng đợi Admin duyệt (AI decision: {}, reason: {})",
-                    contentId, moderation.decision(), moderation.reason());
-        }
-
-        content.setStatus(finalStatus);
-        Content saved = contentRepository.save(content);
-
-        // Lưu hoặc cập nhật bản ghi vào content_moderations
-        saveOrUpdateModeration(contentId, moderation, isApproved);
         return toAuthorResponse(saved);
     }
 

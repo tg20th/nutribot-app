@@ -9,7 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.config import Settings
-from app.exceptions import AIServiceError
+from app.exceptions import AIQuotaExceededError, AIServiceError
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.gemini_service import GeminiService
 from app.services.recommender import ContentRecommender
@@ -31,15 +31,26 @@ def _timestamp() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _error_response(message: str, status_code: int) -> JSONResponse:
+def _error_response(
+    message: str,
+    status_code: int,
+    *,
+    error: str | None = None,
+    retry_after_seconds: int | None = None,
+) -> JSONResponse:
+    content: dict[str, Any] = {
+        "success": False,
+        "message": message,
+        "data": None,
+        "timestamp": _timestamp(),
+    }
+    if error is not None:
+        content["error"] = error
+    if retry_after_seconds is not None:
+        content["retry_after_seconds"] = retry_after_seconds
     return JSONResponse(
         status_code=status_code,
-        content={
-            "success": False,
-            "message": message,
-            "data": None,
-            "timestamp": _timestamp(),
-        },
+        content=content,
     )
 
 
@@ -86,6 +97,13 @@ def create_app(
         _request: Request,
         exc: AIServiceError,
     ) -> JSONResponse:
+        if isinstance(exc, AIQuotaExceededError):
+            return _error_response(
+                str(exc),
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                error="AI_QUOTA_EXCEEDED",
+                retry_after_seconds=exc.retry_after_seconds,
+            )
         return _error_response(str(exc), status.HTTP_503_SERVICE_UNAVAILABLE)
 
     @application.get("/", tags=["System"])
@@ -116,6 +134,7 @@ def create_app(
     @application.post(
         "/api/ai/chat",
         response_model=ChatResponse,
+        response_model_exclude_none=True,
         tags=["Chatbot"],
         summary="Tư vấn dinh dưỡng bằng Gemini",
     )

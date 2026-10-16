@@ -26,10 +26,10 @@ function SuggestionStatus({ status }) {
 
 function SourceContentLink({ source, onOpenSource }) {
   if (source.url) {
-    return <a className="recipe-suggestion-source-link" href={source.url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Open source</a>;
+    return <a className="recipe-suggestion-source-link" href={source.url} target="_blank" rel="noreferrer"><ExternalLink size={16} /> Open original content</a>;
   }
   if (!source.contentId) return null;
-  return <button type="button" className="recipe-suggestion-source-link" onClick={() => onOpenSource(source)}><Eye size={15} /> View source</button>;
+  return <button type="button" className="recipe-suggestion-source-link" onClick={() => onOpenSource(source)}><Eye size={16} /> Open original content</button>;
 }
 
 function NutritionGrid({ nutrition }) {
@@ -49,20 +49,20 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, 
   const ContentIcon = source.contentType === 'VIDEO' ? PlaySquare : FileText;
   return <article className="recipe-suggestion-detail" aria-label="Suggestion detail">
     <header className="recipe-suggestion-detail-head">
-      <div><span>RECIPE SUGGESTION</span><SuggestionStatus status={suggestion.status} /></div>
-      <time dateTime={suggestion.createdAt}>Suggested {formatDate(suggestion.createdAt)}</time>
+      <div><span>REVIEW DETAIL</span><SuggestionStatus status={suggestion.status} /></div>
+      <time dateTime={suggestion.createdAt}>Received {formatDate(suggestion.createdAt)}</time>
     </header>
 
     <div className="recipe-suggestion-detail-body">
       <section className="recipe-suggestion-source">
-        <div className="recipe-suggestion-source-type"><ContentIcon size={18} /><span>{source.contentType === 'VIDEO' ? 'Video source' : 'Blog source'}</span></div>
+        <div className="recipe-suggestion-source-heading"><div className="recipe-suggestion-source-type"><ContentIcon size={18} /><span>{source.contentType === 'VIDEO' ? 'Video source' : 'Blog source'}</span></div><span className="recipe-suggestion-source-caption">Original published content</span></div>
         <h2>{source.title}</h2>
         <div className="recipe-suggestion-source-meta"><span><UserRound size={14} /> {source.authorName}</span><span><Eye size={14} /> {source.viewCount ?? 0} views</span><span>{source.voteCount ?? 0} votes</span></div>
         <SourceContentLink source={source} onOpenSource={onOpenSource} />
       </section>
 
       <section className="recipe-suggestion-section">
-        <div className="recipe-suggestion-section-title"><Soup size={17} /><h3>Proposed dish</h3></div>
+        <div className="recipe-suggestion-section-title"><Soup size={17} /><h3>Proposed dish</h3><span>Catalog candidate</span></div>
         <h4>{dish.name}</h4>
         {dish.description && <p>{dish.description}</p>}
         {dish.servingSize && <small className="recipe-suggestion-serving">Serving: {dish.servingSize}{dish.servingUnit ? ` ${dish.servingUnit}` : ''}</small>}
@@ -87,14 +87,28 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, 
 
       {(restaurant.name || restaurant.address || restaurant.reference) && <section className="recipe-suggestion-restaurant"><MapPin size={17} /><div><h3>Restaurant reference</h3>{restaurant.name && <strong>{restaurant.name}</strong>}{restaurant.address && <p>{restaurant.address}</p>}{restaurant.reference && <a href={restaurant.reference} target="_blank" rel="noreferrer">Open restaurant reference <ExternalLink size={13} /></a>}</div></section>}
 
-      {suggestion.rejectionReason && <section className="recipe-suggestion-review-note"><strong>Review note</strong><p>{suggestion.rejectionReason}</p></section>}
-      {suggestion.reviewedAt && <footer className="recipe-suggestion-review-meta">Reviewed {formatDate(suggestion.reviewedAt)}{suggestion.reviewerName ? ` by ${suggestion.reviewerName}` : ''}</footer>}
-      {showReviewControls && suggestion.status === 'PENDING' && <footer className="recipe-suggestion-review-actions"><div><strong>Review controls</strong><span>Approve to import this dish into the catalog, or reject it with a reason.</span></div><div><button type="button" className="admin-btn secondary" disabled={submitting} onClick={() => onReview('REJECT')}><X size={16} /> Reject</button><button type="button" className="admin-btn primary" disabled={submitting} onClick={() => onReview('APPROVE')}><Check size={16} /> Approve</button></div></footer>}
+      {(suggestion.rejectionReason || suggestion.reviewedAt) && <section className={`recipe-suggestion-review-record is-${String(suggestion.status || '').toLowerCase()}`}>
+        <span className="recipe-suggestion-review-record-icon">{suggestion.status === 'REJECTED' ? <X size={16} /> : <Check size={16} />}</span>
+        <div><strong>{suggestion.status === 'REJECTED' ? 'Suggestion rejected' : 'Suggestion reviewed'}</strong>{suggestion.rejectionReason && <p>{suggestion.rejectionReason}</p>}</div>
+        {suggestion.reviewedAt && <time dateTime={suggestion.reviewedAt}>{formatDate(suggestion.reviewedAt)}{suggestion.reviewerName ? ` by ${suggestion.reviewerName}` : ''}</time>}
+      </section>}
+      {showReviewControls && suggestion.status === 'PENDING' && <footer className="recipe-suggestion-review-actions"><div><strong>Decision required</strong><span>Approve to import this dish and recipe, or reject with a reason.</span></div><div><button type="button" className="admin-btn secondary recipe-suggestion-reject" disabled={submitting} onClick={() => onReview('REJECT')}><X size={16} /> Reject</button><button type="button" className="admin-btn primary" disabled={submitting} onClick={() => onReview('APPROVE')}><Check size={16} /> Approve suggestion</button></div></footer>}
     </div>
   </article>;
 }
 
-function SourceContentModal({ open, loading, error, post, onClose, onRetry }) {
+function SourceContentFallback({ suggestion }) {
+  const { source, dish, ingredients, recipe } = suggestion;
+  return <article className="source-content-fallback">
+    <div className="source-content-fallback-notice"><strong>Original content is not publicly available.</strong><span>The stored review snapshot is shown below so this suggestion can still be assessed.</span></div>
+    <div className="source-content-fallback-heading"><span>{source.contentType === 'VIDEO' ? 'VIDEO SOURCE' : 'BLOG SOURCE'}</span><h3>{source.title}</h3><p>By {source.authorName}</p></div>
+    <section><h4>Stored proposal</h4><strong>{dish.name}</strong>{dish.description && <p>{dish.description}</p>}</section>
+    {ingredients.length > 0 && <section><h4>Ingredients</h4><ul>{ingredients.map((ingredient, index) => <li key={`${ingredient.name}-${index}`}>{ingredient.name}{[ingredient.quantity, ingredient.unit].filter(Boolean).join(' ') ? ` - ${[ingredient.quantity, ingredient.unit].filter(Boolean).join(' ')}` : ''}</li>)}</ul></section>}
+    {recipe.steps.length > 0 && <section><h4>Recipe steps</h4><ol>{recipe.steps.map((step, index) => <li key={`${step}-${index}`}>{step}</li>)}</ol></section>}
+  </article>;
+}
+
+function SourceContentModal({ open, loading, error, post, fallback, onClose, onRetry }) {
   if (!open) return null;
   const story = String(post?.cleanBody || post?.body || '').trim();
   return <div className="admin-modal-backdrop" onMouseDown={onClose}>
@@ -104,7 +118,8 @@ function SourceContentModal({ open, loading, error, post, onClose, onRetry }) {
         <button type="button" className="source-content-close" onClick={onClose} aria-label="Close source content"><X size={18} /></button>
       </header>
       {loading ? <div className="source-content-state"><LoadingState /></div>
-        : error ? <div className="source-content-state"><ErrorState onRetry={onRetry} /></div>
+        : error && error.status === 404 && fallback ? <SourceContentFallback suggestion={fallback} />
+          : error ? <div className="source-content-state"><ErrorState onRetry={onRetry} /></div>
           : !post ? <div className="source-content-state"><EmptyState title="Source content is unavailable." text="The article or video could not be loaded from the server." /></div>
             : <article className="source-content-body">
               {post.type === 'video' && post.videoUrl
@@ -151,7 +166,7 @@ export default function AdminContentRecipeSuggestionsPage() {
   const [source, setSource] = useState(null);
   const [sourcePost, setSourcePost] = useState(null);
   const [sourceLoading, setSourceLoading] = useState(false);
-  const [sourceError, setSourceError] = useState(false);
+  const [sourceError, setSourceError] = useState(null);
   const [sourceRefresh, setSourceRefresh] = useState(0);
 
   useEffect(() => {
@@ -192,10 +207,10 @@ export default function AdminContentRecipeSuggestionsPage() {
     const controller = new AbortController();
     setSourcePost(null);
     setSourceLoading(true);
-    setSourceError(false);
-    getPost(source.contentId, controller.signal)
+    setSourceError(null);
+    getPost(source.contentId, controller.signal, source.contentType)
       .then((next) => { if (!controller.signal.aborted) setSourcePost(next); })
-      .catch((requestError) => { if (!controller.signal.aborted && requestError?.name !== 'AbortError') setSourceError(true); })
+      .catch((requestError) => { if (!controller.signal.aborted && requestError?.name !== 'AbortError') setSourceError(requestError); })
       .finally(() => { if (!controller.signal.aborted) setSourceLoading(false); });
     return () => controller.abort();
   }, [source, sourceRefresh]);
@@ -212,7 +227,7 @@ export default function AdminContentRecipeSuggestionsPage() {
   const retry = () => setRefreshKey((value) => value + 1);
   const openReview = (action) => { setReviewDialog(action); setReviewReason(''); setReviewError(''); };
   const closeReview = () => { if (!submittingReview) setReviewDialog(null); };
-  const openSource = (sourceInfo) => setSource({ contentId: sourceInfo.contentId, contentType: sourceInfo.contentType });
+  const openSource = (sourceInfo, fallback) => setSource({ contentId: sourceInfo.contentId, contentType: sourceInfo.contentType, fallback });
   const closeSource = () => setSource(null);
   const submitReview = async () => {
     if (!selectedId || !reviewDialog || submittingReview) return;
@@ -236,23 +251,25 @@ export default function AdminContentRecipeSuggestionsPage() {
 
   return <div className="recipe-suggestions-page">
     <header className="recipe-suggestions-hero">
-      <div><p>ADMINISTRATION / CATALOG</p><h1>Recipe suggestions</h1><span>Review server-proposed dishes and recipes from published community content.</span></div>
-      <div className="recipe-suggestions-total" aria-live="polite"><Soup size={20} /><strong>{result.totalElements}</strong><span>suggestions</span></div>
+      <div><p>ADMINISTRATION / CONTENT REVIEW</p><h1>Recipe suggestions</h1><span>Review server-generated dish and recipe proposals from published community content.</span></div>
+      <div className="recipe-suggestions-total" aria-live="polite"><Soup size={20} /><div><strong>{result.totalElements}</strong><span>server suggestions</span></div></div>
     </header>
 
-    <div className="recipe-suggestions-filters"><label>Status<select value={status} onChange={(event) => changeStatus(event.target.value)}><option value="">All statuses</option><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option></select></label></div>
+    <section className="recipe-suggestions-toolbar" aria-label="Suggestion filters">
+      <select aria-label="Filter suggestions by status" value={status} onChange={(event) => changeStatus(event.target.value)}><option value="">All statuses</option><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option></select>
+    </section>
 
     {loading ? <section className="admin-panel recipe-suggestions-state"><LoadingState /></section>
       : error ? <section className="admin-panel recipe-suggestions-state"><ErrorState onRetry={retry} /></section>
         : !result.content.length ? <section className="admin-panel recipe-suggestions-state"><EmptyState title="No suggestions found." text={status ? 'Try another server status filter.' : 'Eligible content will appear here when the server creates a suggestion.'} /></section>
           : <div className="recipe-suggestions-board">
             <section className="admin-panel recipe-suggestions-list" aria-label="Content recipe suggestions">
-              <header><h2>Suggestion queue</h2><span>{result.content.length} on this page</span></header>
+              <header><div><p>QUEUE</p><h2>Suggestions to review</h2></div><span>{result.content.length} on this page</span></header>
               <div>{result.content.map((item) => {
                 const active = item.suggestionId === selectedId;
                 const Icon = item.source.contentType === 'VIDEO' ? PlaySquare : FileText;
                 return <button key={item.suggestionId} type="button" className={active ? 'recipe-suggestion-row is-active' : 'recipe-suggestion-row'} onClick={() => setSelectedId(item.suggestionId)} aria-pressed={active}>
-                  <span className="recipe-suggestion-row-icon"><Icon size={18} /></span><span className="recipe-suggestion-row-copy"><strong>{item.source.title}</strong><small>{item.source.contentType === 'VIDEO' ? 'Video' : 'Blog'} by {item.source.authorName}</small><span>Proposed: {item.dish.name}</span><time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time></span><SuggestionStatus status={item.status} />
+                  <span className="recipe-suggestion-row-icon"><Icon size={18} /></span><span className="recipe-suggestion-row-copy"><span className="recipe-suggestion-row-top"><small>{item.source.contentType === 'VIDEO' ? 'Video' : 'Blog'}</small><SuggestionStatus status={item.status} /></span><strong>{item.source.title}</strong><small>By {item.source.authorName}</small><span className="recipe-suggestion-row-proposal">Proposed dish: <b>{item.dish.name}</b></span><time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time></span>
                 </button>;
               })}</div>
               {result.totalPages > 1 && <nav className="recipe-suggestion-pagination" aria-label="Suggestion pagination"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} aria-label="Previous page"><ChevronLeft size={16} /></button><span>Page {page} of {result.totalPages}</span><button type="button" disabled={page >= result.totalPages} onClick={() => setPage((value) => value + 1)} aria-label="Next page"><ChevronRight size={16} /></button></nav>}
@@ -260,11 +277,11 @@ export default function AdminContentRecipeSuggestionsPage() {
             {detailLoading ? <section className="admin-panel recipe-suggestion-detail-state"><LoadingState /></section>
               : detailError ? <section className="admin-panel recipe-suggestion-detail-state"><ErrorState onRetry={() => setDetailRefresh((value) => value + 1)} /></section>
                 : detailUnavailable ? <section className="admin-panel recipe-suggestion-detail-state"><EmptyState title="Suggestion is no longer available." text="The server reported that this suggestion or its source content cannot be reviewed." /></section>
-                : detail ? <RecipeDetail suggestion={detail} showReviewControls onReview={openReview} onOpenSource={openSource} submitting={submittingReview} />
+                : detail ? <RecipeDetail suggestion={detail} showReviewControls onReview={openReview} onOpenSource={(sourceInfo) => openSource(sourceInfo, detail)} submitting={submittingReview} />
                   : selected ? <section className="admin-panel recipe-suggestion-detail-state"><EmptyState title="Suggestion detail is unavailable." text="The source may have changed or is no longer available on the server." /></section> : null}
           </div>}
     {reviewDialog && <div className="admin-modal-backdrop" onMouseDown={closeReview}><section className="admin-dialog recipe-suggestion-review-dialog" role="dialog" aria-modal="true" aria-labelledby="suggestion-review-title" onMouseDown={(event) => event.stopPropagation()}><p>REVIEW</p><h2 id="suggestion-review-title">{reviewDialog === 'APPROVE' ? 'Approve this suggestion?' : 'Reject this suggestion?'}</h2><span>{reviewDialog === 'APPROVE' ? 'The proposed dish and recipe will be imported into the catalog.' : 'State why this proposal should not enter the catalog.'}</span>{reviewDialog === 'REJECT' && <label>Rejection reason<textarea value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} placeholder="Example: nutrition information needs a verifiable source" aria-invalid={Boolean(reviewError)} />{reviewError && <small>{reviewError}</small>}</label>}<div><button type="button" className="admin-btn secondary" disabled={submittingReview} onClick={closeReview}>Cancel</button><button type="button" className={`admin-btn ${reviewDialog === 'APPROVE' ? 'primary' : 'danger'}`} disabled={submittingReview} onClick={submitReview}>{submittingReview ? 'Saving...' : reviewDialog === 'APPROVE' ? 'Approve' : 'Reject'}</button></div></section></div>}
-    <SourceContentModal open={Boolean(source)} loading={sourceLoading} error={sourceError} post={sourcePost} onClose={closeSource} onRetry={() => setSourceRefresh((value) => value + 1)} />
+    <SourceContentModal open={Boolean(source)} loading={sourceLoading} error={sourceError} post={sourcePost} fallback={source?.fallback} onClose={closeSource} onRetry={() => setSourceRefresh((value) => value + 1)} />
     <Toast message={toast} onDismiss={() => setToast('')} />
     {preview && <span className="recipe-suggestions-preview-marker">Preview data</span>}
   </div>;

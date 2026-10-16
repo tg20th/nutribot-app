@@ -28,6 +28,14 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
+    @ExceptionHandler(InvalidMediaException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidMedia(InvalidMediaException ex) {
+        log.warn("InvalidMedia: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("INVALID_MEDIA", ex.getMessage(), null));
+    }
+
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiResponse<Void>> handleConflict(ConflictException ex) {
         log.warn("Conflict: {}", ex.getMessage());

@@ -1,5 +1,6 @@
 package com.fpt.swp391.nutribot.service;
 
+import com.fpt.swp391.nutribot.dto.request.ChatAttachmentRequest;
 import com.fpt.swp391.nutribot.dto.request.ChatMessageCreateRequest;
 import com.fpt.swp391.nutribot.dto.response.ChatMessageResponse;
 import com.fpt.swp391.nutribot.dto.response.ChatSessionResponse;
@@ -12,6 +13,7 @@ import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.ChatMessageRepository;
 import com.fpt.swp391.nutribot.repository.ChatSessionRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,6 +34,7 @@ class ChatHistoryServiceTest {
     private ChatSessionRepository sessionRepository;
     private ChatMessageRepository messageRepository;
     private UserRepository userRepository;
+    private ObjectMapper objectMapper;
     private ChatHistoryService chatHistoryService;
 
     private User testUser;
@@ -41,7 +44,8 @@ class ChatHistoryServiceTest {
         sessionRepository = mock(ChatSessionRepository.class);
         messageRepository = mock(ChatMessageRepository.class);
         userRepository = mock(UserRepository.class);
-        chatHistoryService = new ChatHistoryService(sessionRepository, messageRepository, userRepository);
+        objectMapper = new ObjectMapper();
+        chatHistoryService = new ChatHistoryService(sessionRepository, messageRepository, userRepository, objectMapper);
 
         testUser = User.builder()
                 .userId(1)
@@ -206,5 +210,34 @@ class ChatHistoryServiceTest {
         chatHistoryService.addMessage("testuser", 5, request);
 
         verify(sessionRepository).save(argThat(session -> "Tôi muốn giảm cân".equals(session.getTitle())));
+    }
+
+    @Test
+    @DisplayName("Lưu video URL vào lịch sử và giải mã lại đúng")
+    void addMessage_videoUrl_persistsAndDecodes() {
+        ChatSession s = session(5, "Test");
+        when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+        when(sessionRepository.findBySessionIdAndUserUserId(5, 1)).thenReturn(Optional.of(s));
+        when(messageRepository.save(any(ChatMessage.class))).thenAnswer(inv -> {
+            ChatMessage m = inv.getArgument(0);
+            m.setMessageId(7);
+            m.setCreatedAt(LocalDateTime.now());
+            return m;
+        });
+
+        ChatAttachmentRequest attachment = new ChatAttachmentRequest();
+        attachment.setType("VIDEO");
+        attachment.setUrl("https://youtu.be/dQw4w9WgXcQ");
+
+        ChatMessageCreateRequest request = new ChatMessageCreateRequest();
+        request.setSenderType("USER");
+        request.setContent("");
+        request.setAttachments(new java.util.ArrayList<>(List.of(attachment)));
+
+        ChatMessageResponse result = chatHistoryService.addMessage("testuser", 5, request);
+
+        assertEquals(1, result.getAttachments().size());
+        assertEquals("VIDEO", result.getAttachments().get(0).getType());
+        assertEquals("https://youtu.be/dQw4w9WgXcQ", result.getAttachments().get(0).getUrl());
     }
 }

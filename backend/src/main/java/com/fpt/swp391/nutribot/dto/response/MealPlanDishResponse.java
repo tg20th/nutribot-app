@@ -14,4 +14,5 @@ public class MealPlanDishResponse {
     private BigDecimal healthyFatsG;
     private String imageUrl;
     private BigDecimal servings;
+    private String vegetarianType;
 }

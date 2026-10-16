@@ -2,6 +2,8 @@ package com.fpt.swp391.nutribot.service;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fpt.swp391.nutribot.config.CorrelationIdFilter;
+import com.fpt.swp391.nutribot.dto.request.ChatAttachmentRequest;
+import com.fpt.swp391.nutribot.dto.response.ChatAttachmentResponse;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.filter.GuestRateLimitFilter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,8 +24,8 @@ import tools.jackson.databind.json.JsonMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -52,11 +54,13 @@ public class ChatbotGatewayService {
 
     public ChatbotGatewayService(
             @Value("${ai-service.base-url:http://localhost:8000}") String aiServiceBaseUrl,
+            @Value("${ai-service.chatbot-timeout-seconds:75}") long chatbotTimeoutSeconds,
             GuestRateLimitFilter rateLimitFilter) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(Duration.ofSeconds(3));
-        // Two bounded Gemini attempts (primary + fallback) must complete before this deadline.
-        requestFactory.setReadTimeout(Duration.ofSeconds(32));
+        // Video analysis (URL or upload) can take up to 60s in the AI service,
+        // so the read deadline must cover the longest video path.
+        requestFactory.setReadTimeout(Duration.ofSeconds(chatbotTimeoutSeconds));
 
         this.aiClient = RestClient.builder()
                 .baseUrl(aiServiceBaseUrl.replaceAll("/$", ""))
@@ -71,16 +75,18 @@ public class ChatbotGatewayService {
             String message,
             boolean guest,
             Map<String, Object> userContext,
-            List<ConversationTurn> conversationHistory) {
+            List<ConversationTurn> conversationHistory,
+            ChatAttachmentRequest attachment) {
         validateRequest(sessionId, message);
 
         String correlationId = MDC.get(CorrelationIdFilter.MDC_KEY);
         String quotaKey = guest ? (String) httpRequest.getAttribute("guestQuotaKey") : null;
-        log.info("[{}] Gateway: sessionId={}, msgLen={}, guest={}, contextKeys={}",
+        log.info("[{}] Gateway: sessionId={}, msgLen={}, guest={}, hasMedia={}, contextKeys={}",
                 correlationId,
                 sessionId.length() > 8 ? sessionId.substring(0, 8) + "..." : sessionId,
                 message.length(),
                 guest,
+                attachment != null,
                 userContext == null ? 0 : userContext.size());
 
         if (!canAttemptAiCall()) {
@@ -96,6 +102,7 @@ public class ChatbotGatewayService {
             aiRequest.put("session_id", sessionId);
             aiRequest.put("user_context", userContext);
             aiRequest.put("conversation_history", toAiHistory(conversationHistory));
+            appendAttachmentToAiRequest(aiRequest, attachment);
             String requestBody = JSON_MAPPER.writeValueAsString(aiRequest);
 
             AiChatResponse response = aiClient.post()
@@ -114,7 +121,14 @@ public class ChatbotGatewayService {
             Integer remaining = guest ? rateLimitFilter.remainingForKey(quotaKey) : null;
             log.info("[{}] Gateway: route=AI latencyMs={}", correlationId,
                     Duration.between(startedAt, Instant.now()).toMillis());
-            return new ChatbotReply(response.reply(), safeRecommendations(response.recommendations()), remaining, false);
+
+            ChatAttachmentResponse parsedAttachment = toAttachmentResponse(attachment, response);
+            return new ChatbotReply(
+                    response.reply(),
+                    safeRecommendations(response.recommendations()),
+                    remaining,
+                    false,
+                    parsedAttachment);
         } catch (RestClientException exception) {
             recordAiFailure();
             if (quotaKey != null) rateLimitFilter.releaseReservedTurn(quotaKey);
@@ -131,7 +145,47 @@ public class ChatbotGatewayService {
         String quotaKey = guest ? (String) httpRequest.getAttribute("guestQuotaKey") : null;
         if (quotaKey != null) rateLimitFilter.consumeReservedTurn(quotaKey);
         Integer remaining = guest && quotaKey != null ? rateLimitFilter.remainingForKey(quotaKey) : null;
-        return new ChatbotReply(reply, List.of(), remaining, false);
+        return new ChatbotReply(reply, List.of(), remaining, false, null);
+    }
+
+    private void appendAttachmentToAiRequest(Map<String, Object> aiRequest, ChatAttachmentRequest attachment) {
+        if (attachment == null) return;
+        if ("IMAGE".equalsIgnoreCase(attachment.getType())) {
+            Map<String, String> image = new LinkedHashMap<>();
+            image.put("data_base64", attachment.getDataBase64());
+            image.put("mime_type", attachment.getMimeType());
+            aiRequest.put("image", image);
+        } else if ("VIDEO".equalsIgnoreCase(attachment.getType())) {
+            String url = attachment.getUrl();
+            if (url != null && !url.isBlank()) {
+                aiRequest.put("video_url", url.trim());
+                return;
+            }
+            Map<String, String> video = new LinkedHashMap<>();
+            video.put("data_base64", attachment.getDataBase64());
+            video.put("mime_type", attachment.getMimeType());
+            if (attachment.getFilename() != null) {
+                video.put("filename", attachment.getFilename());
+            }
+            aiRequest.put("video", video);
+        }
+    }
+
+    private ChatAttachmentResponse toAttachmentResponse(ChatAttachmentRequest sent, AiChatResponse ai) {
+        if (sent == null) return null;
+        String context = ai != null && ai.videoContext() != null
+                ? ai.videoContext()
+                : (ai != null ? ai.imageContext() : null);
+        return ChatAttachmentResponse.builder()
+                .type(sent.getType())
+                .url(sent.getUrl())
+                .mimeType(sent.getMimeType())
+                .filename(sent.getFilename())
+                .recognizedIngredients(ai != null ? ai.recognizedIngredients() : null)
+                .uncertainIngredients(ai != null ? ai.uncertainIngredients() : null)
+                .warnings(ai != null ? ai.warnings() : null)
+                .imageContext(context)
+                .build();
     }
 
     private boolean canAttemptAiCall() {
@@ -195,15 +249,16 @@ public class ChatbotGatewayService {
                 "NutriBot is temporarily unavailable. Please try again shortly.",
                 List.of(),
                 remaining,
-                true);
+                true,
+                null);
     }
 
     private void validateRequest(String sessionId, String message) {
         if (sessionId == null || sessionId.isBlank() || sessionId.length() > MAX_SESSION_ID_LENGTH) {
             throw new BadRequestException("A session ID between 1 and 100 characters is required.");
         }
-        if (message == null || message.isBlank() || message.length() > MAX_MESSAGE_LENGTH) {
-            throw new BadRequestException("Message must contain between 1 and 2000 characters.");
+        if (message != null && message.length() > MAX_MESSAGE_LENGTH) {
+            throw new BadRequestException("Message cannot exceed 2000 characters.");
         }
     }
 
@@ -231,9 +286,18 @@ public class ChatbotGatewayService {
             String reply,
             List<String> recommendations,
             Integer remainingTrialCount,
-            boolean fallback) { }
+            boolean fallback,
+            ChatAttachmentResponse attachment) { }
 
-    public record AiChatResponse(String reply, List<String> recommendations) { }
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record AiChatResponse(
+            String reply,
+            List<String> recommendations,
+            List<String> recognizedIngredients,
+            List<String> uncertainIngredients,
+            List<String> warnings,
+            String imageContext,
+            String videoContext) { }
 
     private enum CircuitState { CLOSED, OPEN, HALF_OPEN }
 }

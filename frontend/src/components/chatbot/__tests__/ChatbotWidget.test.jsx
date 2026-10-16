@@ -87,6 +87,26 @@ describe('ChatbotWidget', () => {
     expect(panel).toBeInTheDocument();
   });
 
+  it('returns the launcher to the compact viewport anchor after closing fullscreen', async () => {
+    renderWithRouter(<ChatbotWidget />);
+    const launcher = screen.getByRole('button', { name: /open nutribot chat/i });
+
+    fireEvent.click(launcher);
+    fireEvent.click(screen.getByRole('button', { name: /expand nutribot chat/i }));
+    expect(document.querySelector('.chatbot-widget')).toHaveClass('is-fullscreen');
+
+    fireEvent.click(screen.getByRole('button', { name: /close nutribot chat/i }));
+
+    await waitFor(() => {
+      expect(document.getElementById('nutribot-chat-panel')).not.toBeInTheDocument();
+      expect(document.querySelector('.chatbot-widget')).not.toHaveClass('is-fullscreen');
+      expect(screen.getByRole('button', { name: /open nutribot chat/i })).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    expect(document.querySelector('.chatbot-widget')).not.toHaveClass('is-fullscreen');
+  });
+
   it('shows welcome message in the widget', async () => {
     renderWithRouter(<ChatbotWidget />);
     const launcher = screen.getByRole('button', { name: /open nutribot chat/i });
@@ -175,6 +195,22 @@ describe('ChatbotWidget', () => {
     expect(requestNutritionAdvice).toHaveBeenCalledTimes(2);
   });
 
+  it('sends a YouTube link as a video url attachment', async () => {
+    const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('https://youtu.be/dQw4w9WgXcQ');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add attachment/i }));
+    fireEvent.click(screen.getByRole('button', { name: /paste youtube link/i }));
+    fireEvent.click(screen.getByRole('button', { name: /send message/i }));
+
+    await waitFor(() => expect(requestNutritionAdvice).toHaveBeenCalledWith(expect.objectContaining({
+      attachment: { type: 'VIDEO', url: 'https://youtu.be/dQw4w9WgXcQ' },
+    })));
+    promptSpy.mockRestore();
+  });
+
   it('does not append an old response after a member switches sessions', async () => {
     const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
     let resolveRequest;
@@ -214,6 +250,60 @@ describe('ChatbotWidget', () => {
 
     const prompts = document.querySelectorAll('.chatbot-widget__prompt');
     expect(prompts.length).toBe(4);
+  });
+
+  it('renders an existing conversation without the welcome state or prompts', async () => {
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(document.querySelector('.chatbot-widget__history-toggle'));
+
+    await waitFor(() => expect(screen.getByText('Test Session')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Test Session'));
+
+    await waitFor(() => expect(screen.getByText('Hi there!')).toBeInTheDocument());
+    expect(screen.queryByText('Small choices, made clearer.')).not.toBeInTheDocument();
+    expect(document.querySelector('.chatbot-widget__prompts')).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/message nutribot/i)).toBeInTheDocument();
+  });
+
+  it('shows conversation loading without inserting the welcome message', async () => {
+    const { getChatMessages } = await import('../../../services/chatbotApi');
+    let resolveMessages;
+    getChatMessages.mockImplementationOnce(() => new Promise((resolve) => { resolveMessages = resolve; }));
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(document.querySelector('.chatbot-widget__history-toggle'));
+    await waitFor(() => expect(screen.getByText('Test Session')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Test Session'));
+
+    expect(screen.getByText('Loading conversation...')).toBeInTheDocument();
+    expect(screen.queryByText('Small choices, made clearer.')).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveMessages([
+        { messageId: 1, senderType: 'USER', content: 'History question', createdAt: '2024-01-01' },
+      ]);
+    });
+    await waitFor(() => expect(screen.getByText('History question')).toBeInTheDocument());
+  });
+
+  it('restores the welcome state when starting a new conversation after history', async () => {
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(document.querySelector('.chatbot-widget__history-toggle'));
+    await waitFor(() => expect(screen.getByText('Test Session')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('Test Session'));
+    await waitFor(() => expect(screen.getByText('Hi there!')).toBeInTheDocument());
+
+    fireEvent.click(document.querySelector('.chatbot-widget__history-toggle'));
+    await waitFor(() => expect(screen.getByText('NEW CONVERSATION')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('NEW CONVERSATION'));
+
+    expect(screen.getByText('Small choices, made clearer.')).toBeInTheDocument();
+    expect(document.querySelectorAll('.chatbot-widget__prompt')).toHaveLength(4);
   });
 
   describe('Guest and member behavior', () => {

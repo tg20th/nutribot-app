@@ -18,6 +18,14 @@ class Settings:
     gemini_model: str = "gemini-3.8-flash"
     gemini_fallback_model: str | None = "gemini-3.5-flash-lite"
     gemini_timeout_seconds: float = 14.0
+    gemini_image_timeout_seconds: float = 22.0
+    gemini_image_attempt_timeout_seconds: float = 10.0
+    gemini_video_timeout_seconds: float = 60.0
+    gemini_video_attempt_timeout_seconds: float = 20.0
+    gemini_video_poll_interval_seconds: float = 2.0
+    gemini_video_max_poll_seconds: float = 20.0
+    gemini_video_max_bytes: int = 25 * 1024 * 1024
+    gemini_video_max_duration_seconds: int = 60
     max_history_messages: int = 6
 
     @property
@@ -37,6 +45,30 @@ class Settings:
                 or None
             ),
             gemini_timeout_seconds=_positive_float("GEMINI_TIMEOUT_SECONDS", 14.0),
+            gemini_image_timeout_seconds=_positive_float(
+                "GEMINI_IMAGE_TIMEOUT_SECONDS", 22.0
+            ),
+            gemini_image_attempt_timeout_seconds=_minimum_float(
+                "GEMINI_IMAGE_ATTEMPT_TIMEOUT_SECONDS", 10.0, 10.0
+            ),
+            gemini_video_timeout_seconds=_positive_float(
+                "GEMINI_VIDEO_TIMEOUT_SECONDS", 60.0
+            ),
+            gemini_video_attempt_timeout_seconds=_minimum_float(
+                "GEMINI_VIDEO_ATTEMPT_TIMEOUT_SECONDS", 20.0, 5.0
+            ),
+            gemini_video_poll_interval_seconds=_positive_float(
+                "GEMINI_VIDEO_POLL_INTERVAL_SECONDS", 2.0
+            ),
+            gemini_video_max_poll_seconds=_positive_float(
+                "GEMINI_VIDEO_MAX_POLL_SECONDS", 20.0
+            ),
+            gemini_video_max_bytes=_positive_int(
+                "GEMINI_VIDEO_MAX_BYTES", 25 * 1024 * 1024
+            ),
+            gemini_video_max_duration_seconds=_positive_int(
+                "GEMINI_VIDEO_MAX_DURATION_SECONDS", 60
+            ),
             max_history_messages=_positive_int("MAX_HISTORY_MESSAGES", 6),
         )
 
@@ -64,4 +96,9 @@ def _positive_int(name: str, default: int) -> int:
         raise ValueError(f"{name} phải là số nguyên") from exc
     if value <= 0:
         raise ValueError(f"{name} phải lớn hơn 0")
+    return value
+def _minimum_float(name: str, default: float, minimum: float) -> float:
+    value = _positive_float(name, default)
+    if value < minimum:
+        raise ValueError(f"{name} must be at least {minimum} seconds")
     return value
