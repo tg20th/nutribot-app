@@ -9,6 +9,14 @@ export default function HomePage({ onAuthenticate }) {
   const location = useLocation();
   const blogData = null; const videoData = null;
   const [video, setVideo] = useState(null); const [authMode, setAuthMode] = useState(location.state?.authMode || (location.state?.authRequired ? 'login' : null)); const [remoteContent, setRemoteContent] = useState({ blogs: [], videos: [], featured: null, topics: [], loading: true, error: '' });
+  // NB: post-async — nếu user đã đăng nhập, tự redirect về /home thay vì hiển thị landing page
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('nutribot-auth-token') : null;
+    if (token && !location.state?.authMode) {
+      // Đã login và không có yêu cầu mở modal -> về /home
+      navigate('/home', { replace: true });
+    }
+  }, [navigate, location.state]);
   useEffect(() => {
     if (blogData || videoData) return undefined;
     const controller = new AbortController();
