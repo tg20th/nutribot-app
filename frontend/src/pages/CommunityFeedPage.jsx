@@ -12,7 +12,7 @@ import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CreateBlogPage from './CreateBlogPage';
 import { appendUniquePersonalizedPosts, getCommunityFilters, getPersonalizedPostsPage, getPost, prioritizePersonalizedPost } from '../services/communityApi';
 import { getMyProfile } from '../services/profileApi';
-import { captureFeedAnchor, clearFeedSnapshots, completeFeedPageLoad, feedSnapshotKey, getActiveFeedSnapshot, getFeedSnapshot, prepareFeedCacheForPageLoad, refreshFeedSnapshot, restoreFeedAnchor, saveActiveFeedSnapshot } from '../services/feedStateCache';
+import { captureFeedAnchor, clearFeedSnapshots, completeFeedPageLoad, feedSnapshotKey, getActiveFeedSnapshot, getFeedSnapshot, isFeedRequestCurrent, prepareFeedCacheForPageLoad, refreshFeedSnapshot, restoreFeedAnchor, saveActiveFeedSnapshot } from '../services/feedStateCache';
 
 function postKey(post) {
   return `${post.type ?? 'POST'}:${post.id ?? post.slug ?? post.title}`;
@@ -49,6 +49,7 @@ export default function CommunityFeedPage() {
   const composerTrigger = useRef(null);
   const loadMoreTrigger = useRef(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const requestGeneration = useRef(0);
   const requestedSnapshot = useMemo(() => {
     if (browserReload) {
       return { key: feedSnapshotKey('home', 'All'), snapshot: null };
@@ -119,9 +120,12 @@ export default function CommunityFeedPage() {
   }, [filter, navigate, persistFeed]);
 
   const refreshFeed = useCallback(() => {
+    requestGeneration.current += 1;
     refreshFeedSnapshot(feedSnapshotKey('home', filter));
     pagination.current = { cursor: null, hasMore: true };
     loadingNextPage.current = false;
+    pinnedContentId.current = null;
+    requestedPriorityId.current = null;
     restorePending.current = null;
     setRestoreReady(true);
     setPosts([]);
@@ -133,6 +137,7 @@ export default function CommunityFeedPage() {
   const loadNextPage = useCallback(async (signal, { initial = false } = {}) => {
     if (loadingNextPage.current || (!initial && !pagination.current.hasMore)) return;
 
+    const generation = requestGeneration.current;
     loadingNextPage.current = true;
     if (!initial) setLoadingMore(true);
     const current = pagination.current;
@@ -140,9 +145,9 @@ export default function CommunityFeedPage() {
       const result = await getPersonalizedPostsPage({
         cursor: initial ? null : current.cursor,
         signal,
-        cache: initial && browserReload ? 'no-store' : undefined
+        cache: initial ? 'no-store' : undefined
       });
-      if (signal?.aborted) return;
+      if (!isFeedRequestCurrent(generation, requestGeneration.current, signal)) return;
       pagination.current = {
         cursor: result.nextCursor,
         hasMore: result.hasMore
@@ -158,12 +163,13 @@ export default function CommunityFeedPage() {
             // Pending, rejected, and inaccessible posts must not disrupt the feed.
           }
         }
-        if (!signal?.aborted && priorityPost) {
+        if (isFeedRequestCurrent(generation, requestGeneration.current, signal) && priorityPost) {
           pinnedContentId.current = priorityId;
           nextPosts = prioritizePersonalizedPost(result.posts, priorityPost);
         }
         requestedPriorityId.current = null;
       }
+      if (!isFeedRequestCurrent(generation, requestGeneration.current, signal)) return;
       setPosts((existing) => {
         const incoming = pinnedContentId.current == null
           ? nextPosts
@@ -178,10 +184,10 @@ export default function CommunityFeedPage() {
       });
       setError('');
     } catch (failure) {
-      if (!signal?.aborted) setError(initial ? 'Unable to load the community feed.' : failure.message || 'Unable to load more community posts.');
+      if (isFeedRequestCurrent(generation, requestGeneration.current, signal)) setError(initial ? 'Unable to load the community feed.' : failure.message || 'Unable to load more community posts.');
     } finally {
       loadingNextPage.current = false;
-      if (!initial && !signal?.aborted) setLoadingMore(false);
+      if (!initial && isFeedRequestCurrent(generation, requestGeneration.current, signal)) setLoadingMore(false);
     }
   }, [browserReload]);
 
@@ -195,6 +201,7 @@ export default function CommunityFeedPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const generation = requestGeneration.current;
     if (restoredSnapshot) {
       Promise.allSettled([getMyProfile(controller.signal), getCommunityFilters(controller.signal)]).then(([, profileResult, filtersResult]) => {
         if (controller.signal.aborted) return;
@@ -212,7 +219,7 @@ export default function CommunityFeedPage() {
         if (controller.signal.aborted) return;
         if (profileResult.status === 'fulfilled') setProfile(profileResult.value);
         if (filtersResult.status === 'fulfilled') setFilters(filtersResult.value);
-        setLoading(false);
+        if (isFeedRequestCurrent(generation, requestGeneration.current, controller.signal)) setLoading(false);
       });
     });
     return () => {
