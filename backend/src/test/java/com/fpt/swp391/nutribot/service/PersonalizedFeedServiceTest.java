@@ -287,6 +287,43 @@ class PersonalizedFeedServiceTest {
     }
 
     @Test
+    void personalizedRefreshUsesUnseenComparableCandidatesBeforeRepeatingTopTen() {
+        User user = User.builder().userId(73).username("comparable-reader").status(AccountStatus.ACTIVE).build();
+        when(userRepository.findByUsername("comparable-reader")).thenReturn(java.util.Optional.of(user));
+        stubCatalog(contents(40));
+        stubAiResponse(uniformAiResponse(40));
+
+        List<Integer> firstTopFive = service.getPersonalizedFeed("comparable-reader", 5, null).getItems().stream()
+                .map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList();
+        List<Integer> secondTopFive = service.getPersonalizedFeed("comparable-reader", 5, null).getItems().stream()
+                .map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList();
+
+        assertTrue(java.util.Collections.disjoint(firstTopFive, secondTopFive),
+                "Comparable unseen candidates should lead the next refresh before repeating the prior Top 5");
+    }
+
+    @Test
+    void sixRefreshesWithSixtyThreeEligibleAndFiftyAiRankedItemsRotateTopFive() {
+        User user = User.builder().userId(74).username("six-refresh-reader").status(AccountStatus.ACTIVE).build();
+        when(userRepository.findByUsername("six-refresh-reader")).thenReturn(java.util.Optional.of(user));
+        stubCatalog(contents(63));
+        stubAiResponse(personalizedObservedScoreResponse());
+
+        List<List<Integer>> topFives = new java.util.ArrayList<>();
+        for (int refresh = 0; refresh < 6; refresh++) {
+            PersonalizedFeedResponse response = service.getPersonalizedFeed("six-refresh-reader", 10, null);
+            List<Integer> topFive = response.getItems().stream()
+                    .map(PersonalizedFeedResponse.FeedItemResponse::getContentId).limit(5).toList();
+            topFives.add(topFive);
+            System.out.printf("Six-refresh trace %d: top5=%s, top10=%s%n", refresh, topFive,
+                    response.getItems().stream().map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList());
+        }
+
+        assertTrue(topFives.stream().distinct().count() >= 3,
+                "The fixed 63/50 mock should produce at least three meaningful Top 5 arrangements");
+    }
+
+    @Test
     void contentCandidateSerializesMissingTagMetadataAsEmptyArraysForAiContract() throws Exception {
         var method = PersonalizedFeedService.class.getDeclaredMethod("toContentCandidate", Content.class);
         method.setAccessible(true);
@@ -372,6 +409,16 @@ class PersonalizedFeedServiceTest {
             response.append("{\"content_id\":").append(id)
                     .append(",\"content_type\":\"BLOG\",\"score\":").append(scores[id - 1])
                     .append(",\"reason\":\"personalized\"}");
+        }
+        return response.append("],\"embedding_model\":\"test\"}").toString();
+    }
+
+    private String uniformAiResponse(int count) {
+        StringBuilder response = new StringBuilder("{\"items\":[");
+        for (int id = 1; id <= count; id++) {
+            if (id > 1) response.append(',');
+            response.append("{\"content_id\":").append(id)
+                    .append(",\"content_type\":\"BLOG\",\"score\":1.0,\"reason\":\"personalized\"}");
         }
         return response.append("],\"embedding_model\":\"test\"}").toString();
     }

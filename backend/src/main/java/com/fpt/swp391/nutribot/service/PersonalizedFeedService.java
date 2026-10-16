@@ -57,11 +57,15 @@ public class PersonalizedFeedService {
     // Scores are model-relative values, not probabilities. Group nearby ranks
     // from the response's observed gap distribution, so refresh can rotate
     // comparable candidates without promoting a clear relevance outlier.
-    private static final int MAX_RELEVANCE_WINDOW_SIZE = 8;
+    // Do not impose a fixed-size window: doing so split otherwise comparable
+    // candidates and exhausted the first window before unseen items were
+    // considered.
     private static final double SCORE_GAP_PERCENTILE = 0.75d;
+    private static final double SCORE_GAP_OUTLIER_MULTIPLIER = 1.5d;
     private static final int GENERATION_ROTATION_STEP = 7;
     private static final long RECENT_TRACK_TTL_MS = 3600000; // 1 hour TTL for recent tracking
     private final Map<String, FeedSnapshot> feedSnapshots = new ConcurrentHashMap<>();
+    private final Map<String, FeedSnapshot> latestSnapshots = new ConcurrentHashMap<>();
     private final Map<String, CompletableFuture<FeedSnapshot>> snapshotsInFlight = new ConcurrentHashMap<>();
 
     // Track recent top-N for each user to enable session diversity
@@ -375,9 +379,26 @@ public class PersonalizedFeedService {
     private FeedSnapshot saveSnapshot(String ownerKey, List<Content> contents, Map<Integer, String> reasons, boolean fallback) {
         String id = UUID.randomUUID().toString();
         FeedSnapshot snapshot = new FeedSnapshot(id, ownerKey, contentIds(contents), Map.copyOf(reasons), fallback, Instant.now());
+        FeedSnapshot previous = latestSnapshots.put(ownerKey, snapshot);
         feedSnapshots.put(id, snapshot);
-        log.info("Created feed snapshot={} owner={} candidates={} fallback={}", id, ownerKey, snapshot.contentIds().size(), fallback);
+        log.info("Feed snapshot refresh: owner={}, previousSnapshotId={}, newSnapshotId={}, "
+                        + "previousTop5={}, newTop5={}, candidates={}, fallback={}",
+                ownerKey,
+                shortSnapshotId(previous),
+                shortSnapshotId(snapshot),
+                topIds(previous),
+                topIds(snapshot),
+                snapshot.contentIds().size(),
+                fallback);
         return snapshot;
+    }
+
+    private String shortSnapshotId(FeedSnapshot snapshot) {
+        return snapshot == null ? "none" : snapshot.id().substring(0, 8);
+    }
+
+    private List<Integer> topIds(FeedSnapshot snapshot) {
+        return snapshot == null ? List.of() : snapshot.contentIds().stream().limit(TOP_FIVE_SIZE).toList();
     }
 
     private FeedSnapshot getSnapshot(SnapshotCursor cursor, String ownerKey) {
@@ -497,6 +518,7 @@ public class PersonalizedFeedService {
 
         // Also prune expired recent-top trackers
         recentTops.entrySet().removeIf(entry -> entry.getValue().isExpired());
+        latestSnapshots.entrySet().removeIf(entry -> entry.getValue().createdAt().isBefore(expiresBefore));
     }
 
     private List<Integer> contentIds(List<Content> contents) {
@@ -575,13 +597,24 @@ public class PersonalizedFeedService {
             recentTops.put(ownerKey, new RecentTopTracker(featuredHistory, Instant.now(), generation + 1));
             int novelInTopFive = (int) resultIds.stream().limit(TOP_FIVE_SIZE)
                     .filter(id -> !sessionFeaturedIds.contains(id)).count();
+            int unseenEligibleCandidates = (int) orderedIds.stream()
+                    .filter(id -> !sessionFeaturedIds.contains(id)).count();
+            int unseenWithinAllowedRelevance = (int) rankedIds.stream()
+                    .filter(id -> !sessionFeaturedIds.contains(id)).count();
             if (novelInTopFive < TOP_FIVE_SIZE) {
-                log.info("Feed diversity limited by relevance-window candidates: owner={}, generation={}, novelTop5={}/{}, featuredHistory={}",
-                        ownerKey, generation, novelInTopFive, TOP_FIVE_SIZE, tracker.recentIds());
+                log.info("Feed diversity novelty unavailable: owner={}, generation={}, novelTop5={}/{}, "
+                                + "unseenEligibleCandidates={}, unseenWithinAllowedRelevance={}, reason={}",
+                        ownerKey, generation, novelInTopFive, TOP_FIVE_SIZE,
+                        unseenEligibleCandidates, unseenWithinAllowedRelevance,
+                        unseenWithinAllowedRelevance == 0
+                                ? "no unseen AI-ranked candidate within the relevance range"
+                                : "unseen candidates exist but their score gap is outside the allowed range");
             }
             log.info("Feed diversity generation: owner={}, generation={}, qualityPool={}, featuredHistory={}, " +
-                            "novelInTop5={}, targetNovelInTop5={}, finalTop10={}",
+                            "novelInTop5={}, targetNovelInTop5={}, unseenEligibleCandidates={}, "
+                            + "unseenWithinAllowedRelevance={}, finalTop10={}",
                     ownerKey, generation, rankedIds.size(), tracker.recentIds(), novelInTopFive, TOP_FIVE_SIZE,
+                    unseenEligibleCandidates, unseenWithinAllowedRelevance,
                     resultIds.stream().limit(10).toList());
             return resultIds.stream().map(contentMap::get).filter(Objects::nonNull).toList();
         }
@@ -603,7 +636,7 @@ public class PersonalizedFeedService {
             Double current = scores.get(rankedIds.get(index));
             if (previous != null && current != null) gaps.add(Math.abs(previous - current));
         }
-        double gapThreshold = percentile(gaps, SCORE_GAP_PERCENTILE);
+        double gapThreshold = relevanceGapThreshold(gaps);
         List<Integer> diversified = new ArrayList<>();
         List<Integer> window = new ArrayList<>();
         for (Integer id : rankedIds) {
@@ -611,8 +644,7 @@ public class PersonalizedFeedService {
                 Double previous = scores.get(window.getLast());
                 Double current = scores.get(id);
                 boolean separateWindow = previous == null || current == null
-                        || Math.abs(previous - current) > gapThreshold
-                        || window.size() >= MAX_RELEVANCE_WINDOW_SIZE;
+                        || Math.abs(previous - current) > gapThreshold;
                 if (separateWindow) {
                     appendDiversifiedWindow(diversified, window, sessionFeaturedIds, generation);
                     window.clear();
@@ -623,6 +655,17 @@ public class PersonalizedFeedService {
         appendDiversifiedWindow(diversified, window, sessionFeaturedIds, generation);
         log.debug("Feed relevance windows: generation={}, gapThreshold={}", generation, gapThreshold);
         return diversified;
+    }
+
+    private double relevanceGapThreshold(List<Double> gaps) {
+        if (gaps.isEmpty()) return 0.0;
+        double percentileThreshold = percentile(gaps, SCORE_GAP_PERCENTILE);
+        double medianGap = percentile(gaps, 0.5d);
+        // A normal model score slope often has small rank-to-rank variation.
+        // Treat only a materially larger gap as a relevance boundary; otherwise
+        // the first few candidates become one-item windows and can never rotate
+        // to an unseen comparable candidate.
+        return Math.max(percentileThreshold, medianGap * SCORE_GAP_OUTLIER_MULTIPLIER);
     }
 
     private void appendDiversifiedWindow(List<Integer> destination, List<Integer> window,

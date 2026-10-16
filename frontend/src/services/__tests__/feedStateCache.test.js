@@ -6,7 +6,9 @@ import {
   getActiveFeedSnapshot,
   getFeedSnapshot,
   getFeedScrollContainer,
+  isFeedRequestCurrent,
   prepareFeedCacheForPageLoad,
+  refreshFeedSnapshot,
   restoreFeedAnchor,
   saveActiveFeedSnapshot,
   saveFeedSnapshot,
@@ -56,6 +58,29 @@ describe('Feed state cache and scroll restoration', () => {
 
     expect(getFeedSnapshot('guest:home:All::').posts[0]).toMatchObject({ liked: true, likeCount: 4 });
     expect(getFeedSnapshot('guest:home:Recipes::').posts[0]).toMatchObject({ liked: true, likeCount: 4 });
+  });
+
+  it('invalidates the active snapshot on refresh instead of restoring old posts', () => {
+    const key = 'guest:home:All::';
+    saveActiveFeedSnapshot('home', key, {
+      posts: [{ id: 53 }, { id: 21 }],
+      pagination: { cursor: 'old-cursor', hasMore: true },
+      filter: 'All'
+    });
+
+    refreshFeedSnapshot(key);
+
+    expect(getFeedSnapshot(key)).toBeNull();
+    expect(getActiveFeedSnapshot('home')).toBeNull();
+  });
+
+  it('rejects stale or aborted feed responses', () => {
+    const controller = new AbortController();
+
+    expect(isFeedRequestCurrent(2, 2, controller.signal)).toBe(true);
+    expect(isFeedRequestCurrent(1, 2, controller.signal)).toBe(false);
+    controller.abort();
+    expect(isFeedRequestCurrent(2, 2, controller.signal)).toBe(false);
   });
 
   it('captures and restores the nearest overflow scroll container, not window.scrollY', () => {

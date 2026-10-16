@@ -134,6 +134,10 @@ export function refreshFeedSnapshot(key) {
   }
 }
 
+export function isFeedRequestCurrent(requestGeneration, currentGeneration, signal) {
+  return !signal?.aborted && requestGeneration === currentGeneration;
+}
+
 export function getFeedScrollContainer(root) {
   let element = root;
   while (element && element !== document.body) {
