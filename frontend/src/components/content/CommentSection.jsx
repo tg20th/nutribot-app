@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { MessageCircle, Send } from 'lucide-react';
 import { createContentComment, getContentComments } from '../../services/contentInteractionApi';
 import '../../styles/content-interactions.css';
+import UserProfileLink from '../UserProfileLink';
 
 const memberName = (comment) => comment.userName || 'NutriBot member';
 const replyList = (comment) => Array.isArray(comment.replies) ? comment.replies : [];
@@ -60,10 +61,11 @@ function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, 
   const timestamp = formatDate(comment.createdAt);
 
   return <article className={`content-comment content-comment--depth-${Math.min(depth, 2)}`}>
+    {comment.userId != null && <UserProfileLink userId={comment.userId} className="content-comment-avatar-link" aria-label={`Open ${memberName(comment)} profile`} />}
     <span className="content-comment-avatar" aria-hidden="true">{comment.userAvatar || comment.avatarUrl
       ? <img src={comment.userAvatar || comment.avatarUrl} alt=""/> : memberName(comment).charAt(0).toUpperCase()}</span>
     <div className="content-comment-body">
-      <div className="content-comment-meta"><strong>{memberName(comment)}</strong>
+      <div className="content-comment-meta"><UserProfileLink userId={comment.userId}><strong>{memberName(comment)}</strong></UserProfileLink>
         {timestamp && <time dateTime={comment.createdAt}>{timestamp}</time>}</div>
       <p>{nested && <span className="content-comment-mention">@{memberName(comment.parentComment || {})}</span>}{comment.body}</p>
       <div className="content-comment-actions">

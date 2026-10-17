@@ -13,6 +13,9 @@ import RelatedContentSection from '../components/content/RelatedContentSection';
 import { getPost, normalizePost } from '../services/communityApi';
 import { getMyBlog, getMyVideo } from '../services/authorBlogApi';
 import { extractStoryText } from '../utils/content';
+import UserProfileLink from '../components/UserProfileLink';
+import { isMockPublicProfileEnabled } from '../services/publicProfileApi';
+import { getMockPost, isMockPublicProfilePost } from '../services/mockPublicProfileData';
 
 function loadMyContent(postId, contentType, signal) {
   const request = String(contentType).toLowerCase() === 'video'
@@ -43,17 +46,24 @@ export default function CommunityContentDetailPage() {
   const { postId } = useParams();
   const location = useLocation();
   const requestedReturnTo = location.state?.returnTo;
-  // Only RelatedContentSection supplies this state. Other detail entry points
-  // continue using their existing search, my-content, and feed return logic.
+  const returnTo = (() => {
+    if (typeof requestedReturnTo !== 'string' || !requestedReturnTo.trim()) return '/home';
+    try {
+      const target = new URL(requestedReturnTo, window.location.origin);
+      if (target.origin !== window.location.origin || !target.pathname.startsWith('/')) return '/home';
+      return `${target.pathname}${target.search}${target.hash}`;
+    } catch {
+      return '/home';
+    }
+  })();
   const relatedContentReturnState = location.state?.relatedContentReturnState;
   const isMyContentSource = location.state?.source === 'my-content';
   const sourceContentType = location.state?.contentType;
   const searchReturnState = location.state?.restoreSearch ? { restoreSearch: true } : undefined;
-  const isMyContentReturn = requestedReturnTo === '/community/my-blogs';
-  const isSearchReturn = typeof requestedReturnTo === 'string' && requestedReturnTo.startsWith('/community/search');
-  const isRelatedDetailReturn = typeof requestedReturnTo === 'string'
-    && (requestedReturnTo.startsWith('/blogs/') || requestedReturnTo.startsWith('/community/posts/'));
-  const returnTo = isMyContentReturn || isSearchReturn || isRelatedDetailReturn ? requestedReturnTo : '/home';
+  const isMyContentReturn = returnTo === '/community/my-blogs';
+  const isSearchReturn = returnTo.startsWith('/community/search');
+  const isProfileReturn = returnTo.startsWith('/community/users/');
+  const isRelatedDetailReturn = returnTo.startsWith('/blogs/') || returnTo.startsWith('/community/posts/');
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [videoStarted, setVideoStarted] = useState(false);
@@ -68,7 +78,9 @@ export default function CommunityContentDetailPage() {
     // StrictMode mounts effects twice in development. Deferring the request lets
     // its first cleanup cancel the simulated mount before a view can be counted.
     const timer = window.setTimeout(() => {
-      const loadPost = isMyContentSource
+      const loadPost = isMockPublicProfileEnabled && isMockPublicProfilePost(postId)
+        ? getMockPost(postId, controller.signal)
+        : isMyContentSource
         ? loadMyContent(postId, sourceContentType, controller.signal)
         : getPost(postId, controller.signal);
       loadPost.then((item) => {
@@ -103,7 +115,15 @@ export default function CommunityContentDetailPage() {
   const image = post.type === 'gallery' ? post.images[0] : post.image;
   const nutrition = post.nutrition ?? { carbs: '—', fat: '—', fiber: '—', sodium: '—' };
 
-  const returnState = relatedContentReturnState
+  const returnState = location.state?.returnState
+    ?? relatedContentReturnState
+    ?? (location.state?.feedSnapshotKey
+      ? {
+          feedSnapshotKey: location.state.feedSnapshotKey,
+          feedFilter: location.state.feedFilter,
+          feedPostId: location.state.feedPostId
+        }
+      : undefined)
     ?? (isSearchReturn
       ? searchReturnState
       : isMyContentReturn && Number.isFinite(Number(post.viewCount))
@@ -116,9 +136,10 @@ export default function CommunityContentDetailPage() {
       <CommunitySideNav activePath={isSearchReturn ? '/community/search' : '/home'}/>
       <span className="community-sidenav-spacer" aria-hidden="true"/>
       <main className="content-detail-main">
-        <Link className="detail-back detail-reveal" to={returnTo} state={returnState}><ArrowLeft size={16}/>{isMyContentReturn ? 'Back to my content' : isSearchReturn ? 'Back to search results' : isRelatedDetailReturn ? 'Back to content' : 'Back to home'}</Link>
+        <Link className="detail-back detail-reveal" to={returnTo} state={returnState}><ArrowLeft size={16}/>{isMyContentReturn ? 'Back to my content' : isSearchReturn ? 'Back to search results' : isProfileReturn ? 'Back to profile' : isRelatedDetailReturn ? 'Back to content' : 'Back to home'}</Link>
         <section className="detail-hero detail-reveal">
-          <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1>{post.description && post.description !== (post.cleanBody || post.body) && <p>{extractStoryText(post.description)}</p>}<div className="detail-author">{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}<div><b>{post.author}</b><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></div></div></div>
+
+          <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1>{post.description && post.description !== (post.cleanBody || post.body) && <p>{extractStoryText(post.description)}</p>}<div className="detail-author"><UserProfileLink userId={post.authorId} aria-label={`Open ${post.author || 'author'} profile`}>{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}</UserProfileLink><div><UserProfileLink userId={post.authorId}><b>{post.author}</b></UserProfileLink><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></div></div></div>
           <div className="detail-media">
             {post.type === 'video' && post.videoUrl && videoStarted
               ? <video controls autoPlay playsInline preload="metadata" src={post.videoUrl} poster={image || undefined} aria-label={post.title}/>

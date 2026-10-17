@@ -1,0 +1,9 @@
+.public-profile-recipe[type='button'] {
+  border: 0;
+  padding: 0 0 16px;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}

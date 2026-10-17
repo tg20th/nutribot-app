@@ -16,6 +16,7 @@
 .dish-detail-topbar {
   position: relative;
   flex: 0 0 auto;
+  justify-content: flex-end;
 }
 
 .dish-detail-scroll {

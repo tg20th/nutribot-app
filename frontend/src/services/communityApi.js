@@ -11,6 +11,7 @@ const itemsFrom = (payload) => {
 const normalizeComment = (item = {}) => ({
   ...item,
   id: item.id ?? item.commentId,
+  userId: item.userId ?? item.authorId ?? item.user?.userId ?? item.author?.userId ?? null,
   author: item.authorName ?? item.userName ?? item.author?.fullName ?? item.author?.name ?? item.user?.fullName ?? '',
   avatar: item.avatar ?? item.avatarUrl ?? item.avatar_url ?? item.authorAvatar ?? item.userAvatar ?? item.author?.avatarUrl ?? item.author?.avatar_url ?? item.user?.avatarUrl ?? item.user?.avatar_url ?? null,
   text: item.text ?? item.body ?? item.content ?? '',
@@ -304,6 +305,7 @@ export const normalizePost = (item = {}, fallbackType = 'BLOG') => {
     id: item.id ?? item.contentId,
     type: String(rawType).toUpperCase() === 'VIDEO' ? 'video' : 'blog',
     author: item.authorName ?? author.fullName ?? author.name ?? (typeof author === 'string' ? author : ''),
+    authorId: item.authorId ?? item.userId ?? author.userId ?? author.id ?? item.author?.userId ?? item.user?.userId ?? null,
     username: item.authorUsername ?? item.username ?? author.username ?? '',
     avatar: item.avatar ?? item.avatarUrl ?? item.avatar_url ?? item.authorAvatar ?? item.userAvatar ?? author.avatar ?? author.avatarUrl ?? author.avatar_url ?? null,
     image: item.image ?? item.imageUrl ?? item.image_url ?? item.thumbnailUrl ?? item.thumbnail_url ?? null,

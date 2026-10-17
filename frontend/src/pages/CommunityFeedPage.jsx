@@ -116,8 +116,9 @@ export default function CommunityFeedPage() {
 
   const openPost = useCallback((postId) => {
     const key = persistFeed(postId);
-    navigate(`/community/posts/${postId}`, { state: { returnTo: '/home', feedSnapshotKey: key, feedFilter: filter, feedPostId: String(postId) } });
-  }, [filter, navigate, persistFeed]);
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    navigate(`/community/posts/${postId}`, { state: { returnTo, feedSnapshotKey: key, feedFilter: filter, feedPostId: String(postId) } });
+  }, [filter, location.hash, location.pathname, location.search, navigate, persistFeed]);
 
   const refreshFeed = useCallback(() => {
     requestGeneration.current += 1;

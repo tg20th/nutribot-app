@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Clock3, Loader2, UsersRound, X } from 'lucide-react';
+import { Clock3, Loader2, UsersRound, X } from 'lucide-react';
 import { getDishDetail } from '../../services/dishService';
 import '../../styles/dish-detail.css';
 import '../../styles/dish-detail-fixes.css';
 
-export default function DishDetailModal({ meal, onClose }) {
+export default function DishDetailModal({ meal, onClose, initialDish = null }) {
   const [dish, setDish] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const controller = new AbortController();
+    if (initialDish) { setDish(initialDish); setError(''); return undefined; }
     setDish(null);
     setError('');
     getDishDetail(meal.dishId, controller.signal)
@@ -18,14 +19,13 @@ export default function DishDetailModal({ meal, onClose }) {
         if (!controller.signal.aborted) setError(failure.status === 404 ? 'This dish is no longer available.' : 'We could not load this dish right now.');
       });
     return () => controller.abort();
-  }, [meal.dishId]);
+  }, [initialDish, meal.dishId]);
 
   const facts = dish && [['Calories', dish.calories, 'kcal'], ['Protein', dish.proteinG, 'g'], ['Carbs', dish.carbsG, 'g'], ['Fat', dish.healthyFatsG, 'g']].filter(([, value]) => value != null);
 
   return <div className="dish-detail-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="dish-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="dish-detail-title">
       <header className="dish-detail-topbar">
-        <button type="button" onClick={onClose}><ArrowLeft size={16} /> Back to weekly menu</button>
         <button type="button" onClick={onClose} aria-label="Close dish details"><X size={18} /></button>
       </header>
       <div className="dish-detail-scroll">
