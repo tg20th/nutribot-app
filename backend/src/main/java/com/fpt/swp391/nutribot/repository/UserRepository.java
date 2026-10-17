@@ -33,6 +33,8 @@ public interface UserRepository extends JpaRepository<User, Integer>, JpaSpecifi
     @EntityGraph(attributePaths = "role")
     Optional<User> findByUsernameIgnoreCase(String username);
 
+    Optional<User> findByUsernameIgnoreCaseAndStatus(String username, AccountStatus status);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select u from User u where u.username = :username")
     Optional<User> findByUsernameForUpdate(@Param("username") String username);

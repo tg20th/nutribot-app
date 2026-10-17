@@ -12,4 +12,6 @@ public interface RecipeRepository extends JpaRepository<Recipe, Integer> {
     Optional<Recipe> findByDishId(Integer dishId);
 
     boolean existsBySlug(String slug);
+
+    long countByCreatedByAndStatus(Integer createdBy, String status);
 }
