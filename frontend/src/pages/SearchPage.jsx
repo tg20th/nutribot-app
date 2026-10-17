@@ -250,7 +250,7 @@ function SearchExperience({ isMember, onAuth }) {
 
   const updateParams = (changes) => { const next = new URLSearchParams(searchParams); Object.entries(changes).forEach(([key, value]) => value ? next.set(key, value) : next.delete(key)); setSearchParams(next); };
   const submitSearch = (event) => { event.preventDefault(); updateParams({ q: draft.trim() }); };
-  const returnTo = `${location.pathname}${location.search}`;
+  const returnTo = `${location.pathname}${location.search}${location.hash}`;
 
   if (!isMember) return <main className="public-search-main" ref={pageRef}>
     <section className="public-search-intro" aria-labelledby="public-search-title">

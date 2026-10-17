@@ -1,4 +1,4 @@
-import { Navigate, Routes, Route, useNavigate } from 'react-router-dom';
+import { Navigate, Routes, Route, useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import AuthToast from './components/AuthToast';
 import { getAuthFailureMessage } from './services/loginErrorState';
@@ -30,6 +30,8 @@ import NB07EmailChangeVerificationPreviewPage from './pages/NB07EmailChangeVerif
 import NB01EmailVerificationPreviewPage from './pages/NB01EmailVerificationPreviewPage';
 import ChatHistoryPage from './pages/ChatHistoryPage';
 import RestaurantMapPage from './pages/RestaurantMapPage';
+import PublicProfilePage from './pages/PublicProfilePage';
+import PublicRecipeDetailPage from './pages/PublicRecipeDetailPage';
 
 function AuthFailureHandler() {
   const navigate = useNavigate();
@@ -61,6 +63,12 @@ function RegisterOrAuthModal({ mode }) {
   return <Navigate to="/" replace state={{ authMode: mode }} />;
 }
 
+function WeeklyPlannerEntry() {
+  const [params] = useSearchParams();
+  const dish = params.get('dish');
+  return dish ? <PublicRecipeDetailPage /> : <MemberRoute><WeeklyMenuPage /></MemberRoute>;
+}
+
 export default function App() {
   return <><AuthFailureHandler /><Routes>
     {import.meta.env.DEV && <Route path="/review/nb-26" element={<NB26ReviewPage />} />}
@@ -77,10 +85,12 @@ export default function App() {
     <Route path="/blogs/id/:id" element={<BlogDetailPage byId />} />
     <Route path="/blogs/:slug" element={<BlogDetailPage />} />
     <Route path="/community/planner" element={<MemberRoute><WeeklyMenuPage /></MemberRoute>} />
-    <Route path="/weekly-planner" element={<MemberRoute><WeeklyMenuPage /></MemberRoute>} />
+    <Route path="/weekly-planner" element={<WeeklyPlannerEntry />} />
     <Route path="/profile" element={<MemberRoute><ProfilePage /></MemberRoute>} />
     <Route path="/profile/health" element={<MemberRoute><HealthProfilePage /></MemberRoute>} />
     <Route path="/community/profile" element={<Navigate to="/profile" replace />} />
+    <Route path="/community/users/:userId" element={<PublicProfilePage />} />
+    <Route path="/community/recipes/:dishId" element={<PublicRecipeDetailPage />} />
     <Route path="/community/my-blogs" element={<MemberRoute><MyBlogsPage /></MemberRoute>} />
     <Route path="/community/my-videos" element={<Navigate to="/community/my-blogs" replace />} />
     <Route path="/search" element={<SearchPage />} />
