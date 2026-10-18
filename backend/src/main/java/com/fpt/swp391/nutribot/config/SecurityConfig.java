@@ -95,6 +95,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
 
                         // NB-78: Public User Profile
+                        // Đặt trước permitAll để chặn anonymous truy cập own-profile:
+                        // pattern "/api/v1/users/*" sẽ match "/api/v1/users/profile" (1 segment)
+                        // nếu không exclude ở đây, GET /api/v1/users/profile sẽ permitAll → NPE (Principal null) → 500 thay vì 401
+                        .requestMatchers("/api/v1/users/profile", "/api/v1/users/profile/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/*/posts").permitAll()
 

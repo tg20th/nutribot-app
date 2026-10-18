@@ -8,6 +8,7 @@ import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.Role;
 import com.fpt.swp391.nutribot.entity.User;
+import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.RecipeRepository;
@@ -138,6 +139,36 @@ class PublicProfileServiceTest {
         }
 
         @Test
+        @DisplayName("should return public profile when identifier is numeric userId")
+        void shouldReturnProfile_WhenIdentifierIsNumericUserId() {
+            User user = createActiveUser(7, "hoanglan_ai", "Hoàng Thị Lan");
+            when(userRepository.findById(7)).thenReturn(Optional.of(user));
+            when(contentRepository.countByContentTypeAndStatusAndUserUserId(anyString(), anyString(), anyInt()))
+                    .thenReturn(0L);
+            when(recipeRepository.countByCreatedByAndStatus(anyInt(), anyString())).thenReturn(0L);
+
+            PublicUserProfileResponse result = publicProfileService.getPublicProfile("7");
+
+            assertNotNull(result);
+            assertEquals(7, result.getUserId());
+            assertEquals("hoanglan_ai", result.getUsername());
+            verify(userRepository).findById(7);
+        }
+
+        @Test
+        @DisplayName("should throw NotFoundException when numeric userId is banned or inactive")
+        void shouldThrow404_WhenNumericUserIdIsInactive() {
+            User banned = createActiveUser(8, "banned_user", "Banned User");
+            banned.setStatus(AccountStatus.BANNED);
+            when(userRepository.findById(8)).thenReturn(Optional.of(banned));
+
+            NotFoundException ex = assertThrows(NotFoundException.class,
+                    () -> publicProfileService.getPublicProfile("8"));
+
+            assertEquals("Người dùng không tồn tại", ex.getMessage());
+        }
+
+        @Test
         @DisplayName("should not expose email in response")
         void shouldNotExposeEmail() {
             User user = createActiveUser(1, "testuser", "Test User");
@@ -227,7 +258,7 @@ class PublicProfileServiceTest {
             assertEquals(2, result.getContent().size());
             assertEquals(101, result.getContent().get(0).getContentId());
             assertEquals("Bài viết 1", result.getContent().get(0).getTitle());
-            assertEquals(10L, result.getContent().get(0).getVoteCount());
+            assertEquals(10, result.getContent().get(0).getVoteCount());
             assertEquals(0, result.getCurrentPage());
             assertEquals(2, result.getTotalElements());
         }
@@ -281,13 +312,13 @@ class PublicProfileServiceTest {
         }
 
         @Test
-        @DisplayName("should throw NotFoundException for invalid content type")
-        void shouldThrow404_ForInvalidContentType() {
+        @DisplayName("should throw BadRequestException for invalid content type")
+        void shouldThrow400_ForInvalidContentType() {
             User user = createActiveUser(1, "test", "Test");
             when(userRepository.findByUsernameIgnoreCaseAndStatus("test", AccountStatus.ACTIVE))
                     .thenReturn(Optional.of(user));
 
-            NotFoundException ex = assertThrows(NotFoundException.class,
+            BadRequestException ex = assertThrows(BadRequestException.class,
                     () -> publicProfileService.getPublicPosts("test", "RECIPE", 0, 10));
 
             assertEquals("Loại nội dung không hợp lệ", ex.getMessage());

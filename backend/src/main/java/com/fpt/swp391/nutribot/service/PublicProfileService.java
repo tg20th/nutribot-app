@@ -8,6 +8,7 @@ import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.Role;
 import com.fpt.swp391.nutribot.entity.User;
+import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.RecipeRepository;
@@ -84,18 +85,25 @@ public class PublicProfileService {
         return PagedResponse.of(responsePage);
     }
 
-    private User lookupActiveUser(String username) {
-        return userRepository.findByUsernameIgnoreCaseAndStatus(username, AccountStatus.ACTIVE)
+    private User lookupActiveUser(String identifier) {
+        // FE truyền userId số (UserProfileLink, CommunityPostCard) hoặc username — hỗ trợ cả hai
+        if (identifier != null && identifier.matches("\\d+")) {
+            Integer userId = Integer.valueOf(identifier.trim());
+            return userRepository.findById(userId)
+                    .filter(user -> user.getStatus() == AccountStatus.ACTIVE)
+                    .orElseThrow(() -> new NotFoundException("Người dùng không tồn tại"));
+        }
+        return userRepository.findByUsernameIgnoreCaseAndStatus(identifier, AccountStatus.ACTIVE)
                 .orElseThrow(() -> new NotFoundException("Người dùng không tồn tại"));
     }
 
     private String normalizeContentType(String contentType) {
         if (contentType == null || contentType.isBlank()) {
-            throw new NotFoundException("Loại nội dung không hợp lệ");
+            throw new BadRequestException("Loại nội dung không hợp lệ");
         }
         String upper = contentType.trim().toUpperCase(Locale.ROOT);
         if (!BLOG_TYPE.equals(upper) && !VIDEO_TYPE.equals(upper)) {
-            throw new NotFoundException("Loại nội dung không hợp lệ");
+            throw new BadRequestException("Loại nội dung không hợp lệ");
         }
         return upper;
     }
