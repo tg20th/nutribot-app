@@ -4,34 +4,57 @@ import { getMockPublicProfile, getMockPublicProfileContent, getMockPublicProfile
 
 export const isMockPublicProfileEnabled = import.meta.env.VITE_USE_MOCK_PUBLIC_PROFILE === 'true';
 
-// The public profile contract is intentionally isolated. The current backend
-// does not expose this resource yet; keeping the adapter here makes the
-// dependency explicit and prevents the UI from treating private profile data
-// as public content.
-export async function getPublicProfile(userId, signal) {
-  if (isMockPublicProfileEnabled) return getMockPublicProfile(userId, signal);
-  const data = unwrapData(await apiRequest(`/api/v1/users/${encodeURIComponent(userId)}/public-profile`, { signal }), {});
+// Backend contract (PublicUserController):
+//   GET /api/v1/users/{idOrUsername}            -> PublicUserProfileResponse (không email/health/chat)
+//   GET /api/v1/users/{idOrUsername}/posts?type=BLOG|VIDEO&page&size -> PagedResponse<ContentListResponse>
+// `type` là tham số bắt buộc; chỉ trả bài published. Backend nhận cả userId số lẫn username.
+
+const fetchPage = async (path, { page, size, type, signal }) => {
+  const data = unwrapData(await apiRequest(
+    `${path}?type=${encodeURIComponent(type)}&page=${page}&size=${size}`,
+    { signal }
+  ), {});
+  const items = Array.isArray(data) ? data : data.content ?? data.items ?? [];
+  return { items, last: Boolean(data.last) };
+};
+
+export async function getPublicProfile(userIdOrUsername, signal) {
+  if (isMockPublicProfileEnabled) return getMockPublicProfile(userIdOrUsername, signal);
+  const data = unwrapData(await apiRequest(`/api/v1/users/${encodeURIComponent(userIdOrUsername)}`, { signal }), {});
+  const stats = data.stats ?? {};
+  const blogCount = stats.publishedBlogCount ?? 0;
+  const videoCount = stats.publishedVideoCount ?? 0;
   return {
     ...data,
-    userId: data.userId ?? data.id ?? userId,
+    userId: data.userId ?? data.id ?? userIdOrUsername,
     displayName: data.displayName ?? data.fullName ?? data.name ?? data.username ?? '',
     username: data.username ?? '',
     avatarUrl: data.avatarUrl ?? data.avatar ?? null,
     bio: data.bio ?? '',
     joinedAt: data.joinedAt ?? data.createdAt ?? null,
-    stats: data.stats ?? {}
+    stats: {
+      ...stats,
+      posts: blogCount + videoCount,
+      approvedRecipeContributions: stats.verifiedRecipeCount ?? 0
+    }
   };
 }
 
-export async function getPublicProfileContent(userId, { page = 0, size = 18, signal } = {}) {
-  if (isMockPublicProfileEnabled) return getMockPublicProfileContent(userId, { page, size, signal });
-  const data = unwrapData(await apiRequest(`/api/v1/users/${encodeURIComponent(userId)}/public-content?page=${page}&size=${size}`, { signal }), {});
-  const posts = (Array.isArray(data) ? data : data.content ?? data.items ?? []).map((item) => normalizePost(item, item.contentType));
-  return { posts, last: Boolean(data.last ?? !data.nextPage) };
+export async function getPublicProfileContent(userIdOrUsername, { page = 0, size = 18, signal } = {}) {
+  if (isMockPublicProfileEnabled) return getMockPublicProfileContent(userIdOrUsername, { page, size, signal });
+  const path = `/api/v1/users/${encodeURIComponent(userIdOrUsername)}/posts`;
+  const [blogs, videos] = await Promise.all([
+    fetchPage(path, { page, size, type: 'BLOG', signal }),
+    fetchPage(path, { page, size, type: 'VIDEO', signal })
+  ]);
+  const posts = [...blogs.items, ...videos.items]
+    .map((item) => normalizePost(item, item.contentType))
+    .sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0));
+  return { posts, last: blogs.last && videos.last };
 }
 
-export async function getPublicProfileRecipes(userId, { page = 0, size = 12, signal } = {}) {
-  if (isMockPublicProfileEnabled) return getMockPublicProfileRecipes(userId, { page, size, signal });
-  const data = unwrapData(await apiRequest(`/api/v1/users/${encodeURIComponent(userId)}/public-recipes?page=${page}&size=${size}`, { signal }), {});
-  return { recipes: Array.isArray(data) ? data : data.content ?? data.items ?? [], last: Boolean(data.last ?? !data.nextPage) };
+export async function getPublicProfileRecipes(userIdOrUsername, { signal } = {}) {
+  if (isMockPublicProfileEnabled) return getMockPublicProfileRecipes(userIdOrUsername, { page: 0, size: 12, signal });
+  // Backend chưa có endpoint public recipe theo user (recipe chỉ hiển thị qua stats verifiedRecipeCount).
+  return { recipes: [], last: true };
 }

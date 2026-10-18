@@ -23,6 +23,8 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
 
     Page<Content> findByContentTypeAndStatusAndUserUserId(String contentType, String status, Integer userId, Pageable pageable);
 
+    Long countByContentTypeAndStatusAndUserUserId(String contentType, String status, Integer userId);
+
     Optional<Content> findBySlug(String slug);
 
     boolean existsBySlug(String slug);

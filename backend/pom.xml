@@ -28,6 +28,7 @@
     </scm>
     <properties>
         <java.version>25</java.version>
+        <lombok.version>1.18.48</lombok.version>
     </properties>
     <dependencies>
         <dependency>
@@ -183,6 +184,23 @@
                         </configuration>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!--
+                      - javaagent mockito-core: gắn agent tĩnh thay vì self-attach (bỏ warning Mockito + dynamic agent)
+                      - sun-misc-unsafe-memory-access=allow: tắt warning Lombok (Unsafe) trên JDK 24+
+                      - Xshare:off: tắt CDS warning khi fork JVM chạy test
+                    -->
+                    <argLine>
+                        --sun-misc-unsafe-memory-access=allow
+                        -Xshare:off
+                        -XX:+EnableDynamicAgentLoading
+                        -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
+                    </argLine>
+                </configuration>
             </plugin>
         </plugins>
     </build>
