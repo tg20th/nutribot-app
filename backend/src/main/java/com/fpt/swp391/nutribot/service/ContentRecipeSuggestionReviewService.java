@@ -180,8 +180,14 @@ public class ContentRecipeSuggestionReviewService {
                 .orElseThrow(() -> new ConflictException(
                         "Nội dung nguồn không còn công khai, không thể duyệt đề xuất"));
 
+        // NB-80: Chốt chặn cuối — nội dung nguồn đã bị gỡ đồng thuận thì không import được
+        if (!Boolean.TRUE.equals(freshContent.getRecipeConsent())) {
+            throw new BadRequestException(
+                    "Tác giả chưa đồng thuận cho phép dùng công thức của bài viết này");
+        }
+
         Dish dish = resolveOrCreateDish(suggestion, freshContent);
-        Recipe recipe = resolveOrCreateRecipe(suggestion, dish, admin);
+        Recipe recipe = resolveOrCreateRecipe(suggestion, dish, admin, freshContent);
         persistIngredients(suggestion, recipe);
 
         suggestion.setDishId(dish.getDishId());
@@ -228,7 +234,7 @@ public class ContentRecipeSuggestionReviewService {
         return vegetarianType;
     }
 
-    private Recipe resolveOrCreateRecipe(ContentRecipeSuggestion suggestion, Dish dish, User admin) {
+    private Recipe resolveOrCreateRecipe(ContentRecipeSuggestion suggestion, Dish dish, User admin, Content content) {
         return recipeRepository.findByDishId(dish.getDishId()).orElseGet(() -> {
             String title = suggestion.getRecipeTitle() == null || suggestion.getRecipeTitle().isBlank()
                     ? dish.getName()
@@ -243,6 +249,9 @@ public class ContentRecipeSuggestionReviewService {
                     .cookTimeMin(suggestion.getCookTimeMin())
                     .servings(suggestion.getServings())
                     .createdBy(admin.getUserId())
+                    // NB-80: Ghi nguồn gốc tác giả community để hiển thị attribution
+                    .sourceUserId(content.getUser() != null ? content.getUser().getUserId() : null)
+                    .sourceContentId(content.getContentId())
                     .status(recipeStatus)
                     .build());
         });
@@ -430,6 +439,9 @@ public class ContentRecipeSuggestionReviewService {
                         .viewCount(suggestion.getSourceViewCount())
                         .voteCount(suggestion.getSourceVoteCount())
                         .createdAt(content != null ? content.getCreatedAt() : null)
+                        .recipeConsent(content != null ? Boolean.TRUE.equals(content.getRecipeConsent()) : null)
+                        .recipeConsentAt(content != null ? content.getRecipeConsentAt() : null)
+                        .recipeConsentTermsVersion(content != null ? content.getRecipeConsentTermsVersion() : null)
                         .build())
                 .dish(ContentRecipeSuggestionResponse.DishInfo.builder()
                         .name(suggestion.getDishName())

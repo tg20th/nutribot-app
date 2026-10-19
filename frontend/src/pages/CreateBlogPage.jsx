@@ -252,6 +252,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const [imageUrl, setImageUrl] = useState('');
   const [recipeDetails, setRecipeDetails] = useState(emptyRecipeDetails);
   const [showRecipeDetails, setShowRecipeDetails] = useState(true);
+  const [recipeConsent, setRecipeConsent] = useState(false);
   const [existingThumbnailUrl, setExistingThumbnailUrl] = useState('');
   const [existingMediaUrl, setExistingMediaUrl] = useState('');
   const [loadingContent, setLoadingContent] = useState(isEditing);
@@ -466,6 +467,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
       setIngredientRows(parsed.ingredientRows);
       setStepRows(parsed.stepRows);
       setCategoryId(item.categoryId ? String(item.categoryId) : '');
+      setRecipeConsent(item.recipeConsent === true);
       setExistingThumbnailUrl(item.thumbnailUrl ?? '');
       setExistingMediaUrl(item.mediaUrl ?? '');
     }).catch((failure) => {
@@ -536,6 +538,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         body: makeContentBody(bodyHtml, recipeDetails, ingredientRows, stepRows),
         thumbnailUrl,
         categoryId: Number(categoryId),
+        recipeConsent: recipeConsent === true,
       };
       let created;
       if (isVideo) {
@@ -550,6 +553,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
       }
       let finalStatus = created?.status || 'draft';
       let submittedContentId = null;
+      let recipeConsentMsg = null;
       if (intent === 'submit') {
         const targetId = isEditing ? editId : created?.contentId;
         submittedContentId = targetId;
@@ -557,6 +561,10 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         const reviewRes = await submitForReview(isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG, targetId);
         const reviewData = reviewRes?.data ?? reviewRes ?? {};
         finalStatus = reviewData.status || 'ai_processing';
+        // NB-80: Backend trả thông báo điều kiện đề xuất công thức khi tác giả đã đồng thuận
+        if (recipeConsent === true && reviewData.recipeConsentMessage) {
+          recipeConsentMsg = reviewData.recipeConsentMessage;
+        }
       }
 
       // Auto-publish ngay (AI đã duyệt trong lúc blocking cũ) giờ hiếm xảy ra,
@@ -577,6 +585,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
           type: isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG,
           submitted: intent === 'submit',
           status: finalStatus,
+          recipeConsentMessage: recipeConsentMsg,
           // Truyền contentId vừa submit để MyBlogsPage highlight + polling
           justSubmittedContentId: submittedContentId,
           justSubmittedContentType: isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG,
@@ -881,6 +890,25 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
           <label htmlFor="create-blog-category">Post category <small>required</small></label>
           <select id="create-blog-category" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} disabled={busy || !categories.length}><option value="">Select category</option>{categories.map((item) => <option key={item.categoryId} value={item.categoryId}>{item.name ?? item.categoryName}</option>)}</select>
           {!categories.length && <p className="create-blog-hint">Categories will appear here when the backend provides them.</p>}
+        </div>
+        <div className="create-blog-panel">
+          <div className="create-blog-section-heading">
+            <span>04</span>
+            <div>
+              <h2>Recipe usage consent</h2>
+              <p>Allow NutriBot to use the recipe in this post.</p>
+            </div>
+          </div>
+          <label className="recipe-consent-checkbox">
+            <input
+              type="checkbox"
+              checked={recipeConsent}
+              onChange={(event) => setRecipeConsent(event.target.checked)}
+              disabled={busy}
+            />
+            <span>I agree that NutriBot may use the recipe in this post (ingredients, steps, nutrition) to suggest and create dishes in the system. I confirm I have the rights to this content.</span>
+          </label>
+          <p className="create-blog-hint">Unchecked by default. Consent can be changed later while editing the post.</p>
         </div>
         {error && <p className="create-blog-error" role="alert">{error} {error.includes('đăng nhập') && <Link to="/login">Sign in</Link>}</p>}
         <div className="create-blog-submit-actions">

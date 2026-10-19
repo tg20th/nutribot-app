@@ -97,3 +97,42 @@
     overscroll-behavior: contain;
   }
 }
+
+/* NB-80: Community recipe attribution */
+.dish-detail-attribution {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(23, 53, 41, .12);
+  border-radius: 12px;
+  background: #eff5e5;
+  color: #58695f;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dish-detail-attribution b {
+  color: #173529;
+}
+
+.dish-detail-attribution-avatar {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #d9e4d1;
+}
+
+.dish-detail-attribution-icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  background: #d9e4d1;
+  color: #40634b;
+}

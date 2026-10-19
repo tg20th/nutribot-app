@@ -46,6 +46,12 @@ public class Recipe {
     @Column(name = "created_by")
     private Integer createdBy;
 
+    @Column(name = "source_user_id")
+    private Integer sourceUserId;
+
+    @Column(name = "source_content_id")
+    private Integer sourceContentId;
+
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
     private String status = "draft";

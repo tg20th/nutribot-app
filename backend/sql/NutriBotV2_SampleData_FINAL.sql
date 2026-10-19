@@ -13,6 +13,8 @@ GO
 ------------------------------------------------
 -- 0. XOA SACH DU LIEU (child -> parent)
 ------------------------------------------------
+DELETE FROM recipe_consent_audit_log;
+DBCC CHECKIDENT ('recipe_consent_audit_log', RESEED, 0);
 DELETE FROM content_recipe_suggestions;
 DELETE FROM content_view_events;
 DELETE FROM content_moderations;
@@ -316,7 +318,7 @@ SET IDENTITY_INSERT ingredients OFF;
 GO
 
 ------------------------------------------------
--- DISHES  (74 rows)
+-- DISHES  (74 rows insert, 72 rows sau khi cleanup NB-80 xoa dish 73/74)
 ------------------------------------------------
 SET IDENTITY_INSERT dishes ON;
 INSERT INTO dishes (dish_id, name, slug, description, image_url, category_id, serving_size, serving_unit, calories, protein_g, carbs_g, healthy_fats_g, vegetarian_type, is_active, created_at, updated_at) VALUES
@@ -392,14 +394,14 @@ INSERT INTO dishes (dish_id, name, slug, description, image_url, category_id, se
 (70, N'Cơm trứng phô mai rau củ', N'mon-chay-70', N'Cơm trứng phô mai rau củ: công thức tham khảo với Gạo trắng, Đậu hũ trắng, Hạt điều, Cà rốt.', N'https://images.pexels.com/photos/1753051/pexels-photo-1753051.jpeg?auto=compress&cs=tinysrgb&w=1200', 46, 1.00, N'phần', 800, 46.20, 101.50, 25.80, N'LACTO_OVO', 1, '2026-10-13T23:56:11.791', '2026-10-13T23:56:11.791'),
 (71, N'Mì trứng phô mai sốt kem', N'mon-chay-71', N'Mì trứng phô mai sốt kem: công thức tham khảo với Đậu hũ trắng, Hạt điều, Cà chua, Nấm đùi gà.', N'https://images.pexels.com/photos/707251/pexels-photo-707251.jpeg?auto=compress&cs=tinysrgb&w=1200', 37, 1.00, N'phần', 780, 45.40, 110.30, 24.90, N'LACTO_OVO', 1, '2026-10-13T23:56:11.791', '2026-10-13T23:56:11.791'),
 (72, N'Sandwich trứng phô mai', N'mon-chay-72', N'Sandwich trứng phô mai: công thức tham khảo với Bánh mì nguyên cám, Đậu hũ trắng, Hạt điều, Nấm đùi gà.', N'https://images.pexels.com/photos/1040685/pexels-photo-1040685.jpeg?auto=compress&cs=tinysrgb&w=1200', 47, 1.00, N'phần', 750, 43.70, 94.80, 25.60, N'LACTO_OVO', 1, '2026-10-13T23:56:11.791', '2026-10-13T23:56:11.791'),
-(73, N'Cơm tấm chay sườn nấm', N'com-tam-chay-suon-nam', N'Mình muốn làm mới bữa cơm quen thuộc bằng phiên bản chay. Cơm tấm chay sườn nấm vẫn giữ vị đậm đà nhưng nhẹ nhàng hơn cho bữa tối.', N'https://images.pexels.com/photos/723198/pexels-photo-723198.jpeg', 36, NULL, NULL, 430, 16.50, 52.00, 14.00, N'VEGAN', 1, '2026-10-14T02:59:43.923', '2026-10-14T02:59:43.923'),
-(74, N'Phở cuốn chay chấm tương', N'pho-cuon-chay-cham-tuong', N'Có những buổi chiều mình thích tự cuốn từng chiếc phở cuốn thật chậm. Phở cuốn chay chấm tương vừa nhẹ bụng vừa đủ đầy cho một bữa tối thanh đạm.', N'https://images.pexels.com/photos/1907244/pexels-photo-1907244.jpeg', 40, NULL, NULL, 290, 12.00, 34.00, 9.50, N'VEGAN', 1, '2026-10-14T03:00:56.680', '2026-10-14T03:00:56.680');
+(73, N'Cơm tấm chay sườn nấm tham khảo', N'com-tam-chay-suon-nam-tham-khao', N'Mình muốn làm mới bữa cơm quen thuộc bằng phiên bản chay. Cơm tấm chay sườn nấm vẫn giữ vị đậm đà nhưng nhẹ nhàng hơn cho bữa tối.', N'https://images.pexels.com/photos/723198/pexels-photo-723198.jpeg', 36, NULL, NULL, 430, 16.50, 52.00, 14.00, N'VEGAN', 1, '2026-10-14T02:59:43.923', '2026-10-14T02:59:43.923'),
+(74, N'Phở cuốn chay chấm tương tham khảo', N'pho-cuon-chay-cham-tuong-tham-khao', N'Có những buổi chiều mình thích tự cuốn từng chiếc phở cuốn thật chậm. Phở cuốn chay chấm tương vừa nhẹ bụng vừa đủ đầy cho một bữa tối thanh đạm.', N'https://images.pexels.com/photos/1907244/pexels-photo-1907244.jpeg', 40, NULL, NULL, 290, 12.00, 34.00, 9.50, N'VEGAN', 1, '2026-10-14T03:00:56.680', '2026-10-14T03:00:56.680');
 GO
 SET IDENTITY_INSERT dishes OFF;
 GO
 
 ------------------------------------------------
--- RECIPES  (62 rows)
+-- RECIPES  (62 rows insert, 60 rows sau khi cleanup NB-80 xoa recipe 61/62)
 ------------------------------------------------
 SET IDENTITY_INSERT recipes ON;
 INSERT INTO recipes (recipe_id, dish_id, title, slug, description, instructions, prep_time_min, cook_time_min, servings, created_by, status, created_at, updated_at) VALUES
@@ -463,12 +465,12 @@ INSERT INTO recipes (recipe_id, dish_id, title, slug, description, instructions,
 (58, 58, N'Công thức Quinoa rau củ nướng', N'cong-thuc-mon-chay-58', N'Quinoa rau củ nướng: công thức tham khảo với Quinoa, Nấm đùi gà, Cà rốt, Đậu hũ trắng.', N'1. Sơ chế quinoa, nấm đùi gà, cà rốt; rửa sạch, để ráo và cắt miếng vừa ăn. 2. Nấu chín phần tinh bột hoặc ngũ cốc chính nếu có. 3. Áp chảo hoặc xào nấm, đạm thực vật và rau củ theo thứ tự lâu chín trước, nhanh chín sau. 4. Nêm gia vị thực vật vừa ăn, kết hợp các thành phần và bày ra đĩa.', 20, 30, 2, 20, N'verified', '2026-10-13T23:56:11.865', '2026-10-13T23:56:11.865'),
 (59, 59, N'Công thức Đậu lăng hầm rau củ', N'cong-thuc-mon-chay-59', N'Đậu lăng hầm rau củ: công thức tham khảo với Đậu lăng đỏ, Nấm đùi gà, Cà rốt, Đậu hũ trắng.', N'1. Sơ chế đậu lăng đỏ, nấm đùi gà, cà rốt; rửa sạch, để ráo và cắt miếng vừa ăn. 2. Nấu chín phần tinh bột hoặc ngũ cốc chính nếu có. 3. Áp chảo hoặc xào nấm, đạm thực vật và rau củ theo thứ tự lâu chín trước, nhanh chín sau. 4. Nêm gia vị thực vật vừa ăn, kết hợp các thành phần và bày ra đĩa.', 25, 35, 2, 21, N'verified', '2026-10-13T23:56:11.865', '2026-10-13T23:56:11.865'),
 (60, 60, N'Công thức Bánh mì bơ đậu gà', N'cong-thuc-mon-chay-60', N'Bánh mì bơ đậu gà: công thức tham khảo với Đậu gà, Bánh mì nguyên cám, Bơ, Cà chua.', N'1. Sơ chế đậu gà, bánh mì nguyên cám, bơ; rửa sạch, để ráo và cắt miếng vừa ăn. 2. Nấu chín phần tinh bột hoặc ngũ cốc chính nếu có. 3. Áp chảo hoặc xào nấm, đạm thực vật và rau củ theo thứ tự lâu chín trước, nhanh chín sau. 4. Nêm gia vị thực vật vừa ăn, kết hợp các thành phần và bày ra đĩa.', 10, 15, 2, 22, N'verified', '2026-10-13T23:56:11.865', '2026-10-13T23:56:11.865'),
-(61, 73, N'Cơm tấm chay sườn nấm', N'com-tam-chay-suon-nam', N'Mình muốn làm mới bữa cơm quen thuộc bằng phiên bản chay. Cơm tấm chay sườn nấm vẫn giữ vị đậm đà nhưng nhẹ nhàng hơn cho bữa tối.', N'Vo gạo tấm và nấu chín mềm, giữ hạt cơm tơi.
+(61, 73, N'Cơm tấm chay sườn nấm tham khảo', N'com-tam-chay-suon-nam-tham-khao', N'Mình muốn làm mới bữa cơm quen thuộc bằng phiên bản chay. Cơm tấm chay sườn nấm vẫn giữ vị đậm đà nhưng nhẹ nhàng hơn cho bữa tối.', N'Vo gạo tấm và nấu chín mềm, giữ hạt cơm tơi.
 Ướp nấm đùi gà với nước tương và tiêu, áp chảo cho thơm.
 Chiên đậu hũ trắng đến vàng đều rồi cắt miếng vừa ăn.
 Pha nước chấm chay và chuẩn bị cà rốt, dưa leo cắt lát.
 Xếp cơm tấm chay sườn nấm ra đĩa và dùng nóng.', 20, 25, 2, 61, N'verified', '2026-10-14T09:59:44.005', '2026-10-14T09:59:44.005'),
-(62, 74, N'Phở cuốn chay chấm tương', N'pho-cuon-chay-cham-tuong', N'Có những buổi chiều mình thích tự cuốn từng chiếc phở cuốn thật chậm. Phở cuốn chay chấm tương vừa nhẹ bụng vừa đủ đầy cho một bữa tối thanh đạm.', N'Áp chảo đậu hũ trắng với chút gia vị chay cho vàng đều hai mặt.
+(62, 74, N'Phở cuốn chay chấm tương tham khảo', N'pho-cuon-chay-cham-tuong-tham-khao', N'Có những buổi chiều mình thích tự cuốn từng chiếc phở cuốn thật chậm. Phở cuốn chay chấm tương vừa nhẹ bụng vừa đủ đầy cho một bữa tối thanh đạm.', N'Áp chảo đậu hũ trắng với chút gia vị chay cho vàng đều hai mặt.
 Rửa sạch rau thơm, cà rốt và nấm hương; cắt sợi vừa cuốn.
 Trải bánh phở cuốn, xếp đậu hũ và rau củ rồi cuốn chặt tay.
 Pha nước chấm từ tương và chút vị chua ngọt cho cân bằng.
@@ -4535,15 +4537,12 @@ SET IDENTITY_INSERT content_view_events OFF;
 GO
 
 ------------------------------------------------
--- CONTENT_RECIPE_SUGGESTIONS  (3 rows)
+-- CONTENT_RECIPE_SUGGESTIONS  (0 rows - NB-80)
+-- Mac dinh: nguoi dung CHUA dong thuang -> khong co suggestion nao duoc tao san.
+-- Demo: tick "Chia se cong thuc" tren bai du dieu kien (published, view >= 500,
+--       vote >= 10, chua co suggestion) -> admin publish hoac sweep job
+--       (10 phut/lan) tao suggestion PENDING cho admin duyet.
 ------------------------------------------------
-SET IDENTITY_INSERT content_recipe_suggestions ON;
-INSERT INTO content_recipe_suggestions (suggestion_id, content_id, status, source_view_count, source_vote_count, dish_name, dish_description, serving_size, serving_unit, calories, protein_g, carbs_g, fat_g, fiber_g, ingredients_json, recipe_title, recipe_description, prep_time_min, cook_time_min, servings, recipe_steps_json, restaurant_name, restaurant_address, restaurant_reference, reviewed_by, reviewed_at, rejection_reason, created_at, updated_at, dish_id, recipe_id) VALUES
-(8, 81, N'PENDING', 880, 12, N'Bánh xèo chay giòn rụm', N'Cuối tuần này mình muốn thử một món có chút giòn rụm cho bữa tối. Bánh xèo chay giòn rụm là lựa chọn khiến cả nhà hào hứng ngay từ khi nghe mùi thơm trên chảo.', NULL, NULL, 320, 13.50, 38.00, 12.40, 5.20, N'[{"name":"Bột gạo","quantity":200,"unit":"g","notes":null},{"name":"Nước cốt dừa","quantity":150,"unit":"ml","notes":null},{"name":"Nấm đùi gà","quantity":100,"unit":"g","notes":null},{"name":"Giá đỗ","quantity":80,"unit":"g","notes":null},{"name":"Cà rốt","quantity":50,"unit":"g","notes":null}]', N'Bánh xèo chay giòn rụm', N'Cuối tuần này mình muốn thử một món có chút giòn rụm cho bữa tối. Bánh xèo chay giòn rụm là lựa chọn khiến cả nhà hào hứng ngay từ khi nghe mùi thơm trên chảo.', 20, 15, 3, N'["Pha bột gạo với nước cốt dừa và chút muối, để nghỉ cho bột nở đều.","Rửa và cắt nấm đùi gà, giá đỗ, cà rốt thành miếng vừa ăn.","Làm nóng chảo, tráng một lớp bột mỏng rồi xếp nhân rau củ lên trên.","Đậy nắp cho bánh chín, mở nắp để bánh giòn rồi gấp đôi.","Bày bánh xèo chay giòn rụm ra đĩa và dùng ngay với rau sống."]', NULL, NULL, NULL, NULL, NULL, NULL, '2026-10-14T08:51:09.661', '2026-10-14T08:51:09.661', NULL, NULL),
-(9, 82, N'APPROVED', 1020, 12, N'Phở cuốn chay chấm tương', N'Có những buổi chiều mình thích tự cuốn từng chiếc phở cuốn thật chậm. Phở cuốn chay chấm tương vừa nhẹ bụng vừa đủ đầy cho một bữa tối thanh đạm.', NULL, NULL, 290, 12.00, 34.00, 9.50, 4.80, N'[{"name":"Bánh phở cuốn","quantity":200,"unit":"g","notes":null},{"name":"Đậu hũ trắng","quantity":150,"unit":"g","notes":null},{"name":"Nấm hương","quantity":80,"unit":"g","notes":null},{"name":"Rau thơm","quantity":50,"unit":"g","notes":null},{"name":"Cà rốt","quantity":50,"unit":"g","notes":null}]', N'Phở cuốn chay chấm tương', N'Có những buổi chiều mình thích tự cuốn từng chiếc phở cuốn thật chậm. Phở cuốn chay chấm tương vừa nhẹ bụng vừa đủ đầy cho một bữa tối thanh đạm.', 25, 10, 2, N'["Áp chảo đậu hũ trắng với chút gia vị chay cho vàng đều hai mặt.","Rửa sạch rau thơm, cà rốt và nấm hương; cắt sợi vừa cuốn.","Trải bánh phở cuốn, xếp đậu hũ và rau củ rồi cuốn chặt tay.","Pha nước chấm từ tương và chút vị chua ngọt cho cân bằng.","Xếp phở cuốn chay chấm tương ra đĩa và dùng kèm nước chấm."]', NULL, NULL, NULL, 61, '2026-10-14T10:00:56.811', NULL, '2026-10-14T08:51:09.818', '2026-10-14T10:00:56.815', 74, 62),
-(10, 83, N'APPROVED', 945, 12, N'Cơm tấm chay sườn nấm', N'Mình muốn làm mới bữa cơm quen thuộc bằng phiên bản chay. Cơm tấm chay sườn nấm vẫn giữ vị đậm đà nhưng nhẹ nhàng hơn cho bữa tối.', NULL, NULL, 430, 16.50, 52.00, 14.00, 6.00, N'[{"name":"Gạo tấm","quantity":200,"unit":"g","notes":null},{"name":"Nấm đùi gà","quantity":150,"unit":"g","notes":null},{"name":"Đậu hũ trắng","quantity":100,"unit":"g","notes":null},{"name":"Cà rốt","quantity":50,"unit":"g","notes":null},{"name":"Dưa leo","quantity":50,"unit":"g","notes":null}]', N'Cơm tấm chay sườn nấm', N'Mình muốn làm mới bữa cơm quen thuộc bằng phiên bản chay. Cơm tấm chay sườn nấm vẫn giữ vị đậm đà nhưng nhẹ nhàng hơn cho bữa tối.', 20, 25, 2, N'["Vo gạo tấm và nấu chín mềm, giữ hạt cơm tơi.","Ướp nấm đùi gà với nước tương và tiêu, áp chảo cho thơm.","Chiên đậu hũ trắng đến vàng đều rồi cắt miếng vừa ăn.","Pha nước chấm chay và chuẩn bị cà rốt, dưa leo cắt lát.","Xếp cơm tấm chay sườn nấm ra đĩa và dùng nóng."]', NULL, NULL, NULL, 61, '2026-10-14T09:59:44.346', NULL, '2026-10-14T08:51:09.832', '2026-10-14T09:59:44.357', 73, 61);
-GO
-SET IDENTITY_INSERT content_recipe_suggestions OFF;
 GO
 
 ------------------------------------------------
@@ -4829,5 +4828,21 @@ INSERT INTO chat_messages (message_id, session_id, sender_type, content, created
 (120, 60, N'ASSISTANT', N'Bạn có thể ưu tiên đậu hũ, tempeh, đậu lăng, đậu gà, edamame và kết hợp cùng ngũ cốc nguyên hạt.', '2026-10-13T23:56:15.568', NULL);
 GO
 SET IDENTITY_INSERT chat_messages OFF;
+GO
+
+------------------------------------------------
+-- BO DU LIEU DU TU SUGGESTION MAU CU (NB-80)
+-- 3 suggestion mau truoc do da sinh ra dish 73/74 + recipe 61/62 nhung
+-- suggestion da bi xoa -> cac mon/cong thuc nay tro thanh "du lieu du".
+-- Neu giiu: list mon dung cho tao thuc don da co san ten mon giong
+-- "Phở cuốn chay chấm tương" nhung suggestion van de xuat (vi ten khong
+-- trung hoan toan sau khi doi ten "tham khao") -> mo hieu nham.
+-- Xoa het: list mon sach -> chi co mon moi tu duyet suggestion moi hien.
+-- Thu tu dam bao FK: con truoc cha.
+------------------------------------------------
+DELETE FROM weekly_menu_items WHERE dish_id IN (73, 74);
+DELETE FROM recipe_ingredients WHERE recipe_id IN (61, 62);
+DELETE FROM recipes WHERE recipe_id IN (61, 62);
+DELETE FROM dishes WHERE dish_id IN (73, 74);
 GO
 

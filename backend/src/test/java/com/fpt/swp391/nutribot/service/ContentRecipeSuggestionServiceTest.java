@@ -73,6 +73,7 @@ class ContentRecipeSuggestionServiceTest {
                 .body("Nguyên liệu và cách làm...")
                 .status("published")
                 .viewCount(views)
+                .recipeConsent(true)
                 .build();
     }
 
@@ -236,6 +237,7 @@ class ContentRecipeSuggestionServiceTest {
                 .body(body)
                 .status("published")
                 .viewCount(MIN_VIEWS)
+                .recipeConsent(true)
                 .build();
         when(voteRepository.countByContentId(100)).thenReturn((long) MIN_VOTES);
         when(suggestionRepository.existsByContentContentIdAndStatusIn(eq(100), anyCollection())).thenReturn(false);
@@ -270,5 +272,93 @@ class ContentRecipeSuggestionServiceTest {
 
         assertTrue(created);
         verify(extractionGateway).extractRecipe(content);
+    }
+
+    @Test
+    @DisplayName("NB-80: Không tạo suggestion khi tác giả chưa đồng thuận dùng công thức")
+    void evaluateContent_skipsWhenConsentNotGranted() {
+        Content content = Content.builder()
+                .contentId(110)
+                .contentType("BLOG")
+                .title("Bún gạo lứt rau củ")
+                .body("Nguyên liệu và cách làm...")
+                .status("published")
+                .viewCount(MIN_VIEWS)
+                .recipeConsent(false)
+                .build();
+
+        boolean created = service.evaluateContent(content);
+
+        assertFalse(created);
+        verifyNoInteractions(voteRepository, extractionGateway);
+        verify(suggestionRepository, never()).save(any());
+    }
+
+    // ==================== isConsentEligibleNow (NB-80) ====================
+
+    @Test
+    @DisplayName("NB-80: isConsentEligibleNow = true khi đồng thuận + đủ view + đủ vote + chưa có suggestion")
+    void isConsentEligibleNow_allConditionsMet_returnsTrue() {
+        Content content = publishedContent(120, "BLOG", MIN_VIEWS);
+        when(voteRepository.countByContentId(120)).thenReturn((long) MIN_VOTES);
+        when(suggestionRepository.existsByContentContentIdAndStatusIn(eq(120), anyCollection())).thenReturn(false);
+
+        assertTrue(service.isConsentEligibleNow(content));
+    }
+
+    @Test
+    @DisplayName("NB-80: isConsentEligibleNow = false khi chưa đồng thuận (không cần truy vấn vote)")
+    void isConsentEligibleNow_noConsent_returnsFalse() {
+        Content content = publishedContent(121, "BLOG", MIN_VIEWS);
+        content.setRecipeConsent(false);
+
+        assertFalse(service.isConsentEligibleNow(content));
+        verifyNoInteractions(voteRepository, suggestionRepository);
+    }
+
+    @Test
+    @DisplayName("NB-80: isConsentEligibleNow = false khi view dưới ngưỡng")
+    void isConsentEligibleNow_belowMinViews_returnsFalse() {
+        Content content = publishedContent(122, "BLOG", MIN_VIEWS - 1);
+
+        assertFalse(service.isConsentEligibleNow(content));
+        verifyNoInteractions(voteRepository);
+    }
+
+    @Test
+    @DisplayName("NB-80: isConsentEligibleNow = false khi vote dưới ngưỡng")
+    void isConsentEligibleNow_belowMinVotes_returnsFalse() {
+        Content content = publishedContent(123, "BLOG", MIN_VIEWS);
+        when(voteRepository.countByContentId(123)).thenReturn((long) MIN_VOTES - 1);
+
+        assertFalse(service.isConsentEligibleNow(content));
+        verify(suggestionRepository, never()).existsByContentContentIdAndStatusIn(any(), anyCollection());
+    }
+
+    @Test
+    @DisplayName("NB-80: isConsentEligibleNow = false khi đã có suggestion đang hoạt động")
+    void isConsentEligibleNow_existingSuggestion_returnsFalse() {
+        Content content = publishedContent(124, "BLOG", MIN_VIEWS);
+        when(voteRepository.countByContentId(124)).thenReturn((long) MIN_VOTES);
+        when(suggestionRepository.existsByContentContentIdAndStatusIn(eq(124), anyCollection())).thenReturn(true);
+
+        assertFalse(service.isConsentEligibleNow(content));
+    }
+
+    @Test
+    @DisplayName("NB-80: isConsentEligibleNow = false khi viewCount null")
+    void isConsentEligibleNow_nullViews_returnsFalse() {
+        Content content = publishedContent(125, "BLOG", MIN_VIEWS);
+        content.setViewCount(null);
+
+        assertFalse(service.isConsentEligibleNow(content));
+        verifyNoInteractions(voteRepository);
+    }
+
+    @Test
+    @DisplayName("NB-80: getMinViews/getMinVotes trả đúng ngưỡng cấu hình")
+    void minThresholds_exposeConfiguredValues() {
+        assertEquals(MIN_VIEWS, service.getMinViews());
+        assertEquals(MIN_VOTES, service.getMinVotes());
     }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Clock3, Loader2, UsersRound, X } from 'lucide-react';
+import { Clock3, Loader2, UserRound, UsersRound, X } from 'lucide-react';
 import { getDishDetail } from '../../services/dishService';
 import '../../styles/dish-detail.css';
 import '../../styles/dish-detail-fixes.css';
@@ -44,6 +44,14 @@ export default function DishDetailModal({ meal, onClose, initialDish = null }) {
             </div>
             {dish.imageUrl && <img src={dish.imageUrl} alt={dish.name} />}
           </header>
+          {dish.sourceAuthorName && (
+            <p className="dish-detail-attribution">
+              {dish.sourceAuthorAvatar
+                ? <img className="dish-detail-attribution-avatar" src={dish.sourceAuthorAvatar} alt="" aria-hidden="true" />
+                : <span className="dish-detail-attribution-icon" aria-hidden="true"><UserRound size={14} /></span>}
+              <span>Community recipe shared by <b>{dish.sourceAuthorName}</b></span>
+            </p>
+          )}
           {facts.length > 0 && <section className="dish-detail-nutrition">{facts.map(([label, value, unit]) => <div key={label}><b><span className="dish-detail-nutrition-value">{value}</span><small className="dish-detail-nutrition-unit">{unit}</small></b><span>{label}</span></div>)}</section>}
           <div className="dish-detail-grid">
             {dish.ingredients.length > 0 && <section><span>Ingredients</span><h3>What you need</h3><ul>{dish.ingredients.map((item, index) => <li key={index}>{[item.quantity, item.unit, item.name ?? item.ingredientName].filter(Boolean).join(' ')}</li>)}</ul></section>}

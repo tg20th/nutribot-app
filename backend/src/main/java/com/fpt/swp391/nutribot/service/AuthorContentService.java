@@ -7,6 +7,7 @@ import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.entity.Category;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentModeration;
+import com.fpt.swp391.nutribot.entity.RecipeConsentAuditLog;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.event.ContentModerationRequestedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
@@ -15,6 +16,7 @@ import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.CategoryRepository;
 import com.fpt.swp391.nutribot.repository.ContentModerationRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
+import com.fpt.swp391.nutribot.repository.RecipeConsentAuditLogRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -45,6 +47,9 @@ public class AuthorContentService {
     private final CloudinaryMediaService cloudinaryMediaService;
     private final ContentModerationGatewayService contentModerationGatewayService;
     private final ContentModerationRepository contentModerationRepository;
+    private final RecipeConsentAuditLogRepository recipeConsentAuditLogRepository;
+    private final ContentRecipeBodyParser contentRecipeBodyParser;
+    private final ContentRecipeSuggestionService contentRecipeSuggestionService;
     private final ApplicationEventPublisher applicationEventPublisher;
 
     private static final String STATUS_DRAFT = "draft";
@@ -53,6 +58,9 @@ public class AuthorContentService {
     public static final String STATUS_PUBLISHED = "published";
     private static final String STATUS_REJECTED = "rejected";
     private static final List<String> AUTHOR_ALLOWED_STATUSES = List.of(STATUS_DRAFT, STATUS_UNDER_REVIEW);
+
+    /** Phiên bản điều khoản đồng thuận dùng công thức (NB-80). */
+    public static final String RECIPE_CONSENT_TERMS_VERSION = "v1";
 
     @Transactional(readOnly = true)
     public PagedResponse<AuthorContentResponse> getMyContent(String username, String contentType, int page, int size) {
@@ -85,6 +93,7 @@ public class AuthorContentService {
 
         validateVideoFields(contentType, request.getMediaUrl(), request.getDurationSec());
 
+        boolean consentGranted = Boolean.TRUE.equals(request.getRecipeConsent());
         Content content = Content.builder()
                 .user(user)
                 .contentType(contentType)
@@ -96,10 +105,16 @@ public class AuthorContentService {
                 .thumbnailUrl(request.getThumbnailUrl())
                 .durationSec(request.getDurationSec())
                 .status(STATUS_DRAFT) // Bài viết/video mới tạo luôn là draft
+                .recipeConsent(consentGranted)
+                .recipeConsentAt(consentGranted ? LocalDateTime.now() : null)
+                .recipeConsentTermsVersion(consentGranted ? resolveTermsVersion(request.getRecipeConsentTermsVersion()) : null)
                 .viewCount(0)
                 .build();
 
         Content saved = contentRepository.save(content);
+        if (consentGranted) {
+            saveConsentAudit(user, saved, null, true, "CREATE");
+        }
         return toAuthorResponse(saved);
     }
 
@@ -177,6 +192,19 @@ public class AuthorContentService {
             content.setDurationSec(request.getDurationSec());
         }
 
+        // NB-80: Thay đổi đồng thuận dùng công thức (false -> true đặt timestamp + terms;
+        // true -> false xóa timestamp/terms) và ghi audit log
+        if (request.getRecipeConsent() != null) {
+            boolean previousConsent = Boolean.TRUE.equals(content.getRecipeConsent());
+            boolean newConsent = Boolean.TRUE.equals(request.getRecipeConsent());
+            if (previousConsent != newConsent) {
+                content.setRecipeConsent(newConsent);
+                content.setRecipeConsentAt(newConsent ? LocalDateTime.now() : null);
+                content.setRecipeConsentTermsVersion(newConsent ? resolveTermsVersion(request.getRecipeConsentTermsVersion()) : null);
+                saveConsentAudit(user, content, previousConsent, newConsent, "UPDATE");
+            }
+        }
+
         // State Machine Guard
         if (request.getStatus() != null && !request.getStatus().isBlank()) {
             String requestedStatus = request.getStatus().trim().toLowerCase();
@@ -229,6 +257,14 @@ public class AuthorContentService {
             throw new ForbiddenException("Bạn không có quyền thao tác trên nội dung này");
         }
 
+        // NB-80: Nếu body chứa công thức (parse được) nhưng chưa đồng thuận -> chặn nộp bài
+        if (!Boolean.TRUE.equals(content.getRecipeConsent())
+                && contentRecipeBodyParser.parse(content) != null) {
+            throw new BadRequestException(
+                    "Bài viết này chứa công thức nấu ăn. Vui lòng chọn đồng thuận "
+                    + "cho phép NutriBot dùng công thức trước khi đăng bài.");
+        }
+
         // Set sang AI_PROCESSING để FE phân biệt đang chờ AI vs chờ Admin duyệt
         content.setStatus(STATUS_AI_PROCESSING);
         Content saved = contentRepository.save(content);
@@ -243,7 +279,35 @@ public class AuthorContentService {
                 )
         );
 
-        return toAuthorResponse(saved);
+        AuthorContentResponse response = toAuthorResponse(saved);
+        applyRecipeSuggestionGuidance(saved, response);
+        return response;
+    }
+
+    /**
+     * NB-80: Nếu tác giả đã đồng thuận dùng công thức, gắn vào response thông báo
+     * về điều kiện đề xuất (đủ lượt xem/đánh giá, chưa có suggestion) để FE hiển thị
+     * thay cho thông báo chung chung "chờ admin duyệt".
+     */
+    private void applyRecipeSuggestionGuidance(Content content, AuthorContentResponse response) {
+        if (!Boolean.TRUE.equals(content.getRecipeConsent())) {
+            response.setRecipeConsentEligible(false);
+            return;
+        }
+        boolean eligible = contentRecipeSuggestionService.isConsentEligibleNow(content);
+        response.setRecipeConsentEligible(eligible);
+        if (eligible) {
+            response.setRecipeConsentMessage(
+                    "Bài viết đã vào hàng đợi admin duyệt. Sau khi được đăng, "
+                    + "NutriBot sẽ tự động đề xuất công thức nấu ăn lên admin.");
+        } else {
+            response.setRecipeConsentMessage(String.format(
+                    "Bài viết đã vào hàng đợi admin duyệt. Hiện chưa đủ điều kiện đề xuất "
+                    + "công thức (cần từ %d lượt xem và %d đánh giá); "
+                    + "hệ thống sẽ tự đề xuất khi bài đạt điều kiện.",
+                    contentRecipeSuggestionService.getMinViews(),
+                    contentRecipeSuggestionService.getMinVotes()));
+        }
     }
 
     private void saveOrUpdateModeration(Integer contentId, ContentModerationGatewayService.ModerationResult moderation, boolean isApproved) {
@@ -417,7 +481,41 @@ public class AuthorContentService {
                 .viewCount(content.getViewCount())
                 .createdAt(content.getCreatedAt())
                 .updatedAt(content.getUpdatedAt())
+                .recipeConsent(Boolean.TRUE.equals(content.getRecipeConsent()))
+                .recipeConsentAt(content.getRecipeConsentAt())
+                .recipeConsentTermsVersion(content.getRecipeConsentTermsVersion())
                 .build();
+    }
+
+    /**
+     * NB-80: Chuẩn hóa phiên bản điều khoản đồng thuận từ client.
+     * Nếu client gửi null hoặc rỗng -> dùng phiên bản hiện hành {@code v1}.
+     * Nếu gửi chuỗi khác -> cắt về 20 ký tự theo giới hạn cột DB.
+     */
+    private String resolveTermsVersion(String clientVersion) {
+        if (clientVersion == null || clientVersion.isBlank()) {
+            return RECIPE_CONSENT_TERMS_VERSION;
+        }
+        String trimmed = clientVersion.trim();
+        return trimmed.length() > 20 ? trimmed.substring(0, 20) : trimmed;
+    }
+
+    /**
+     * NB-80: Ghi một dòng vào bảng audit append-only {@code recipe_consent_audit_log}.
+     */
+    private void saveConsentAudit(User user, Content content, Boolean previousValue, boolean newValue, String source) {
+        try {
+            recipeConsentAuditLogRepository.save(RecipeConsentAuditLog.builder()
+                    .userId(user.getUserId())
+                    .contentId(content.getContentId())
+                    .previousValue(previousValue)
+                    .newValue(newValue)
+                    .termsVersion(content.getRecipeConsentTermsVersion())
+                    .source(source)
+                    .build());
+        } catch (Exception e) {
+            log.warn("Không ghi được audit log đồng thuận cho content {}: {}", content.getContentId(), e.getMessage());
+        }
     }
 
     private String extractDescription(String body) {

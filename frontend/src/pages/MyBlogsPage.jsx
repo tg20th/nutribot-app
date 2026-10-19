@@ -254,9 +254,12 @@ export default function MyBlogsPage() {
       setNotice('Your post has been updated.');
     } else if (location.state?.submitted) {
       const st = location.state?.status;
+      // NB-80: Thông báo điều kiện đề xuất công thức (trả từ submit API khi đã đồng thuận)
+      const consentMsg = location.state?.recipeConsentMessage;
+      let baseNotice;
       if (st === 'ai_processing') {
         // Flow mới: AI moderation chạy bất đồng bộ. Cho user biết đang chờ.
-        setNotice('Bài viết đã được nộp. Hệ thống đang kiểm duyệt tự động, vui lòng chờ trong giây lát.');
+        baseNotice = 'Bài viết đã được nộp. Hệ thống đang kiểm duyệt tự động, vui lòng chờ trong giây lát.';
         // Bắt đầu polling cho contentId vừa submit (nếu có)
         const justId = location.state?.justSubmittedContentId;
         const justType = location.state?.justSubmittedContentType;
@@ -268,12 +271,13 @@ export default function MyBlogsPage() {
           });
         }
       } else if (st === 'published') {
-        setNotice('Bài viết đã được AI kiểm duyệt và xuất bản tự động thành công! (Published)');
+        baseNotice = 'Bài viết đã được AI kiểm duyệt và xuất bản tự động thành công! (Published)';
       } else if (st === 'rejected') {
-        setNotice('Bài viết đã bị từ chối do vi phạm tiêu chuẩn kiểm duyệt nội dung. (Rejected)');
+        baseNotice = 'Bài viết đã bị từ chối do vi phạm tiêu chuẩn kiểm duyệt nội dung. (Rejected)';
       } else {
-        setNotice('Bài viết đã được nộp và đang chờ quản trị viên kiểm duyệt. (Under review)');
+        baseNotice = 'Bài viết đã được nộp và đang chờ quản trị viên kiểm duyệt. (Under review)';
       }
+      setNotice(consentMsg ? `${baseNotice} ${consentMsg}` : baseNotice);
     } else if (location.state?.created) {
       setNotice('Your draft has been saved.');
     }

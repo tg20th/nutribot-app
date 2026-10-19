@@ -25,4 +25,8 @@ public class ContentCreateRequest {
     private String thumbnailUrl;
 
     private Integer durationSec;
+
+    private Boolean recipeConsent;
+
+    private String recipeConsentTermsVersion;
 }

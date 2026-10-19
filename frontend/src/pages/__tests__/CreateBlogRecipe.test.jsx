@@ -143,4 +143,54 @@ describe('CreateBlogPage Recipe Details & Steps UI', () => {
     fireEvent.change(titleInput, { target: { value: 'Updated Salad Recipe 2026' } });
     expect(titleInput.value).toBe('Updated Salad Recipe 2026');
   });
+
+  it('renders recipe consent checkbox UNCHECKED by default with explanatory text', async () => {
+    render(
+      <MemoryRouter>
+        <CreateBlogPage />
+      </MemoryRouter>
+    );
+
+    const checkbox = screen.getByRole('checkbox', { name: /I agree that NutriBot may use the recipe/i });
+    expect(checkbox).toBeInTheDocument();
+    expect(checkbox).not.toBeChecked();
+  });
+
+  it('toggles consent checkbox on click', async () => {
+    render(
+      <MemoryRouter>
+        <CreateBlogPage />
+      </MemoryRouter>
+    );
+
+    const checkbox = screen.getByRole('checkbox', { name: /I agree that NutriBot may use the recipe/i });
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+    fireEvent.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+  });
+
+  it('prefills consent checkbox from loaded post when editing', async () => {
+    const { getMyBlog } = await import('../../services/authorBlogApi');
+    getMyBlog.mockResolvedValueOnce({
+      contentId: 81,
+      title: 'Recipe Post',
+      body: 'Story',
+      categoryId: 1,
+      recipeConsent: true,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/community/my-content/blog/81/edit']}>
+        <CreateBlogPage />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Recipe Post')).toBeInTheDocument();
+    });
+
+    const checkbox = screen.getByRole('checkbox', { name: /I agree that NutriBot may use the recipe/i });
+    expect(checkbox).toBeChecked();
+  });
 });

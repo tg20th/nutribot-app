@@ -50,6 +50,16 @@ public class Content {
     @Builder.Default
     private String status = "draft";
 
+    @Column(name = "recipe_consent")
+    @Builder.Default
+    private Boolean recipeConsent = false;
+
+    @Column(name = "recipe_consent_at")
+    private LocalDateTime recipeConsentAt;
+
+    @Column(name = "recipe_consent_terms_version", length = 20)
+    private String recipeConsentTermsVersion;
+
     @Column(name = "view_count", nullable = false)
     @Builder.Default
     private Integer viewCount = 0;

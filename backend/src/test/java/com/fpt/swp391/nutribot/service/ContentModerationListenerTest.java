@@ -39,6 +39,9 @@ class ContentModerationListenerTest {
     @Mock
     private com.fpt.swp391.nutribot.repository.CategoryRepository categoryRepository;
 
+    @Mock
+    private org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
+
     private ContentModerationListener listener;
 
     private Content sampleContent;
@@ -49,7 +52,8 @@ class ContentModerationListenerTest {
                 contentRepository,
                 contentModerationGatewayService,
                 contentModerationRepository,
-                categoryRepository
+                categoryRepository,
+                applicationEventPublisher
         );
 
         User author = User.builder()
@@ -82,6 +86,9 @@ class ContentModerationListenerTest {
 
         assertEquals("published", sampleContent.getStatus());
         verify(contentRepository).save(sampleContent);
+        // NB-80: Auto-approve phải fire ContentPublishedEvent để tạo recipe suggestion ngay
+        verify(applicationEventPublisher).publishEvent(
+                new com.fpt.swp391.nutribot.event.ContentPublishedEvent(100));
     }
 
     @Test
@@ -99,6 +106,9 @@ class ContentModerationListenerTest {
 
         assertEquals("under_review", sampleContent.getStatus());
         verify(contentRepository).save(sampleContent);
+        // NB-80: Chưa publish -> KHÔNG được fire ContentPublishedEvent
+        verify(applicationEventPublisher, never()).publishEvent(
+                any(com.fpt.swp391.nutribot.event.ContentPublishedEvent.class));
     }
 
     @Test

@@ -8,6 +8,9 @@
 -- Weekly Menu & Restaurant → DISH
 -- Includes: contents.category_id migration + email_otps migration
 -- Added: vegetarian type + content dwell tracking + per-serving nutrition
+-- Consolidated: ai_processing status (CK_contents_status) + NB-80 recipe consent
+--               (contents.recipe_consent*, recipes.source_*, recipe_consent_audit_log)
+-- Chi con 2 file SQL: NutriBotV2_Database.sql (schema) + NutriBotV2_SampleData_FINAL.sql (data)
 -- =============================================
 
 IF DB_ID(N'NutriBotV2') IS NOT NULL
@@ -21,6 +24,11 @@ CREATE DATABASE NutriBotV2;
 GO
 
 USE NutriBotV2;
+GO
+
+-- sqlcmd mac dinh QUOTED_IDENTIFIER OFF -> filtered index (WHERE ...) bi loi
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
 GO
 
 ------------------------------------------------
@@ -201,11 +209,14 @@ CREATE TABLE recipes (
     servings        INT NULL,
     created_by      INT NULL,
     status          NVARCHAR(20) NOT NULL CONSTRAINT DF_recipes_status DEFAULT (N'draft'),
+    source_user_id      INT NULL,                   -- Tác giả community đóng góp công thức (NB-80)
+    source_content_id   INT NULL,                   -- Bài post nguồn khi import (NB-80)
     created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_recipes_created_at DEFAULT (SYSUTCDATETIME()),
     updated_at      DATETIME2(3) NOT NULL CONSTRAINT DF_recipes_updated_at DEFAULT (SYSUTCDATETIME()),
     CONSTRAINT UQ_recipes_slug UNIQUE (slug),
     CONSTRAINT FK_recipes_dishes FOREIGN KEY (dish_id) REFERENCES dishes(dish_id),
     CONSTRAINT FK_recipes_users FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL,
+    CONSTRAINT FK_recipes_source_users FOREIGN KEY (source_user_id) REFERENCES users(user_id) ON DELETE NO ACTION,
     CONSTRAINT CK_recipes_status CHECK (status IN (N'draft', N'verified', N'flagged', N'inactive')),
     CONSTRAINT CK_recipes_prep CHECK (prep_time_min IS NULL OR prep_time_min >= 0),
     CONSTRAINT CK_recipes_cook CHECK (cook_time_min IS NULL OR cook_time_min >= 0),
@@ -244,6 +255,9 @@ CREATE TABLE contents (
     thumbnail_url   NVARCHAR(500) NULL,
     duration_sec    INT NULL,                           -- VIDEO
     status          NVARCHAR(20) NOT NULL CONSTRAINT DF_contents_status DEFAULT (N'draft'),
+    recipe_consent              BIT NULL,          -- Đồng thuận dùng công thức (NB-80)
+    recipe_consent_at           DATETIME2(3) NULL,
+    recipe_consent_terms_version NVARCHAR(20) NULL,
     view_count      INT NOT NULL CONSTRAINT DF_contents_view_count DEFAULT (0),
     created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_contents_created_at DEFAULT (SYSUTCDATETIME()),
     updated_at      DATETIME2(3) NOT NULL CONSTRAINT DF_contents_updated_at DEFAULT (SYSUTCDATETIME()),
@@ -254,6 +268,31 @@ CREATE TABLE contents (
     CONSTRAINT CK_contents_status CHECK (status IN (N'draft', N'ai_processing', N'under_review', N'published', N'flagged', N'rejected', N'archived')),
     CONSTRAINT CK_contents_view_count CHECK (view_count >= 0),
     CONSTRAINT CK_contents_duration CHECK (duration_sec IS NULL OR duration_sec >= 0)
+);
+GO
+
+-- NB-80: FK recipes.source_content_id → contents phải tạo SAU khi bảng contents tồn tại
+ALTER TABLE recipes WITH CHECK
+ADD CONSTRAINT FK_recipes_source_contents
+    FOREIGN KEY (source_content_id) REFERENCES contents(content_id) ON DELETE SET NULL;
+GO
+
+------------------------------------------------
+-- 7.1 RECIPE CONSENT AUDIT LOG (NB-80)
+-- Ghi nhận mọi thay đổi trạng thái đồng thuận dùng công thức.
+------------------------------------------------
+CREATE TABLE recipe_consent_audit_log (
+    audit_id       INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    user_id        INT NOT NULL,
+    content_id     INT NOT NULL,
+    previous_value BIT NULL,
+    new_value      BIT NOT NULL,
+    terms_version  NVARCHAR(20) NULL,
+    source         NVARCHAR(20) NOT NULL,               -- CREATE | UPDATE
+    changed_at     DATETIME2(3) NOT NULL CONSTRAINT DF_rcal_changed_at DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT FK_rcal_users FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION,
+    CONSTRAINT FK_rcal_contents FOREIGN KEY (content_id) REFERENCES contents(content_id) ON DELETE CASCADE,
+    CONSTRAINT CK_rcal_source CHECK (source IN (N'CREATE', N'UPDATE'))
 );
 GO
 

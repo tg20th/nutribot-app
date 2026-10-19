@@ -57,7 +57,14 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, 
       <section className="recipe-suggestion-source">
         <div className="recipe-suggestion-source-heading"><div className="recipe-suggestion-source-type"><ContentIcon size={18} /><span>{source.contentType === 'VIDEO' ? 'Video source' : 'Blog source'}</span></div><span className="recipe-suggestion-source-caption">Original published content</span></div>
         <h2>{source.title}</h2>
-        <div className="recipe-suggestion-source-meta"><span><UserRound size={14} /> {source.authorName}</span><span><Eye size={14} /> {source.viewCount ?? 0} views</span><span>{source.voteCount ?? 0} votes</span></div>
+        <div className="recipe-suggestion-source-meta">
+          <span><UserRound size={14} /> {source.authorName}</span>
+          <span><Eye size={14} /> {source.viewCount ?? 0} views</span>
+          <span>{source.voteCount ?? 0} votes</span>
+          <span className={source.recipeConsent ? 'recipe-suggestion-consent recipe-suggestion-consent--yes' : 'recipe-suggestion-consent recipe-suggestion-consent--no'}>
+            {source.recipeConsent ? '✓ Consent granted' : '✗ No consent'}
+          </span>
+        </div>
         <SourceContentLink source={source} onOpenSource={onOpenSource} />
       </section>
 

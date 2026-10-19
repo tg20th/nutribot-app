@@ -53,6 +53,15 @@ class AuthorContentServiceTest {
     private ContentModerationRepository contentModerationRepository;
 
     @Mock
+    private com.fpt.swp391.nutribot.repository.RecipeConsentAuditLogRepository recipeConsentAuditLogRepository;
+
+    @Mock
+    private ContentRecipeBodyParser contentRecipeBodyParser;
+
+    @Mock
+    private ContentRecipeSuggestionService contentRecipeSuggestionService;
+
+    @Mock
     private org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
     @InjectMocks
@@ -492,5 +501,195 @@ class AuthorContentServiceTest {
     @DisplayName("21. [Moved] AI APPROVE tự publish — kiểm thử ở ContentModerationListenerTest")
     void submitContent_aiApproveAutoPublishes_movedToListener() {
         // Logic AI giờ nằm trong ContentModerationListener — xem ContentModerationListenerTest
+    }
+
+    // ==================== NB-80: ĐỒNG THUẬN DÙNG CÔNG THỨC ====================
+
+    @Test
+    @DisplayName("NB-80.1: Tạo bài với recipeConsent=true lưu timestamp, terms version và ghi audit CREATE")
+    void createContent_withConsent_savesTimestampAndAudit() {
+        ContentCreateRequest request = ContentCreateRequest.builder()
+                .title("Công thức Salad Diện Dưỡng")
+                .body("Cách làm salad...")
+                .categoryId(10)
+                .recipeConsent(true)
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(categoryRepository.findById(10)).thenReturn(Optional.of(validCategory));
+        when(contentRepository.existsBySlug(anyString())).thenReturn(false);
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> {
+            Content c = invocation.getArgument(0);
+            c.setContentId(105);
+            return c;
+        });
+
+        AuthorContentResponse response = authorContentService.createContent("truong_author", "BLOG", request);
+
+        assertEquals(Boolean.TRUE, response.getRecipeConsent());
+        assertNotNull(response.getRecipeConsentAt());
+        assertEquals("v1", response.getRecipeConsentTermsVersion());
+
+        ArgumentCaptor<Content> captor = ArgumentCaptor.forClass(Content.class);
+        verify(contentRepository).save(captor.capture());
+        assertNotNull(captor.getValue().getRecipeConsentAt());
+
+        ArgumentCaptor<com.fpt.swp391.nutribot.entity.RecipeConsentAuditLog> auditCaptor =
+                ArgumentCaptor.forClass(com.fpt.swp391.nutribot.entity.RecipeConsentAuditLog.class);
+        verify(recipeConsentAuditLogRepository).save(auditCaptor.capture());
+        assertEquals("CREATE", auditCaptor.getValue().getSource());
+        assertEquals(Boolean.TRUE, auditCaptor.getValue().getNewValue());
+        assertNull(auditCaptor.getValue().getPreviousValue());
+        assertEquals("v1", auditCaptor.getValue().getTermsVersion());
+    }
+
+    @Test
+    @DisplayName("NB-80.2: Tạo bài mặc định (không chọn consent) thì recipeConsent=false, không ghi audit")
+    void createContent_withoutConsent_defaultsFalseNoAudit() {
+        ContentCreateRequest request = ContentCreateRequest.builder()
+                .title("Bài viết thuần văn bản")
+                .body("Không có công thức.")
+                .categoryId(10)
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(categoryRepository.findById(10)).thenReturn(Optional.of(validCategory));
+        when(contentRepository.existsBySlug(anyString())).thenReturn(false);
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> {
+            Content c = invocation.getArgument(0);
+            c.setContentId(106);
+            return c;
+        });
+
+        AuthorContentResponse response = authorContentService.createContent("truong_author", "BLOG", request);
+
+        assertEquals(Boolean.FALSE, response.getRecipeConsent());
+        assertNull(response.getRecipeConsentAt());
+        verify(recipeConsentAuditLogRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("NB-80.3: Chuyển consent false -> true khi sửa bài ghi timestamp và audit UPDATE")
+    void updateContent_enableConsent_writesAudit() {
+        sampleContent.setRecipeConsent(false);
+        ContentUpdateRequest request = ContentUpdateRequest.builder()
+                .recipeConsent(true)
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AuthorContentResponse response = authorContentService.updateContent("truong_author", 100, request);
+
+        assertEquals(Boolean.TRUE, response.getRecipeConsent());
+        assertNotNull(response.getRecipeConsentAt());
+        assertEquals("v1", response.getRecipeConsentTermsVersion());
+
+        ArgumentCaptor<com.fpt.swp391.nutribot.entity.RecipeConsentAuditLog> auditCaptor =
+                ArgumentCaptor.forClass(com.fpt.swp391.nutribot.entity.RecipeConsentAuditLog.class);
+        verify(recipeConsentAuditLogRepository).save(auditCaptor.capture());
+        assertEquals("UPDATE", auditCaptor.getValue().getSource());
+        assertEquals(Boolean.FALSE, auditCaptor.getValue().getPreviousValue());
+        assertEquals(Boolean.TRUE, auditCaptor.getValue().getNewValue());
+    }
+
+    @Test
+    @DisplayName("NB-80.4: Nộp bài có công thức trong body nhưng chưa đồng thuận -> BadRequestException")
+    void submitContent_recipeBodyWithoutConsent_badRequest() {
+        sampleContent.setBody("{\"story\":\"salad\",\"ingredients\":[{\"name\":\"Xà lách\"}],\"steps\":[\"Trộn\"]}");
+        sampleContent.setRecipeConsent(false);
+        Content recipeContent = sampleContent;
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(recipeContent));
+        when(contentRecipeBodyParser.parse(any(Content.class))).thenReturn(
+                new RecipeExtractionGatewayService.RecipeExtractionResult(
+                        new RecipeExtractionGatewayService.DishProposal("Salad rau củ", null, null, null),
+                        null,
+                        java.util.List.of(),
+                        null));
+
+        assertThrows(BadRequestException.class,
+                () -> authorContentService.submitContent("truong_author", 100));
+        // Không được chuyển sang ai_processing khi bị chặn
+        assertEquals("draft", sampleContent.getStatus());
+        verify(applicationEventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("NB-80.5: Nộp bài có công thức và đã đồng thuận -> chuyển ai_processing bình thường")
+    void submitContent_recipeBodyWithConsent_proceeds() {
+        sampleContent.setBody("{\"story\":\"salad\",\"ingredients\":[{\"name\":\"Xà lách\"}],\"steps\":[\"Trộn\"]}");
+        sampleContent.setRecipeConsent(true);
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
+
+        assertEquals("ai_processing", response.getStatus());
+        verify(applicationEventPublisher).publishEvent(any(com.fpt.swp391.nutribot.event.ContentModerationRequestedEvent.class));
+    }
+
+    @Test
+    @DisplayName("NB-80.6: Nộp bài đồng thuận + ĐỦ điều kiện (view/vote) -> response gắn hướng dẫn đề xuất")
+    void submitContent_consentEligible_returnsGuidanceMessage() {
+        sampleContent.setRecipeConsent(true);
+        sampleContent.setViewCount(880);
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(contentRecipeSuggestionService.isConsentEligibleNow(any(Content.class))).thenReturn(true);
+
+        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
+
+        assertEquals("ai_processing", response.getStatus());
+        assertEquals(Boolean.TRUE, response.getRecipeConsentEligible());
+        assertNotNull(response.getRecipeConsentMessage());
+        assertTrue(response.getRecipeConsentMessage().contains("đề xuất công thức"));
+    }
+
+    @Test
+    @DisplayName("NB-80.7: Nộp bài đồng thuận + CHƯA đủ điều kiện -> báo chưa đủ điều kiện kèm ngưỡng")
+    void submitContent_consentNotEligible_returnsNotEligibleMessage() {
+        sampleContent.setRecipeConsent(true);
+        sampleContent.setViewCount(0);
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(contentRecipeSuggestionService.isConsentEligibleNow(any(Content.class))).thenReturn(false);
+        when(contentRecipeSuggestionService.getMinViews()).thenReturn(500);
+        when(contentRecipeSuggestionService.getMinVotes()).thenReturn(10);
+
+        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
+
+        assertEquals("ai_processing", response.getStatus());
+        assertEquals(Boolean.FALSE, response.getRecipeConsentEligible());
+        assertNotNull(response.getRecipeConsentMessage());
+        assertTrue(response.getRecipeConsentMessage().contains("chưa đủ điều kiện"));
+        assertTrue(response.getRecipeConsentMessage().contains("500"));
+        assertTrue(response.getRecipeConsentMessage().contains("10"));
+    }
+
+    @Test
+    @DisplayName("NB-80.8: Nộp bài CHƯA đồng thuận -> không có hướng dẫn đề xuất")
+    void submitContent_withoutConsent_noGuidance() {
+        sampleContent.setRecipeConsent(null);
+        sampleContent.setViewCount(880);
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
+
+        assertEquals("ai_processing", response.getStatus());
+        assertEquals(Boolean.FALSE, response.getRecipeConsentEligible());
+        assertNull(response.getRecipeConsentMessage());
+        verify(contentRecipeSuggestionService, never()).isConsentEligibleNow(any());
     }
 }

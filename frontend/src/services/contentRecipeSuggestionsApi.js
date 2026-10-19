@@ -67,6 +67,10 @@ function mapSource(raw) {
     voteCount: source.voteCount ?? raw.voteCount ?? 0,
     createdAt: source.createdAt ?? raw.contentCreatedAt ?? raw.createdAt ?? null,
     url: source.url ?? source.contentUrl ?? raw.contentUrl ?? null,
+    // NB-80: Trạng thái đồng thuận dùng công thức của tác giả bài viết nguồn
+    recipeConsent: source.recipeConsent === true,
+    recipeConsentAt: source.recipeConsentAt ?? null,
+    recipeConsentTermsVersion: source.recipeConsentTermsVersion ?? null,
   };
 }
 
