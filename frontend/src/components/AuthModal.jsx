@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { ApiError } from '../services/apiClient';
 import { loginAccount, registerAccount, resendRegistrationOtp, verifyRegistrationOtp } from '../services/authApi';
 import { getLoginErrorMessage, getLoginErrorState } from '../services/loginErrorState';
-import AuthToast from './AuthToast';
+import { useToast } from './notifications/ToastProvider';
 import EmailVerificationStep from './auth/EmailVerificationStep';
 import '../styles/auth-popup.css';
 
@@ -77,6 +77,7 @@ function validateLogin(form) {
 }
 
 export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthenticated, verification = {}, backdropClassName = '' }) {
+  const { toast } = useToast();
   const [form, setForm] = useState(emptyForm);
   const [touched, setTouched] = useState({});
   const [error, setError] = useState('');
@@ -163,17 +164,20 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
       }
       onAuthenticated?.(data, mode);
       setSuccess('Welcome back.');
+      toast.success('Welcome back.');
       window.setTimeout(onClose, 700);
     } catch (requestError) {
       if (isSignup) {
         const message = requestError instanceof ApiError ? requestError.message : requestError.message || 'Something went wrong. Please try again.';
         setError(message);
+        toast.error(message);
         return;
       }
 
       const state = getLoginErrorState(requestError);
       setLoginErrorState(state);
       setError(getLoginErrorMessage(state));
+      toast.error(getLoginErrorMessage(state));
       if (state === 'PENDING_VERIFY') {
         const pendingOtp = getPendingOtp();
         setPendingVerificationEmail(pendingOtp?.email || (isEmail(form.email) ? normalizeEmail(form.email) : ''));
@@ -259,7 +263,6 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
   </div>;
 
   return <>
-    <AuthToast error={error} success={success} />
     <div className={`modal-backdrop auth-backdrop ${backdropClassName}`.trim()} role="dialog" aria-modal="true" aria-labelledby="auth-title" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <form className="auth-modal" noValidate onSubmit={submit}>
         <button className="modal-close" type="button" onClick={onClose} aria-label="Close"><X size={19} /></button>

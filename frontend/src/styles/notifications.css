@@ -1,0 +1,10 @@
+.toast-viewport{position:fixed;top:24px;right:24px;z-index:1500;display:grid;gap:10px;width:min(360px,calc(100vw - 48px));pointer-events:none}
+.global-toast{display:flex;align-items:flex-start;gap:10px;padding:12px 12px 12px 13px;border:0;border-radius:15px;background:#fffdf7;color:#263f31;box-shadow:0 8px 24px rgba(36,63,45,.09),0 2px 6px rgba(36,63,45,.05);font-size:12px;line-height:1.45;pointer-events:auto;animation:toast-in .32s ease-out both}
+.global-toast__icon{display:grid;place-items:center;flex:none;width:27px;height:27px;margin-top:1px;border-radius:50%;background:#e7efe2;color:#54784d}
+.global-toast__content{display:grid;min-width:0;flex:1;gap:2px;padding-top:1px}
+.global-toast__content strong{color:#294534;font-family:inherit;font-size:11px;font-weight:700;letter-spacing:.02em;line-height:1.25}
+.global-toast__content>span{min-width:0;color:#6c7d70;font-size:12px;line-height:1.45;overflow-wrap:anywhere}
+.global-toast button{display:grid;flex:none;margin:-2px -2px 0 0;padding:4px;border:0;border-radius:50%;background:transparent;color:#8a978b;cursor:pointer;transition:color .18s ease,background-color .18s ease}.global-toast button:hover{background:#f0f3eb;color:#294534}.global-toast--error .global-toast__icon{background:#f5e6e1;color:#a65c4f}.global-toast--warning .global-toast__icon{background:#f5ecd9;color:#a97936}.global-toast--info .global-toast__icon{background:#e5eef0;color:#607d86}.global-toast--loading .global-toast__icon{background:#e7efe2;color:#54784d}.global-toast.is-exiting{animation:toast-out .24s ease-in both}.global-toast-spinner{animation:toast-spin 1s linear infinite}
+@keyframes toast-in{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}@keyframes toast-out{to{opacity:0;transform:translateX(24px)}}@keyframes toast-spin{to{transform:rotate(360deg)}}
+@media(max-width:540px){.toast-viewport{top:16px;right:16px;width:calc(100vw - 32px)}}
+@media(prefers-reduced-motion:reduce){.global-toast,.global-toast.is-exiting,.global-toast-spinner{animation:none;transition:none}.global-toast.is-exiting{opacity:0}}

@@ -1,6 +1,6 @@
 import { Navigate, Routes, Route, useNavigate, useSearchParams } from 'react-router-dom';
-import { useEffect, useState } from 'react';
-import AuthToast from './components/AuthToast';
+import { useEffect } from 'react';
+import { useToast } from './components/notifications/ToastProvider';
 import { getAuthFailureMessage } from './services/loginErrorState';
 import HomePage from './pages/HomePage';
 import CommunityFeedPage from './pages/CommunityFeedPage';
@@ -35,18 +35,18 @@ import PublicRecipeDetailPage from './pages/PublicRecipeDetailPage';
 
 function AuthFailureHandler() {
   const navigate = useNavigate();
-  const [message, setMessage] = useState('');
+  const { toast } = useToast();
 
   useEffect(() => {
     const handleFailure = (event) => {
-      setMessage(getAuthFailureMessage(event.detail?.state));
+      toast.error(getAuthFailureMessage(event.detail?.state));
       navigate('/', { replace: true });
     };
     window.addEventListener('nutribot-auth-failure', handleFailure);
     return () => window.removeEventListener('nutribot-auth-failure', handleFailure);
-  }, [navigate]);
+  }, [navigate, toast]);
 
-  return <AuthToast error={message} success="" />;
+  return null;
 }
 
 /**

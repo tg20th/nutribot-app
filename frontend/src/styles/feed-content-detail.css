@@ -2,7 +2,7 @@
 .nb-content-detail .content-detail-main{width:100%;min-width:0;box-sizing:border-box}
 .nb-content-detail .detail-back{background:transparent;padding:0;border:0}
 .nb-content-detail .detail-hero{grid-template-columns:minmax(0,.93fr) minmax(0,1.07fr)}
-.nb-content-detail .detail-hero h1{font-size:64px;letter-spacing:0;overflow-wrap:anywhere}
+.nb-content-detail .detail-hero h1{font-size:clamp(36px,4.2vw,62px);line-height:1.02;letter-spacing:-.05em;overflow-wrap:anywhere}
 .nb-content-detail .detail-media{min-height:0;align-self:start;aspect-ratio:auto;background:transparent}
 .nb-content-detail .detail-media img{display:block;width:100%;height:auto;max-height:min(78dvh,860px);object-fit:contain;object-position:center}
 .nb-content-detail .detail-media video{position:static;display:block;width:100%;height:auto;max-height:min(78dvh,860px);object-fit:contain;background:transparent}
@@ -18,5 +18,5 @@
 .nb-content-detail .nutrition-grid span,.nb-content-detail .detail-micro-nutrition span{font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important}
 .nb-content-detail .detail-comments{scroll-margin-top:88px;min-height:65vh;width:100%;font-family:var(--nutribot-user-font,'Google Sans Text',sans-serif)!important}
 .nb-content-detail .detail-community-cta button{margin-left:auto;padding:10px 12px;background:#d7f261;color:#173529;font-size:11px;font-weight:800;white-space:nowrap}
-@media(max-width:1100px){.nb-content-detail .detail-nutrition{grid-template-columns:1fr}.nb-content-detail .detail-hero h1{font-size:48px}}
-@media(max-width:800px){.nb-content-detail .detail-hero{grid-template-columns:1fr}.nb-content-detail .detail-hero h1{font-size:45px}.nb-content-detail .detail-nutrition-title h2{font-size:34px}}
+@media(max-width:1100px){.nb-content-detail .detail-nutrition{grid-template-columns:1fr}.nb-content-detail .detail-hero h1{font-size:clamp(34px,4.8vw,52px)}}
+@media(max-width:800px){.nb-content-detail .detail-hero{grid-template-columns:1fr}.nb-content-detail .detail-hero h1{font-size:clamp(34px,9vw,45px)}.nb-content-detail .detail-nutrition-title h2{font-size:34px}}
