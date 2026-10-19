@@ -1,8 +1,5 @@
 import { apiRequest, unwrapData } from './apiClient';
 import { normalizePost } from './communityApi';
-import { getMockPublicProfile, getMockPublicProfileContent, getMockPublicProfileRecipes } from './mockPublicProfileData';
-
-export const isMockPublicProfileEnabled = import.meta.env.VITE_USE_MOCK_PUBLIC_PROFILE === 'true';
 
 // Backend contract (PublicUserController):
 //   GET /api/v1/users/{idOrUsername}            -> PublicUserProfileResponse (không email/health/chat)
@@ -19,7 +16,6 @@ const fetchPage = async (path, { page, size, type, signal }) => {
 };
 
 export async function getPublicProfile(userIdOrUsername, signal) {
-  if (isMockPublicProfileEnabled) return getMockPublicProfile(userIdOrUsername, signal);
   const data = unwrapData(await apiRequest(`/api/v1/users/${encodeURIComponent(userIdOrUsername)}`, { signal }), {});
   const stats = data.stats ?? {};
   const blogCount = stats.publishedBlogCount ?? 0;
@@ -41,7 +37,6 @@ export async function getPublicProfile(userIdOrUsername, signal) {
 }
 
 export async function getPublicProfileContent(userIdOrUsername, { page = 0, size = 18, signal } = {}) {
-  if (isMockPublicProfileEnabled) return getMockPublicProfileContent(userIdOrUsername, { page, size, signal });
   const path = `/api/v1/users/${encodeURIComponent(userIdOrUsername)}/posts`;
   const [blogs, videos] = await Promise.all([
     fetchPage(path, { page, size, type: 'BLOG', signal }),
@@ -54,7 +49,8 @@ export async function getPublicProfileContent(userIdOrUsername, { page = 0, size
 }
 
 export async function getPublicProfileRecipes(userIdOrUsername, { signal } = {}) {
-  if (isMockPublicProfileEnabled) return getMockPublicProfileRecipes(userIdOrUsername, { page: 0, size: 12, signal });
+  void userIdOrUsername;
+  void signal;
   // Backend chưa có endpoint public recipe theo user (recipe chỉ hiển thị qua stats verifiedRecipeCount).
-  return { recipes: [], last: true };
+  return { recipes: [], last: true, unavailable: true };
 }

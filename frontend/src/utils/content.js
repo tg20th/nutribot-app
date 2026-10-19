@@ -21,7 +21,7 @@ const tags = (item) => asArray(item.tags ?? item.categories)
 export const extractStoryText = (value) => {
   if (!value || typeof value !== 'string') return '';
   const trimmed = value.trim();
-  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+  if (trimmed.startsWith('{')) {
     try {
       const parsed = JSON.parse(trimmed);
       if (parsed && typeof parsed === 'object') {
@@ -29,13 +29,21 @@ export const extractStoryText = (value) => {
         return typeof story === 'string' ? story.trim() : '';
       }
     } catch {
-      // ignore
+      return '';
     }
   }
   return value;
 };
 
-export const cleanExcerpt = extractStoryText;
+export const cleanExcerpt = (value, maxLength) => {
+  const text = extractStoryText(value)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.!?;:])/g, '$1')
+    .trim();
+  return Number.isFinite(maxLength) ? text.slice(0, maxLength) : text;
+};
 
 // This adapter lets the UI accept different backend DTO field names.
 export function normalizeContent(item = {}, fallbackType = 'Article') {

@@ -3,9 +3,9 @@
 .nb-content-detail .detail-back{background:transparent;padding:0;border:0}
 .nb-content-detail .detail-hero{grid-template-columns:minmax(0,.93fr) minmax(0,1.07fr)}
 .nb-content-detail .detail-hero h1{font-size:64px;letter-spacing:0;overflow-wrap:anywhere}
-.nb-content-detail .detail-media{min-height:0;aspect-ratio:1/1}
-.nb-content-detail .detail-media video{display:block;width:100%;height:100%;object-fit:contain;background:#17251b}
-.nb-content-detail .detail-media:has(video):after{display:none}
+.nb-content-detail .detail-media{min-height:0;align-self:start;aspect-ratio:auto;background:transparent}
+.nb-content-detail .detail-media img{display:block;width:100%;height:auto;max-height:min(78dvh,860px);object-fit:contain;object-position:center}
+.nb-content-detail .detail-media video{position:static;display:block;width:100%;height:auto;max-height:min(78dvh,860px);object-fit:contain;background:transparent}
 .nb-content-detail .detail-nutrition{gap:40px}
 .nb-content-detail .detail-nutrition-title h2{font-size:44px;letter-spacing:0}
 .nb-content-detail .nutrition-grid b,.nb-content-detail .detail-micro-nutrition b{font-family:var(--nutribot-brand-font,'Playfair Display',Georgia,serif)!important;font-size:36px;letter-spacing:0;font-weight:500!important}

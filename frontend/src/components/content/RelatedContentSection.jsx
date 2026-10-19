@@ -2,13 +2,10 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowUpRight, BookOpen, ImageOff, PlayCircle } from 'lucide-react';
 import { getResolvedRelatedContent } from '../../services/relatedContentApi';
+import { cleanExcerpt } from '../../utils/content';
 import '../../styles/related-content.css';
 
-const excerptOf = (item) => String(item.description ?? item.caption ?? item.body ?? item.cleanBody ?? '')
-  .replace(/<[^>]*>/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim()
-  .slice(0, 130);
+const excerptOf = (item) => cleanExcerpt(item.description ?? item.caption ?? item.body ?? item.cleanBody ?? '', 130);
 
 const isVideo = (item) => String(item.contentType ?? item.type).toUpperCase() === 'VIDEO' || item.type === 'video';
 

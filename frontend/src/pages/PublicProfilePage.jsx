@@ -4,8 +4,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import MemberPageLayout from '../layouts/MemberPageLayout';
 import ImageWithFallback from '../components/ImageWithFallback';
 import DishDetailModal from '../components/community/DishDetailModal';
-import { getPublicProfile, getPublicProfileContent, getPublicProfileRecipes, isMockPublicProfileEnabled } from '../services/publicProfileApi';
-import { isMockPublicProfileRecipe } from '../services/mockPublicProfileData';
+import { getPublicProfile, getPublicProfileContent, getPublicProfileRecipes } from '../services/publicProfileApi';
 import '../styles/public-profile.css';
 import '../styles/public-profile-recipe-button.css';
 
@@ -29,6 +28,7 @@ export default function PublicProfilePage() {
   const [profile, setProfile] = useState(() => cachedView?.profile ?? null);
   const [posts, setPosts] = useState(() => cachedView?.posts ?? []);
   const [recipes, setRecipes] = useState(() => cachedView?.recipes ?? []);
+  const [recipesUnavailable, setRecipesUnavailable] = useState(() => cachedView?.recipesUnavailable ?? false);
   const [tab, setTab] = useState(() => location.state?.profileTab || cachedView?.tab || 'posts');
   const [state, setState] = useState(() => cachedView ? 'ready' : 'loading');
   const [selectedRecipe, setSelectedRecipe] = useState(null);
@@ -46,6 +46,7 @@ export default function PublicProfilePage() {
       setProfile(nextProfile);
       setPosts(content.posts);
       setRecipes(recipeData.recipes);
+      setRecipesUnavailable(Boolean(recipeData.unavailable));
       setState('ready');
     }).catch((error) => {
       if (!controller.signal.aborted) setState(error?.status === 404 ? 'not-found' : 'error');
@@ -55,11 +56,11 @@ export default function PublicProfilePage() {
 
   useEffect(() => {
     if (!profile || state !== 'ready') return undefined;
-    profileViewCache.set(String(userId), { profile, posts, recipes, tab, scrollY: window.scrollY });
+    profileViewCache.set(String(userId), { profile, posts, recipes, recipesUnavailable, tab, scrollY: window.scrollY });
     return () => {
-      profileViewCache.set(String(userId), { profile, posts, recipes, tab, scrollY: window.scrollY });
+      profileViewCache.set(String(userId), { profile, posts, recipes, recipesUnavailable, tab, scrollY: window.scrollY });
     };
-  }, [profile, posts, recipes, state, tab, userId]);
+  }, [profile, posts, recipes, recipesUnavailable, state, tab, userId]);
 
   useEffect(() => {
     if (state !== 'ready') return undefined;
@@ -75,7 +76,6 @@ export default function PublicProfilePage() {
   if (state !== 'ready') return <MemberPageLayout activePath="/home"><main className="public-profile-page public-profile-state"><h1>{state === 'not-found' ? 'Profile not found' : 'Public profile unavailable'}</h1><p>{state === 'not-found' ? 'This profile is no longer public or does not exist.' : 'The public profile service is not available yet. Please try again later.'}</p><Link to="/home">Back to community</Link></main></MemberPageLayout>;
 
   return <MemberPageLayout activePath="/home"><main className="public-profile-page">
-    {isMockPublicProfileEnabled && <div className="public-profile-preview-banner" role="status" style={{ marginBottom: 20, padding: '10px 12px', border: '1px solid #cdddbf', borderRadius: 8, background: 'var(--sage)', color: 'var(--primary)', fontSize: 11, fontWeight: 800 }}>Preview mode · showing mock public profile data</div>}
     <header className="public-profile-header">
       <ProfileAvatar profile={profile} large />
       <div className="public-profile-intro"><div className="public-profile-name-row"><div><h1>{profile.displayName || profile.username}</h1>{profile.username && <p>@{profile.username}</p>}</div></div>
@@ -86,6 +86,6 @@ export default function PublicProfilePage() {
     </header>
     <nav className="public-profile-tabs" aria-label="Profile content"><button className={tab === 'posts' ? 'is-active' : ''} onClick={() => setTab('posts')}><Grid3X3 size={16}/> Posts</button><button className={tab === 'recipes' ? 'is-active' : ''} onClick={() => setTab('recipes')}><UtensilsCrossed size={16}/> Recipes</button></nav>
     {tab === 'posts' && <><div className="public-profile-grid">{posts.map((post) => <Link key={`${post.type}-${post.id}`} to={`/community/posts/${post.id}`} state={{ returnTo: profileReturnTo, returnState: { profileTab: tab, profileScrollY: window.scrollY } }} className="public-profile-grid-item">{post.image ? <ImageWithFallback src={post.image} alt={post.title || 'Post'} loading="lazy"/> : <span>{post.title || post.caption || 'Shared post'}</span>}{post.images?.length > 1 && <small aria-label="Gallery">{post.images.length}</small>}</Link>)}</div>{!posts.length && <p className="public-profile-empty">No public posts yet.</p>}</>}
-    {tab === 'recipes' && <div className="public-profile-recipes">{recipes.map((recipe) => <button type="button" key={recipe.dishId ?? recipe.id} onClick={() => setSelectedRecipe(recipe)} className="public-profile-recipe">{(recipe.imageUrl || recipe.image) ? <ImageWithFallback src={recipe.imageUrl || recipe.image} alt={recipe.name || recipe.title || ''} loading="lazy"/> : <span className="public-profile-recipe-fallback"><UtensilsCrossed size={20}/></span>}<div><h2>{recipe.name || recipe.title}</h2>{recipe.description && <p>{recipe.description}</p>}<small>{recipe.preparationTime || recipe.prepTime || ''}{recipe.servings ? ` · Serves ${recipe.servings}` : ''}</small></div></button>)}{!recipes.length && <p className="public-profile-empty">No approved public recipes yet.</p>}</div>}
-  </main>{selectedRecipe && <DishDetailModal meal={selectedRecipe} initialDish={isMockPublicProfileRecipe(selectedRecipe.dishId ?? selectedRecipe.id) ? selectedRecipe : null} onClose={() => setSelectedRecipe(null)}/>}</MemberPageLayout>;
+    {tab === 'recipes' && <div className="public-profile-recipes">{recipes.map((recipe) => <button type="button" key={recipe.dishId ?? recipe.id} onClick={() => setSelectedRecipe(recipe)} className="public-profile-recipe">{(recipe.imageUrl || recipe.image) ? <ImageWithFallback src={recipe.imageUrl || recipe.image} alt={recipe.name || recipe.title || ''} loading="lazy"/> : <span className="public-profile-recipe-fallback"><UtensilsCrossed size={20}/></span>}<div><h2>{recipe.name || recipe.title}</h2>{recipe.description && <p>{recipe.description}</p>}<small>{recipe.preparationTime || recipe.prepTime || ''}{recipe.servings ? ` · Serves ${recipe.servings}` : ''}</small></div></button>)}{!recipes.length && <p className="public-profile-empty">{recipesUnavailable ? 'Public recipes are not available yet.' : 'No approved public recipes yet.'}</p>}</div>}
+  </main>{selectedRecipe && <DishDetailModal meal={selectedRecipe} onClose={() => setSelectedRecipe(null)}/>}</MemberPageLayout>;
 }
