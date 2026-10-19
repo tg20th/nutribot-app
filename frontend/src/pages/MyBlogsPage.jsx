@@ -5,6 +5,7 @@ import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import { deleteMyBlog, deleteMyVideo, getBlogCategories, getMyBlog, getMyBlogs, getMyVideo, getMyVideos, recallAuthorContent, submitAuthorContent, updateMyBlog, updateMyVideo } from '../services/authorBlogApi';
+import { useToast } from '../components/notifications/ToastProvider';
 import '../styles/my-blogs.css';
 
 const PAGE_SIZE = 6;
@@ -233,6 +234,7 @@ function DeleteContentDialog({ item, config, onClose, onDeleted }) {
 }
 
 export default function MyBlogsPage() {
+  const { toast } = useToast();
   const location = useLocation();
   const config = CONTENT_TYPES.blog;
   const Icon = FileText;
@@ -284,10 +286,11 @@ export default function MyBlogsPage() {
   }, [location.state]);
 
   useEffect(() => {
-    if (!notice) return undefined;
-    const timeout = window.setTimeout(() => setNotice(''), 5000);
-    return () => window.clearTimeout(timeout);
-  }, [notice]);
+    if (!notice) return;
+    const rejected = /rejected|từ chối|không thể|cannot|could not|error/i.test(notice);
+    const pending = /under review|chờ|kiểm duyệt/i.test(notice);
+    toast[rejected ? 'error' : pending ? 'info' : 'success'](notice);
+  }, [notice, toast]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -455,7 +458,6 @@ export default function MyBlogsPage() {
 
         <section className="my-blogs-collection" aria-labelledby="my-blogs-list-title" aria-busy={loading}>
           <div className="my-blogs-list-heading"><h2 id="my-blogs-list-title" ref={headingRef} tabIndex={-1}>Your posts {!loading && !error && <span>{displayedContent.length}</span>}</h2><Link className="my-blog-button" to="/community/blogs/new">Create post</Link></div>
-          {notice && <div className="my-blogs-alert" role="status"><CheckCircle2 size={18}/><span>{notice}</span><button className="my-blog-icon-button" aria-label="Dismiss notification" onClick={() => setNotice('')}><X size={16}/></button></div>}
           {loading ? <div className="my-blogs-state" role="status"><LoaderCircle className="my-blogs-spinner" size={28}/><h3>Gathering your content...</h3><p>Your blogs and videos will be ready in a moment.</p></div>
             : error ? <div className="my-blogs-state"><RequestError error={error} type="content" fallback="We couldn't load your content. Please try again."/><button className="my-blog-button" onClick={() => setRevision((value) => value + 1)}>Try again</button></div>
               : !displayedContent.length ? <div className="my-blogs-state"><span className="my-blogs-empty-icon"><Icon size={32}/></span><p className="my-blogs-eyebrow">A FRESH PAGE</p><h3>{statusFilter === 'all' ? 'Your first post starts here.' : `No posts in ${statuses[statusFilter] || statusFilter}.`}</h3><p>{statusFilter === 'all' ? 'Share a recipe, note, story, or helpful video with the community.' : 'You have no posts matching this filter.'}</p><Link className="my-blog-button" to="/community/blogs/new">Create post <ArrowUpRight size={16}/></Link></div>

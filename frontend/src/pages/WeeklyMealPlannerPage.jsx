@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, Download, Info, Loader2, Plus, RefreshCw, Repeat2, Save, Sparkles, Trash2, WifiOff, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Download, Info, Loader2, Plus, RefreshCw, Repeat2, Save, Sparkles, Trash2, X } from 'lucide-react';
 import MemberPageLayout from '../layouts/MemberPageLayout';
 import MealEditorDialog from '../components/community/MealEditorDialog';
 import DishDetailModal from '../components/community/DishDetailModal';
 import MenuPreviewModal from '../components/menu/MenuPreviewModal';
 import ImageWithFallback from '../components/ImageWithFallback';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
+import { useToast } from '../components/notifications/ToastProvider';
 import freshProduce from '../assets/fresh-produce.jpg';
 import { getAllergyIngredients, getHealthProfile, getMyProfile } from '../services/profileApi';
 import { getDishCompatibilityDetails } from '../services/dishService';
@@ -69,6 +70,7 @@ const menuPayload = (menu) => ({
 });
 
 export default function WeeklyMealPlannerPage() {
+  const { toast } = useToast();
   const page = useRef(null);
   const [communityUser, setCommunityUser] = useState({});
   const [plannerProfile, setPlannerProfile] = useState(null);
@@ -99,6 +101,7 @@ export default function WeeklyMealPlannerPage() {
   const [aiSaveError, setAiSaveError] = useState('');
   const aiSaveRequest = useRef(false);
   const [notice, setNotice] = useState(null);
+  const saveToastId = useRef(null);
   const [selectedDayIndex, setSelectedDayIndex] = useState(() => selectedIndexForWeek(toIsoDate(startOfWeek())));
   const [viewMode, setViewMode] = useState('day');
   const [collapsedSlots, setCollapsedSlots] = useState({});
@@ -188,16 +191,23 @@ export default function WeeklyMealPlannerPage() {
   }, [loading, menu, weekStart]);
 
   useEffect(() => {
-    if (!notice || notice.type === 'saving') return undefined;
-    const timer = window.setTimeout(() => setNotice(null), 3600);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
+    if (notice?.type === 'saving') {
+      if (!saveToastId.current) saveToastId.current = toast.loading(notice.text);
+      else toast.update(saveToastId.current, { type: 'loading', message: notice.text });
+      return;
+    }
+    if (notice) {
+      const type = notice.type === 'offline' ? 'warning' : notice.type === 'error' ? 'error' : 'success';
+      if (saveToastId.current) {
+        toast.update(saveToastId.current, { type, message: notice.text });
+        saveToastId.current = null;
+      } else toast[type](notice.text);
+    }
+  }, [notice, toast]);
 
   useEffect(() => {
-    if (!dishError) return undefined;
-    const timer = window.setTimeout(() => setDishError(false), 3600);
-    return () => window.clearTimeout(timer);
-  }, [dishError]);
+    if (dishError) toast.error('The dish catalog is unavailable, so a dish cannot be added yet.');
+  }, [dishError, toast]);
 
   useGSAP(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
@@ -306,7 +316,7 @@ export default function WeeklyMealPlannerPage() {
       setNotice({ type: 'success', text: `Added ${newMeal.name} in ${dayLabel}.` });
     } catch (error) {
       await loadWeek(weekStart);
-      setNotice({ type: 'error', text: error?.message || 'The backend rejected this dish. Your week was synchronized.' });
+      setNotice({ type: 'error', text: error?.message || 'The backend rejected this dish. Your week was not synchronized.' });
     }
   };
 
@@ -338,11 +348,11 @@ export default function WeeklyMealPlannerPage() {
           }
         }
         await loadWeek(weekStart);
-        if (failures.length) setNotice({ type: 'error', text: `${selectedDishes.length - failures.length} dish(es) added. ${failures.length} could not be saved; the week was synchronized.` });
+        if (failures.length) setNotice({ type: 'error', text: `${selectedDishes.length - failures.length} dish(es) added. ${failures.length} could not be saved; the week was not fully synchronized.` });
         else setNotice({ type: 'success', text: `Added ${selectedDishes.length} dishes in ${editor.day.label}.` });
       } catch (error) {
         await loadWeek(weekStart);
-        setNotice({ type: 'error', text: error?.message || 'The backend could not save the selected dishes. The week was synchronized.' });
+        setNotice({ type: 'error', text: error?.message || 'The backend could not save the selected dishes. Your week was not synchronized.' });
       }
       return;
     }
@@ -406,7 +416,7 @@ export default function WeeklyMealPlannerPage() {
       setNotice({ type: 'success', text: `Replaced ${dish.name} in ${editor.day.label}.` });
     } catch (error) {
       await loadWeek(weekStart);
-      setNotice({ type: 'error', text: error?.message || 'The backend rejected this dish. Your week was synchronized.' });
+      setNotice({ type: 'error', text: error?.message || 'The backend rejected this dish. Your week was not synchronized.' });
     }
   };
 
@@ -701,12 +711,6 @@ export default function WeeklyMealPlannerPage() {
           </header>
 
           {generatingPlan && !showRegenerateConfirm && <div className="planner-toast is-saving" role="status" aria-live="polite"><Loader2 size={15} className="is-spinning"/><span>Generating your AI meal plan...</span></div>}
-          {notice && <div className={`planner-toast is-${notice.type}`} role={notice.type === 'offline' ? 'alert' : 'status'}>
-            {notice.type === 'offline' ? <WifiOff size={15}/> : notice.type === 'saving' ? <Loader2 size={15} className="is-spinning"/> : <CheckCircle2 size={15}/>}
-            <span>{notice.text}</span><button type="button" onClick={() => setNotice(null)} aria-label="Dismiss message"><X size={14}/></button>
-          </div>}
-          {dishError && <div className="planner-toast is-offline" role="alert"><WifiOff size={15}/><span>The dish catalog is unavailable, so a dish cannot be added yet.</span><button type="button" onClick={() => setDishError(false)} aria-label="Dismiss message"><X size={14}/></button></div>}
-
           {false && <><div className="planner-content-heading">
             <div><span>Your menu</span><h2>Meals with room to move.</h2></div>
             <p>{['Add,', 'swap,', 'and shape this week your way.'].map((word) => <span className="planner-scrub-word" key={word}>{word} </span>)}</p>

@@ -40,6 +40,17 @@ function syncSearchViewSnapshot(returnTo, post) {
   }
 }
 
+function formatPublicationDate(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+}
+
+function storyParagraphs(value) {
+  return String(value || '').split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
+}
+
 export default function CommunityContentDetailPage() {
   const { postId } = useParams();
   const location = useLocation();
@@ -65,6 +76,7 @@ export default function CommunityContentDetailPage() {
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [videoStarted, setVideoStarted] = useState(false);
+  const [storyExpanded, setStoryExpanded] = useState(false);
   const page = useRef(null);
   const [query, setQuery] = useState('');
 
@@ -97,6 +109,10 @@ export default function CommunityContentDetailPage() {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [postId]);
 
+  useEffect(() => {
+    setStoryExpanded(false);
+  }, [postId]);
+
   useGSAP(() => { if (post) gsap.from('.detail-reveal', { y: 26, opacity: 0, duration: .8, stagger: .1, ease: 'power3.out' }); }, { scope: page, dependencies: [post] });
 
   if (!post) return <div className="community-page community-detail-page">
@@ -109,6 +125,12 @@ export default function CommunityContentDetailPage() {
   </div>;
 
   const image = post.type === 'gallery' ? post.images[0] : post.image;
+  const story = extractStoryText(post.story || post.cleanBody || post.body || post.description).trim();
+  const isLongStory = story.length > 420;
+  const storyPreview = isLongStory && !storyExpanded
+    ? `${story.slice(0, 420).replace(/\s+\S*$/, '')}…`
+    : story;
+  const publicationDate = formatPublicationDate(post.createdAt);
   const nutrition = post.nutrition ?? { carbs: '—', fat: '—', fiber: '—', sodium: '—' };
 
   const returnState = location.state?.returnState
@@ -135,7 +157,7 @@ export default function CommunityContentDetailPage() {
         <Link className="detail-back detail-reveal" to={returnTo} state={returnState}><ArrowLeft size={16}/>{isMyContentReturn ? 'Back to my content' : isSearchReturn ? 'Back to search results' : isProfileReturn ? 'Back to profile' : isRelatedDetailReturn ? 'Back to content' : 'Back to home'}</Link>
         <section className="detail-hero detail-reveal">
 
-          <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1>{post.description && post.description !== (post.cleanBody || post.body) && <p>{extractStoryText(post.description)}</p>}<div className="detail-author"><UserProfileLink userId={post.authorId} aria-label={`Open ${post.author || 'author'} profile`}>{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}</UserProfileLink><div><UserProfileLink userId={post.authorId}><b>{post.author}</b></UserProfileLink><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></div></div></div>
+          <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1>{story && <div className="detail-hero-story"><div className="detail-story-divider" aria-hidden="true"/>{storyParagraphs(storyPreview).map((paragraph, index) => <p key={index}>{paragraph}</p>)}{isLongStory && <button type="button" className="detail-story-toggle" onClick={() => setStoryExpanded((expanded) => !expanded)}>{storyExpanded ? 'Show less' : 'Read more'}</button>}</div>}<div className="detail-author"><UserProfileLink userId={post.authorId} aria-label={`Open ${post.author || 'author'} profile`}>{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}</UserProfileLink><div><UserProfileLink userId={post.authorId}><b>{post.author}</b></UserProfileLink><small>{[post.username, publicationDate].filter(Boolean).join(' · ')}</small></div></div></div>
           <div className="detail-media">
             {post.type === 'video' && post.videoUrl && videoStarted
               ? <video controls autoPlay playsInline preload="metadata" src={post.videoUrl} poster={image || undefined} aria-label={post.title}/>
@@ -150,15 +172,7 @@ export default function CommunityContentDetailPage() {
           <article className="detail-ingredients"><div className="detail-section-head"><span>What you need</span><h2>Ingredients</h2><small>Serves {post.servings}</small></div><ul>{(post.pantryItems ?? ['Ingredients will be shared soon.']).map((item, index) => <li key={item}><i>{String(index + 1).padStart(2, '0')}</i>{item}</li>)}</ul><div className="detail-micro-nutrition"><span>Fiber <b>{nutrition.fiber}</b></span><span>Sodium <b>{nutrition.sodium}</b></span></div></article>
           <article className="detail-method"><div className="detail-section-head"><span>Make it yours</span><h2>Method</h2><small>{post.prepTime} prep · {post.cookTime} cook</small></div><ol>{(post.steps ?? []).map((step, index) => <li key={step}><b>{index + 1}</b><p>{step}</p></li>)}</ol></article>
         </section>
-        <article className="nb-content-body detail-reveal">
-          <div className="detail-section-head"><h2>{post.type === 'video' ? 'About this video' : 'The story'}</h2></div>
-          {String(extractStoryText(post.cleanBody || post.body || post.description) || 'No detail content has been added yet.')
-            .split(/\n\n+/)
-            .filter(Boolean)
-            .map((paragraph, index) => (
-              <p key={index}>{paragraph}</p>
-            ))}
-        </article>
+        <div className="detail-related-divider" aria-hidden="true"/>
         <RelatedContentSection contentId={post.id} contentType={post.type}/>
         <RestaurantRecommendations dishName={post.title}/>
         <section className="detail-actions detail-reveal"><VoteButton contentId={post.id}/></section>

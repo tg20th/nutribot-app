@@ -7,7 +7,6 @@ import {
   ArrowRight,
   Camera,
   CalendarDays,
-  Check,
   ChevronDown,
   Eye,
   EyeOff,
@@ -26,6 +25,7 @@ import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import AuthModal from '../components/AuthModal';
+import { useToast } from '../components/notifications/ToastProvider';
 import { changeMyPassword, deleteMyAvatar, getMyProfile, updateMyAvatar, updateMyProfile, verifyMyEmailChange } from '../services/profileApi';
 import { getCurrentUserFromToken } from '../utils/auth';
 import freshProduce from '../assets/fresh-produce.jpg';
@@ -145,6 +145,7 @@ const validatePasswordChange = (passwords, hasExistingPassword = true) => {
 };
 
 export default function ProfilePage() {
+  const { toast } = useToast();
   const pageRef = useRef(null);
   const avatarInputRef = useRef(null);
   const savingRef = useRef(false);
@@ -208,10 +209,9 @@ export default function ProfilePage() {
   }, [avatarPreview]);
 
   useEffect(() => {
-    if (!notice) return undefined;
-    const timeoutId = window.setTimeout(() => setNotice((current) => current === notice ? null : current), 3500);
-    return () => window.clearTimeout(timeoutId);
-  }, [notice]);
+    if (!notice) return;
+    toast[notice.type === 'error' ? 'error' : notice.type === 'info' ? 'info' : 'success'](notice.message);
+  }, [notice, toast]);
 
   useGSAP(() => {
     const media = gsap.matchMedia();
@@ -492,14 +492,6 @@ export default function ProfilePage() {
             </button>
             <input ref={avatarInputRef} className="nb-profile-avatar-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarChange} tabIndex={-1} />
           </section>
-
-          {notice && (
-            <div className={`nb-profile-notice nb-profile-notice--${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>
-              {notice.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
-              <span>{notice.message}</span>
-              <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss notification"><X size={16} /></button>
-            </div>
-          )}
 
           <div className="nb-profile-grid">
             <form className="nb-profile-form" onSubmit={handleSubmit} noValidate>

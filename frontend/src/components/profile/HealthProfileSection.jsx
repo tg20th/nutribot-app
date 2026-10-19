@@ -1,6 +1,5 @@
 import {
   Activity,
-  AlertCircle,
   Check,
   CheckCircle2,
   ChevronDown,
@@ -15,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getAllergyIngredients, getHealthProfile, updateHealthProfile } from '../../services/profileApi';
+import { useToast } from '../notifications/ToastProvider';
 
 const EMPTY_HEALTH = {
   heightCm: '',
@@ -79,6 +79,7 @@ const validate = (health) => {
 };
 
 export default function HealthProfileSection() {
+  const { toast } = useToast();
   const savingRef = useRef(false);
   const [health, setHealth] = useState(EMPTY_HEALTH);
   const [savedHealth, setSavedHealth] = useState(EMPTY_HEALTH);
@@ -116,10 +117,9 @@ export default function HealthProfileSection() {
   }, []);
 
   useEffect(() => {
-    if (!notice) return undefined;
-    const timeoutId = window.setTimeout(() => setNotice((current) => current === notice ? null : current), 3500);
-    return () => window.clearTimeout(timeoutId);
-  }, [notice]);
+    if (!notice) return;
+    toast[notice.type === 'error' ? 'error' : 'success'](notice.message);
+  }, [notice, toast]);
 
   const isDirty = JSON.stringify(health) !== JSON.stringify(savedHealth);
   const bmi = isDirty ? calculateBmi(health.heightCm, health.weightKg) : savedBmi;
@@ -213,14 +213,6 @@ export default function HealthProfileSection() {
 
   return (
     <form className="health-profile-section" onSubmit={submit} noValidate>
-      {notice && (
-        <div className={`health-notice health-notice--${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>
-          {notice.type === 'success' ? <Check size={18} /> : <AlertCircle size={18} />}
-          <span>{notice.message}</span>
-          <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss notification"><X size={16} /></button>
-        </div>
-      )}
-
       <div className="health-bento">
         <section className="health-card health-metrics-card" aria-labelledby="body-metrics-title">
           <header>
