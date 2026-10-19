@@ -67,6 +67,11 @@ export async function getDishDetail(dishId, signal) {
     prepTimeMinutes: recipe.prepTimeMin ?? null,
     cookTimeMinutes: recipe.cookTimeMin ?? null,
     ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
-    steps: normalizeCookingSteps(recipe.steps ?? recipe.instructions)
+    steps: normalizeCookingSteps(recipe.steps ?? recipe.instructions),
+    // NB-80: Attribution — công thức import từ bài post cộng đồng đã đồng thuận
+    sourceAuthorId: recipe.sourceAuthorId ?? null,
+    sourceAuthorName: recipe.sourceAuthorName ?? null,
+    sourceAuthorAvatar: recipe.sourceAuthorAvatar ?? null,
+    sourceContentId: recipe.sourceContentId ?? null
   };
 }
