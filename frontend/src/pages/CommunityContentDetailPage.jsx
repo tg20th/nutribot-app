@@ -14,8 +14,6 @@ import { getPost, normalizePost } from '../services/communityApi';
 import { getMyBlog, getMyVideo } from '../services/authorBlogApi';
 import { extractStoryText } from '../utils/content';
 import UserProfileLink from '../components/UserProfileLink';
-import { isMockPublicProfileEnabled } from '../services/publicProfileApi';
-import { getMockPost, isMockPublicProfilePost } from '../services/mockPublicProfileData';
 
 function loadMyContent(postId, contentType, signal) {
   const request = String(contentType).toLowerCase() === 'video'
@@ -78,9 +76,7 @@ export default function CommunityContentDetailPage() {
     // StrictMode mounts effects twice in development. Deferring the request lets
     // its first cleanup cancel the simulated mount before a view can be counted.
     const timer = window.setTimeout(() => {
-      const loadPost = isMockPublicProfileEnabled && isMockPublicProfilePost(postId)
-        ? getMockPost(postId, controller.signal)
-        : isMyContentSource
+      const loadPost = isMyContentSource
         ? loadMyContent(postId, sourceContentType, controller.signal)
         : getPost(postId, controller.signal);
       loadPost.then((item) => {

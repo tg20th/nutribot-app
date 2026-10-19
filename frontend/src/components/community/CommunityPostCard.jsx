@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import ImageWithFallback from '../ImageWithFallback';
 import PostDiscussionModal from '../content/PostDiscussionModal';
 import VoteButton from '../content/VoteButton';
-import { formatPostDate, extractStoryText } from '../../utils/content';
+import { cleanExcerpt, formatPostDate } from '../../utils/content';
 import { getContentCommentCount } from '../../services/contentInteractionApi';
 import UserProfileLink from '../UserProfileLink';
 
@@ -21,7 +21,7 @@ export default function CommunityPostCard({ post: sourcePost, interactionApi = {
   const [commentCount, setCommentCount] = useState(post.comments);
   const images = post.type === 'gallery' ? post.images : [post.image];
   const rawCaption = firstPresent(post.caption, post.story, post.description, post.summary, typeof post.content === 'string' ? post.content : null, post.cleanBody);
-  const caption = String(extractStoryText(rawCaption) ?? '').trim();
+  const caption = cleanExcerpt(rawCaption);
   const captionPreviewLength = 280;
   const captionIsLong = caption.length > captionPreviewLength;
   useEffect(() => {

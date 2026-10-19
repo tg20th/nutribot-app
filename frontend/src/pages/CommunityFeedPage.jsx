@@ -13,6 +13,7 @@ import CreateBlogPage from './CreateBlogPage';
 import { appendUniquePersonalizedPosts, getCommunityFilters, getPersonalizedPostsPage, getPost, prioritizePersonalizedPost } from '../services/communityApi';
 import { getMyProfile } from '../services/profileApi';
 import { captureFeedAnchor, clearFeedSnapshots, completeFeedPageLoad, feedSnapshotKey, getActiveFeedSnapshot, getFeedSnapshot, isFeedRequestCurrent, prepareFeedCacheForPageLoad, refreshFeedSnapshot, restoreFeedAnchor, saveActiveFeedSnapshot } from '../services/feedStateCache';
+import { cleanExcerpt } from '../utils/content';
 
 function postKey(post) {
   return `${post.type ?? 'POST'}:${post.id ?? post.slug ?? post.title}`;
@@ -293,7 +294,7 @@ export default function CommunityFeedPage() {
             <div className="feed-intro-actions"><button type="button" onClick={openComposer}>Share a bite <ArrowUpRight size={17}/></button>{discoverPosts.length === 2 && <a href="#discover">Explore picks <Sparkles size={16}/></a>}</div>
           </section>
           {discoverPosts.length === 2 && <section className="feed-discover" id="discover" aria-label="Featured food stories">
-            <article className="discover-feature group" role="link" tabIndex="0" aria-label={`Watch ${discoverPosts[0].title}`} onClick={() => openPost(discoverPosts[0].id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPost(discoverPosts[0].id); } }}><img src={discoverPosts[0].image} alt={discoverPosts[0].title}/><div><span><Play size={13} fill="currentColor"/> Watch now</span><h2>{discoverPosts[0].title}</h2><p>{discoverPosts[0].description}</p>{discoverPosts[0].description?.length > 160 && <button type="button" onClick={(event) => { event.stopPropagation(); openPost(discoverPosts[0].id); }}>See more</button>}</div></article>
+            <article className="discover-feature group" role="link" tabIndex="0" aria-label={`Watch ${discoverPosts[0].title}`} onClick={() => openPost(discoverPosts[0].id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPost(discoverPosts[0].id); } }}><img src={discoverPosts[0].image} alt={discoverPosts[0].title}/><div><span><Play size={13} fill="currentColor"/> Watch now</span><h2>{discoverPosts[0].title}</h2><p>{cleanExcerpt(discoverPosts[0].description)}</p>{cleanExcerpt(discoverPosts[0].description).length > 160 && <button type="button" onClick={(event) => { event.stopPropagation(); openPost(discoverPosts[0].id); }}>See more</button>}</div></article>
             <article className="discover-note"><span>Today&apos;s mood</span><b>Bright,<br/>fresh,<br/>uncomplicated.</b><small>Curated for your table</small></article>
             <article className="discover-feature discover-feature--small group" role="link" tabIndex="0" aria-label={`Read ${discoverPosts[1].title}`} onClick={() => openPost(discoverPosts[1].id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openPost(discoverPosts[1].id); } }}><img src={discoverPosts[1].image} alt={discoverPosts[1].title}/><div><span>READ &amp; SAVE</span><h2>{discoverPosts[1].title}</h2></div></article>
           </section>}
