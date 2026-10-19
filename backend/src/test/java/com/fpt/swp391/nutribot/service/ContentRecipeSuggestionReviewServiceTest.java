@@ -107,6 +107,7 @@ class ContentRecipeSuggestionReviewServiceTest {
                 .status("published")
                 .thumbnailUrl("https://img.nutribot.test/bun-gao-lut.jpg")
                 .viewCount(1800)
+                .recipeConsent(true)
                 .build();
     }
 
@@ -241,6 +242,9 @@ class ContentRecipeSuggestionReviewServiceTest {
         assertEquals("verified", recipeCaptor.getValue().getStatus());
         assertEquals(1, recipeCaptor.getValue().getCreatedBy());
         assertEquals("Ngâm bún\nÁp chảo", recipeCaptor.getValue().getInstructions());
+        // NB-80: Recipe import từ cộng đồng phải ghi nguồn gốc tác giả
+        assertEquals(9, recipeCaptor.getValue().getSourceUserId());
+        assertEquals(82, recipeCaptor.getValue().getSourceContentId());
 
         ArgumentCaptor<RecipeIngredient> riCaptor = ArgumentCaptor.forClass(RecipeIngredient.class);
         verify(recipeIngredientRepository).save(riCaptor.capture());
@@ -383,5 +387,47 @@ class ContentRecipeSuggestionReviewServiceTest {
         assertThrows(BadRequestException.class,
                 () -> service.review(700, request("APPROVE", null), "admin"));
         verify(dishRepository, never()).save(any(Dish.class));
+    }
+
+    @Test
+    @DisplayName("NB-80: Approve bị chặn khi tác giả đã gỡ đồng thuận dùng công thức")
+    void review_approve_consentRevoked_badRequest() {
+        Content content = content(20);
+        content.setRecipeConsent(false);
+        content.setRecipeConsentAt(null);
+        content.setRecipeConsentTermsVersion(null);
+        ContentRecipeSuggestion suggestion = pendingSuggestion(content);
+
+        when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
+        when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
+
+        assertThrows(BadRequestException.class,
+                () -> service.review(700, request("APPROVE", null), "admin"));
+        verify(dishRepository, never()).save(any(Dish.class));
+        verify(recipeRepository, never()).save(any(Recipe.class));
+        assertEquals("PENDING", suggestion.getStatus());
+    }
+
+    @Test
+    @DisplayName("NB-80: Response chứa trạng thái đồng thuận của nội dung nguồn")
+    void list_includesConsentInfo() {
+        Content content = content(20);
+        content.setRecipeConsentAt(java.time.LocalDateTime.of(2026, 10, 10, 8, 0));
+        content.setRecipeConsentTermsVersion("v1");
+        ContentRecipeSuggestion approved = pendingSuggestion(content);
+        approved.setStatus("APPROVED");
+        approved.setReviewedBy(1);
+
+        when(suggestionRepository.findAllWithContent(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(approved)));
+        when(userRepository.findAllById(anyCollection())).thenReturn(List.of(admin()));
+
+        PagedResponse<ContentRecipeSuggestionResponse> result = service.list(null, 0, 10);
+
+        ContentRecipeSuggestionResponse.SourceContent source = result.getContent().get(0).getSourceContent();
+        assertEquals(Boolean.TRUE, source.getRecipeConsent());
+        assertEquals("v1", source.getRecipeConsentTermsVersion());
+        assertNotNull(source.getRecipeConsentAt());
     }
 }

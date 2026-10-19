@@ -63,4 +63,21 @@ public class AuthorContentResponse {
 
     @JsonProperty("updatedAt")
     private LocalDateTime updatedAt;
+
+    @JsonProperty("recipeConsent")
+    private Boolean recipeConsent;
+
+    @JsonProperty("recipeConsentAt")
+    private LocalDateTime recipeConsentAt;
+
+    @JsonProperty("recipeConsentTermsVersion")
+    private String recipeConsentTermsVersion;
+
+    /** NB-80: Bài đã đồng thuận ĐANG đủ điều kiện đề xuất công thức (đủ view/vote, chưa có suggestion). */
+    @JsonProperty("recipeConsentEligible")
+    private Boolean recipeConsentEligible;
+
+    /** NB-80: Thông báo hướng dẫn cho tác giả sau khi nộp bài có đồng thuận. */
+    @JsonProperty("recipeConsentMessage")
+    private String recipeConsentMessage;
 }

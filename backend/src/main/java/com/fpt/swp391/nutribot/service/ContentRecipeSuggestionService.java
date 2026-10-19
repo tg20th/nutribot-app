@@ -113,6 +113,12 @@ public class ContentRecipeSuggestionService {
             return false;
         }
 
+        // NB-80: Tác giả chưa đồng thuận dùng công thức -> không tạo suggestion
+        if (!Boolean.TRUE.equals(content.getRecipeConsent())) {
+            log.debug("Bỏ qua suggestion cho content {}: tác giả chưa đồng thuận dùng công thức", content.getContentId());
+            return false;
+        }
+
         Integer contentId = content.getContentId();
         long voteCount = voteRepository.countByContentId(contentId);
         if (voteCount < minVotes) {
@@ -150,6 +156,38 @@ public class ContentRecipeSuggestionService {
             log.debug("Bỏ qua tạo trùng suggestion cho content {}: {}", contentId, ex.getMessage());
             return false;
         }
+    }
+
+    /**
+     * NB-80: Kiểm tra điều kiện đề xuất TẠI THỜI ĐIỂM NỘP BÀI.
+     * Khác {@link #isEligibleContent(Content)}, không yêu cầu trạng thái published
+     * (bài vừa nộp đang ở ai_processing/under_review) — chỉ xét các điều kiện
+     * người dùng có thể đạt: đã đồng thuận + đủ lượt xem + đủ đánh giá + chưa có
+     * suggestion đang hoạt động trong hệ thống.
+     */
+    public boolean isConsentEligibleNow(Content content) {
+        if (!enabled || content == null) {
+            return false;
+        }
+        if (!Boolean.TRUE.equals(content.getRecipeConsent())) {
+            return false;
+        }
+        int views = content.getViewCount() == null ? 0 : content.getViewCount();
+        if (views < minViews) {
+            return false;
+        }
+        if (voteRepository.countByContentId(content.getContentId()) < minVotes) {
+            return false;
+        }
+        return !suggestionRepository.existsByContentContentIdAndStatusIn(content.getContentId(), ACTIVE_STATUSES);
+    }
+
+    public int getMinViews() {
+        return minViews;
+    }
+
+    public int getMinVotes() {
+        return minVotes;
     }
 
     private boolean isEligibleContent(Content content) {

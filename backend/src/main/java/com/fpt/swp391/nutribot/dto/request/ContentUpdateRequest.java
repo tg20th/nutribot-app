@@ -25,4 +25,8 @@ public class ContentUpdateRequest {
     private Integer durationSec;
 
     private String status;
+
+    private Boolean recipeConsent;
+
+    private String recipeConsentTermsVersion;
 }

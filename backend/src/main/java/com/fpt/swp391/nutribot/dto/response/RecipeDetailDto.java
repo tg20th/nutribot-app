@@ -21,4 +21,8 @@ public class RecipeDetailDto {
     private Integer prepTimeMin;
     private Integer cookTimeMin;
     private List<IngredientDetailDto> ingredients;
+    private Integer sourceAuthorId;
+    private String sourceAuthorName;
+    private String sourceAuthorAvatar;
+    private Integer sourceContentId;
 }

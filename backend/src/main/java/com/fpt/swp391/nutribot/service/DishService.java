@@ -7,11 +7,13 @@ import com.fpt.swp391.nutribot.entity.Dish;
 import com.fpt.swp391.nutribot.entity.Ingredient;
 import com.fpt.swp391.nutribot.entity.Recipe;
 import com.fpt.swp391.nutribot.entity.RecipeIngredient;
+import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.DishRepository;
 import com.fpt.swp391.nutribot.repository.IngredientRepository;
 import com.fpt.swp391.nutribot.repository.RecipeIngredientRepository;
 import com.fpt.swp391.nutribot.repository.RecipeRepository;
+import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +31,7 @@ public class DishService {
     private final RecipeRepository recipeRepository;
     private final RecipeIngredientRepository recipeIngredientRepository;
     private final IngredientRepository ingredientRepository;
+    private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
     public DishDetailResponse getDishDetail(Integer dishId) {
@@ -60,6 +63,11 @@ public class DishService {
                         .toList();
             }
 
+            // NB-80: Attribution — hiển thị tác giả community khi recipe import từ bài post đã đồng thuận
+            User sourceAuthor = recipe.getSourceUserId() == null
+                    ? null
+                    : userRepository.findById(recipe.getSourceUserId()).orElse(null);
+
             recipeDto = RecipeDetailDto.builder()
                     .recipeId(recipe.getRecipeId())
                     .title(recipe.getTitle())
@@ -69,6 +77,10 @@ public class DishService {
                     .prepTimeMin(recipe.getPrepTimeMin())
                     .cookTimeMin(recipe.getCookTimeMin())
                     .ingredients(ingredientDtos)
+                    .sourceAuthorId(sourceAuthor != null ? sourceAuthor.getUserId() : null)
+                    .sourceAuthorName(sourceAuthor != null ? displayName(sourceAuthor) : null)
+                    .sourceAuthorAvatar(sourceAuthor != null ? sourceAuthor.getAvatarUrl() : null)
+                    .sourceContentId(recipe.getSourceContentId())
                     .build();
         }
 
@@ -86,5 +98,15 @@ public class DishService {
                 .vegetarianType(dish.getVegetarianType())
                 .recipe(recipeDto)
                 .build();
+    }
+
+    /** NB-80: Ưu tiên fullName, fallback username. */
+    private String displayName(User user) {
+        if (user == null) {
+            return null;
+        }
+        return user.getFullName() != null && !user.getFullName().isBlank()
+                ? user.getFullName()
+                : user.getUsername();
     }
 }

@@ -2,11 +2,13 @@ package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.event.ContentModerationRequestedEvent;
+import com.fpt.swp391.nutribot.event.ContentPublishedEvent;
 import com.fpt.swp391.nutribot.repository.CategoryRepository;
 import com.fpt.swp391.nutribot.repository.ContentModerationRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -40,6 +42,7 @@ public class ContentModerationListener {
     private final ContentModerationGatewayService contentModerationGatewayService;
     private final ContentModerationRepository contentModerationRepository;
     private final CategoryRepository categoryRepository;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     /**
      * Chạy bất đồng bộ SAU KHI transaction commit thành công (không rollback listener nếu fail).
@@ -94,6 +97,10 @@ public class ContentModerationListener {
         if (isApproved) {
             content.setStatus(AuthorContentService.STATUS_PUBLISHED);
             log.info("Content {} auto-approved by AI", contentId);
+            // NB-80: Phát ContentPublishedEvent như AdminModerationService để
+            // ContentRecipeSuggestionListener đánh giá tạo suggestion ngay lập tức
+            // (không phải chờ sweep job 10 phút).
+            applicationEventPublisher.publishEvent(new ContentPublishedEvent(contentId));
         } else {
             content.setStatus(AuthorContentService.STATUS_UNDER_REVIEW);
             log.info("Content {} chuyển sang hàng đợi Admin duyệt (AI decision: {}, reason: {})",

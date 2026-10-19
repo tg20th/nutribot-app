@@ -41,6 +41,9 @@ public class ContentRecipeSuggestionResponse {
         private Integer voteCount;
         private LocalDateTime createdAt;
         private String url;
+        private Boolean recipeConsent;
+        private LocalDateTime recipeConsentAt;
+        private String recipeConsentTermsVersion;
     }
 
     @Data
