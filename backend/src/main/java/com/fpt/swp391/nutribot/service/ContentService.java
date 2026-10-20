@@ -26,6 +26,14 @@ public class ContentService {
     private static final String VIDEO_TYPE = "VIDEO";
     private static final String PUBLISHED_STATUS = "published";
 
+    @Transactional(readOnly = true)
+    public List<CommunityHighlightResponse> getCommunityHighlights(int limit) {
+        int safeLimit = Math.max(1, Math.min(3, limit));
+        return contentRepository.findCommunityHighlights(
+                PUBLISHED_STATUS,
+                PageRequest.of(0, safeLimit));
+    }
+
     // ==================== BLOG METHODS ====================
 
     @Transactional(readOnly = true)

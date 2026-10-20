@@ -396,6 +396,12 @@ export async function getPosts(signal) {
   return result.posts;
 }
 
+export async function getCommunityHighlights({ limit = 3, signal } = {}) {
+  const safeLimit = Math.max(1, Math.min(3, Number(limit) || 3));
+  const data = unwrapData(await apiRequest(`/api/v1/community/highlights?limit=${safeLimit}`, { signal }), []);
+  return (Array.isArray(data) ? data : []).map((item) => normalizePost(item, item?.contentType));
+}
+
 export async function getPost(id, signal, contentType = '') {
   const normalizedType = String(contentType).trim().toUpperCase();
   if (normalizedType === 'VIDEO') {

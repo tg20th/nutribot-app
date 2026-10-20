@@ -2,6 +2,7 @@ package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.response.ContentDetailResponse;
 import com.fpt.swp391.nutribot.dto.response.ContentListResponse;
+import com.fpt.swp391.nutribot.dto.response.CommunityHighlightResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.dto.response.VideoDetailResponse;
 import com.fpt.swp391.nutribot.dto.response.VideoListResponse;
@@ -86,6 +87,24 @@ class ContentServiceTest {
     }
 
     // ==================== BLOG DETAIL TESTS (BL-011) ====================
+
+    @Test
+    @DisplayName("Community highlights giới hạn kết quả và dùng truy vấn xếp hạng tổng hợp")
+    void getCommunityHighlights_UsesBoundedAggregateQuery() {
+        List<CommunityHighlightResponse> highlights = List.of(
+                CommunityHighlightResponse.builder().contentId(12).contentType("BLOG").voteCount(8L).commentCount(2L).build(),
+                CommunityHighlightResponse.builder().contentId(9).contentType("VIDEO").voteCount(0L).commentCount(0L).build()
+        );
+        when(contentRepository.findCommunityHighlights(eq("published"), any(Pageable.class))).thenReturn(highlights);
+
+        List<CommunityHighlightResponse> response = contentService.getCommunityHighlights(99);
+
+        assertEquals(highlights, response);
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(contentRepository).findCommunityHighlights(eq("published"), pageableCaptor.capture());
+        assertEquals(3, pageableCaptor.getValue().getPageSize());
+        assertEquals(0, pageableCaptor.getValue().getPageNumber());
+    }
 
     @Test
     @DisplayName("Guest truy cập Blog ID bản nháp / không tồn tại -> Bắt buộc ném NotFoundException (HTTP 404), không rò rỉ nội dung")

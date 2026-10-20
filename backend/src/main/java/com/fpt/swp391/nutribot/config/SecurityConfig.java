@@ -89,6 +89,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/home/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/feed/home").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/community/highlights").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/contents/*/comments").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/contents/*/vote").permitAll()
