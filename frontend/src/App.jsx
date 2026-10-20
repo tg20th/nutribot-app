@@ -32,6 +32,7 @@ import ChatHistoryPage from './pages/ChatHistoryPage';
 import RestaurantMapPage from './pages/RestaurantMapPage';
 import PublicProfilePage from './pages/PublicProfilePage';
 import PublicRecipeDetailPage from './pages/PublicRecipeDetailPage';
+import RecipeConsentRequestsPage from './pages/RecipeConsentRequestsPage';
 
 function AuthFailureHandler() {
   const navigate = useNavigate();
@@ -93,6 +94,7 @@ export default function App() {
     <Route path="/community/recipes/:dishId" element={<PublicRecipeDetailPage />} />
     <Route path="/community/my-blogs" element={<MemberRoute><MyBlogsPage /></MemberRoute>} />
     <Route path="/community/my-videos" element={<Navigate to="/community/my-blogs" replace />} />
+    <Route path="/community/recipe-consent-requests" element={<MemberRoute><RecipeConsentRequestsPage /></MemberRoute>} />
     <Route path="/search" element={<SearchPage />} />
     <Route path="/community/search" element={<MemberRoute><SearchPage member /></MemberRoute>} />
     <Route path="/community/blogs/new" element={<MemberRoute><CreateBlogPage /></MemberRoute>} />
