@@ -311,7 +311,7 @@ export default function CommunityFeedPage() {
             {error && posts.length > 0 && <span className="content-status--error">{error}</span>}
           </div>}
         </main>
-        <CommunityRightRail/>
+        <CommunityRightRail onOpenPost={openPost}/>
       </div>
     </MemberPageLayout>
     <ChatbotWidget/>

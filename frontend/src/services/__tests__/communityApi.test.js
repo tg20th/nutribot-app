@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from '../apiClient';
-import { appendUniquePersonalizedPosts, getPersonalizedPostsPage, normalizePost, prioritizePersonalizedPost } from '../communityApi';
+import { appendUniquePersonalizedPosts, getCommunityHighlights, getPersonalizedPostsPage, normalizePost, prioritizePersonalizedPost } from '../communityApi';
 
 vi.mock('../apiClient', () => ({
   apiRequest: vi.fn(),
@@ -113,5 +113,27 @@ describe('personalized community feed API', () => {
     expect(post.description).not.toContain('Ingredients');
     expect(post.calories).toBe(23);
     expect(post.protein).toBe(2.9);
+  });
+});
+
+describe('community highlights API', () => {
+  beforeEach(() => vi.resetAllMocks());
+
+  it('requests the bounded highlights endpoint and normalizes real engagement fields', async () => {
+    apiRequest.mockResolvedValue({ data: [{
+      contentId: 7,
+      contentType: 'VIDEO',
+      title: 'A bright lunch',
+      thumbnailUrl: 'https://img.test/lunch.jpg',
+      authorId: 11,
+      authorName: 'Mai',
+      voteCount: 6,
+      commentCount: 3
+    }] });
+
+    const result = await getCommunityHighlights({ limit: 10 });
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/v1/community/highlights?limit=3', { signal: undefined });
+    expect(result[0]).toMatchObject({ id: 7, type: 'video', image: 'https://img.test/lunch.jpg', likes: 6, comments: 3 });
   });
 });

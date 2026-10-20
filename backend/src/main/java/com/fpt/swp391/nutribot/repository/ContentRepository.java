@@ -1,6 +1,7 @@
 package com.fpt.swp391.nutribot.repository;
 
 import com.fpt.swp391.nutribot.entity.Content;
+import com.fpt.swp391.nutribot.dto.response.CommunityHighlightResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -154,4 +155,22 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
     // NB-65: Đếm vote cho content
     @Query("SELECT COUNT(v) FROM Vote v WHERE v.contentId = :contentId AND v.voteValue = 1")
     Long countVoteByContentId(@Param("contentId") Integer contentId);
+
+    @Query("SELECT new com.fpt.swp391.nutribot.dto.response.CommunityHighlightResponse(" +
+           "c.contentId, c.contentType, c.title, c.thumbnailUrl, " +
+           "c.user.userId, c.user.username, c.user.fullName, c.user.avatarUrl, " +
+           "(SELECT COUNT(v) FROM Vote v WHERE v.contentId = c.contentId AND v.voteValue = 1), " +
+           "(SELECT COUNT(cm) FROM Comment cm WHERE cm.contentId = c.contentId AND cm.status = 'published'), " +
+           "c.createdAt) " +
+           "FROM Content c " +
+           "WHERE c.status = :status " +
+           "AND c.contentType IN ('BLOG', 'VIDEO') " +
+           "AND c.user.status = com.fpt.swp391.nutribot.entity.AccountStatus.ACTIVE " +
+           "ORDER BY " +
+           "((SELECT COUNT(v2) FROM Vote v2 WHERE v2.contentId = c.contentId AND v2.voteValue = 1) * 3 + " +
+           "(SELECT COUNT(cm2) FROM Comment cm2 WHERE cm2.contentId = c.contentId AND cm2.status = 'published') * 2) DESC, " +
+           "c.createdAt DESC, c.contentId DESC")
+    List<CommunityHighlightResponse> findCommunityHighlights(
+            @Param("status") String status,
+            Pageable pageable);
 }
