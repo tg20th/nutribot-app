@@ -1,9 +1,10 @@
-import { Activity, BookOpen, CalendarDays, MapPin, Rss, Search } from 'lucide-react';
+import { Activity, BookOpen, CalendarDays, ClipboardCheck, MapPin, Rss, Search } from 'lucide-react';
 
 export const userDashboardNav = [
   { label: 'Home', icon: Rss, to: '/home' },
   { label: 'Search', icon: Search, to: '/community/search' },
   { label: 'My blogs', icon: BookOpen, to: '/community/my-blogs' },
+  { label: 'Recipe requests', icon: ClipboardCheck, to: '/community/recipe-consent-requests' },
   { label: 'Weekly Meal Planner', icon: CalendarDays, to: '/community/planner' },
   { label: 'Health profile', icon: Activity, to: '/profile/health' },
   { label: 'Nearby Vegan Map', icon: MapPin, to: '/restaurants/map' },

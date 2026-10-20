@@ -1,3 +1,4 @@
+import { clearAuthentication } from '../utils/auth';
 import { getApiAuthFailureState } from './loginErrorState';
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
@@ -42,9 +43,7 @@ export async function apiRequest(path, options = {}) {
   if (!response.ok) {
     const authFailureState = getApiAuthFailureState(response.status, Boolean(authToken));
     if (authFailureState && typeof window !== 'undefined') {
-      localStorage.removeItem('nutribot-auth-token');
-      localStorage.removeItem('nutribot-user');
-      window.dispatchEvent(new CustomEvent('nutribot-auth-changed'));
+      clearAuthentication();
       window.dispatchEvent(new CustomEvent('nutribot-auth-failure', { detail: { state: authFailureState } }));
     }
     throw new ApiError(payload?.message || `Yêu cầu thất bại (${response.status})`, response.status, payload);

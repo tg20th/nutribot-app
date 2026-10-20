@@ -28,6 +28,22 @@ export function decodeJWT(token) {
 }
 
 /**
+ * Checks the standard JWT expiry claim before a protected screen renders.
+ * The server remains the source of truth, but this prevents an expired token
+ * from keeping the admin shell open while every request fails.
+ */
+export function isTokenExpired(token, now = Date.now()) {
+  const expiresAt = Number(decodeJWT(token)?.exp);
+  return Number.isFinite(expiresAt) && expiresAt * 1000 <= now;
+}
+
+export function clearAuthentication() {
+  localStorage.removeItem('nutribot-auth-token');
+  localStorage.removeItem('nutribot-user');
+  window.dispatchEvent(new CustomEvent('nutribot-auth-changed'));
+}
+
+/**
  * Get username from stored JWT token
  */
 export function getUsernameFromToken() {
@@ -42,7 +58,7 @@ export function getUsernameFromToken() {
  */
 export function getCurrentUserFromToken() {
   const token = localStorage.getItem('nutribot-auth-token');
-  if (!token) return null;
+  if (!token || isTokenExpired(token)) return null;
   const payload = decodeJWT(token);
   return {
     username: payload?.sub || payload?.username || payload?.preferred_username || null,
