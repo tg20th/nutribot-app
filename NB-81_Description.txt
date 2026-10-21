@@ -1,0 +1,21 @@
+Mô tả task
+Nền tảng in-app notifications: recipient, actor, type, reference, readAt.
+
+Actor
+Authorized User / Administrator (theo quyền)
+
+Business Requirement
+NutriBot Community Recipe Contribution; phương án A: Admin duyệt cuối cùng. Không tự động import recipe chỉ vì đủ điều kiện.
+
+Acceptance Criteria
+List phân trang, unread count, mark read.
+
+Không thể xem/sửa thông báo người khác.
+
+Reference bị xóa có fallback; dữ liệu bền vững.
+
+Dependency / Thứ tự thực hiện
+Depends on task trong nhóm mới: None (mã thứ tự 01–12; map sang Jira keys sau khi tạo).
+
+Scope Note
+Tích hợp flow hiện có, tránh phá vỡ Post, Recipe, Meal Planner và Recommendation.
