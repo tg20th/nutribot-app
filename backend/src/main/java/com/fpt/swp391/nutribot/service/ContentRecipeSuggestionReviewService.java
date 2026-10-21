@@ -14,6 +14,7 @@ import com.fpt.swp391.nutribot.entity.Recipe;
 import com.fpt.swp391.nutribot.entity.RecipeIngredient;
 import com.fpt.swp391.nutribot.entity.RecipeIngredientId;
 import com.fpt.swp391.nutribot.entity.User;
+import com.fpt.swp391.nutribot.event.RecipeSuggestionReviewedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ConflictException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
@@ -27,6 +28,7 @@ import com.fpt.swp391.nutribot.repository.RecipeRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -80,6 +82,7 @@ public class ContentRecipeSuggestionReviewService {
     private final String dishDefaultCategorySlug;
     private final String ingredientDefaultCategorySlug;
     private final String recipeStatus;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ContentRecipeSuggestionReviewService(
             ContentRecipeSuggestionRepository suggestionRepository,
@@ -94,7 +97,8 @@ public class ContentRecipeSuggestionReviewService {
             VegetarianTypeClassifier vegetarianTypeClassifier,
             @Value("${app.content-recipe-suggestion.dish-default-category-slug:salad-healthy}") String dishDefaultCategorySlug,
             @Value("${app.content-recipe-suggestion.ingredient-default-category-slug:rau-cu}") String ingredientDefaultCategorySlug,
-            @Value("${app.content-recipe-suggestion.recipe-status:verified}") String recipeStatus) {
+            @Value("${app.content-recipe-suggestion.recipe-status:verified}") String recipeStatus,
+            ApplicationEventPublisher eventPublisher) {
         this.suggestionRepository = suggestionRepository;
         this.contentRepository = contentRepository;
         this.dishRepository = dishRepository;
@@ -108,6 +112,7 @@ public class ContentRecipeSuggestionReviewService {
         this.dishDefaultCategorySlug = dishDefaultCategorySlug;
         this.ingredientDefaultCategorySlug = ingredientDefaultCategorySlug;
         this.recipeStatus = recipeStatus;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional(readOnly = true)
@@ -156,7 +161,26 @@ public class ContentRecipeSuggestionReviewService {
         }
 
         suggestionRepository.save(suggestion);
+        publishReviewNotification(suggestion, admin, action);
         return toResponse(suggestion, Map.of(admin.getUserId(), displayName(admin)));
+    }
+
+    private void publishReviewNotification(ContentRecipeSuggestion suggestion, User admin, String action) {
+        if (suggestion == null || admin == null) {
+            return;
+        }
+        Content content = suggestion.getContent();
+        Integer authorId = content != null && content.getUser() != null ? content.getUser().getUserId() : null;
+        Integer contentId = content != null ? content.getContentId() : null;
+        if (authorId == null || suggestion.getSuggestionId() == null) {
+            return;
+        }
+        eventPublisher.publishEvent(new RecipeSuggestionReviewedEvent(
+                suggestion.getSuggestionId(),
+                contentId,
+                authorId,
+                admin.getUserId(),
+                action));
     }
 
     private void reject(ContentRecipeSuggestion suggestion, String reason, User admin) {

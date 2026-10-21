@@ -32,6 +32,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
@@ -63,6 +64,8 @@ class ContentRecipeSuggestionReviewServiceTest {
     private CategoryRepository categoryRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private ContentRecipeSuggestionReviewService service;
 
@@ -81,7 +84,8 @@ class ContentRecipeSuggestionReviewServiceTest {
                 new VegetarianTypeClassifier(),
                 "salad-healthy",
                 "rau-cu",
-                "verified");
+                "verified",
+                eventPublisher);
     }
 
     private User admin() {
