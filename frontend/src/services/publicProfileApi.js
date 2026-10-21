@@ -49,7 +49,6 @@ export async function getPublicProfileContent(userIdOrUsername, { page = 0, size
 }
 
 export async function getPublicProfileRecipes(userIdOrUsername, { signal } = {}) {
-  if (isMockPublicProfileEnabled) return getMockPublicProfileRecipes(userIdOrUsername, { page: 0, size: 12, signal });
   const data = unwrapData(await apiRequest(`/api/v1/users/${encodeURIComponent(userIdOrUsername)}/recipes`, { signal }), []);
   const recipes = Array.isArray(data) ? data : data.content ?? data.items ?? [];
   return { recipes, last: true };
