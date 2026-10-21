@@ -28,6 +28,7 @@ export default function PublicProfilePage() {
   const [profile, setProfile] = useState(() => cachedView?.profile ?? null);
   const [posts, setPosts] = useState(() => cachedView?.posts ?? []);
   const [recipes, setRecipes] = useState(() => cachedView?.recipes ?? []);
+  const [postsUnavailable, setPostsUnavailable] = useState(() => cachedView?.postsUnavailable ?? false);
   const [recipesUnavailable, setRecipesUnavailable] = useState(() => cachedView?.recipesUnavailable ?? false);
   const [tab, setTab] = useState(() => location.state?.profileTab || cachedView?.tab || 'posts');
   const [state, setState] = useState(() => cachedView ? 'ready' : 'loading');
@@ -37,30 +38,38 @@ export default function PublicProfilePage() {
     if (cachedView) return undefined;
     const controller = new AbortController();
     setState('loading');
-    Promise.all([
+    Promise.allSettled([
       getPublicProfile(userId, controller.signal),
       getPublicProfileContent(userId, { signal: controller.signal }),
       getPublicProfileRecipes(userId, { signal: controller.signal })
-    ]).then(([nextProfile, content, recipeData]) => {
+    ]).then(([profileResult, contentResult, recipeResult]) => {
       if (controller.signal.aborted) return;
+
+      if (profileResult.status === 'rejected') {
+        setState(profileResult.reason?.status === 404 ? 'not-found' : 'error');
+        return;
+      }
+
+      const nextProfile = profileResult.value;
+      const content = contentResult.status === 'fulfilled' ? contentResult.value : null;
+      const recipeData = recipeResult.status === 'fulfilled' ? recipeResult.value : null;
       setProfile(nextProfile);
-      setPosts(content.posts);
-      setRecipes(recipeData.recipes);
-      setRecipesUnavailable(Boolean(recipeData.unavailable));
+      setPosts(content?.posts ?? []);
+      setPostsUnavailable(contentResult.status === 'rejected');
+      setRecipes(recipeData?.recipes ?? []);
+      setRecipesUnavailable(recipeResult.status === 'rejected' || Boolean(recipeData?.unavailable));
       setState('ready');
-    }).catch((error) => {
-      if (!controller.signal.aborted) setState(error?.status === 404 ? 'not-found' : 'error');
     });
     return () => controller.abort();
   }, [cachedView, userId]);
 
   useEffect(() => {
     if (!profile || state !== 'ready') return undefined;
-    profileViewCache.set(String(userId), { profile, posts, recipes, recipesUnavailable, tab, scrollY: window.scrollY });
+    profileViewCache.set(String(userId), { profile, posts, recipes, postsUnavailable, recipesUnavailable, tab, scrollY: window.scrollY });
     return () => {
-      profileViewCache.set(String(userId), { profile, posts, recipes, recipesUnavailable, tab, scrollY: window.scrollY });
+      profileViewCache.set(String(userId), { profile, posts, recipes, postsUnavailable, recipesUnavailable, tab, scrollY: window.scrollY });
     };
-  }, [profile, posts, recipes, recipesUnavailable, state, tab, userId]);
+  }, [profile, posts, recipes, postsUnavailable, recipesUnavailable, state, tab, userId]);
 
   useEffect(() => {
     if (state !== 'ready') return undefined;
@@ -85,7 +94,7 @@ export default function PublicProfilePage() {
       </div>
     </header>
     <nav className="public-profile-tabs" aria-label="Profile content"><button className={tab === 'posts' ? 'is-active' : ''} onClick={() => setTab('posts')}><Grid3X3 size={16}/> Posts</button><button className={tab === 'recipes' ? 'is-active' : ''} onClick={() => setTab('recipes')}><UtensilsCrossed size={16}/> Recipes</button></nav>
-    {tab === 'posts' && <><div className="public-profile-grid">{posts.map((post) => <Link key={`${post.type}-${post.id}`} to={`/community/posts/${post.id}`} state={{ returnTo: profileReturnTo, returnState: { profileTab: tab, profileScrollY: window.scrollY } }} className="public-profile-grid-item">{post.image ? <ImageWithFallback src={post.image} alt={post.title || 'Post'} loading="lazy"/> : <span>{post.title || post.caption || 'Shared post'}</span>}{post.images?.length > 1 && <small aria-label="Gallery">{post.images.length}</small>}</Link>)}</div>{!posts.length && <p className="public-profile-empty">No public posts yet.</p>}</>}
+    {tab === 'posts' && <>{postsUnavailable && <p className="public-profile-empty">Public posts are not available yet.</p>}<div className="public-profile-grid">{posts.map((post) => <Link key={`${post.type}-${post.id}`} to={`/community/posts/${post.id}`} state={{ returnTo: profileReturnTo, returnState: { profileTab: tab, profileScrollY: window.scrollY } }} className="public-profile-grid-item">{post.image ? <ImageWithFallback src={post.image} alt={post.title || 'Post'} loading="lazy"/> : <span>{post.title || post.caption || 'Shared post'}</span>}{post.images?.length > 1 && <small aria-label="Gallery">{post.images.length}</small>}</Link>)}</div>{!posts.length && !postsUnavailable && <p className="public-profile-empty">No public posts yet.</p>}</>}
     {tab === 'recipes' && <div className="public-profile-recipes">{recipes.map((recipe) => <button type="button" key={recipe.dishId ?? recipe.id} onClick={() => setSelectedRecipe(recipe)} className="public-profile-recipe">{(recipe.imageUrl || recipe.image) ? <ImageWithFallback src={recipe.imageUrl || recipe.image} alt={recipe.name || recipe.title || ''} loading="lazy"/> : <span className="public-profile-recipe-fallback"><UtensilsCrossed size={20}/></span>}<div><h2>{recipe.name || recipe.title}</h2>{recipe.description && <p>{recipe.description}</p>}<small>{recipe.preparationTime || recipe.prepTime || ''}{recipe.servings ? ` · Serves ${recipe.servings}` : ''}</small></div></button>)}{!recipes.length && <p className="public-profile-empty">{recipesUnavailable ? 'Public recipes are not available yet.' : 'No approved public recipes yet.'}</p>}</div>}
   </main>{selectedRecipe && <DishDetailModal meal={selectedRecipe} onClose={() => setSelectedRecipe(null)}/>}</MemberPageLayout>;
 }
