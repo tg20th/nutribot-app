@@ -15,7 +15,14 @@ import java.util.Optional;
 
 public interface NotificationRepository extends JpaRepository<Notification, Integer> {
 
-    Page<Notification> findByRecipient_UserIdOrderByCreatedAtDesc(Integer recipientId, Pageable pageable);
+    /**
+     * NB-83: Danh sach thong bao sap xep theo updated_at DESC (thoi diem tuong tac gan nhat).
+     * COALESCE phong khi updated_at con NULL (du lieu cu), notificationId DESC lam tie-breaker
+     * de phan trang on dinh khi nhieu thong bao trung updated_at.
+     */
+    @Query("SELECT n FROM Notification n WHERE n.recipient.userId = :recipientId "
+            + "ORDER BY COALESCE(n.updatedAt, n.createdAt) DESC, n.createdAt DESC, n.notificationId DESC")
+    Page<Notification> findByRecipientIdOrderByActivityDesc(@Param("recipientId") Integer recipientId, Pageable pageable);
 
     long countByRecipient_UserIdAndReadAtIsNull(Integer recipientId);
 

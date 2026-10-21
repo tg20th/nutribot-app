@@ -13,14 +13,19 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -46,10 +51,32 @@ public class NotificationService {
     public PagedResponse<NotificationResponse> listMyNotifications(Integer userId, int page, int size) {
         int pageNumber = Math.max(page, 0);
         int pageSize = size <= 0 ? 10 : Math.min(size, 50);
-        Pageable pageable = PageRequest.of(pageNumber, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Notification> notificationPage = notificationRepository.findByRecipient_UserIdOrderByCreatedAtDesc(userId, pageable);
-        Page<NotificationResponse> mapped = notificationPage.map(this::toResponse);
+        Pageable pageable = PageRequest.of(pageNumber, pageSize);
+        Page<Notification> notificationPage = notificationRepository.findByRecipientIdOrderByActivityDesc(userId, pageable);
+        Map<Integer, Content> contentMap = loadReferencedContents(notificationPage.getContent());
+        Page<NotificationResponse> mapped = notificationPage.map(notification -> toResponse(notification, contentMap));
         return PagedResponse.of(mapped);
+    }
+
+    /**
+     * NB-83: Tai thong tin bai viet (tieu de, loai noi dung) cho cac thong bao trong trang hien tai.
+     * Gom 1 lan truy van cho ca trang (batch) de khong sinh N+1 query.
+     * Thong bao khong tro toi bai viet (vi du duyet cong thuc cua NB-81) se khong co du lieu nay.
+     */
+    private Map<Integer, Content> loadReferencedContents(List<Notification> notifications) {
+        Set<Integer> contentIds = notifications.stream()
+                .filter(notification -> REFERENCE_TYPE_CONTENT.equals(notification.getReferenceType()))
+                .map(Notification::getReferenceId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (contentIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Integer, Content> contentMap = new HashMap<>();
+        for (Content content : contentRepository.findAllById(contentIds)) {
+            contentMap.put(content.getContentId(), content);
+        }
+        return contentMap;
     }
 
     @Transactional(readOnly = true)
@@ -196,7 +223,22 @@ public class NotificationService {
     }
 
     private NotificationResponse toResponse(Notification notification) {
+        return toResponse(notification, Map.of());
+    }
+
+    /**
+     * NB-83: Chuyen notification sang response kem thong tin bai viet duoc vote/comment.
+     * contentTitle/contentType null khi thong bao khong tro toi bai viet
+     * (duyet cong thuc cua NB-81) hoac khi bai viet da bi xoa.
+     */
+    private NotificationResponse toResponse(Notification notification, Map<Integer, Content> contentMap) {
         User actor = notification.getActor();
+        Content content = REFERENCE_TYPE_CONTENT.equals(notification.getReferenceType())
+                ? contentMap.get(notification.getReferenceId())
+                : null;
+        LocalDateTime updatedAt = notification.getUpdatedAt() != null
+                ? notification.getUpdatedAt()
+                : notification.getCreatedAt();
         return NotificationResponse.builder()
                 .notificationId(notification.getNotificationId())
                 .type(notification.getType())
@@ -205,9 +247,12 @@ public class NotificationService {
                 .actorId(actor != null ? actor.getUserId() : null)
                 .actorFullName(actor != null ? actor.getFullName() : null)
                 .actorAvatarUrl(actor != null ? actor.getAvatarUrl() : null)
+                .contentTitle(content != null ? content.getTitle() : null)
+                .contentType(content != null ? content.getContentType() : null)
                 .read(notification.getReadAt() != null)
                 .readAt(notification.getReadAt())
                 .createdAt(notification.getCreatedAt())
+                .updatedAt(updatedAt)
                 .build();
     }
 }

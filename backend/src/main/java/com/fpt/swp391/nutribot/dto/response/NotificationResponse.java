@@ -26,4 +26,22 @@ public class NotificationResponse {
     private LocalDateTime readAt;
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
+
+    /**
+     * NB-83: Tieu de bai viet duoc vote/comment (null voi thong bao duyet cong thuc cua NB-81).
+     */
+    private String contentTitle;
+
+    /**
+     * NB-83: Loai noi dung cua bai viet duoc vote/comment: BLOG hoac VIDEO
+     * (null voi thong bao duyet cong thuc cua NB-81).
+     */
+    private String contentType;
+
+    /**
+     * NB-83: Thoi diem tuong tac gan nhat. Kiem duyet vote moi duoc gom vao thong bao cu
+     * thi updated_at duoc cap nhat va thong bao do luon len dau danh sach.
+     */
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime updatedAt;
 }
