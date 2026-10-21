@@ -588,3 +588,115 @@ Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/c
   ]
 }
 ```
+
+---
+
+## 9. Thông báo (Notifications - Thắng & Lan)
+
+> Phạm vi: NB-81 (duyệt / từ chối công thức) + NB-83 (vote / comment bài viết).
+> Tất cả endpoint yêu cầu token hợp lệ: `Authorization: Bearer <token>`.
+
+### 9.1. Lấy danh sách thông báo
+
+- **Endpoint:** `GET /api/v1/notifications?page=0&size=10`
+- **Query Params:** `page` (mặc định `0`), `size` (mặc định `10`, tối đa `50`)
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Lấy danh sách thông báo thành công",
+  "data": {
+    "content": [
+      {
+        "notificationId": 12,
+        "type": "CONTENT_VOTED",
+        "referenceType": "CONTENT",
+        "referenceId": 35,
+        "actorId": 3,
+        "actorFullName": "Jennie Kim",
+        "actorAvatarUrl": "https://example.com/avatar.jpg",
+        "contentTitle": "Cách làm Phở nữa thật ngon",
+        "contentType": "BLOG",
+        "read": false,
+        "readAt": null,
+        "createdAt": "2026-10-21T10:00:00",
+        "updatedAt": "2026-10-21T10:12:30"
+      }
+    ],
+    "page": 0,
+    "size": 10,
+    "totalElements": 1,
+    "totalPages": 1,
+    "first": true,
+    "last": true,
+    "currentPage": 0
+  },
+  "timestamp": "2026-10-21T10:15:00Z"
+}
+```
+
+**Ý nghĩa các trường bổ sung (NB-83):**
+
+| Trường | Ý nghĩa |
+|---|---|
+| `contentTitle` | Tiêu đề bài viết được vote / comment. `null` với thông báo duyệt công thức (NB-81) hoặc khi bài viết đã bị xoá. |
+| `contentType` | Loại bài viết: `BLOG` hoặc `VIDEO` (viết hoa, khớp `contents.content_type`). `null` cùng trường hợp với `contentTitle`. |
+| `updatedAt` | Thời điểm tương tác gần nhất. Khi có vote mới được gom vào thông báo cũ, `updatedAt` được cập nhật, thông báo đó **lên đầu danh sách** và được đánh dấu chưa đọc lại. |
+
+- **Sắp xếp:** `updatedAt` giảm dần (mới nhất trước), tie-break theo `createdAt` rồi `notificationId` giảm dần.
+- **Điều hướng (Frontend):** dùng `referenceId` (contentId) + `contentType` để gọi `GET /api/v1/blogs/id/{id}` hoặc `GET /api/v1/videos/id/{id}`.
+
+### 9.2. Đếm số thông báo chưa đọc
+
+- **Endpoint:** `GET /api/v1/notifications/unread-count`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Lấy số thông báo chưa đọc thành công",
+  "data": 3,
+  "timestamp": "2026-10-21T10:15:00Z"
+}
+```
+
+### 9.3. Đánh dấu một thông báo đã đọc
+
+- **Endpoint:** `PATCH /api/v1/notifications/{notificationId}/read`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Đánh dấu đã đọc thành công",
+  "data": null,
+  "timestamp": "2026-10-21T10:15:00Z"
+}
+```
+- **Lỗi (404):** thông báo không tồn tại hoặc không thuộc về người đang đăng nhập.
+
+### 9.4. Đánh dấu tất cả thông báo đã đọc
+
+- **Endpoint:** `PATCH /api/v1/notifications/read-all`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Đánh dấu tất cả đã đọc thành công",
+  "data": null,
+  "timestamp": "2026-10-21T10:15:00Z"
+}
+```
+
+### 9.5. Quy tắc sinh thông báo
+
+| `type` | `referenceType` | `referenceId` | Sinh ra khi | Nguồn |
+|---|---|---|---|---|
+| `CONTENT_VOTED` | `CONTENT` | `contentId` | Có người khác vote bài viết của tôi | NB-83 |
+| `CONTENT_COMMENTED` | `CONTENT` | `contentId` | Có người khác comment bài viết của tôi | NB-83 |
+| `RECIPE_SUGGESTION_APPROVED` | `CONTENT_RECIPE_SUGGESTION` | `suggestionId` | Admin duyệt công thức tôi đề xuất | NB-81 |
+| `RECIPE_SUGGESTION_REJECTED` | `CONTENT_RECIPE_SUGGESTION` | `suggestionId` | Admin từ chối công thức tôi đề xuất | NB-81 |
+
+**Quy tắc NB-83:**
+- Không tạo thông báo khi người dùng tự vote / tự comment bài của chính mình.
+- Không tạo thông báo khi bỏ vote (`unvote`).
+- Các vote gần nhau (trong cửa sổ **30 phút**) được **gộp vào cùng một thông báo** để tránh spam: `updatedAt` được cập nhật và `readAt` bị xoá để thông báo lên đầu danh sách và tính vào số chưa đọc.
+- Mỗi comment tạo một thông báo riêng (không gộp).

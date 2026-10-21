@@ -5,6 +5,7 @@ import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.entity.Vote;
+import com.fpt.swp391.nutribot.event.ContentVotedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ConflictException;
 import com.fpt.swp391.nutribot.exception.ForbiddenException;
@@ -14,6 +15,7 @@ import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.VoteRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +30,7 @@ public class VoteService {
     private final VoteRepository voteRepository;
     private final ContentRepository contentRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final String PUBLISHED_STATUS = "published";
 
@@ -62,12 +65,14 @@ public class VoteService {
                     .build();
             try {
                 voteRepository.saveAndFlush(vote);
-                isVoted = true;
             } catch (DataIntegrityViolationException ex) {
                 log.warn("Xung đột đồng thời khi vote contentId={} bởi userId={}: {}",
                         contentId, user.getUserId(), ex.getMessage());
                 throw new ConflictException("Thao tác vote bị trùng lặp hoặc xung đột");
             }
+            isVoted = true;
+            // NB-83: chỉ phát event khi vote MỚI được tạo, giao diện gỡ vote (toggle off) không sinh thông báo.
+            eventPublisher.publishEvent(new ContentVotedEvent(contentId, user.getUserId()));
         }
 
         Long voteCount = voteRepository.countByContentId(contentId);

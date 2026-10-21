@@ -5,6 +5,7 @@ import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.entity.Vote;
+import com.fpt.swp391.nutribot.event.ContentVotedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ConflictException;
 import com.fpt.swp391.nutribot.exception.ForbiddenException;
@@ -15,6 +16,8 @@ import com.fpt.swp391.nutribot.repository.VoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDateTime;
@@ -30,6 +33,7 @@ class VoteServiceTest {
     private VoteRepository voteRepository;
     private ContentRepository contentRepository;
     private UserRepository userRepository;
+    private ApplicationEventPublisher eventPublisher;
     private VoteService voteService;
 
     @BeforeEach
@@ -37,7 +41,8 @@ class VoteServiceTest {
         voteRepository = mock(VoteRepository.class);
         contentRepository = mock(ContentRepository.class);
         userRepository = mock(UserRepository.class);
-        voteService = new VoteService(voteRepository, contentRepository, userRepository);
+        eventPublisher = mock(ApplicationEventPublisher.class);
+        voteService = new VoteService(voteRepository, contentRepository, userRepository, eventPublisher);
     }
 
     private User createSampleUser(int id, String username, AccountStatus status) {
@@ -97,6 +102,50 @@ class VoteServiceTest {
         assertTrue(response.getIsVoted());
         assertEquals(1L, response.getVoteCount());
         verify(voteRepository).saveAndFlush(argThat(v -> v.getVoteValue() == 1 && v.getUserId() == 2));
+    }
+
+    @Test
+    @DisplayName("NB-83: Thả tim mới -> Phát event ContentVotedEvent để tạo notification")
+    void toggleVote_WhenNewVote_PublishesContentVotedEvent() {
+        User voter = createSampleUser(2, "voter", AccountStatus.ACTIVE);
+        User author = createSampleUser(1, "author", AccountStatus.ACTIVE);
+        Content video = createSampleContent(201, "VIDEO", "published", author);
+
+        when(userRepository.findByUsernameForUpdate("voter")).thenReturn(Optional.of(voter));
+        when(contentRepository.findPublishedById(201, "published")).thenReturn(Optional.of(video));
+        when(voteRepository.findByUserIdAndContentIdForUpdate(voter.getUserId(), 201)).thenReturn(Optional.empty());
+        when(voteRepository.countByContentId(201)).thenReturn(1L);
+
+        voteService.toggleVote("voter", 201);
+
+        ArgumentCaptor<ContentVotedEvent> captor = ArgumentCaptor.forClass(ContentVotedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertEquals(201, captor.getValue().contentId());
+        assertEquals(2, captor.getValue().voterId());
+    }
+
+    @Test
+    @DisplayName("NB-83: Bấm thả tim lần 2 (Unvote) -> Không phát event, không tạo notification")
+    void toggleVote_WhenUnvote_DoesNotPublishEvent() {
+        User voter = createSampleUser(2, "voter", AccountStatus.ACTIVE);
+        User author = createSampleUser(1, "author", AccountStatus.ACTIVE);
+        Content blog = createSampleContent(101, "BLOG", "published", author);
+
+        Vote existingVote = Vote.builder()
+                .voteId(55)
+                .userId(voter.getUserId())
+                .contentId(101)
+                .voteValue((short) 1)
+                .build();
+
+        when(userRepository.findByUsernameForUpdate("voter")).thenReturn(Optional.of(voter));
+        when(contentRepository.findPublishedById(101, "published")).thenReturn(Optional.of(blog));
+        when(voteRepository.findByUserIdAndContentIdForUpdate(voter.getUserId(), 101)).thenReturn(Optional.of(existingVote));
+        when(voteRepository.countByContentId(101)).thenReturn(0L);
+
+        voteService.toggleVote("voter", 101);
+
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test
