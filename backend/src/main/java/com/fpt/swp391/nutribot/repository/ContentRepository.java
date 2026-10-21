@@ -5,10 +5,13 @@ import com.fpt.swp391.nutribot.dto.response.CommunityHighlightResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import jakarta.persistence.LockModeType;
 
 import java.util.List;
 import java.util.Optional;
@@ -104,6 +107,12 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
     Page<Content> findPublishedAll(@Param("status") String status, Pageable pageable);
 
     Page<Content> findByStatus(String status, Pageable pageable);
+
+    // NB-83: Khoá dòng content để serialize việc tạo/gộp notification theo cùng 1 bài viết.
+    // Tránh race khi nhiều user vote/comment đồng thời sinh ra nhiều notification trùng nhóm.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM Content c WHERE c.contentId = :contentId")
+    Optional<Content> findByIdForUpdate(@Param("contentId") Integer contentId);
 
     // NB-60: nội dung published đủ ngưỡng view để rà soát tạo recipe suggestion
     List<Content> findByStatusAndViewCountGreaterThanEqual(String status, Integer viewCount);

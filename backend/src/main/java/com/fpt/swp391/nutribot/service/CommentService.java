@@ -8,6 +8,7 @@ import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Comment;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.User;
+import com.fpt.swp391.nutribot.event.ContentCommentedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ForbiddenException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
@@ -15,6 +16,7 @@ import com.fpt.swp391.nutribot.repository.CommentRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -33,6 +35,7 @@ public class CommentService {
     private final CommentRepository commentRepository;
     private final ContentRepository contentRepository;
     private final UserRepository userRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public static final String STATUS_PUBLISHED = "published";
     public static final String STATUS_HIDDEN = "hidden";
@@ -114,6 +117,7 @@ public class CommentService {
                 .build();
 
         Comment saved = commentRepository.save(comment);
+        eventPublisher.publishEvent(new ContentCommentedEvent(contentId, user.getUserId(), saved.getCommentId(), effectiveParentId));
         return toCommentResponse(saved);
     }
 

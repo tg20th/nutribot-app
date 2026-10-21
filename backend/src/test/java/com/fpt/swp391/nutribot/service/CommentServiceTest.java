@@ -8,6 +8,7 @@ import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Comment;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.User;
+import com.fpt.swp391.nutribot.event.ContentCommentedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ForbiddenException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
@@ -17,6 +18,8 @@ import com.fpt.swp391.nutribot.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
@@ -34,6 +37,7 @@ class CommentServiceTest {
     private CommentRepository commentRepository;
     private ContentRepository contentRepository;
     private UserRepository userRepository;
+    private ApplicationEventPublisher eventPublisher;
     private CommentService commentService;
 
     @BeforeEach
@@ -41,7 +45,8 @@ class CommentServiceTest {
         commentRepository = mock(CommentRepository.class);
         contentRepository = mock(ContentRepository.class);
         userRepository = mock(UserRepository.class);
-        commentService = new CommentService(commentRepository, contentRepository, userRepository);
+        eventPublisher = mock(ApplicationEventPublisher.class);
+        commentService = new CommentService(commentRepository, contentRepository, userRepository, eventPublisher);
     }
 
     private User createSampleUser(int id, String username, AccountStatus status) {
@@ -158,6 +163,61 @@ class CommentServiceTest {
         assertEquals(10, response.getCommentId());
         assertEquals("Món này trông ngon quá!", response.getBody());
         verify(commentRepository).save(argThat(c -> "published".equals(c.getStatus()) && c.getBody().equals("Món này trông ngon quá!")));
+    }
+
+    @Test
+    @DisplayName("NB-83: Gửi bình luận mới -> Phát event ContentCommentedEvent để tạo notification")
+    void createComment_WhenNewComment_PublishesContentCommentedEvent() {
+        User commenter = createSampleUser(2, "commenter", AccountStatus.ACTIVE);
+        User author = createSampleUser(1, "author1", AccountStatus.ACTIVE);
+        Content video = createSampleContent(201, "VIDEO", "published", author);
+
+        when(userRepository.findByUsername("commenter")).thenReturn(Optional.of(commenter));
+        when(contentRepository.findPublishedById(201, "published")).thenReturn(Optional.of(video));
+
+        Comment savedComment = Comment.builder()
+                .commentId(10)
+                .contentId(201)
+                .userId(commenter.getUserId())
+                .body("Binh luan moi")
+                .status("published")
+                .createdAt(LocalDateTime.now())
+                .build();
+        when(commentRepository.save(any(Comment.class))).thenReturn(savedComment);
+        when(userRepository.findById(commenter.getUserId())).thenReturn(Optional.of(commenter));
+
+        CommentCreateRequest request = new CommentCreateRequest("Binh luan moi", null);
+
+        commentService.createComment("commenter", 201, request);
+
+        ArgumentCaptor<ContentCommentedEvent> captor = ArgumentCaptor.forClass(ContentCommentedEvent.class);
+        verify(eventPublisher).publishEvent(captor.capture());
+        assertEquals(201, captor.getValue().contentId());
+        assertEquals(2, captor.getValue().commenterId());
+        assertEquals(10, captor.getValue().commentId());
+        assertNull(captor.getValue().parentId());
+    }
+
+    @Test
+    @DisplayName("NB-83: Xóa bình luận -> Không phát event, không tạo notification mới")
+    void deleteComment_DoesNotPublishEvent() {
+        User commenter = createSampleUser(2, "commenter", AccountStatus.ACTIVE);
+
+        Comment comment = Comment.builder()
+                .commentId(10)
+                .contentId(201)
+                .userId(commenter.getUserId())
+                .body("Binh luan")
+                .status("published")
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(userRepository.findByUsername("commenter")).thenReturn(Optional.of(commenter));
+        when(commentRepository.findByIdForUpdate(10)).thenReturn(Optional.of(comment));
+
+        commentService.deleteComment("commenter", 10);
+
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

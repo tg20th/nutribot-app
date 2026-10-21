@@ -10,6 +10,7 @@
 -- Added: vegetarian type + content dwell tracking + per-serving nutrition
 -- Consolidated: ai_processing status (CK_contents_status) + NB-80 recipe consent
 --               (contents.recipe_consent*, recipes.source_*, recipe_consent_audit_log)
+-- NB-83: notifications.updated_at + index nhom vote (co migration idempotent o cuoi file)
 -- Chi con 2 file SQL: NutriBotV2_Database.sql (schema) + NutriBotV2_SampleData_FINAL.sql (data)
 -- =============================================
 
@@ -565,12 +566,13 @@ CREATE TABLE notifications (
     reference_id INT NULL,
     read_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT GETDATE(),
+    updated_at DATETIME NULL,
     CONSTRAINT fk_notifications_recipient FOREIGN KEY (recipient_id) REFERENCES users(user_id),
     CONSTRAINT fk_notifications_actor FOREIGN KEY (actor_id) REFERENCES users(user_id)
 );
 
 CREATE INDEX idx_notifications_recipient_read_created ON notifications(recipient_id, read_at, created_at);
-
+CREATE INDEX idx_notifications_recipient_type_ref ON notifications(recipient_id, type, reference_type, reference_id, updated_at DESC);
 GO
 
 ------------------------------------------------
@@ -611,4 +613,33 @@ CREATE UNIQUE NONCLUSTERED INDEX UQ_content_recipe_suggestions_active ON content
 CREATE NONCLUSTERED INDEX IX_content_recipe_suggestions_status ON content_recipe_suggestions(status, created_at DESC);
 CREATE NONCLUSTERED INDEX IX_content_recipe_suggestions_dish ON content_recipe_suggestions(dish_id);
 CREATE NONCLUSTERED INDEX IX_content_recipe_suggestions_recipe ON content_recipe_suggestions(recipe_id);
+GO
+
+------------------------------------------------
+-- NB-83 MIGRATION: notifications.updated_at
+-- Cột updated_at dùng để gom nhóm vote gần nhau (cửa sổ 30 phút) và đánh dấu lại
+-- thông báo chưa đọc. Script bên dưới idempotent: chạy trên DB mới (đã có cột) hoặc
+-- DB cũ (NB-81 chưa có cột) đều an toàn.
+------------------------------------------------
+IF COL_LENGTH('notifications', 'updated_at') IS NULL
+BEGIN
+    ALTER TABLE notifications ADD updated_at DATETIME NULL;
+    PRINT 'NB-83: Da them cot notifications.updated_at';
+END
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE name = 'idx_notifications_recipient_type_ref'
+      AND object_id = OBJECT_ID('notifications')
+)
+BEGIN
+    CREATE INDEX idx_notifications_recipient_type_ref
+        ON notifications(recipient_id, type, reference_type, reference_id, updated_at DESC);
+    PRINT 'NB-83: Da them index idx_notifications_recipient_type_ref';
+END
+GO
+
+-- Backfill gia tri updated_at cho du lieu cu (dung created_at) de khong anh huong nhom vote.
+UPDATE notifications SET updated_at = created_at WHERE updated_at IS NULL;
 GO
