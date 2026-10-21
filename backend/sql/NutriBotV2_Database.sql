@@ -522,7 +522,7 @@ GO
 CREATE TABLE content_recipe_suggestions (
     suggestion_id INT IDENTITY(1,1) PRIMARY KEY,
     content_id INT NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    status NVARCHAR(20) NOT NULL CONSTRAINT DF_content_recipe_suggestions_status DEFAULT (N'PENDING'),
     dish_id INT NULL,
     recipe_id INT NULL,
     source_view_count INT NULL,
@@ -642,4 +642,18 @@ GO
 
 -- Backfill gia tri updated_at cho du lieu cu (dung created_at) de khong anh huong nhom vote.
 UPDATE notifications SET updated_at = created_at WHERE updated_at IS NULL;
+GO
+
+-- NB-83: Index phuc vu sap xep danh sach thong bao theo updated_at DESC.
+-- Notification duoc gom nhom vote se tang updated_at nen phai len dau danh sach.
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE name = 'idx_notifications_recipient_updated'
+      AND object_id = OBJECT_ID('notifications')
+)
+BEGIN
+    CREATE INDEX idx_notifications_recipient_updated
+        ON notifications(recipient_id, updated_at DESC);
+    PRINT 'NB-83: Da them index idx_notifications_recipient_updated';
+END
 GO

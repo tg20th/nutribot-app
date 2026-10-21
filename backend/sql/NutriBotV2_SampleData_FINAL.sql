@@ -10,6 +10,11 @@ GO
 SET NOCOUNT ON;
 GO
 
+-- sqlcmd mac dinh QUOTED_IDENTIFIER OFF -> DELETE tren bang co filtered index bi loi
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
+
 ------------------------------------------------
 -- 0. XOA SACH DU LIEU (child -> parent)
 ------------------------------------------------
