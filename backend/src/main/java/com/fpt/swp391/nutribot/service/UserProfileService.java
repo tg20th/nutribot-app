@@ -23,6 +23,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.multipart.MultipartFile;
 
 import com.fpt.swp391.nutribot.dto.request.PasswordUpdateRequest;
+import com.fpt.swp391.nutribot.dto.response.MyRecipeResponse;
+import com.fpt.swp391.nutribot.entity.Recipe;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import javax.imageio.ImageIO;
@@ -36,6 +38,7 @@ import java.util.List;
 import java.util.Iterator;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -54,6 +57,8 @@ public class UserProfileService {
     private final JwtTokenProvider jwtTokenProvider;
     private final EmailChangeService emailChangeService;
     private final PasswordEncoder passwordEncoder;
+    private final com.fpt.swp391.nutribot.repository.RecipeRepository recipeRepository;
+    private final RecipeResponseMapper recipeResponseMapper;
 
     @Transactional(readOnly = true)
     public UserProfileResponse getProfile(String username) {
@@ -311,6 +316,19 @@ public class UserProfileService {
             }
             throw new BadRequestException("The uploaded file is not a valid image.");
         }
+    }
+
+    @Transactional(readOnly = true)
+    public List<MyRecipeResponse> getMyRecipes(String username) {
+        User user = findUser(username);
+        List<Recipe> recipes = recipeRepository.findBySourceUserIdAndStatusOrderByCreatedAtDesc(user.getUserId(), "verified");
+        if (recipes == null || recipes.isEmpty()) {
+            return List.of();
+        }
+        return recipes.stream()
+                .map(recipeResponseMapper::toResponse)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toList());
     }
 
     private String decodeImageFormat(byte[] bytes) throws IOException {

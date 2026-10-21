@@ -1,12 +1,14 @@
 package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.response.ContentListResponse;
+import com.fpt.swp391.nutribot.dto.response.MyRecipeResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.dto.response.PublicProfileStats;
 import com.fpt.swp391.nutribot.dto.response.PublicUserProfileResponse;
 import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Content;
-import com.fpt.swp391.nutribot.entity.Role;
+import com.fpt.swp391.nutribot.entity.Dish;
+import com.fpt.swp391.nutribot.entity.Recipe;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
@@ -21,7 +23,9 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +34,7 @@ public class PublicProfileService {
     private final UserRepository userRepository;
     private final ContentRepository contentRepository;
     private final RecipeRepository recipeRepository;
+    private final RecipeResponseMapper recipeResponseMapper;
     private final com.fpt.swp391.nutribot.repository.VoteRepository voteRepository;
 
     private static final String PUBLISHED_STATUS = "published";
@@ -43,7 +48,7 @@ public class PublicProfileService {
 
         long blogCount = contentRepository.countByContentTypeAndStatusAndUserUserId(BLOG_TYPE, PUBLISHED_STATUS, user.getUserId());
         long videoCount = contentRepository.countByContentTypeAndStatusAndUserUserId(VIDEO_TYPE, PUBLISHED_STATUS, user.getUserId());
-        long recipeCount = recipeRepository.countByCreatedByAndStatus(user.getUserId(), VERIFIED_RECIPE_STATUS);
+        long recipeCount = recipeRepository.countBySourceUserIdAndStatus(user.getUserId(), VERIFIED_RECIPE_STATUS);
 
         PublicProfileStats stats = PublicProfileStats.builder()
                 .publishedBlogCount(blogCount)
@@ -83,6 +88,22 @@ public class PublicProfileService {
 
         Page<ContentListResponse> responsePage = contentPage.map(this::toListResponse);
         return PagedResponse.of(responsePage);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MyRecipeResponse> getPublicRecipes(String username) {
+        User user = lookupActiveUser(username);
+
+        List<Recipe> recipes = recipeRepository
+                .findBySourceUserIdAndStatusOrderByCreatedAtDesc(user.getUserId(), VERIFIED_RECIPE_STATUS);
+        if (recipes == null || recipes.isEmpty()) {
+            return List.of();
+        }
+
+        return recipes.stream()
+                .map(recipeResponseMapper::toResponse)
+                .filter(Objects::nonNull)
+                .toList();
     }
 
     private User lookupActiveUser(String identifier) {

@@ -1,11 +1,14 @@
 package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.response.ContentListResponse;
+import com.fpt.swp391.nutribot.dto.response.MyRecipeResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.dto.response.PublicProfileStats;
 import com.fpt.swp391.nutribot.dto.response.PublicUserProfileResponse;
 import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Content;
+import com.fpt.swp391.nutribot.entity.Dish;
+import com.fpt.swp391.nutribot.entity.Recipe;
 import com.fpt.swp391.nutribot.entity.Role;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
@@ -37,6 +40,7 @@ class PublicProfileServiceTest {
     private ContentRepository contentRepository;
     private RecipeRepository recipeRepository;
     private VoteRepository voteRepository;
+    private RecipeResponseMapper recipeResponseMapper;
     private PublicProfileService publicProfileService;
 
     @BeforeEach
@@ -45,8 +49,9 @@ class PublicProfileServiceTest {
         contentRepository = mock(ContentRepository.class);
         recipeRepository = mock(RecipeRepository.class);
         voteRepository = mock(VoteRepository.class);
+        recipeResponseMapper = new RecipeResponseMapper();
         publicProfileService = new PublicProfileService(
-                userRepository, contentRepository, recipeRepository, voteRepository);
+                userRepository, contentRepository, recipeRepository, recipeResponseMapper, voteRepository);
     }
 
     private User createActiveUser(int userId, String username, String fullName) {
@@ -93,7 +98,7 @@ class PublicProfileServiceTest {
                     .thenReturn(Optional.of(user));
             when(contentRepository.countByContentTypeAndStatusAndUserUserId("BLOG", "published", 12)).thenReturn(5L);
             when(contentRepository.countByContentTypeAndStatusAndUserUserId("VIDEO", "published", 12)).thenReturn(2L);
-            when(recipeRepository.countByCreatedByAndStatus(12, "verified")).thenReturn(1L);
+            when(recipeRepository.countBySourceUserIdAndStatus(12, "verified")).thenReturn(1L);
 
             PublicUserProfileResponse result = publicProfileService.getPublicProfile("hoanglan_ai");
 
@@ -145,7 +150,7 @@ class PublicProfileServiceTest {
             when(userRepository.findById(7)).thenReturn(Optional.of(user));
             when(contentRepository.countByContentTypeAndStatusAndUserUserId(anyString(), anyString(), anyInt()))
                     .thenReturn(0L);
-            when(recipeRepository.countByCreatedByAndStatus(anyInt(), anyString())).thenReturn(0L);
+            when(recipeRepository.countBySourceUserIdAndStatus(anyInt(), anyString())).thenReturn(0L);
 
             PublicUserProfileResponse result = publicProfileService.getPublicProfile("7");
 
@@ -176,7 +181,7 @@ class PublicProfileServiceTest {
                     .thenReturn(Optional.of(user));
             when(contentRepository.countByContentTypeAndStatusAndUserUserId(anyString(), anyString(), anyInt()))
                     .thenReturn(0L);
-            when(recipeRepository.countByCreatedByAndStatus(anyInt(), anyString())).thenReturn(0L);
+            when(recipeRepository.countBySourceUserIdAndStatus(anyInt(), anyString())).thenReturn(0L);
 
             PublicUserProfileResponse result = publicProfileService.getPublicProfile("testuser");
 
@@ -202,7 +207,7 @@ class PublicProfileServiceTest {
                     .thenReturn(Optional.of(admin));
             when(contentRepository.countByContentTypeAndStatusAndUserUserId(anyString(), anyString(), anyInt()))
                     .thenReturn(0L);
-            when(recipeRepository.countByCreatedByAndStatus(anyInt(), anyString())).thenReturn(0L);
+            when(recipeRepository.countBySourceUserIdAndStatus(anyInt(), anyString())).thenReturn(0L);
 
             PublicUserProfileResponse result = publicProfileService.getPublicProfile("admin_user");
 
@@ -217,7 +222,7 @@ class PublicProfileServiceTest {
                     .thenReturn(Optional.of(user));
             when(contentRepository.countByContentTypeAndStatusAndUserUserId(anyString(), anyString(), anyInt()))
                     .thenReturn(0L);
-            when(recipeRepository.countByCreatedByAndStatus(anyInt(), anyString())).thenReturn(0L);
+            when(recipeRepository.countBySourceUserIdAndStatus(anyInt(), anyString())).thenReturn(0L);
 
             PublicUserProfileResponse result = publicProfileService.getPublicProfile("newuser");
 
@@ -367,6 +372,107 @@ class PublicProfileServiceTest {
             assertNotNull(result);
             assertTrue(result.getContent().isEmpty());
             assertEquals(0, result.getTotalElements());
+        }
+    }
+
+    // ==================== getPublicRecipes tests (NB-80: public recipes tab) ====================
+
+    @Nested
+    @DisplayName("getPublicRecipes")
+    class GetPublicRecipesTests {
+
+        private Dish createDish(int dishId, boolean active) {
+            return Dish.builder()
+                    .dishId(dishId)
+                    .name("Món " + dishId)
+                    .slug("mon-" + dishId)
+                    .description("Mô tả món " + dishId)
+                    .imageUrl("https://cdn.nutribot.vn/dishes/" + dishId + ".jpg")
+                    .active(active)
+                    .build();
+        }
+
+        private Recipe createVerifiedRecipe(int recipeId, int dishId, int sourceUserId, Dish dish) {
+            return Recipe.builder()
+                    .recipeId(recipeId)
+                    .dishId(dishId)
+                    .title("Công thức " + recipeId)
+                    .slug("cong-thuc-" + recipeId)
+                    .description("Mô tả công thức " + recipeId)
+                    .prepTimeMin(15)
+                    .cookTimeMin(25)
+                    .servings(2)
+                    .createdBy(99)
+                    .sourceUserId(sourceUserId)
+                    .status("verified")
+                    .dish(dish)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("should return verified recipes from the user's own posts")
+        void shouldReturnVerifiedRecipesFromSourceUser() {
+            User user = createActiveUser(12, "hoanglan_ai", "Hoàng Thị Lan");
+            when(userRepository.findByUsernameIgnoreCaseAndStatus("hoanglan_ai", AccountStatus.ACTIVE))
+                    .thenReturn(Optional.of(user));
+            when(recipeRepository.findBySourceUserIdAndStatusOrderByCreatedAtDesc(12, "verified"))
+                    .thenReturn(List.of(
+                            createVerifiedRecipe(1, 101, 12, createDish(101, true)),
+                            createVerifiedRecipe(2, 102, 12, createDish(102, true))));
+
+            List<MyRecipeResponse> result = publicProfileService.getPublicRecipes("hoanglan_ai");
+
+            assertEquals(2, result.size());
+            assertEquals(101, result.get(0).getDishId());
+            assertEquals("Món 101", result.get(0).getName());
+            assertEquals("https://cdn.nutribot.vn/dishes/101.jpg", result.get(0).getImageUrl());
+            assertEquals(15, result.get(0).getPrepTimeMinutes());
+            assertEquals(25, result.get(0).getCookTimeMinutes());
+            assertEquals(2, result.get(0).getServings());
+        }
+
+        @Test
+        @DisplayName("should skip recipes whose dish has been deactivated by admin")
+        void shouldSkipRecipesWithInactiveDish() {
+            User user = createActiveUser(12, "hoanglan_ai", "Hoàng Thị Lan");
+            when(userRepository.findByUsernameIgnoreCaseAndStatus("hoanglan_ai", AccountStatus.ACTIVE))
+                    .thenReturn(Optional.of(user));
+            when(recipeRepository.findBySourceUserIdAndStatusOrderByCreatedAtDesc(12, "verified"))
+                    .thenReturn(List.of(
+                            createVerifiedRecipe(1, 101, 12, createDish(101, false)),
+                            createVerifiedRecipe(2, 102, 12, createDish(102, true))));
+
+            List<MyRecipeResponse> result = publicProfileService.getPublicRecipes("hoanglan_ai");
+
+            assertEquals(1, result.size());
+            assertEquals(102, result.get(0).getDishId());
+        }
+
+        @Test
+        @DisplayName("should return empty list when user has no verified recipes")
+        void shouldReturnEmptyList_WhenNoRecipes() {
+            User user = createActiveUser(5, "blogger", "Blogger Người Dùng");
+            when(userRepository.findByUsernameIgnoreCaseAndStatus("blogger", AccountStatus.ACTIVE))
+                    .thenReturn(Optional.of(user));
+            when(recipeRepository.findBySourceUserIdAndStatusOrderByCreatedAtDesc(5, "verified"))
+                    .thenReturn(List.of());
+
+            List<MyRecipeResponse> result = publicProfileService.getPublicRecipes("blogger");
+
+            assertNotNull(result);
+            assertTrue(result.isEmpty());
+        }
+
+        @Test
+        @DisplayName("should throw NotFoundException when user does not exist")
+        void shouldThrow404_WhenUserNotFound() {
+            when(userRepository.findByUsernameIgnoreCaseAndStatus("ghost", AccountStatus.ACTIVE))
+                    .thenReturn(Optional.empty());
+
+            NotFoundException ex = assertThrows(NotFoundException.class,
+                    () -> publicProfileService.getPublicRecipes("ghost"));
+
+            assertEquals("Người dùng không tồn tại", ex.getMessage());
         }
     }
 }

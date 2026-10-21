@@ -102,6 +102,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/users/profile", "/api/v1/users/profile/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/*/posts").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/*/recipes").permitAll()
 
                         // Public Chatbot query (hỗ trợ khách vãng lai)
                         .requestMatchers(HttpMethod.POST, "/api/v1/chatbot/query").permitAll()

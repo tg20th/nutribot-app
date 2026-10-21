@@ -24,7 +24,11 @@ export const verifyMyEmailChange = async (otp) => unwrapData(await apiRequest('/
 
 export const uploadMyAvatar = updateMyAvatar;
 
-export const deleteMyAvatar = async () => unwrapData(await apiRequest('/api/v1/users/profile/avatar', { method: 'DELETE' }), {});
+export const deleteMyAvatar = async () =>
+  unwrapData(await apiRequest('/api/v1/users/profile/avatar', { method: 'DELETE' }), {});
+
+export const getMyRecipes = async (signal) =>
+  unwrapData(await apiRequest('/api/v1/users/profile/recipes', { signal }), []);
 
 export const getHealthProfile = async (signal) => unwrapData(await apiRequest('/api/v1/users/profile/health', { signal }), {});
 

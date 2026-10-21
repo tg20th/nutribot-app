@@ -56,9 +56,6 @@ class AuthorContentServiceTest {
     private com.fpt.swp391.nutribot.repository.RecipeConsentAuditLogRepository recipeConsentAuditLogRepository;
 
     @Mock
-    private ContentRecipeBodyParser contentRecipeBodyParser;
-
-    @Mock
     private ContentRecipeSuggestionService contentRecipeSuggestionService;
 
     @Mock
@@ -595,26 +592,19 @@ class AuthorContentServiceTest {
     }
 
     @Test
-    @DisplayName("NB-80.4: Nộp bài có công thức trong body nhưng chưa đồng thuận -> BadRequestException")
-    void submitContent_recipeBodyWithoutConsent_badRequest() {
+    @DisplayName("NB-80.4: Nộp bài có công thức nhưng CHƯA cho phép -> vẫn nộp bài bình thường (không chặn)")
+    void submitContent_recipeBodyWithoutConsent_proceeds() {
         sampleContent.setBody("{\"story\":\"salad\",\"ingredients\":[{\"name\":\"Xà lách\"}],\"steps\":[\"Trộn\"]}");
         sampleContent.setRecipeConsent(false);
-        Content recipeContent = sampleContent;
 
         when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
-        when(contentRepository.findById(100)).thenReturn(Optional.of(recipeContent));
-        when(contentRecipeBodyParser.parse(any(Content.class))).thenReturn(
-                new RecipeExtractionGatewayService.RecipeExtractionResult(
-                        new RecipeExtractionGatewayService.DishProposal("Salad rau củ", null, null, null),
-                        null,
-                        java.util.List.of(),
-                        null));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThrows(BadRequestException.class,
-                () -> authorContentService.submitContent("truong_author", 100));
-        // Không được chuyển sang ai_processing khi bị chặn
-        assertEquals("draft", sampleContent.getStatus());
-        verify(applicationEventPublisher, never()).publishEvent(any());
+        AuthorContentResponse response = authorContentService.submitContent("truong_author", 100);
+
+        assertEquals("ai_processing", response.getStatus());
+        verify(applicationEventPublisher).publishEvent(any(com.fpt.swp391.nutribot.event.ContentModerationRequestedEvent.class));
     }
 
     @Test
@@ -649,7 +639,7 @@ class AuthorContentServiceTest {
         assertEquals("ai_processing", response.getStatus());
         assertEquals(Boolean.TRUE, response.getRecipeConsentEligible());
         assertNotNull(response.getRecipeConsentMessage());
-        assertTrue(response.getRecipeConsentMessage().contains("đề xuất công thức"));
+        assertTrue(response.getRecipeConsentMessage().contains("suggest this recipe to admins"));
     }
 
     @Test
@@ -670,14 +660,14 @@ class AuthorContentServiceTest {
         assertEquals("ai_processing", response.getStatus());
         assertEquals(Boolean.FALSE, response.getRecipeConsentEligible());
         assertNotNull(response.getRecipeConsentMessage());
-        assertTrue(response.getRecipeConsentMessage().contains("chưa đủ điều kiện"));
+        assertTrue(response.getRecipeConsentMessage().contains("does not yet meet"));
         assertTrue(response.getRecipeConsentMessage().contains("500"));
         assertTrue(response.getRecipeConsentMessage().contains("10"));
     }
 
     @Test
-    @DisplayName("NB-80.8: Nộp bài CHƯA đồng thuận -> không có hướng dẫn đề xuất")
-    void submitContent_withoutConsent_noGuidance() {
+    @DisplayName("NB-80.8: Nộp bài CHƯA cho phép -> thông báo không đề xuất món ăn, không kiểm tra điều kiện")
+    void submitContent_withoutConsent_returnsNoSuggestionNotice() {
         sampleContent.setRecipeConsent(null);
         sampleContent.setViewCount(880);
 
@@ -689,7 +679,8 @@ class AuthorContentServiceTest {
 
         assertEquals("ai_processing", response.getStatus());
         assertEquals(Boolean.FALSE, response.getRecipeConsentEligible());
-        assertNull(response.getRecipeConsentMessage());
+        assertNotNull(response.getRecipeConsentMessage());
+        assertTrue(response.getRecipeConsentMessage().contains("no dish will be suggested"));
         verify(contentRecipeSuggestionService, never()).isConsentEligibleNow(any());
     }
 }
