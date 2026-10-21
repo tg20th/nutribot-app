@@ -6,6 +6,7 @@ import com.fpt.swp391.nutribot.dto.request.EmailVerificationRequest;
 import com.fpt.swp391.nutribot.dto.request.PasswordUpdateRequest;
 import com.fpt.swp391.nutribot.dto.request.ProfileUpdateRequest;
 import com.fpt.swp391.nutribot.dto.response.EmailVerificationResponse;
+import com.fpt.swp391.nutribot.dto.response.MyRecipeResponse;
 import com.fpt.swp391.nutribot.dto.response.UserProfileResponse;
 import com.fpt.swp391.nutribot.service.EmailChangeService;
 import com.fpt.swp391.nutribot.service.UserProfileService;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.security.Principal;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/users/profile")
@@ -37,6 +39,12 @@ public class UserProfileController {
     public ResponseEntity<ApiResponse<UserProfileResponse>> getProfile(Principal principal) {
         UserProfileResponse response = userProfileService.getProfile(principal.getName());
         return ResponseEntity.ok(ApiResponse.success("Profile loaded successfully.", response));
+    }
+
+    @GetMapping("/recipes")
+    public ResponseEntity<ApiResponse<List<MyRecipeResponse>>> getMyRecipes(Principal principal) {
+        List<MyRecipeResponse> recipes = userProfileService.getMyRecipes(principal.getName());
+        return ResponseEntity.ok(ApiResponse.success("My recipes loaded successfully.", recipes));
     }
 
     @PutMapping

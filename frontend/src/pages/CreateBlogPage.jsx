@@ -561,8 +561,9 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         const reviewRes = await submitForReview(isVideo ? CONTENT_TYPES.VIDEO : CONTENT_TYPES.BLOG, targetId);
         const reviewData = reviewRes?.data ?? reviewRes ?? {};
         finalStatus = reviewData.status || 'ai_processing';
-        // NB-80: Backend trả thông báo điều kiện đề xuất công thức khi tác giả đã đồng thuận
-        if (recipeConsent === true && reviewData.recipeConsentMessage) {
+        // NB-80: Backend tra thong bao trang thai de xuat cong thuc
+        // (ca khi tac gia cho phep lan khong cho phep de hien thi len MyBlogs)
+        if (reviewData.recipeConsentMessage) {
           recipeConsentMsg = reviewData.recipeConsentMessage;
         }
       }
@@ -895,8 +896,8 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
           <div className="create-blog-section-heading">
             <span>04</span>
             <div>
-              <h2>Recipe usage consent</h2>
-              <p>Allow NutriBot to use the recipe in this post.</p>
+              <h2>Use recipe as a system dish</h2>
+              <p>Allow NutriBot to take the recipe from this post and turn it into a dish of the system.</p>
             </div>
           </div>
           <label className="recipe-consent-checkbox">
@@ -906,9 +907,9 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
               onChange={(event) => setRecipeConsent(event.target.checked)}
               disabled={busy}
             />
-            <span>I agree that NutriBot may use the recipe in this post (ingredients, steps, nutrition) to suggest and create dishes in the system. I confirm I have the rights to this content.</span>
+            <span>I allow NutriBot to use the recipe in this post (ingredients, steps, nutrition) to create dishes in the system. I confirm I have the rights to this content. If unchecked, the post still publishes and shows the recipe normally, but no dish will be suggested to admins from it.</span>
           </label>
-          <p className="create-blog-hint">Unchecked by default. Consent can be changed later while editing the post.</p>
+          <p className="create-blog-hint">Unchecked by default. You can change this later while editing the post.</p>
         </div>
         {error && <p className="create-blog-error" role="alert">{error} {error.includes('đăng nhập') && <Link to="/login">Sign in</Link>}</p>}
         <div className="create-blog-submit-actions">

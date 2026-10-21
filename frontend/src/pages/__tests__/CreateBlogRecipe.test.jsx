@@ -151,7 +151,7 @@ describe('CreateBlogPage Recipe Details & Steps UI', () => {
       </MemoryRouter>
     );
 
-    const checkbox = screen.getByRole('checkbox', { name: /I agree that NutriBot may use the recipe/i });
+    const checkbox = screen.getByRole('checkbox', { name: /I allow NutriBot to use the recipe/i });
     expect(checkbox).toBeInTheDocument();
     expect(checkbox).not.toBeChecked();
   });
@@ -163,7 +163,7 @@ describe('CreateBlogPage Recipe Details & Steps UI', () => {
       </MemoryRouter>
     );
 
-    const checkbox = screen.getByRole('checkbox', { name: /I agree that NutriBot may use the recipe/i });
+    const checkbox = screen.getByRole('checkbox', { name: /I allow NutriBot to use the recipe/i });
     fireEvent.click(checkbox);
     expect(checkbox).toBeChecked();
     fireEvent.click(checkbox);
@@ -190,7 +190,7 @@ describe('CreateBlogPage Recipe Details & Steps UI', () => {
       expect(screen.getByDisplayValue('Recipe Post')).toBeInTheDocument();
     });
 
-    const checkbox = screen.getByRole('checkbox', { name: /I agree that NutriBot may use the recipe/i });
+    const checkbox = screen.getByRole('checkbox', { name: /I allow NutriBot to use the recipe/i });
     expect(checkbox).toBeChecked();
   });
 });

@@ -5,19 +5,22 @@ import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
-  Camera,
   CalendarDays,
+  Camera,
+  Check,
   ChevronDown,
   Eye,
   EyeOff,
+  Grid3X3,
+  ImageUp,
   LoaderCircle,
   LockKeyhole,
   Mail,
-  ImageUp,
   RotateCcw,
   Save,
   Trash2,
   UserRound,
+  UtensilsCrossed,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -26,10 +29,14 @@ import CommunitySideNav from '../components/community/CommunitySideNav';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import AuthModal from '../components/AuthModal';
 import { useToast } from '../components/notifications/ToastProvider';
-import { changeMyPassword, deleteMyAvatar, getMyProfile, updateMyAvatar, updateMyProfile, verifyMyEmailChange } from '../services/profileApi';
+import { changeMyPassword, deleteMyAvatar, getMyProfile, getMyRecipes, updateMyAvatar, updateMyProfile, verifyMyEmailChange } from '../services/profileApi';
 import { getCurrentUserFromToken } from '../utils/auth';
+import ImageWithFallback from '../components/ImageWithFallback';
+import DishDetailModal from '../components/community/DishDetailModal';
 import freshProduce from '../assets/fresh-produce.jpg';
 import '../styles/profile.css';
+import '../styles/public-profile.css';
+import '../styles/public-profile-recipe-button.css';
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
@@ -174,6 +181,11 @@ export default function ProfilePage() {
   const [passwordVisibility, setPasswordVisibility] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
+  const [activeTab, setActiveTab] = useState('info');
+  const [myRecipes, setMyRecipes] = useState([]);
+  const [recipesLoading, setRecipesLoading] = useState(false);
+  const [recipesLoaded, setRecipesLoaded] = useState(false);
+  const [selectedRecipe, setSelectedRecipe] = useState(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -204,9 +216,30 @@ export default function ProfilePage() {
     return () => controller.abort();
   }, [fallbackUser, profileLoadAttempt]);
 
-  useEffect(() => () => {
-    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
-  }, [avatarPreview]);
+  useEffect(() => {
+    if (activeTab !== 'recipes' || recipesLoaded) return undefined;
+    const controller = new AbortController();
+    setRecipesLoading(true);
+    getMyRecipes(controller.signal)
+      .then((recipes) => {
+        if (!controller.signal.aborted) {
+          setMyRecipes(Array.isArray(recipes) ? recipes : []);
+          setRecipesLoaded(true);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setMyRecipes([]);
+          setRecipesLoaded(true);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setRecipesLoading(false);
+        }
+      });
+    return () => controller.abort();
+  }, [activeTab, recipesLoaded]);
 
   useEffect(() => {
     if (!notice) return;
@@ -494,6 +527,16 @@ export default function ProfilePage() {
           </section>
 
           <div className="nb-profile-grid">
+            <nav className="public-profile-tabs nb-profile-tabs" aria-label="Profile content">
+              <button type="button" className={activeTab === 'info' ? 'is-active' : ''} onClick={() => setActiveTab('info')}>
+                <Grid3X3 size={16} /> Personal info
+              </button>
+              <button type="button" className={activeTab === 'recipes' ? 'is-active' : ''} onClick={() => setActiveTab('recipes')}>
+                <UtensilsCrossed size={16} /> Recipes
+              </button>
+            </nav>
+
+            {activeTab === 'info' && (
             <form className="nb-profile-form" onSubmit={handleSubmit} noValidate>
               <header>
                 <div>
@@ -599,6 +642,52 @@ export default function ProfilePage() {
                 <button type="submit" className="nb-profile-button nb-profile-button--primary" disabled={!isDirty || isSaving || isLoading || !hasLoadedProfile}>{isSaving ? <LoaderCircle size={17} className="nb-profile-spinner" /> : <Save size={17} />} {isSaving ? 'Saving...' : 'Save profile'}</button>
               </footer>
             </form>
+            )}
+
+            {activeTab === 'recipes' && (
+              <section className="nb-profile-recipes" aria-label="Your recipes">
+                {recipesLoading ? (
+                  <div className="nb-profile-loading" role="status">
+                    <LoaderCircle size={25} className="nb-profile-spinner" />
+                    <span>Loading your recipes...</span>
+                  </div>
+                ) : myRecipes.length > 0 ? (
+                  <div className="public-profile-recipes">
+                    {myRecipes.map((recipe) => (
+                      <button
+                        type="button"
+                        key={`${recipe.recipeId ?? recipe.dishId}`}
+                        onClick={() => setSelectedRecipe(recipe)}
+                        className="public-profile-recipe"
+                      >
+                        {(recipe.imageUrl || recipe.image) ? (
+                          <ImageWithFallback src={recipe.imageUrl || recipe.image} alt={recipe.name || recipe.title || ''} loading="lazy" />
+                        ) : (
+                          <span className="public-profile-recipe-fallback"><UtensilsCrossed size={20} /></span>
+                        )}
+                        <div>
+                          <h2>{recipe.name || recipe.title}</h2>
+                          {recipe.description && <p>{recipe.description}</p>}
+                          <small>
+                            {(recipe.preparationTime || recipe.prepTimeMinutes || recipe.prepTime || '')}
+                            {recipe.servings ? ` · Serves ${recipe.servings}` : ''}
+                          </small>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="public-profile-empty">No recipes yet. Recipes created from your blog posts with recipe consent will appear here.</p>
+                )}
+              </section>
+            )}
+
+            {selectedRecipe && (
+              <DishDetailModal
+                meal={selectedRecipe}
+                onClose={() => setSelectedRecipe(null)}
+              />
+            )}
 
             <aside className="nb-profile-aside" aria-label="Profile summary">
               <div className="nb-profile-completion">

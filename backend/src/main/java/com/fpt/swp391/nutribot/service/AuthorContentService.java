@@ -48,7 +48,6 @@ public class AuthorContentService {
     private final ContentModerationGatewayService contentModerationGatewayService;
     private final ContentModerationRepository contentModerationRepository;
     private final RecipeConsentAuditLogRepository recipeConsentAuditLogRepository;
-    private final ContentRecipeBodyParser contentRecipeBodyParser;
     private final ContentRecipeSuggestionService contentRecipeSuggestionService;
     private final ApplicationEventPublisher applicationEventPublisher;
 
@@ -257,13 +256,9 @@ public class AuthorContentService {
             throw new ForbiddenException("Bạn không có quyền thao tác trên nội dung này");
         }
 
-        // NB-80: Nếu body chứa công thức (parse được) nhưng chưa đồng thuận -> chặn nộp bài
-        if (!Boolean.TRUE.equals(content.getRecipeConsent())
-                && contentRecipeBodyParser.parse(content) != null) {
-            throw new BadRequestException(
-                    "Bài viết này chứa công thức nấu ăn. Vui lòng chọn đồng thuận "
-                    + "cho phép NutriBot dùng công thức trước khi đăng bài.");
-        }
+        // NB-80 (sua nghiep vu): Bai co cong thuc nhung tac gia CHUA cho phep
+        // van duoc nop bai/binh thuong — chi khong tao suggestion de xuat mon an
+        // cho admin (gate o ContentRecipeSuggestionService.evaluateContent).
 
         // Set sang AI_PROCESSING để FE phân biệt đang chờ AI vs chờ Admin duyệt
         content.setStatus(STATUS_AI_PROCESSING);
@@ -285,26 +280,29 @@ public class AuthorContentService {
     }
 
     /**
-     * NB-80: Nếu tác giả đã đồng thuận dùng công thức, gắn vào response thông báo
-     * về điều kiện đề xuất (đủ lượt xem/đánh giá, chưa có suggestion) để FE hiển thị
-     * thay cho thông báo chung chung "chờ admin duyệt".
+     * NB-80: Gắn vào response thông báo về trạng thái đề xuất công thức:
+     * - Chưa cho phép -> bai van duyet/binh thuong nhung khong de xuat mon an.
+     * - Da cho phep -> thong bao dieu kien de xat (du luot xem/danh gia, chua co suggestion).
      */
     private void applyRecipeSuggestionGuidance(Content content, AuthorContentResponse response) {
         if (!Boolean.TRUE.equals(content.getRecipeConsent())) {
             response.setRecipeConsentEligible(false);
+            response.setRecipeConsentMessage(
+                    "Your post is in the review queue. You have not allowed NutriBot "
+                    + "to use the recipe, so no dish will be suggested to admins from this post.");
             return;
         }
         boolean eligible = contentRecipeSuggestionService.isConsentEligibleNow(content);
         response.setRecipeConsentEligible(eligible);
         if (eligible) {
             response.setRecipeConsentMessage(
-                    "Bài viết đã vào hàng đợi admin duyệt. Sau khi được đăng, "
-                    + "NutriBot sẽ tự động đề xuất công thức nấu ăn lên admin.");
+                    "Your post is in the review queue. Once published, "
+                    + "NutriBot will automatically suggest this recipe to admins.");
         } else {
             response.setRecipeConsentMessage(String.format(
-                    "Bài viết đã vào hàng đợi admin duyệt. Hiện chưa đủ điều kiện đề xuất "
-                    + "công thức (cần từ %d lượt xem và %d đánh giá); "
-                    + "hệ thống sẽ tự đề xuất khi bài đạt điều kiện.",
+                    "Your post is in the review queue. It does not yet meet the recipe "
+                    + "suggestion conditions (needs at least %d views and %d votes); "
+                    + "the system will suggest it automatically once eligible.",
                     contentRecipeSuggestionService.getMinViews(),
                     contentRecipeSuggestionService.getMinVotes()));
         }
