@@ -1,7 +1,7 @@
-import { Check, ChevronLeft, ChevronRight, ExternalLink, Eye, FileText, ListOrdered, MapPin, PlaySquare, Soup, UserRound, UtensilsCrossed, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, ExternalLink, Eye, FileText, ListOrdered, MapPin, PlaySquare, Soup, UserRound, UtensilsCrossed, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, ErrorState, LoadingState, Toast } from '../../components/admin/AdminUi';
-import { contentRecipeSuggestionsApi } from '../../services/contentRecipeSuggestionsApi';
+import { contentRecipeSuggestionsApi, isRecipeConsentValid, RECIPE_CONSENT_TERMS_VERSION } from '../../services/contentRecipeSuggestionsApi';
 import { getPost } from '../../services/communityApi';
 import '../../styles/admin-content-recipe-suggestions.css';
 
@@ -32,6 +32,29 @@ function SourceContentLink({ source, onOpenSource }) {
   return <button type="button" className="recipe-suggestion-source-link" onClick={() => onOpenSource(source)}><Eye size={16} /> Open original content</button>;
 }
 
+function ValidationPanel({ validation }) {
+  if (!validation) return null;
+  const issues = validation.issues ?? [];
+  const errors = issues.filter((issue) => issue.severity === 'ERROR');
+  const warnings = issues.filter((issue) => issue.severity === 'WARNING');
+  const tone = errors.length ? 'is-blocked' : warnings.length ? 'is-warning' : 'is-ready';
+  return <section className={`recipe-suggestion-validation ${tone}`} aria-label="Suggestion validation">
+    <div className="recipe-suggestion-validation-head">
+      <div>
+        <span>PRE-APPROVAL CHECK</span>
+        <h3>{errors.length ? 'Cannot approve yet' : warnings.length ? 'Review warnings before approving' : 'Ready to approve'}</h3>
+      </div>
+      {validation.vegetarianType && <span className="recipe-suggestion-vegetarian">{validation.vegetarianType.replaceAll('_', ' ')}</span>}
+    </div>
+    {errors.length === 0 && warnings.length === 0
+      ? <p className="recipe-suggestion-validation-ok"><Check size={15} /> Data validation passed.</p>
+      : <ul className="recipe-suggestion-issues">{issues.map((issue, index) => <li key={`${issue.field}-${issue.code}-${index}`} className={`is-${issue.severity.toLowerCase()}`}>
+        <span>{issue.severity === 'ERROR' ? <X size={14} /> : <AlertTriangle size={14} />}</span>
+        <div><strong>{issue.field || 'Suggestion'}</strong><p>{issue.message}</p></div>
+      </li>)}</ul>}
+  </section>;
+}
+
 function NutritionGrid({ nutrition }) {
   const values = [
     ['Calories', nutrition.calories, 'kcal'],
@@ -45,8 +68,18 @@ function NutritionGrid({ nutrition }) {
 }
 
 function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, submitting }) {
-  const { source, dish, recipe, nutrition, ingredients, restaurant } = suggestion;
+  const { source, dish, recipe, nutrition, ingredients, restaurant, validation } = suggestion;
   const ContentIcon = source.contentType === 'VIDEO' ? PlaySquare : FileText;
+  const consentValid = isRecipeConsentValid(source);
+  const consentOutdated = source.recipeConsent === true
+    && Boolean(source.recipeConsentTermsVersion)
+    && source.recipeConsentTermsVersion !== RECIPE_CONSENT_TERMS_VERSION;
+  const approvalBlocked = !consentValid || validation?.canApprove === false;
+  const blockedMessage = !consentValid
+    ? (consentOutdated
+      ? `Author consented to terms ${source.recipeConsentTermsVersion}; current terms are ${RECIPE_CONSENT_TERMS_VERSION}. The author must consent again.`
+      : 'Author consent is required before this suggestion can be approved.')
+    : 'Resolve the validation errors before approving this suggestion.';
   return <article className="recipe-suggestion-detail" aria-label="Suggestion detail">
     <header className="recipe-suggestion-detail-head">
       <div><span>REVIEW DETAIL</span><SuggestionStatus status={suggestion.status} /></div>
@@ -62,11 +95,13 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, 
           <span><Eye size={14} /> {source.viewCount ?? 0} views</span>
           <span>{source.voteCount ?? 0} votes</span>
           <span className={source.recipeConsent ? 'recipe-suggestion-consent recipe-suggestion-consent--yes' : 'recipe-suggestion-consent recipe-suggestion-consent--no'}>
-            {source.recipeConsent ? '✓ Consent granted' : '✗ No consent'}
+            {consentValid ? '✓ Consent granted' : consentOutdated ? '! Consent outdated' : '✗ No consent'}
           </span>
         </div>
         <SourceContentLink source={source} onOpenSource={onOpenSource} />
       </section>
+
+      <ValidationPanel validation={validation} />
 
       <section className="recipe-suggestion-section">
         <div className="recipe-suggestion-section-title"><Soup size={17} /><h3>Proposed dish</h3><span>Catalog candidate</span></div>
@@ -99,7 +134,7 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, 
         <div><strong>{suggestion.status === 'REJECTED' ? 'Suggestion rejected' : 'Suggestion reviewed'}</strong>{suggestion.rejectionReason && <p>{suggestion.rejectionReason}</p>}</div>
         {suggestion.reviewedAt && <time dateTime={suggestion.reviewedAt}>{formatDate(suggestion.reviewedAt)}{suggestion.reviewerName ? ` by ${suggestion.reviewerName}` : ''}</time>}
       </section>}
-      {showReviewControls && suggestion.status === 'PENDING' && <footer className="recipe-suggestion-review-actions"><div><strong>Decision required</strong><span>Approve to import this dish and recipe, or reject with a reason.</span></div><div><button type="button" className="admin-btn secondary recipe-suggestion-reject" disabled={submitting} onClick={() => onReview('REJECT')}><X size={16} /> Reject</button><button type="button" className="admin-btn primary" disabled={submitting} onClick={() => onReview('APPROVE')}><Check size={16} /> Approve suggestion</button></div></footer>}
+      {showReviewControls && suggestion.status === 'PENDING' && <footer className="recipe-suggestion-review-actions"><div><strong>Decision required</strong><span>{approvalBlocked ? blockedMessage : 'Approve to import this dish and recipe, or reject with a reason.'}</span></div><div><button type="button" className="admin-btn secondary recipe-suggestion-reject" disabled={submitting} onClick={() => onReview('REJECT')}><X size={16} /> Reject</button><button type="button" className="admin-btn primary" disabled={submitting || approvalBlocked} title={approvalBlocked ? blockedMessage : undefined} onClick={() => onReview('APPROVE')}><Check size={16} /> Approve suggestion</button></div></footer>}
     </div>
   </article>;
 }
@@ -168,6 +203,7 @@ export default function AdminContentRecipeSuggestionsPage() {
   const [reviewDialog, setReviewDialog] = useState(null);
   const [reviewReason, setReviewReason] = useState('');
   const [reviewError, setReviewError] = useState('');
+  const [reviewIssues, setReviewIssues] = useState([]);
   const [submittingReview, setSubmittingReview] = useState(false);
   const [toast, setToast] = useState('');
   const [source, setSource] = useState(null);
@@ -232,7 +268,17 @@ export default function AdminContentRecipeSuggestionsPage() {
   const selected = useMemo(() => result.content.find((item) => item.suggestionId === selectedId) ?? null, [result.content, selectedId]);
   const changeStatus = (nextStatus) => { setStatus(nextStatus); setPage(1); setSelectedId(null); };
   const retry = () => setRefreshKey((value) => value + 1);
-  const openReview = (action) => { setReviewDialog(action); setReviewReason(''); setReviewError(''); };
+  const openReview = (action) => {
+    if (action === 'APPROVE' && detail?.status === 'PENDING'
+      && (!isRecipeConsentValid(detail.source) || detail.validation?.canApprove === false)) {
+      setToast('This suggestion cannot be approved until consent and validation checks pass.');
+      return;
+    }
+    setReviewDialog(action);
+    setReviewReason('');
+    setReviewError('');
+    setReviewIssues([]);
+  };
   const closeReview = () => { if (!submittingReview) setReviewDialog(null); };
   const openSource = (sourceInfo, fallback) => setSource({ contentId: sourceInfo.contentId, contentType: sourceInfo.contentType, fallback });
   const closeSource = () => setSource(null);
@@ -241,6 +287,7 @@ export default function AdminContentRecipeSuggestionsPage() {
     if (reviewDialog === 'REJECT' && !reviewReason.trim()) { setReviewError('Enter a reason before rejecting this suggestion.'); return; }
     setSubmittingReview(true);
     setReviewError('');
+    setReviewIssues([]);
     try {
       const updated = await contentRecipeSuggestionsApi.review(selectedId, reviewDialog, reviewReason);
       setDetail(updated);
@@ -248,11 +295,18 @@ export default function AdminContentRecipeSuggestionsPage() {
       setToast(reviewDialog === 'APPROVE' ? 'Suggestion approved.' : 'Suggestion rejected.');
       setRefreshKey((value) => value + 1);
     } catch (requestError) {
+      const payloadData = requestError?.payload?.data;
+      const issues = Array.isArray(payloadData)
+        ? payloadData
+        : Array.isArray(payloadData?.issues) ? payloadData.issues : [];
       if (requestError?.status === 409 || requestError?.status === 404) {
         setReviewDialog(null);
-        setToast('Suggestion changed on the server. The queue has been refreshed.');
+        setToast(requestError?.message || 'Suggestion changed on the server. The queue has been refreshed.');
         setRefreshKey((value) => value + 1);
-      } else setReviewError(requestError?.message || 'The review could not be saved.');
+      } else {
+        setReviewIssues(issues);
+        setReviewError(requestError?.message || 'The review could not be saved.');
+      }
     } finally { setSubmittingReview(false); }
   };
 
@@ -287,7 +341,7 @@ export default function AdminContentRecipeSuggestionsPage() {
                 : detail ? <RecipeDetail suggestion={detail} showReviewControls onReview={openReview} onOpenSource={(sourceInfo) => openSource(sourceInfo, detail)} submitting={submittingReview} />
                   : selected ? <section className="admin-panel recipe-suggestion-detail-state"><EmptyState title="Suggestion detail is unavailable." text="The source may have changed or is no longer available on the server." /></section> : null}
           </div>}
-    {reviewDialog && <div className="admin-modal-backdrop" onMouseDown={closeReview}><section className="admin-dialog recipe-suggestion-review-dialog" role="dialog" aria-modal="true" aria-labelledby="suggestion-review-title" onMouseDown={(event) => event.stopPropagation()}><p>REVIEW</p><h2 id="suggestion-review-title">{reviewDialog === 'APPROVE' ? 'Approve this suggestion?' : 'Reject this suggestion?'}</h2><span>{reviewDialog === 'APPROVE' ? 'The proposed dish and recipe will be imported into the catalog.' : 'State why this proposal should not enter the catalog.'}</span>{reviewDialog === 'REJECT' && <label>Rejection reason<textarea value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} placeholder="Example: nutrition information needs a verifiable source" aria-invalid={Boolean(reviewError)} />{reviewError && <small>{reviewError}</small>}</label>}<div><button type="button" className="admin-btn secondary" disabled={submittingReview} onClick={closeReview}>Cancel</button><button type="button" className={`admin-btn ${reviewDialog === 'APPROVE' ? 'primary' : 'danger'}`} disabled={submittingReview} onClick={submitReview}>{submittingReview ? 'Saving...' : reviewDialog === 'APPROVE' ? 'Approve' : 'Reject'}</button></div></section></div>}
+    {reviewDialog && <div className="admin-modal-backdrop" onMouseDown={closeReview}><section className="admin-dialog recipe-suggestion-review-dialog" role="dialog" aria-modal="true" aria-labelledby="suggestion-review-title" onMouseDown={(event) => event.stopPropagation()}><p>REVIEW</p><h2 id="suggestion-review-title">{reviewDialog === 'APPROVE' ? 'Approve this suggestion?' : 'Reject this suggestion?'}</h2><span>{reviewDialog === 'APPROVE' ? 'The proposed dish and recipe will be imported into the catalog.' : 'State why this proposal should not enter the catalog.'}</span>{reviewDialog === 'REJECT' && <label>Rejection reason<textarea value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} placeholder="Example: nutrition information needs a verifiable source" aria-invalid={Boolean(reviewError)} /></label>}{reviewError && <div className="recipe-suggestion-review-error" role="alert"><strong>{reviewDialog === 'APPROVE' ? 'Approval was blocked' : 'Review failed'}</strong><p>{reviewError}</p>{reviewIssues.length > 0 && <ul>{reviewIssues.map((issue, index) => <li key={`${issue.field}-${issue.code}-${index}`}><b>{issue.field || 'Suggestion'}</b>{issue.message}</li>)}</ul>}</div>}<div><button type="button" className="admin-btn secondary" disabled={submittingReview} onClick={closeReview}>Cancel</button><button type="button" className={`admin-btn ${reviewDialog === 'APPROVE' ? 'primary' : 'danger'}`} disabled={submittingReview} onClick={submitReview}>{submittingReview ? 'Saving...' : reviewDialog === 'APPROVE' ? 'Approve' : 'Reject'}</button></div></section></div>}
     <SourceContentModal open={Boolean(source)} loading={sourceLoading} error={sourceError} post={sourcePost} fallback={source?.fallback} onClose={closeSource} onRetry={() => setSourceRefresh((value) => value + 1)} />
     <Toast message={toast} onDismiss={() => setToast('')} />
     {preview && <span className="recipe-suggestions-preview-marker">Preview data</span>}

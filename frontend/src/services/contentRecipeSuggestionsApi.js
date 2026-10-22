@@ -2,20 +2,33 @@ import { apiRequest, unwrapData } from './apiClient';
 
 const basePath = '/api/v1/admin/content-recipe-suggestions';
 
+// NB-87: Phải khớp RecipeConsentPolicy.CURRENT_TERMS_VERSION ở backend
+export const RECIPE_CONSENT_TERMS_VERSION = 'v1';
+
+export function isRecipeConsentValid(source) {
+  return source?.recipeConsent === true
+    && Boolean(source?.recipeConsentAt)
+    && source?.recipeConsentTermsVersion === RECIPE_CONSENT_TERMS_VERSION;
+}
+
 const previewMode = () => import.meta.env.DEV && typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('preview') === '1';
 
 let previewSuggestions = [
   {
     suggestionId: 701, status: 'PENDING', createdAt: '2026-10-10T08:16:00Z', contentId: 82, contentType: 'BLOG', contentTitle: 'Bún gạo lứt rau củ cho bữa trưa nhẹ bụng', authorName: 'Bảo Trâm', viewCount: 1847, voteCount: 126,
+    sourceContent: { recipeConsent: true, recipeConsentAt: '2026-10-05T09:00:00Z', recipeConsentTermsVersion: 'v1' },
+    validation: { valid: false, canApprove: false, vegetarianType: 'VEGAN', vegetarianVerdict: 'VEGETARIAN', issues: [{ field: 'ingredients[0].quantity', code: 'INGREDIENT_QUANTITY_REQUIRED', severity: 'ERROR', message: 'Nguyên liệu "Bún gạo lứt" thiếu số lượng' }] },
     dish: { name: 'Bún gạo lứt rau củ', description: 'Bún gạo lứt với rau củ áp chảo, nước sốt gừng và mè rang.', servingSize: 1, servingUnit: 'bowl' },
     nutrition: { calories: 418, proteinG: 15.8, carbsG: 64.2, fatG: 11.6, fiberG: 9.4 },
-    ingredients: [{ name: 'Bún gạo lứt', quantity: 90, unit: 'g' }, { name: 'Đậu hũ non', quantity: 120, unit: 'g' }, { name: 'Bông cải xanh', quantity: 80, unit: 'g' }, { name: 'Sốt gừng mè', quantity: 2, unit: 'tbsp' }],
+    ingredients: [{ name: 'Bún gạo lứt', quantity: null, unit: 'g' }, { name: 'Đậu hũ non', quantity: 120, unit: 'g' }, { name: 'Bông cải xanh', quantity: 80, unit: 'g' }, { name: 'Sốt gừng mè', quantity: 2, unit: 'tbsp' }],
     recipe: { title: 'Bún gạo lứt rau củ', description: 'Món trưa dễ chuẩn bị, phù hợp khi cần đủ chất nhưng vẫn nhẹ nhàng.', prepTimeMin: 12, cookTimeMin: 10, servings: 1, steps: ['Ngâm bún gạo lứt trong nước ấm.', 'Áp chảo đậu hũ và rau củ đến khi chín vừa.', 'Trộn bún với sốt gừng mè, sau đó thêm rau củ và đậu hũ.'] },
     restaurant: { name: 'Nhà Bếp Mộc', address: '42 Nguyễn Văn Trỗi, Phú Nhuận', reference: 'https://maps.google.com/?q=Nha+Bep+Moc' },
   },
   {
     suggestionId: 702, status: 'PENDING', createdAt: '2026-10-09T15:42:00Z', contentId: 76, contentType: 'VIDEO', contentTitle: 'Cá hồi áp chảo sốt chanh cho ngày tập luyện', authorName: 'Minh Quân', viewCount: 2934, voteCount: 211,
+    sourceContent: { recipeConsent: true, recipeConsentAt: '2026-10-04T10:30:00Z', recipeConsentTermsVersion: 'v1' },
+    validation: { valid: true, canApprove: true, vegetarianType: null, vegetarianVerdict: 'NON_VEGETARIAN', issues: [] },
     dish: { name: 'Cá hồi áp chảo sốt chanh', description: 'Cá hồi áp chảo dùng cùng khoai lang và rau xanh.', servingSize: 1, servingUnit: 'plate' },
     nutrition: { calories: 536, proteinG: 38.5, carbsG: 42.1, fatG: 24.4, fiberG: 7.1 },
     ingredients: [{ name: 'Phi lê cá hồi', quantity: 160, unit: 'g' }, { name: 'Khoai lang', quantity: 180, unit: 'g' }, { name: 'Măng tây', quantity: 90, unit: 'g' }, { name: 'Chanh vàng', quantity: 1, unit: 'fruit' }],
@@ -74,6 +87,25 @@ function mapSource(raw) {
   };
 }
 
+function mapValidation(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  return {
+    valid: raw.valid === true,
+    canApprove: raw.canApprove === true,
+    vegetarianType: raw.vegetarianType ?? null,
+    vegetarianVerdict: raw.vegetarianVerdict ?? null,
+    issues: asArray(raw.issues).map((rawIssue) => {
+      const issue = asObject(rawIssue);
+      return {
+        field: issue.field ?? '',
+        code: issue.code ?? '',
+        severity: String(issue.severity ?? 'ERROR').toUpperCase(),
+        message: issue.message ?? '',
+      };
+    }),
+  };
+}
+
 export function mapContentRecipeSuggestion(raw) {
   const item = asObject(raw);
   const dish = asObject(item.dish ?? item.suggestedDish ?? item.dishProposal);
@@ -89,6 +121,7 @@ export function mapContentRecipeSuggestion(raw) {
     reviewedAt: item.reviewedAt ?? null,
     reviewerName: item.reviewerName ?? item.reviewedByName ?? null,
     rejectionReason: item.rejectionReason ?? item.reviewReason ?? null,
+    validation: mapValidation(item.validation),
     source: mapSource(item),
     dish: {
       name: dish.name ?? dish.title ?? item.dishName ?? item.proposedDishName ?? 'Dish name unavailable',
@@ -167,8 +200,15 @@ export const contentRecipeSuggestionsApi = {
       const index = previewSuggestions.findIndex((item) => item.suggestionId === Number(suggestionId));
       const current = previewSuggestions[index];
       if (!current) { const error = new Error('Suggestion not found.'); error.status = 404; throw error; }
+      if (current.status === 'APPROVED' && action === 'APPROVE') return mapContentRecipeSuggestion(current);
       if (current.status !== 'PENDING') { const error = new Error('This suggestion has already been reviewed.'); error.status = 409; throw error; }
       if (action === 'REJECT' && !rejectionReason.trim()) { const error = new Error('A rejection reason is required.'); error.status = 400; throw error; }
+      if (action === 'APPROVE' && current.validation?.canApprove === false) {
+        const error = new Error('Recipe data failed validation.');
+        error.status = 422;
+        error.payload = { data: current.validation.issues };
+        throw error;
+      }
       previewSuggestions[index] = { ...current, status: action === 'APPROVE' ? 'APPROVED' : 'REJECTED', reviewedAt: new Date().toISOString(), reviewerName: 'Preview administrator', rejectionReason: rejectionReason.trim() || null };
       return mapContentRecipeSuggestion(previewSuggestions[index]);
     }

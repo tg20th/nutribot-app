@@ -750,6 +750,7 @@ Hệ thống tạo đề xuất công thức  ──► status = PENDING   (+ gh
 - **Chỉ một đề xuất "đang hoạt động" (`PENDING` hoặc `APPROVED`) cho mỗi bài viết** — ràng buộc bởi unique index `UQ_content_recipe_suggestions_active` trên `contents`.
 - Đề xuất chỉ được tạo khi bài viết **đang bật** `recipeConsent`.
 - Khi admin duyệt, hệ thống kiểm tra lại `recipeConsent` lần cuối; nếu tác giả đã gỡ đồng thuận thì không duyệt được.
+- Đồng thuận hợp lệ để duyệt (NB-87) phải đồng thời có `recipe_consent = 1`, `recipe_consent_at` khác `NULL` và `recipe_consent_terms_version` đúng phiên bản hiện hành (`v1`). Thiếu consent/mốc thời gian trả `400`; sai phiên bản điều khoản trả `409`. Xem mục 12.
 - Rút đồng thuận làm mọi đề xuất `PENDING` của bài viết chuyển sang `REJECTED` kèm lý do `Tác giả đã gỡ đồng thuận dùng công thức cho bài viết này`.
 - Job quét định kỳ (`app.content-recipe-suggestion.revocation-sweep-interval-ms`, mặc định 10 phút) đóng các đề xuất `PENDING` còn sót do bài viết mất đồng thuận ở nơi khác.
 
@@ -952,4 +953,41 @@ Hệ thống tạo đề xuất công thức  ──► status = PENDING   (+ gh
 |---|---|---|
 | `app.content-recipe-suggestion.max-servings` | `50` | Giới hạn số khẩu phần tối đa. |
 | `app.content-recipe-suggestion.duplicate-similarity-threshold` | `0.8` | Ngưỡng Jaccard để cảnh báo trùng nguyên liệu. |
+
+## 12. Chốt chặn cuối khi duyệt đề xuất công thức (NB-87)
+
+> Phạm vi: NB-87 (Thắng). Bổ sung quy tắc cho `PUT /api/v1/admin/content-recipe-suggestions/{suggestionId}/review`.
+
+### 12.1. Điều kiện duyệt (đúng thứ tự kiểm tra)
+
+1. Chỉ `ADMIN` được gọi endpoint (`/api/v1/admin/**` + `@PreAuthorize`).
+2. `action` phải là `APPROVE` hoặc `REJECT`; giá trị khác trả `400`.
+3. Trạng thái hiện tại phải là `PENDING`; ngoại lệ idempotent ở mục 12.2.
+4. Nội dung nguồn phải còn `published`; nếu không trả `409`.
+5. Đồng thuận của tác giả phải hợp lệ:
+   - `recipeConsent = true` **và** `recipeConsentAt != null`; thiếu một trong hai trả `400` (`Tác giả chưa đồng thuận hợp lệ...`).
+   - `recipeConsentTermsVersion` phải bằng phiên bản hiện hành (`v1`); lệch phiên bản trả `409` kèm thông báo cần đồng thuận lại.
+6. Validator NB-86 phải trả `valid = true`; nếu không trả `422` với `data` là **mảng** issue (mục 11.5).
+7. Chỉ khi tất cả điều kiện trên đạt: tạo đúng một `Dish` + một `Recipe` + các `RecipeIngredient`, cập nhật đề xuất `APPROVED`, ghi audit `APPROVED`, phát thông báo cho tác giả. Nội dung gốc (`contents`) **không bị sửa**.
+
+### 12.2. Idempotency và xung đột
+
+| Trạng thái hiện tại | `action` | Kết quả |
+|---|---|---|
+| `PENDING` | `APPROVE` | `200`, duyệt và tạo catalog như mục 12.1. |
+| `APPROVED` | `APPROVE` | `200`, trả nguyên trạng đề xuất (kèm `dishId`/`recipeId` đã có). **Không** tạo thêm Dish/Recipe, không ghi audit, không gửi thông báo. |
+| `REJECTED` | `APPROVE` | `409`. |
+| `APPROVED` | `REJECT` | `409`. |
+| `REJECTED` | `REJECT` | `409`. |
+
+- Nếu hai admin duyệt đồng thời và lần ghi sau đụng ràng buộc unique (`UQ_dishes_name`, `UQ_dishes_slug`, `UQ_ingredients_name`, `UQ_ingredients_slug`) thì transaction rollback và trả `409` với thông báo tải lại đề xuất; không trả `500`.
+- Lỗi gửi thông báo sau khi transaction đã commit **không** làm request duyệt thất bại (listener bắt lỗi và ghi log).
+
+### 12.3. Hành vi Frontend Admin
+
+- `GET /{suggestionId}` trả khối `validation` cho đề xuất `PENDING`; UI hiển thị panel "Pre-approval check" với các issue `ERROR`/`WARNING`, badge `vegetarianType` và nút **Approve bị vô hiệu hoá** khi `canApprove = false` hoặc đồng thuận không hợp lệ.
+- UI coi đồng thuận là hợp lệ khi có `recipeConsentAt` và `recipeConsentTermsVersion = v1`; hiển thị `! Consent outdated` khi phiên bản lệch.
+- Lỗi `422` trả `data` dạng mảng issue; UI hiển thị message của backend kèm danh sách `field` + `message` trong hộp thoại duyệt (không đóng hộp thoại để Admin xem lỗi).
+- `409`/`404` khi duyệt: đóng hộp thoại, hiển thị toast "Suggestion changed on the server" và tải lại hàng đợi.
+
 
