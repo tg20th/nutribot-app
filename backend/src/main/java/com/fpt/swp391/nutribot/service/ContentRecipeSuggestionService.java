@@ -4,15 +4,18 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestion;
+import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestionAudit;
 import com.fpt.swp391.nutribot.repository.ContentRecipeSuggestionRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.DishRepository;
 import com.fpt.swp391.nutribot.repository.VoteRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -39,6 +42,8 @@ public class ContentRecipeSuggestionService {
     private final boolean enabled;
     private final int minViews;
     private final int minVotes;
+    private final RecipeSuggestionAuditService auditService;
+    private final ObjectProvider<ContentRecipeSuggestionService> selfProvider;
 
     public ContentRecipeSuggestionService(
             ContentRepository contentRepository,
@@ -50,7 +55,9 @@ public class ContentRecipeSuggestionService {
             ObjectMapper objectMapper,
             @Value("${app.content-recipe-suggestion.enabled:true}") boolean enabled,
             @Value("${app.content-recipe-suggestion.min-views:500}") int minViews,
-            @Value("${app.content-recipe-suggestion.min-votes:10}") int minVotes) {
+            @Value("${app.content-recipe-suggestion.min-votes:10}") int minVotes,
+            RecipeSuggestionAuditService auditService,
+            ObjectProvider<ContentRecipeSuggestionService> selfProvider) {
         this.contentRepository = contentRepository;
         this.voteRepository = voteRepository;
         this.suggestionRepository = suggestionRepository;
@@ -61,6 +68,8 @@ public class ContentRecipeSuggestionService {
         this.enabled = enabled;
         this.minViews = minViews;
         this.minVotes = minVotes;
+        this.auditService = auditService;
+        this.selfProvider = selfProvider;
     }
 
     /**
@@ -68,13 +77,12 @@ public class ContentRecipeSuggestionService {
      * làm chậm API duyệt và không giữ transaction trong lúc gọi AI service.
      */
     @Async
-    @Transactional
     public void evaluateContentById(Integer contentId) {
         if (contentId == null) {
             return;
         }
         try {
-            contentRepository.findById(contentId).ifPresent(this::evaluateContent);
+            contentRepository.findById(contentId).ifPresent(this::evaluateContentInOwnTransaction);
         } catch (Exception ex) {
             log.error("Đánh giá suggestion thất bại cho content {}: {}", contentId, ex.getMessage());
         }
@@ -83,28 +91,45 @@ public class ContentRecipeSuggestionService {
     /**
      * Quét toàn bộ nội dung published đủ ngưỡng view để tạo suggestion còn thiếu.
      * Dùng cho job định kỳ vì view/vote tăng dần theo thời gian.
+     * <p>
+     * Mỗi nội dung được đánh giá trong MỘT transaction riêng ({@link #evaluateContent})
+     * để một nội dung lỗi (ví dụ trùng ràng buộc unique) không làm hỏng cả lượt quét,
+     * và không để lại transaction treo chờ khoá.
      */
-    @Transactional
     public int evaluateEligibleContents() {
         if (!enabled) {
             return 0;
         }
         int created = 0;
         for (Content content : contentRepository.findByStatusAndViewCountGreaterThanEqual("published", minViews)) {
-            if (evaluateContent(content)) {
-                created++;
+            try {
+                if (evaluateContentInOwnTransaction(content)) {
+                    created++;
+                }
+            } catch (Exception ex) {
+                log.warn("Bỏ qua nội dung {} khi quét suggestion: {}", content.getContentId(), ex.getMessage());
             }
         }
         return created;
     }
 
     /**
+     * Gọi {@link #evaluateContent)} qua proxy để đảm bảo transaction mới được mở
+     * (self-invocation trực tiếp sẽ không kích hoạt {@code @Transactional}).
+     */
+    private boolean evaluateContentInOwnTransaction(Content content) {
+        return selfProvider.getObject().evaluateContent(content);
+    }
+
+    /**
      * Đánh giá một nội dung và tạo suggestion nếu đủ điều kiện. Chỉ đề xuất món
      * ăn chưa tồn tại trong hệ thống (so khớp tên với bảng dishes, mọi trạng thái).
+     * <p>
+     * Luôn chạy trong transaction riêng ({@code REQUIRES_NEW}) để mỗi nội dung độc lập.
      *
      * @return true nếu một suggestion mới được tạo.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean evaluateContent(Content content) {
         if (!enabled || content == null) {
             return false;
@@ -149,13 +174,20 @@ public class ContentRecipeSuggestionService {
         ContentRecipeSuggestion suggestion = buildSuggestion(content, extraction, voteCount);
         try {
             suggestionRepository.save(suggestion);
-            log.info("Đã tạo recipe suggestion cho content {}", contentId);
-            return true;
         } catch (DataIntegrityViolationException ex) {
             // Một luồng khác đã tạo trước đó (ràng buộc unique trên content_id + status active).
             log.debug("Bỏ qua tạo trùng suggestion cho content {}: {}", contentId, ex.getMessage());
             return false;
         }
+        // NB-84: Ghi nhật ký lúc hệ thống sinh đề xuất để đối soát lại vòng đời.
+        // Ghi trong CÙNG transaction với đề xuất (bảng audit có khoá ngoại tới đề xuất).
+        auditService.record(suggestion, ContentRecipeSuggestionAudit.ACTION_SUGGESTED,
+                content.getUser() != null ? content.getUser().getUserId() : null,
+                "Hệ thống đề xuất công thức từ bài viết đạt điều kiện "
+                        + "(" + (content.getViewCount() == null ? 0 : content.getViewCount()) + " lượt xem, "
+                        + voteCount + " lượt thích)");
+        log.info("Đã tạo recipe suggestion cho content {}", contentId);
+        return true;
     }
 
     /**

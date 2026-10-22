@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -35,4 +36,33 @@ public interface ContentRecipeSuggestionRepository extends JpaRepository<Content
     @EntityGraph(attributePaths = {"content", "content.user"})
     @Query("SELECT s FROM ContentRecipeSuggestion s WHERE s.suggestionId = :suggestionId")
     Optional<ContentRecipeSuggestion> findDetailById(@Param("suggestionId") Integer suggestionId);
+
+    /**
+     * NB-84: Tac gia xem cac de xuat cong thuc cua chinh minh.
+     */
+    @EntityGraph(attributePaths = {"content", "content.user"})
+    Page<ContentRecipeSuggestion> findByContentUserUserId(Integer userId, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"content", "content.user"})
+    Page<ContentRecipeSuggestion> findByContentUserUserIdAndStatusIn(
+            Integer userId, Collection<String> statuses, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"content", "content.user"})
+    Optional<ContentRecipeSuggestion> findBySuggestionIdAndContentUserUserId(
+            Integer suggestionId, Integer userId);
+
+    /**
+     * NB-84: Cac de xuat con PENDING nhung bai viet da bi tac gia rut dong thuan.
+     * Dung cho job quet de doi soat lai va chuyen sang REJECTED, tranh de xuat bi ket.
+     */
+    @Query("SELECT s FROM ContentRecipeSuggestion s JOIN FETCH s.content c "
+            + "WHERE s.status = 'PENDING' AND COALESCE(c.recipeConsent, false) = false")
+    List<ContentRecipeSuggestion> findPendingWithoutConsent();
+
+    /**
+     * NB-84: Cac de xuat dang PENDING cua 1 bai viet, dung khi tac gia rut dong thuan.
+     */
+    @EntityGraph(attributePaths = {"content", "content.user"})
+    List<ContentRecipeSuggestion> findByContentContentIdAndStatusIn(
+            Integer contentId, Collection<String> statuses);
 }

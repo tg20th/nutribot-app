@@ -593,7 +593,7 @@ Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/c
 
 ## 9. Thông báo (Notifications - Thắng & Lan)
 
-> Phạm vi: NB-81 (duyệt / từ chối công thức) + NB-83 (vote / comment bài viết).
+> Phạm vi: NB-81 (duyệt / từ chối công thức) + NB-83 (vote / comment bài viết) + NB-84 (nội dung thông báo duyệt công thức).
 > Tất cả endpoint yêu cầu token hợp lệ: `Authorization: Bearer <token>`.
 
 ### 9.1. Lấy danh sách thông báo
@@ -615,6 +615,9 @@ Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/c
         "actorId": 3,
         "actorFullName": "Jennie Kim",
         "actorAvatarUrl": "https://example.com/avatar.jpg",
+        "title": "Công thức đã được thêm vào NutriBot",
+        "message": "Công thức \"Phở nấm thuần chay\" từ bài viết \"Chia sẻ cách làm Phở nấm thuần chay\" của bạn đã được duyệt và thêm vào hệ thống. Bạn có thể tìm món này trong danh mục món ăn.",
+        "actionUrl": "/community/posts/82",
         "contentTitle": "Cách làm Phở nữa thật ngon",
         "contentType": "BLOG",
         "read": false,
@@ -693,10 +696,142 @@ Các endpoint bên dưới yêu cầu Bearer token. Menu chỉ được đọc/c
 | `CONTENT_VOTED` | `CONTENT` | `contentId` | Có người khác vote bài viết của tôi | NB-83 |
 | `CONTENT_COMMENTED` | `CONTENT` | `contentId` | Có người khác comment bài viết của tôi | NB-83 |
 | `RECIPE_SUGGESTION_APPROVED` | `CONTENT_RECIPE_SUGGESTION` | `suggestionId` | Admin duyệt công thức tôi đề xuất | NB-81 |
-| `RECIPE_SUGGESTION_REJECTED` | `CONTENT_RECIPE_SUGGESTION` | `suggestionId` | Admin từ chối công thức tôi đề xuất | NB-81 |
+| `RECIPE_SUGGESTION_REJECTED` | `CONTENT_RECIPE_SUGGESTION` | `suggestionId` | Admin từ chối công thức tôi đề xuất **hoặc** đề xuất bị đóng tự động do gỡ đồng thuận | NB-81 / NB-84 |
 
 **Quy tắc NB-83:**
 - Không tạo thông báo khi người dùng tự vote / tự comment bài của chính mình.
 - Không tạo thông báo khi bỏ vote (`unvote`).
 - Các vote gần nhau (trong cửa sổ **30 phút**) được **gộp vào cùng một thông báo** để tránh spam: `updatedAt` được cập nhật và `readAt` bị xoá để thông báo lên đầu danh sách và tính vào số chưa đọc.
 - Mỗi comment tạo một thông báo riêng (không gộp).
+
+### 9.6. Trường nội dung thông báo (NB-84)
+
+Từ NB-84, mọi thông báo đều mang **tiêu đề + nội dung + đường dẫn điều hướng** để Frontend hiển thị được ngay, không cần tự dựng chuỗi.
+
+| Trường | Kiểu | Ý nghĩa |
+|---|---|---|
+| `title` | `string` (≤ 200 ký tự) | Tiêu đề thông báo. Với duyệt công thức: `Công thức đã được thêm vào NutriBot` / `Đề xuất công thức chưa được duyệt` / `Đề xuất công thức đã được đóng`. |
+| `message` | `string` (≤ 1000 ký tự) | Nội dung chi tiết, có nêu tên món, tiêu đề bài viết và lý do (nếu có). |
+| `actionUrl` | `string` (≤ 300 ký tự) | Đường dẫn FE điều hướng, dạng `/community/posts/{contentId}`. `null` khi không xác định được bài viết. |
+
+**Quy tắc NB-84:**
+- Thông báo duyệt công thức chỉ gửi cho **tác giả của bài viết** (người đã bật đồng thuận dùng công thức).
+- `RECIPE_SUGGESTION_APPROVED` → thông báo chỉ được gửi **sau khi** công thức đã được import thành công vào danh mục món ăn.
+- `RECIPE_SUGGESTION_REJECTED` sinh ra ở **hai** trường hợp, phân biệt qua `title`:
+  - `Đề xuất công thức chưa được duyệt` → admin từ chối, `message` kèm `rejectionReason`.
+  - `Đề xuất công thức đã được đóng` → đề xuất bị đóng tự động vì bài viết không còn đồng thuận dùng công thức (`message` kèm lý do gỡ đồng thuận).
+- Không có thông báo riêng cho bước "đã gửi đề xuất" — tác giả tự theo dõi qua API mục 10.
+
+## 10. Vòng đời đề xuất công thức (Recipe Suggestion Approval - NB-84)
+
+> Phạm vi: NB-84 (Thắng). Tất cả endpoint yêu cầu token hợp lệ: `Authorization: Bearer <token>`.
+
+### 10.1. Vòng đời và quy tắc nghiệp vụ
+
+```text
+Tác giả bật đồng thuận (recipeConsent = true)
+        │
+        ▼
+Đủ điều kiện: published + (BLOG|VIDEO) + view ≥ 500 + vote ≥ 10
+        │
+        ▼
+Hệ thống tạo đề xuất công thức  ──► status = PENDING   (+ ghi nhật ký SUGGESTED)
+        │
+        ├── Admin duyệt (APPROVE) ──► status = APPROVED  (+ nhật ký APPROVED)
+        │     └── import món ăn + công thức, gửi thông báo RECIPE_SUGGESTION_APPROVED
+        ├── Admin từ chối (REJECT) ─► status = REJECTED  (+ nhật ký REJECTED)
+        │     └── gửi thông báo RECIPE_SUGGESTION_REJECTED kèm lý do
+        └── Tác giả gỡ đồng thuận (true → false) ─► status = REJECTED (+ nhật ký AUTO_REJECTED)
+              └── gửi thông báo RECIPE_SUGGESTION_REJECTED (title "Đề xuất công thức đã được đóng")
+```
+
+**Quy tắc:**
+- Chỉ tồn tại 3 trạng thái: `PENDING` → `APPROVED` | `REJECTED`. Không thêm trạng thái mới.
+- **Chỉ một đề xuất "đang hoạt động" (`PENDING` hoặc `APPROVED`) cho mỗi bài viết** — ràng buộc bởi unique index `UQ_content_recipe_suggestions_active` trên `contents`.
+- Đề xuất chỉ được tạo khi bài viết **đang bật** `recipeConsent`.
+- Khi admin duyệt, hệ thống kiểm tra lại `recipeConsent` lần cuối; nếu tác giả đã gỡ đồng thuận thì không duyệt được.
+- Rút đồng thuận làm mọi đề xuất `PENDING` của bài viết chuyển sang `REJECTED` kèm lý do `Tác giả đã gỡ đồng thuận dùng công thức cho bài viết này`.
+- Job quét định kỳ (`app.content-recipe-suggestion.revocation-sweep-interval-ms`, mặc định 10 phút) đóng các đề xuất `PENDING` còn sót do bài viết mất đồng thuận ở nơi khác.
+
+### 10.2. Tác giả theo dõi đề xuất của bài viết của mình
+
+- **Endpoint:** `GET /api/v1/author/recipe-suggestions?status=PENDING&page=0&size=10`
+- **Query Params:** `status` (tuỳ chọn: `PENDING` | `APPROVED` | `REJECTED`), `page` (mặc định `0`), `size` (mặc định `10`)
+- **Quyền:** chỉ trả về đề xuất thuộc về **chính người đang đăng nhập**.
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Lấy danh sách đề xuất công thức thành công",
+  "data": {
+    "content": [
+      {
+        "suggestionId": 700,
+        "status": "PENDING",
+        "dishName": "Phở nấm thuần chay",
+        "recipeTitle": "Phở nấm thuần chay",
+        "contentId": 82,
+        "contentTitle": "Chia sẻ cách làm Phở nấm thuần chay",
+        "contentType": "BLOG",
+        "sourceViewCount": 1800,
+        "sourceVoteCount": 120,
+        "rejectionReason": null,
+        "reviewedBy": null,
+        "reviewedByName": null,
+        "reviewedAt": null,
+        "createdAt": "2026-10-22T09:00:00",
+        "updatedAt": "2026-10-22T09:00:00"
+      }
+    ],
+    "page": 0,
+    "size": 10,
+    "totalElements": 1,
+    "totalPages": 1,
+    "first": true,
+    "last": true,
+    "currentPage": 0
+  },
+  "timestamp": "2026-10-22T09:30:00Z"
+}
+```
+
+- **Lỗi (404):** đề xuất không tồn tại **hoặc không thuộc về** người đang đăng nhập (`Không tìm thấy đề xuất với ID: {id}`) — trả 404 để không lộ sự tồn tại của đề xuất của người khác.
+
+### 10.3. Chi tiết một đề xuất của tác giả
+
+- **Endpoint:** `GET /api/v1/author/recipe-suggestions/{suggestionId}`
+- **Response (200 OK):** trả về **một object** `AuthorRecipeSuggestionResponse` (cùng cấu trúc phần tử ở mục 10.2).
+- **Lỗi (404):** xem mục 10.2.
+
+### 10.4. Admin xem nhật ký đề xuất
+
+- **Endpoint:** `GET /api/v1/admin/content-recipe-suggestions/{suggestionId}/audit`
+- **Quyền:** `ADMIN`
+- **Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Lấy nhật ký đề xuất công thức thành công",
+  "data": [
+    {
+      "auditId": 12,
+      "suggestionId": 700,
+      "action": "AUTO_REJECTED",
+      "actorId": 9,
+      "actorName": "Giselle Uchinaga",
+      "reason": "Tác giả đã gỡ đồng thuận dùng công thức cho bài viết này",
+      "createdAt": "2026-10-22T09:20:00"
+    }
+  ],
+  "timestamp": "2026-10-22T09:30:00Z"
+}
+```
+
+**Giá trị `action`:**
+
+| `action` | Ý nghĩa |
+|---|---|
+| `SUGGESTED` | Hệ thống vừa tạo đề xuất từ bài viết (reason ghi lại số view / vote đạt ngưỡng). |
+| `APPROVED` | Admin duyệt đề xuất. |
+| `REJECTED` | Admin từ chối đề xuất. |
+| `AUTO_REJECTED` | Hệ thống tự đóng đề xuất vì bài viết không còn đồng thuận dùng công thức. |

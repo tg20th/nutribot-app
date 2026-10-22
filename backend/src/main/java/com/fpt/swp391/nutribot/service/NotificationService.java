@@ -40,6 +40,14 @@ public class NotificationService {
     public static final String ACTION_APPROVE = "APPROVE";
     public static final String ACTION_REJECT = "REJECT";
 
+    /** NB-84: Tieu de gan cho thong bao ket qua duyet cong thuc. */
+    public static final String TITLE_SUGGESTION_APPROVED = "Công thức đã được thêm vào NutriBot";
+    public static final String TITLE_SUGGESTION_REJECTED = "Đề xuất công thức chưa được duyệt";
+    public static final String TITLE_SUGGESTION_CLOSED = "Đề xuất công thức đã được đóng";
+
+    /** NB-84: Do dai toi da cho noi dung thong bao (khop cot NVARCHAR(1000)). */
+    private static final int MAX_MESSAGE_LENGTH = 1000;
+
     /** NB-83: Cửa sổ gom nhóm vote (phút). Vote mới trong cửa sổ này sẽ gộp vào notification hiện có. */
     public static final int VOTE_GROUP_WINDOW_MINUTES = 30;
 
@@ -106,6 +114,24 @@ public class NotificationService {
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void createForRecipeSuggestionReviewed(Integer authorId, Integer adminId, Integer suggestionId, String action) {
+        createForRecipeSuggestionReviewed(authorId, adminId, suggestionId, action, null, null, null, null);
+    }
+
+    /**
+     * NB-84: Thông báo kết quả duyệt đề xuất công thức có nội dung cụ thể.
+     * Tác giả thấy rõ công thức nào đã vào hệ thống hoặc bị từ chối vì lý do gì,
+     * thay vì chỉ nhận một thông báo trống không nội dung.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void createForRecipeSuggestionReviewed(
+            Integer authorId,
+            Integer adminId,
+            Integer suggestionId,
+            String action,
+            Integer contentId,
+            String dishName,
+            String contentTitle,
+            String rejectionReason) {
         if (authorId == null || suggestionId == null) {
             return;
         }
@@ -117,7 +143,8 @@ public class NotificationService {
         if (adminId != null) {
             actor = userRepository.findById(adminId).orElse(null);
         }
-        String type = ACTION_REJECT.equalsIgnoreCase(action) ? TYPE_RECIPE_SUGGESTION_REJECTED : TYPE_RECIPE_SUGGESTION_APPROVED;
+        boolean rejected = ACTION_REJECT.equalsIgnoreCase(action);
+        String type = rejected ? TYPE_RECIPE_SUGGESTION_REJECTED : TYPE_RECIPE_SUGGESTION_APPROVED;
 
         Notification notification = Notification.builder()
                 .recipient(recipient)
@@ -125,8 +152,124 @@ public class NotificationService {
                 .type(type)
                 .referenceType(REFERENCE_TYPE_CONTENT_RECIPE_SUGGESTION)
                 .referenceId(suggestionId)
+                .title(rejected ? TITLE_SUGGESTION_REJECTED : TITLE_SUGGESTION_APPROVED)
+                .message(rejected
+                        ? buildRejectedMessage(dishName, contentTitle, rejectionReason)
+                        : buildApprovedMessage(dishName, contentTitle))
+                .actionUrl(buildActionUrl(contentId))
                 .build();
         notificationRepository.save(notification);
+    }
+
+    /**
+     * NB-84: Thông báo cho tác giả khi đề xuất công thức bị đóng tự động vì bài viết
+     * không còn đồng thuận dùng công thức (tác giả gỡ đồng thuận hoặc job quét đối soát).
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void createForRecipeSuggestionClosed(
+            Integer authorId,
+            Integer suggestionId,
+            Integer contentId,
+            String dishName,
+            String contentTitle,
+            String reason) {
+        if (authorId == null || suggestionId == null) {
+            return;
+        }
+        User recipient = userRepository.findById(authorId).orElse(null);
+        if (recipient == null) {
+            return;
+        }
+
+        Notification notification = Notification.builder()
+                .recipient(recipient)
+                .actor(null)
+                .type(TYPE_RECIPE_SUGGESTION_REJECTED)
+                .referenceType(REFERENCE_TYPE_CONTENT_RECIPE_SUGGESTION)
+                .referenceId(suggestionId)
+                .title(TITLE_SUGGESTION_CLOSED)
+                .message(buildClosedMessage(dishName, contentTitle, reason))
+                .actionUrl(buildActionUrl(contentId))
+                .build();
+        notificationRepository.save(notification);
+    }
+
+    /**
+     * NB-84: Nội dung thông báo khi admin duyệt công thức.
+     */
+    private String buildApprovedMessage(String dishName, String contentTitle) {
+        StringBuilder message = new StringBuilder();
+        if (hasText(dishName)) {
+            message.append("Công thức \"").append(dishName).append("\"");
+        }
+        if (hasText(contentTitle)) {
+            message.append(message.length() > 0 ? " từ bài viết \"" : "Bài viết \"").append(contentTitle).append("\"");
+        }
+        if (message.length() == 0) {
+            message.append("Công thức từ bài viết của bạn");
+        }
+        message.append(" của bạn đã được duyệt và thêm vào hệ thống. Bạn có thể tìm món này trong danh mục món ăn.");
+        return truncate(message.toString());
+    }
+
+    /**
+     * NB-84: Noi dung thong bao khi admin tu choi cong thuc, kem ly do.
+     */
+    private String buildRejectedMessage(String dishName, String contentTitle, String rejectionReason) {
+        StringBuilder message = new StringBuilder();
+        if (hasText(dishName)) {
+            message.append("Công thức \"").append(dishName).append("\"");
+        }
+        if (hasText(contentTitle)) {
+            message.append(message.length() > 0 ? " từ bài viết \"" : "Bài viết \"").append(contentTitle).append("\"");
+        }
+        if (message.length() == 0) {
+            message.append("Công thức từ bài viết của bạn");
+        }
+        message.append(" của bạn chưa được duyệt.");
+        if (hasText(rejectionReason)) {
+            message.append(" Lý do: ").append(rejectionReason.trim());
+        }
+        return truncate(message.toString());
+    }
+
+    /**
+     * NB-84: Nội dung thông báo khi đề xuất công thức bị đóng tự động.
+     */
+    private String buildClosedMessage(String dishName, String contentTitle, String reason) {
+        StringBuilder message = new StringBuilder();
+        if (hasText(dishName)) {
+            message.append("Công thức \"").append(dishName).append("\"");
+        }
+        if (hasText(contentTitle)) {
+            message.append(message.length() > 0 ? " từ bài viết \"" : "Bài viết \"").append(contentTitle).append("\"");
+        }
+        if (message.length() == 0) {
+            message.append("Đề xuất công thức của bạn");
+        }
+        message.append(" đã được đóng và không được duyệt.");
+        if (hasText(reason)) {
+            message.append(" Lý do: ").append(reason.trim());
+        }
+        return truncate(message.toString());
+    }
+
+    private String buildActionUrl(Integer contentId) {
+        if (contentId == null) {
+            return null;
+        }
+        return "/community/posts/" + contentId;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private String truncate(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.length() <= MAX_MESSAGE_LENGTH ? value : value.substring(0, MAX_MESSAGE_LENGTH);
     }
 
     /**
@@ -253,6 +396,9 @@ public class NotificationService {
                 .readAt(notification.getReadAt())
                 .createdAt(notification.getCreatedAt())
                 .updatedAt(updatedAt)
+                .title(notification.getTitle())
+                .message(notification.getMessage())
+                .actionUrl(notification.getActionUrl())
                 .build();
     }
 }

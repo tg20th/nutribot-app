@@ -36,6 +36,24 @@ public class Notification {
     @Column(name = "reference_id")
     private Integer referenceId;
 
+    /**
+     * NB-84: Tieu de rut gon cua thong bao, giong nhu "Cong thuc da duoc them vao NutriBot".
+     */
+    @Column(name = "title", length = 200)
+    private String title;
+
+    /**
+     * NB-84: Noi dung day du cua thong bao (VD: ten cong thuc, ly do tu choi).
+     */
+    @Column(name = "message", length = 1000)
+    private String message;
+
+    /**
+     * NB-84: Duong dan dieu huong de nguoi dung di toi noi dung lien quan.
+     */
+    @Column(name = "action_url", length = 300)
+    private String actionUrl;
+
     @Column(name = "read_at")
     private LocalDateTime readAt;
 

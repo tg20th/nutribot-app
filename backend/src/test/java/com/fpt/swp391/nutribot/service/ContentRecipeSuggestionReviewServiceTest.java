@@ -66,6 +66,8 @@ class ContentRecipeSuggestionReviewServiceTest {
     private UserRepository userRepository;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private RecipeSuggestionAuditService auditService;
 
     private ContentRecipeSuggestionReviewService service;
 
@@ -85,7 +87,8 @@ class ContentRecipeSuggestionReviewServiceTest {
                 "salad-healthy",
                 "rau-cu",
                 "verified",
-                eventPublisher);
+                eventPublisher,
+                auditService);
     }
 
     private User admin() {

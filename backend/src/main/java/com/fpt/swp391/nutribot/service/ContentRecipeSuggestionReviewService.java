@@ -8,6 +8,7 @@ import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.entity.Category;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestion;
+import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestionAudit;
 import com.fpt.swp391.nutribot.entity.Dish;
 import com.fpt.swp391.nutribot.entity.Ingredient;
 import com.fpt.swp391.nutribot.entity.Recipe;
@@ -83,6 +84,7 @@ public class ContentRecipeSuggestionReviewService {
     private final String ingredientDefaultCategorySlug;
     private final String recipeStatus;
     private final ApplicationEventPublisher eventPublisher;
+    private final RecipeSuggestionAuditService auditService;
 
     public ContentRecipeSuggestionReviewService(
             ContentRecipeSuggestionRepository suggestionRepository,
@@ -98,7 +100,8 @@ public class ContentRecipeSuggestionReviewService {
             @Value("${app.content-recipe-suggestion.dish-default-category-slug:salad-healthy}") String dishDefaultCategorySlug,
             @Value("${app.content-recipe-suggestion.ingredient-default-category-slug:rau-cu}") String ingredientDefaultCategorySlug,
             @Value("${app.content-recipe-suggestion.recipe-status:verified}") String recipeStatus,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            RecipeSuggestionAuditService auditService) {
         this.suggestionRepository = suggestionRepository;
         this.contentRepository = contentRepository;
         this.dishRepository = dishRepository;
@@ -113,6 +116,7 @@ public class ContentRecipeSuggestionReviewService {
         this.ingredientDefaultCategorySlug = ingredientDefaultCategorySlug;
         this.recipeStatus = recipeStatus;
         this.eventPublisher = eventPublisher;
+        this.auditService = auditService;
     }
 
     @Transactional(readOnly = true)
@@ -161,8 +165,21 @@ public class ContentRecipeSuggestionReviewService {
         }
 
         suggestionRepository.save(suggestion);
+        recordAudit(suggestion, admin, action);
         publishReviewNotification(suggestion, admin, action);
         return toResponse(suggestion, Map.of(admin.getUserId(), displayName(admin)));
+    }
+
+    /**
+     * NB-84: Ghi nhat ky vong doi trang thai de xuat (duyet / tu choi).
+     */
+    private void recordAudit(ContentRecipeSuggestion suggestion, User admin, String action) {
+        String auditAction = ACTION_REJECT.equalsIgnoreCase(action)
+                ? ContentRecipeSuggestionAudit.ACTION_REJECTED
+                : ContentRecipeSuggestionAudit.ACTION_APPROVED;
+        auditService.record(suggestion, auditAction,
+                admin != null ? admin.getUserId() : null,
+                suggestion.getRejectionReason());
     }
 
     private void publishReviewNotification(ContentRecipeSuggestion suggestion, User admin, String action) {
@@ -180,7 +197,10 @@ public class ContentRecipeSuggestionReviewService {
                 contentId,
                 authorId,
                 admin.getUserId(),
-                action));
+                action,
+                suggestion.getDishName(),
+                content != null ? content.getTitle() : null,
+                suggestion.getRejectionReason()));
     }
 
     private void reject(ContentRecipeSuggestion suggestion, String reason, User admin) {
