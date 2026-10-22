@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { getCurrentUserFromToken } from '../../utils/auth';
 import { userDashboardNav } from './userDashboardNav';
 import { getMyProfile } from '../../services/profileApi';
+import NotificationCenter from '../notifications/NotificationCenter';
 
 const buildAvatarFromUsername = (username) => {
   const safeName = (username || 'User').trim();
@@ -141,6 +142,7 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
           </button>
         </form>
       )}
+      <div className="community-topbar-actions"><NotificationCenter/></div>
     </header>
 
     {/* Mobile drawer overlay */}

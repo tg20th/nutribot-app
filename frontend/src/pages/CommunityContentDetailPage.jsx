@@ -90,7 +90,7 @@ export default function CommunityContentDetailPage() {
     const timer = window.setTimeout(() => {
       const loadPost = isMyContentSource
         ? loadMyContent(postId, sourceContentType, controller.signal)
-        : getPost(postId, controller.signal);
+        : getPost(postId, controller.signal, sourceContentType);
       loadPost.then((item) => {
         if (!controller.signal.aborted) {
           syncSearchViewSnapshot(returnTo, item);

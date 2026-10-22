@@ -75,6 +75,9 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // CORS preflight requests must be handled before authentication.
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
                         // Public Auth Endpoints
                         .requestMatchers(
                                 "/api/v1/auth/login",
@@ -229,9 +232,8 @@ public class SecurityConfig {
                 "http://127.0.0.1:*",
                 "https://*.ngrok-free.app",
                 "https://*.ngrok.io",
-                "https://*.ngrok-free.dev",
-                "*"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+                "https://*.ngrok-free.dev"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With"));
         configuration.setExposedHeaders(List.of("Authorization"));
         configuration.setAllowCredentials(true);
