@@ -59,6 +59,9 @@ class AuthorContentServiceTest {
     private ContentRecipeSuggestionService contentRecipeSuggestionService;
 
     @Mock
+    private RecipeConsentRevocationService recipeConsentRevocationService;
+
+    @Mock
     private org.springframework.context.ApplicationEventPublisher applicationEventPublisher;
 
     @InjectMocks

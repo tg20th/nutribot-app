@@ -49,6 +49,7 @@ public class AuthorContentService {
     private final ContentModerationRepository contentModerationRepository;
     private final RecipeConsentAuditLogRepository recipeConsentAuditLogRepository;
     private final ContentRecipeSuggestionService contentRecipeSuggestionService;
+    private final RecipeConsentRevocationService recipeConsentRevocationService;
     private final ApplicationEventPublisher applicationEventPublisher;
 
     private static final String STATUS_DRAFT = "draft";
@@ -201,6 +202,11 @@ public class AuthorContentService {
                 content.setRecipeConsentAt(newConsent ? LocalDateTime.now() : null);
                 content.setRecipeConsentTermsVersion(newConsent ? resolveTermsVersion(request.getRecipeConsentTermsVersion()) : null);
                 saveConsentAudit(user, content, previousConsent, newConsent, "UPDATE");
+                // NB-84: Bài không còn đồng thuận thì đề xuất công thức đang chờ phải đóng lại,
+                // nếu không sẽ kẹt PENDING vô tận (admin không thể duyệt vì bị chặn consent).
+                if (!newConsent) {
+                    recipeConsentRevocationService.revokePendingSuggestions(contentId, user.getUserId());
+                }
             }
         }
 

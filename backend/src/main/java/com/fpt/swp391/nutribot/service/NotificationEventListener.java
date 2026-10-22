@@ -17,6 +17,14 @@ public class NotificationEventListener {
         if (event == null) {
             return;
         }
-        notificationService.createForRecipeSuggestionReviewed(event.authorId(), event.adminId(), event.suggestionId(), event.action());
+        notificationService.createForRecipeSuggestionReviewed(
+                event.authorId(),
+                event.adminId(),
+                event.suggestionId(),
+                event.action(),
+                event.contentId(),
+                event.dishName(),
+                event.contentTitle(),
+                event.rejectionReason());
     }
 }

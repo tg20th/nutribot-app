@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 public class ContentRecipeSuggestionSweepJob {
 
     private final ContentRecipeSuggestionService contentRecipeSuggestionService;
+    private final RecipeConsentRevocationService recipeConsentRevocationService;
 
     @Scheduled(
             fixedDelayString = "${app.content-recipe-suggestion.sweep-interval-ms:600000}",
@@ -27,6 +28,25 @@ public class ContentRecipeSuggestionSweepJob {
             }
         } catch (Exception ex) {
             log.error("Sweep recipe suggestion thất bại: {}", ex.getMessage());
+        }
+    }
+
+    /**
+     * NB-84: Đóng các đề xuất công thức còn PENDING khi bài viết nguồn không còn được
+     * phép dùng công thức. Chạy định kỳ để đối soát lại các trường hợp gỡ đồng thuận
+     * diễn ra ngoài luồng cập nhật bài viết (ví dụ bài bị xoá).
+     */
+    @Scheduled(
+            fixedDelayString = "${app.content-recipe-suggestion.revocation-sweep-interval-ms:600000}",
+            initialDelayString = "${app.content-recipe-suggestion.revocation-sweep-initial-delay-ms:120000}")
+    public void sweepRevokedConsentSuggestions() {
+        try {
+            int revoked = recipeConsentRevocationService.revokePendingSuggestionsWithoutConsent();
+            if (revoked > 0) {
+                log.info("Sweep đã đóng {} đề xuất công thức do bài viết không còn đồng thuận", revoked);
+            }
+        } catch (Exception ex) {
+            log.error("Sweep đóng đề xuất công thức thất bại: {}", ex.getMessage());
         }
     }
 }

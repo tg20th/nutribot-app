@@ -557,6 +557,26 @@ CREATE TABLE content_recipe_suggestions (
     CONSTRAINT fk_suggestion_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(user_id)
 );
 
+----------------------------------------------
+-- 13.2 CONTENT RECIPE SUGGESTION AUDIT (NB-84)
+-- Nhật ký append-only mọi thay đổi trạng thái của đề xuất công thức
+----------------------------------------------
+CREATE TABLE content_recipe_suggestion_audit (
+    audit_id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    suggestion_id INT NOT NULL,
+    action NVARCHAR(30) NOT NULL,
+    actor_id INT NULL,
+    reason NVARCHAR(MAX) NULL,
+    created_at DATETIME2(3) NOT NULL CONSTRAINT DF_crsa_created_at DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT fk_crsa_suggestion FOREIGN KEY (suggestion_id) REFERENCES content_recipe_suggestions(suggestion_id) ON DELETE CASCADE,
+    CONSTRAINT fk_crsa_actor FOREIGN KEY (actor_id) REFERENCES users(user_id) ON DELETE NO ACTION,
+    CONSTRAINT CK_crsa_action CHECK (action IN (N'SUGGESTED', N'APPROVED', N'REJECTED', N'AUTO_REJECTED'))
+);
+
+CREATE INDEX idx_crsa_suggestion ON content_recipe_suggestion_audit(suggestion_id, created_at DESC);
+GO
+
+-- NB-84: Nội dung thông báo đọc được (tiêu đề + nội dung + đường dẫn điều hướng)
 CREATE TABLE notifications (
     notification_id INT IDENTITY(1,1) PRIMARY KEY,
     recipient_id INT NOT NULL,
@@ -564,6 +584,9 @@ CREATE TABLE notifications (
     type VARCHAR(50) NOT NULL,
     reference_type VARCHAR(50) NULL,
     reference_id INT NULL,
+    title NVARCHAR(200) NULL,
+    message NVARCHAR(1000) NULL,
+    action_url NVARCHAR(300) NULL,
     read_at DATETIME NULL,
     created_at DATETIME NOT NULL DEFAULT GETDATE(),
     updated_at DATETIME NULL,
@@ -655,5 +678,61 @@ BEGIN
     CREATE INDEX idx_notifications_recipient_updated
         ON notifications(recipient_id, updated_at DESC);
     PRINT 'NB-83: Da them index idx_notifications_recipient_updated';
+END
+GO
+
+-- =============================================
+-- NB-84 MIGRATION (idempotent)
+-- 1. Them cot noi dung dung cho thong bao (title/message/action_url)
+-- 2. Tao bang nhat ky content_recipe_suggestion_audit
+-- =============================================
+
+IF COL_LENGTH('notifications', 'title') IS NULL
+BEGIN
+    ALTER TABLE notifications ADD title NVARCHAR(200) NULL;
+    PRINT 'NB-84: Da them cot notifications.title';
+END
+GO
+
+IF COL_LENGTH('notifications', 'message') IS NULL
+BEGIN
+    ALTER TABLE notifications ADD message NVARCHAR(1000) NULL;
+    PRINT 'NB-84: Da them cot notifications.message';
+END
+GO
+
+IF COL_LENGTH('notifications', 'action_url') IS NULL
+BEGIN
+    ALTER TABLE notifications ADD action_url NVARCHAR(300) NULL;
+    PRINT 'NB-84: Da them cot notifications.action_url';
+END
+GO
+
+IF OBJECT_ID('content_recipe_suggestion_audit', 'U') IS NULL
+BEGIN
+    CREATE TABLE content_recipe_suggestion_audit (
+        audit_id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        suggestion_id INT NOT NULL,
+        action NVARCHAR(30) NOT NULL,
+        actor_id INT NULL,
+        reason NVARCHAR(MAX) NULL,
+        created_at DATETIME2(3) NOT NULL CONSTRAINT DF_crsa_created_at DEFAULT (SYSUTCDATETIME()),
+        CONSTRAINT fk_crsa_suggestion FOREIGN KEY (suggestion_id) REFERENCES content_recipe_suggestions(suggestion_id) ON DELETE CASCADE,
+        CONSTRAINT fk_crsa_actor FOREIGN KEY (actor_id) REFERENCES users(user_id) ON DELETE NO ACTION,
+        CONSTRAINT CK_crsa_action CHECK (action IN (N'SUGGESTED', N'APPROVED', N'REJECTED', N'AUTO_REJECTED'))
+    );
+    PRINT 'NB-84: Da tao bang content_recipe_suggestion_audit';
+END
+GO
+
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE name = 'idx_crsa_suggestion'
+      AND object_id = OBJECT_ID('content_recipe_suggestion_audit')
+)
+BEGIN
+    CREATE INDEX idx_crsa_suggestion
+        ON content_recipe_suggestion_audit(suggestion_id, created_at DESC);
+    PRINT 'NB-84: Da them index idx_crsa_suggestion';
 END
 GO

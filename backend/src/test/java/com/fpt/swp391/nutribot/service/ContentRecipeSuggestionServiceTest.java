@@ -15,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -48,7 +49,23 @@ class ContentRecipeSuggestionServiceTest {
     @Mock
     private RecipeExtractionGatewayService extractionGateway;
 
+    @Mock
+    private RecipeSuggestionAuditService auditService;
+
     private ContentRecipeSuggestionService service;
+
+    /**
+     * ObjectProvider trả về chính service này (giống proxy của Spring khi chạy thật),
+     * để evaluateContentInOwnTransaction gọi được evaluateContent qua "proxy".
+     */
+    private ObjectProvider<ContentRecipeSuggestionService> selfProvider() {
+        return new ObjectProvider<>() {
+            @Override
+            public ContentRecipeSuggestionService getObject() {
+                return service;
+            }
+        };
+    }
 
     @BeforeEach
     void setUp() {
@@ -62,7 +79,9 @@ class ContentRecipeSuggestionServiceTest {
                 new ObjectMapper(),
                 true,
                 MIN_VIEWS,
-                MIN_VOTES);
+                MIN_VOTES,
+                auditService,
+                selfProvider());
     }
 
     private Content publishedContent(Integer id, String type, int views) {
@@ -195,7 +214,7 @@ class ContentRecipeSuggestionServiceTest {
         ContentRecipeSuggestionService disabled = new ContentRecipeSuggestionService(
                 contentRepository, voteRepository, suggestionRepository, dishRepository,
                 new ContentRecipeBodyParser(new ObjectMapper()), extractionGateway,
-                new ObjectMapper(), false, MIN_VIEWS, MIN_VOTES);
+                new ObjectMapper(), false, MIN_VIEWS, MIN_VOTES, auditService, selfProvider());
 
         boolean created = disabled.evaluateContent(publishedContent(88, "BLOG", MIN_VIEWS));
 

@@ -27,6 +27,9 @@ class AdminContentRecipeSuggestionControllerTest {
     private ContentRecipeSuggestionReviewService reviewService;
 
     @Mock
+    private com.fpt.swp391.nutribot.service.RecipeSuggestionAuditService auditService;
+
+    @Mock
     private Authentication authentication;
 
     @InjectMocks

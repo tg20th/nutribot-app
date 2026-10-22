@@ -44,4 +44,19 @@ public class NotificationResponse {
      */
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime updatedAt;
+
+    /**
+     * NB-84: Tieu de rut gon cua thong bao. Vi du "Cong thuc da duoc them vao NutriBot".
+     */
+    private String title;
+
+    /**
+     * NB-84: Noi dung day du cua thong bao, gom ten cong thuc va ly do neu bi tu choi.
+     */
+    private String message;
+
+    /**
+     * NB-84: Duong dan dieu huong toi noi dung lien quan (VD: bai viet nguon).
+     */
+    private String actionUrl;
 }
