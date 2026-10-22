@@ -36,6 +36,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
@@ -170,6 +171,8 @@ class ContentRecipeSuggestionReviewServiceTest {
                 .thumbnailUrl("https://img.nutribot.test/bun-gao-lut.jpg")
                 .viewCount(1800)
                 .recipeConsent(true)
+                .recipeConsentAt(java.time.LocalDateTime.of(2026, 10, 10, 8, 0))
+                .recipeConsentTermsVersion(RecipeConsentPolicy.CURRENT_TERMS_VERSION)
                 .build();
     }
 
@@ -294,6 +297,8 @@ class ContentRecipeSuggestionReviewServiceTest {
         assertEquals(70, riCaptor.getValue().getIngredientId());
         assertEquals(new BigDecimal("90"), riCaptor.getValue().getQuantity());
         assertEquals("g", riCaptor.getValue().getUnit());
+        // NB-87: Duyệt đề xuất không được sửa nội dung gốc của tác giả
+        verify(contentRepository, never()).save(any(Content.class));
     }
 
     @Test
@@ -382,16 +387,105 @@ class ContentRecipeSuggestionReviewServiceTest {
     }
 
     @Test
-    @DisplayName("Review lại suggestion đã xử lý -> ConflictException")
-    void review_alreadyReviewed_conflict() {
+    @DisplayName("NB-87: Duyệt lại đề xuất đã APPROVED là idempotent, không tạo thêm dữ liệu")
+    void review_approveTwice_idempotent() {
         ContentRecipeSuggestion suggestion = pendingSuggestion(content(20));
         suggestion.setStatus("APPROVED");
+        suggestion.setDishId(50);
+        suggestion.setRecipeId(60);
+        suggestion.setReviewedBy(1);
+        suggestion.setReviewedAt(java.time.LocalDateTime.of(2026, 10, 12, 9, 0));
+
+        when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
+        when(userRepository.findAllById(anyCollection())).thenReturn(List.of(admin()));
+
+        ContentRecipeSuggestionResponse response = service.review(700, request("APPROVE", null), "admin");
+
+        assertEquals("APPROVED", response.getStatus());
+        assertEquals(50, response.getDishId());
+        assertEquals(60, response.getRecipeId());
+        verify(suggestionRepository, never()).save(any(ContentRecipeSuggestion.class));
+        verifyNoInteractions(contentRepository, dishRepository, recipeRepository,
+                ingredientRepository, recipeIngredientRepository, auditService, eventPublisher);
+    }
+
+    @Test
+    @DisplayName("NB-87: Duyệt đề xuất đã bị từ chối -> ConflictException")
+    void review_approveAfterReject_conflict() {
+        ContentRecipeSuggestion suggestion = pendingSuggestion(content(20));
+        suggestion.setStatus("REJECTED");
 
         when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
 
         assertThrows(ConflictException.class,
                 () -> service.review(700, request("APPROVE", null), "admin"));
         verifyNoInteractions(contentRepository, dishRepository, recipeRepository);
+    }
+
+    @Test
+    @DisplayName("NB-87: Từ chối đề xuất đã duyệt -> ConflictException")
+    void review_rejectAfterApprove_conflict() {
+        ContentRecipeSuggestion suggestion = pendingSuggestion(content(20));
+        suggestion.setStatus("APPROVED");
+
+        when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
+
+        assertThrows(ConflictException.class,
+                () -> service.review(700, request("REJECT", "Đổi ý"), "admin"));
+    }
+
+    @Test
+    @DisplayName("NB-87: Tác giả đồng thuận theo điều khoản cũ -> ConflictException, không tạo dữ liệu")
+    void review_approve_outdatedConsentTerms_conflict() {
+        Content content = content(20);
+        content.setRecipeConsentTermsVersion("v0");
+        ContentRecipeSuggestion suggestion = pendingSuggestion(content);
+
+        when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
+        when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
+
+        assertThrows(ConflictException.class,
+                () -> service.review(700, request("APPROVE", null), "admin"));
+        verify(dishRepository, never()).save(any(Dish.class));
+        verify(recipeRepository, never()).save(any(Recipe.class));
+        assertEquals("PENDING", suggestion.getStatus());
+    }
+
+    @Test
+    @DisplayName("NB-87: Đồng thuận thiếu mốc thời gian -> BadRequestException, không tạo dữ liệu")
+    void review_approve_missingConsentAt_badRequest() {
+        Content content = content(20);
+        content.setRecipeConsentAt(null);
+        ContentRecipeSuggestion suggestion = pendingSuggestion(content);
+
+        when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
+        when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
+
+        assertThrows(BadRequestException.class,
+                () -> service.review(700, request("APPROVE", null), "admin"));
+        verify(dishRepository, never()).save(any(Dish.class));
+        assertEquals("PENDING", suggestion.getStatus());
+    }
+
+    @Test
+    @DisplayName("NB-87: Đụng unique tên món/nguyên liệu khi duyệt song song -> ConflictException thay vì 500")
+    void review_approve_catalogRace_conflict() {
+        Content content = content(20);
+        ContentRecipeSuggestion suggestion = pendingSuggestion(content);
+
+        when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
+        when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
+        when(categoryRepository.findById(20)).thenReturn(Optional.of(category(20, "RECIPE")));
+        when(dishRepository.save(any(Dish.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate dish"));
+
+        assertThrows(ConflictException.class,
+                () -> service.review(700, request("APPROVE", null), "admin"));
+        verify(recipeRepository, never()).save(any(Recipe.class));
+        assertEquals("PENDING", suggestion.getStatus());
     }
 
     @Test

@@ -29,6 +29,7 @@ import com.fpt.swp391.nutribot.repository.RecipeRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -147,17 +148,30 @@ public class ContentRecipeSuggestionReviewService {
         ContentRecipeSuggestion suggestion = suggestionRepository.findByIdForUpdate(suggestionId)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy đề xuất với ID: " + suggestionId));
 
+        String action = request.getAction() == null ? "" : request.getAction().trim().toUpperCase();
+        if (!ACTION_APPROVE.equals(action) && !ACTION_REJECT.equals(action)) {
+            throw new BadRequestException("Action không hợp lệ: " + request.getAction());
+        }
+
         if (!STATUS_PENDING.equalsIgnoreCase(suggestion.getStatus())) {
+            // NB-87: Duyệt lại một đề xuất đã APPROVED là thao tác idempotent, không tạo thêm dữ liệu
+            if (ACTION_APPROVE.equals(action) && STATUS_APPROVED.equalsIgnoreCase(suggestion.getStatus())) {
+                return toResponse(suggestion, resolveReviewerNames(List.of(suggestion)));
+            }
             throw new ConflictException("Đề xuất đã được xử lý với trạng thái: " + suggestion.getStatus());
         }
 
         User admin = resolveAdmin(adminUsername);
-        String action = request.getAction() == null ? "" : request.getAction().trim().toUpperCase();
-
-        switch (action) {
-            case ACTION_APPROVE -> approve(suggestion, admin);
-            case ACTION_REJECT -> reject(suggestion, request.getRejectionReason(), admin);
-            default -> throw new BadRequestException("Action không hợp lệ: " + request.getAction());
+        try {
+            if (ACTION_APPROVE.equals(action)) {
+                approve(suggestion, admin);
+            } else {
+                reject(suggestion, request.getRejectionReason(), admin);
+            }
+        } catch (DataIntegrityViolationException ex) {
+            // NB-87: Hai admin duyệt cùng lúc có thể đụng unique tên món/nguyên liệu -> trả 409 thay vì 500
+            throw new ConflictException(
+                    "Dữ liệu món hoặc nguyên liệu vừa được cập nhật bởi người khác, vui lòng tải lại và thử duyệt lại");
         }
 
         suggestionRepository.save(suggestion);
@@ -220,10 +234,18 @@ public class ContentRecipeSuggestionReviewService {
                 .orElseThrow(() -> new ConflictException(
                         "Nội dung nguồn không còn công khai, không thể duyệt đề xuất"));
 
-        // NB-86: Chốt chặn cuối — nội dung nguồn đã bị gỡ đồng thuận thì không import được
-        if (!Boolean.TRUE.equals(freshContent.getRecipeConsent())) {
+        // NB-87: Đồng thuận chỉ hợp lệ khi tác giả đã bật, có mốc thời gian và đúng phiên bản điều khoản hiện hành
+        if (!Boolean.TRUE.equals(freshContent.getRecipeConsent())
+                || freshContent.getRecipeConsentAt() == null) {
             throw new BadRequestException(
-                    "Tác giả chưa đồng thuận cho phép dùng công thức của bài viết này");
+                    "Tác giả chưa đồng thuận hợp lệ cho phép dùng công thức của bài viết này");
+        }
+        String consentTermsVersion = freshContent.getRecipeConsentTermsVersion();
+        if (!RecipeConsentPolicy.CURRENT_TERMS_VERSION.equals(consentTermsVersion)) {
+            throw new ConflictException("Tác giả đã đồng thuận theo phiên bản điều khoản cũ ("
+                    + (consentTermsVersion == null ? "không xác định" : consentTermsVersion)
+                    + "), cần đồng thuận lại theo phiên bản "
+                    + RecipeConsentPolicy.CURRENT_TERMS_VERSION + " trước khi duyệt");
         }
 
         RecipeSuggestionValidation validation = validator.validate(suggestion);

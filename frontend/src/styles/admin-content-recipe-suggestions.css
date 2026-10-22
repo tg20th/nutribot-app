@@ -30,3 +30,29 @@
 .recipe-suggestion-consent{padding:3px 8px;border-radius:999px;font-size:10px;font-weight:800}
 .recipe-suggestion-consent--yes{background:#e3f2df;color:#285d35;border:1px solid #b9d9ae}
 .recipe-suggestion-consent--no{background:#fbeee9;color:#913f2c;border:1px solid #ecc8b9}
+
+/* NB-87: Kết quả kiểm tra dữ liệu trước khi duyệt */
+.recipe-suggestion-validation{margin-top:18px;padding:14px 16px;border:1px solid #dde6d8;border-radius:10px;background:#f8fbf5}
+.recipe-suggestion-validation.is-blocked{border-color:#ecc8b9;background:#fdf5f1}
+.recipe-suggestion-validation.is-warning{border-color:#ecdfb8;background:#fdfaf0}
+.recipe-suggestion-validation-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.recipe-suggestion-validation-head div{display:grid;gap:3px}
+.recipe-suggestion-validation-head span{color:#7b8379;font-size:10px;font-weight:800;letter-spacing:.08em}
+.recipe-suggestion-validation-head h3{margin:0;color:#283b2d;font-size:14px}
+.recipe-suggestion-validation.is-blocked .recipe-suggestion-validation-head h3{color:#8f3c2d}
+.recipe-suggestion-validation.is-warning .recipe-suggestion-validation-head h3{color:#8a6a1f}
+.recipe-suggestion-vegetarian{padding:3px 9px;border-radius:999px;background:#e3f0dd;color:#2d6838;border:1px solid #b9d9ae;font-size:10px;font-weight:800;white-space:nowrap}
+.recipe-suggestion-validation-ok{display:flex;align-items:center;gap:6px;margin:10px 0 0!important;color:#2d6838!important;font-size:12px!important;font-weight:700}
+.recipe-suggestion-issues{display:grid;gap:8px;margin:12px 0 0;padding:0;list-style:none}
+.recipe-suggestion-issues li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:9px;padding:9px 11px;border-radius:8px;background:#fff;border:1px solid #e6d3cb;color:#7c3a2c}
+.recipe-suggestion-issues li.is-warning{border-color:#ebdfba;color:#7d621d}
+.recipe-suggestion-issues li>span{display:grid;place-items:center;width:20px;height:20px}
+.recipe-suggestion-issues li div{display:grid;gap:2px;min-width:0}
+.recipe-suggestion-issues li strong{font-size:11px;overflow-wrap:anywhere}
+.recipe-suggestion-issues li p{margin:0;color:#5d554f;font-size:11px;line-height:1.45;overflow-wrap:anywhere}
+.recipe-suggestion-review-error{margin-top:12px;padding:10px 12px;border:1px solid #ecc8b9;border-radius:8px;background:#fdf3ef;color:#8f3c2d}
+.recipe-suggestion-review-error strong{display:block;font-size:12px}
+.recipe-suggestion-review-error p{margin:4px 0 0;font-size:11px;line-height:1.45}
+.recipe-suggestion-review-error ul{display:grid;gap:4px;margin:8px 0 0;padding:0;list-style:none}
+.recipe-suggestion-review-error li{font-size:11px;line-height:1.45;overflow-wrap:anywhere}
+.recipe-suggestion-review-error li b{display:block;color:#7c3a2c}

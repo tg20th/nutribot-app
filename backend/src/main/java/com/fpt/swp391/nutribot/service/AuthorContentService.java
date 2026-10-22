@@ -59,8 +59,8 @@ public class AuthorContentService {
     private static final String STATUS_REJECTED = "rejected";
     private static final List<String> AUTHOR_ALLOWED_STATUSES = List.of(STATUS_DRAFT, STATUS_UNDER_REVIEW);
 
-    /** Phiên bản điều khoản đồng thuận dùng công thức (NB-80). */
-    public static final String RECIPE_CONSENT_TERMS_VERSION = "v1";
+    /** Phiên bản điều khoản đồng thuận dùng công thức (NB-80, tập trung tại NB-87). */
+    public static final String RECIPE_CONSENT_TERMS_VERSION = RecipeConsentPolicy.CURRENT_TERMS_VERSION;
 
     @Transactional(readOnly = true)
     public PagedResponse<AuthorContentResponse> getMyContent(String username, String contentType, int page, int size) {
