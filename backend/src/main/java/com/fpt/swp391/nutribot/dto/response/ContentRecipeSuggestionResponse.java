@@ -27,6 +27,7 @@ public class ContentRecipeSuggestionResponse {
     private List<IngredientInfo> ingredients;
     private RecipeInfo recipe;
     private RestaurantInfo restaurant;
+    private RecipeSuggestionValidation validation;
 
     @Data
     @Builder

@@ -12,6 +12,8 @@ public interface RecipeRepository extends JpaRepository<Recipe, Integer> {
 
     Optional<Recipe> findByDishId(Integer dishId);
 
+    Optional<Recipe> findFirstBySourceContentId(Integer sourceContentId);
+
     boolean existsBySlug(String slug);
 
     long countBySourceUserIdAndStatus(Integer sourceUserId, String status);

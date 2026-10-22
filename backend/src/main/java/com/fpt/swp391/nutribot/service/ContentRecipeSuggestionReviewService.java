@@ -1,10 +1,9 @@
 package com.fpt.swp391.nutribot.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fpt.swp391.nutribot.dto.request.ContentRecipeSuggestionReviewRequest;
 import com.fpt.swp391.nutribot.dto.response.ContentRecipeSuggestionResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
+import com.fpt.swp391.nutribot.dto.response.RecipeSuggestionValidation;
 import com.fpt.swp391.nutribot.entity.Category;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestion;
@@ -19,6 +18,7 @@ import com.fpt.swp391.nutribot.event.RecipeSuggestionReviewedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ConflictException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
+import com.fpt.swp391.nutribot.exception.RecipeValidationException;
 import com.fpt.swp391.nutribot.repository.CategoryRepository;
 import com.fpt.swp391.nutribot.repository.ContentRecipeSuggestionRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
@@ -27,7 +27,6 @@ import com.fpt.swp391.nutribot.repository.IngredientRepository;
 import com.fpt.swp391.nutribot.repository.RecipeIngredientRepository;
 import com.fpt.swp391.nutribot.repository.RecipeRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -38,7 +37,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -46,7 +44,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -55,7 +52,6 @@ import java.util.stream.Collectors;
  * liệu món ăn/công thức/nguyên liệu vào canonical catalog một cách an toàn
  * (transaction all-or-nothing, có khóa chống hai Admin xử lý trùng).
  */
-@Slf4j
 @Service
 public class ContentRecipeSuggestionReviewService {
 
@@ -67,7 +63,6 @@ public class ContentRecipeSuggestionReviewService {
     private static final String PUBLISHED_STATUS = "published";
     private static final String DISH_CATEGORY_TYPE = "RECIPE";
     private static final String INGREDIENT_CATEGORY_TYPE = "INGREDIENT";
-    private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{InCombiningDiacriticalMarks}+");
     private static final int MAX_PAGE_SIZE = 50;
 
     private final ContentRecipeSuggestionRepository suggestionRepository;
@@ -78,8 +73,8 @@ public class ContentRecipeSuggestionReviewService {
     private final RecipeIngredientRepository recipeIngredientRepository;
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
-    private final ObjectMapper objectMapper;
-    private final VegetarianTypeClassifier vegetarianTypeClassifier;
+    private final RecipeSuggestionPayloadReader payloadReader;
+    private final RecipeSuggestionValidator validator;
     private final String dishDefaultCategorySlug;
     private final String ingredientDefaultCategorySlug;
     private final String recipeStatus;
@@ -95,8 +90,8 @@ public class ContentRecipeSuggestionReviewService {
             RecipeIngredientRepository recipeIngredientRepository,
             CategoryRepository categoryRepository,
             UserRepository userRepository,
-            ObjectMapper objectMapper,
-            VegetarianTypeClassifier vegetarianTypeClassifier,
+            RecipeSuggestionPayloadReader payloadReader,
+            RecipeSuggestionValidator validator,
             @Value("${app.content-recipe-suggestion.dish-default-category-slug:salad-healthy}") String dishDefaultCategorySlug,
             @Value("${app.content-recipe-suggestion.ingredient-default-category-slug:rau-cu}") String ingredientDefaultCategorySlug,
             @Value("${app.content-recipe-suggestion.recipe-status:verified}") String recipeStatus,
@@ -110,8 +105,8 @@ public class ContentRecipeSuggestionReviewService {
         this.recipeIngredientRepository = recipeIngredientRepository;
         this.categoryRepository = categoryRepository;
         this.userRepository = userRepository;
-        this.objectMapper = objectMapper;
-        this.vegetarianTypeClassifier = vegetarianTypeClassifier;
+        this.payloadReader = payloadReader;
+        this.validator = validator;
         this.dishDefaultCategorySlug = dishDefaultCategorySlug;
         this.ingredientDefaultCategorySlug = ingredientDefaultCategorySlug;
         this.recipeStatus = recipeStatus;
@@ -140,7 +135,8 @@ public class ContentRecipeSuggestionReviewService {
     public ContentRecipeSuggestionResponse getById(Integer suggestionId) {
         ContentRecipeSuggestion suggestion = suggestionRepository.findDetailById(suggestionId)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy đề xuất với ID: " + suggestionId));
-        return toResponse(suggestion, resolveReviewerNames(List.of(suggestion)));
+        return toResponse(suggestion, resolveReviewerNames(List.of(suggestion)),
+                STATUS_PENDING.equalsIgnoreCase(suggestion.getStatus()));
     }
 
     @Transactional
@@ -224,13 +220,18 @@ public class ContentRecipeSuggestionReviewService {
                 .orElseThrow(() -> new ConflictException(
                         "Nội dung nguồn không còn công khai, không thể duyệt đề xuất"));
 
-        // NB-80: Chốt chặn cuối — nội dung nguồn đã bị gỡ đồng thuận thì không import được
+        // NB-86: Chốt chặn cuối — nội dung nguồn đã bị gỡ đồng thuận thì không import được
         if (!Boolean.TRUE.equals(freshContent.getRecipeConsent())) {
             throw new BadRequestException(
                     "Tác giả chưa đồng thuận cho phép dùng công thức của bài viết này");
         }
 
-        Dish dish = resolveOrCreateDish(suggestion, freshContent);
+        RecipeSuggestionValidation validation = validator.validate(suggestion);
+        if (!validation.isValid()) {
+            throw new RecipeValidationException(validation.getIssues());
+        }
+
+        Dish dish = resolveOrCreateDish(suggestion, freshContent, validation.getVegetarianType());
         Recipe recipe = resolveOrCreateRecipe(suggestion, dish, admin, freshContent);
         persistIngredients(suggestion, recipe);
 
@@ -242,19 +243,22 @@ public class ContentRecipeSuggestionReviewService {
         suggestion.setReviewedAt(LocalDateTime.now());
     }
 
-    private Dish resolveOrCreateDish(ContentRecipeSuggestion suggestion, Content content) {
+    private Dish resolveOrCreateDish(
+            ContentRecipeSuggestion suggestion,
+            Content content,
+            String vegetarianType) {
         String dishName = suggestion.getDishName() == null ? null : suggestion.getDishName().trim();
         if (dishName == null || dishName.isEmpty()) {
             throw new BadRequestException("Đề xuất thiếu tên món ăn, không thể duyệt");
         }
 
-        return dishRepository.findByNameIgnoreCase(dishName).orElseGet(() -> dishRepository.save(Dish.builder()
+        return dishRepository.save(Dish.builder()
                 .name(dishName)
                 .slug(uniqueSlug(dishName, "dish", dishRepository::existsBySlug))
                 .description(suggestion.getDishDescription())
                 .categoryId(resolveDishCategoryId(content))
                 .imageUrl(content.getThumbnailUrl())
-                .vegetarianType(classifyVegetarianType(suggestion))
+                .vegetarianType(vegetarianType)
                 .calories(suggestion.getCalories())
                 .proteinG(suggestion.getProteinG())
                 .carbsG(suggestion.getCarbsG())
@@ -262,21 +266,9 @@ public class ContentRecipeSuggestionReviewService {
                 .servingSize(suggestion.getServingSize())
                 .servingUnit(suggestion.getServingUnit())
                 .active(true)
-                .build()));
+                .build());
     }
 
-    private String classifyVegetarianType(ContentRecipeSuggestion suggestion) {
-        List<String> names = readIngredients(suggestion.getIngredientsJson()).stream()
-                .filter(proposal -> proposal != null && proposal.name() != null)
-                .map(RecipeExtractionGatewayService.IngredientProposal::name)
-                .toList();
-        String vegetarianType = vegetarianTypeClassifier.classify(names);
-        if (vegetarianType == null) {
-            log.warn("Không suy diễn được loại ăn chay cho đề xuất {} (nguyên liệu chứa thịt hoặc thiếu dữ liệu)",
-                    suggestion.getSuggestionId());
-        }
-        return vegetarianType;
-    }
 
     private Recipe resolveOrCreateRecipe(ContentRecipeSuggestion suggestion, Dish dish, User admin, Content content) {
         return recipeRepository.findByDishId(dish.getDishId()).orElseGet(() -> {
@@ -302,7 +294,8 @@ public class ContentRecipeSuggestionReviewService {
     }
 
     private void persistIngredients(ContentRecipeSuggestion suggestion, Recipe recipe) {
-        for (RecipeExtractionGatewayService.IngredientProposal proposal : readIngredients(suggestion.getIngredientsJson())) {
+        for (RecipeExtractionGatewayService.IngredientProposal proposal
+                : payloadReader.readIngredients(suggestion.getIngredientsJson()).value()) {
             if (proposal == null || proposal.name() == null || proposal.name().isBlank()) {
                 continue;
             }
@@ -311,10 +304,12 @@ public class ContentRecipeSuggestionReviewService {
             if (recipeIngredientRepository.existsById(id)) {
                 continue;
             }
-            BigDecimal quantity = proposal.quantity() != null && proposal.quantity().compareTo(BigDecimal.ZERO) > 0
-                    ? proposal.quantity()
-                    : BigDecimal.ONE;
-            String unit = proposal.unit() == null || proposal.unit().isBlank() ? "g" : proposal.unit().trim();
+            BigDecimal quantity = proposal.quantity();
+            String unit = proposal.unit() == null ? null : proposal.unit().trim();
+            if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0 || unit == null || unit.isEmpty()) {
+                throw new IllegalStateException(
+                        "Nguyên liệu chưa được kiểm tra hợp lệ trước khi nhập: " + proposal.name());
+            }
             recipeIngredientRepository.save(RecipeIngredient.builder()
                     .recipeId(recipe.getRecipeId())
                     .ingredientId(ingredient.getIngredientId())
@@ -374,7 +369,7 @@ public class ContentRecipeSuggestionReviewService {
     }
 
     private String joinSteps(String stepsJson) {
-        List<String> steps = readSteps(stepsJson);
+        List<String> steps = payloadReader.readSteps(stepsJson).value();
         if (steps.isEmpty()) {
             return null;
         }
@@ -382,31 +377,6 @@ public class ContentRecipeSuggestionReviewService {
                 .filter(step -> step != null && !step.isBlank())
                 .map(String::trim)
                 .collect(Collectors.joining("\n"));
-    }
-
-    private List<RecipeExtractionGatewayService.IngredientProposal> readIngredients(String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(json,
-                    new TypeReference<List<RecipeExtractionGatewayService.IngredientProposal>>() {});
-        } catch (Exception ex) {
-            log.warn("Không đọc được ingredients_json của đề xuất: {}", ex.getMessage());
-            return List.of();
-        }
-    }
-
-    private List<String> readSteps(String json) {
-        if (json == null || json.isBlank()) {
-            return List.of();
-        }
-        try {
-            return objectMapper.readValue(json, new TypeReference<List<String>>() {});
-        } catch (Exception ex) {
-            log.warn("Không đọc được recipe_steps_json của đề xuất: {}", ex.getMessage());
-            return List.of();
-        }
     }
 
     private Map<Integer, String> resolveReviewerNames(Collection<ContentRecipeSuggestion> suggestions) {
@@ -431,7 +401,7 @@ public class ContentRecipeSuggestionReviewService {
     }
 
     private String uniqueSlug(String name, String fallback, Predicate<String> exists) {
-        String base = slugify(name);
+        String base = RecipeTextNormalizer.slugify(name);
         if (base.isBlank()) {
             base = fallback;
         }
@@ -443,22 +413,16 @@ public class ContentRecipeSuggestionReviewService {
         return candidate;
     }
 
-    private String slugify(String input) {
-        if (input == null) {
-            return "";
-        }
-        String normalized = Normalizer.normalize(input, Normalizer.Form.NFD);
-        String ascii = COMBINING_MARKS.matcher(normalized).replaceAll("").replace('đ', 'd').replace('Đ', 'D');
-        return ascii.toLowerCase()
-                .replaceAll("[^a-z0-9\\s-]", "")
-                .replaceAll("\\s+", "-")
-                .replaceAll("-+", "-")
-                .replaceAll("^-|-$", "");
+    private ContentRecipeSuggestionResponse toResponse(
+            ContentRecipeSuggestion suggestion,
+            Map<Integer, String> reviewerNames) {
+        return toResponse(suggestion, reviewerNames, false);
     }
 
     private ContentRecipeSuggestionResponse toResponse(
             ContentRecipeSuggestion suggestion,
-            Map<Integer, String> reviewerNames) {
+            Map<Integer, String> reviewerNames,
+            boolean includeValidation) {
         Content content = suggestion.getContent();
         String reviewerName = suggestion.getReviewedBy() == null
                 ? null
@@ -500,7 +464,7 @@ public class ContentRecipeSuggestionReviewService {
                         .fatG(suggestion.getFatG())
                         .fiberG(suggestion.getFiberG())
                         .build())
-                .ingredients(readIngredients(suggestion.getIngredientsJson()).stream()
+                .ingredients(payloadReader.readIngredients(suggestion.getIngredientsJson()).value().stream()
                         .map(ingredient -> ContentRecipeSuggestionResponse.IngredientInfo.builder()
                                 .name(ingredient.name())
                                 .quantity(ingredient.quantity())
@@ -514,13 +478,14 @@ public class ContentRecipeSuggestionReviewService {
                         .prepTimeMin(suggestion.getPrepTimeMin())
                         .cookTimeMin(suggestion.getCookTimeMin())
                         .servings(suggestion.getServings())
-                        .steps(readSteps(suggestion.getRecipeStepsJson()))
+                        .steps(payloadReader.readSteps(suggestion.getRecipeStepsJson()).value())
                         .build())
                 .restaurant(ContentRecipeSuggestionResponse.RestaurantInfo.builder()
                         .name(suggestion.getRestaurantName())
                         .address(suggestion.getRestaurantAddress())
                         .reference(suggestion.getRestaurantReference())
                         .build())
+                .validation(includeValidation ? validator.validate(suggestion) : null)
                 .build();
     }
 }
