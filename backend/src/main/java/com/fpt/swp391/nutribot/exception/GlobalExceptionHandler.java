@@ -1,6 +1,7 @@
 package com.fpt.swp391.nutribot.exception;
 
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
+import com.fpt.swp391.nutribot.dto.response.RecipeValidationIssue;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -138,6 +139,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error("PROFILE_INCOMPLETE", ex.getMessage(), ex.getMissingFields()));
+    }
+
+    @ExceptionHandler(RecipeValidationException.class)
+    public ResponseEntity<ApiResponse<List<RecipeValidationIssue>>> handleRecipeValidation(
+            RecipeValidationException ex) {
+        log.warn("Recipe validation failed: {}",
+                ex.getIssues().stream().map(RecipeValidationIssue::getCode).toList());
+        return ResponseEntity
+                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(ApiResponse.error("RECIPE_VALIDATION_FAILED", ex.getMessage(), ex.getIssues()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

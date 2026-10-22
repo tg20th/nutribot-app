@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fpt.swp391.nutribot.dto.request.ContentRecipeSuggestionReviewRequest;
 import com.fpt.swp391.nutribot.dto.response.ContentRecipeSuggestionResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
+import com.fpt.swp391.nutribot.dto.response.RecipeSuggestionValidation;
+import com.fpt.swp391.nutribot.dto.response.RecipeValidationIssue;
 import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Category;
 import com.fpt.swp391.nutribot.entity.Content;
@@ -17,6 +19,7 @@ import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ConflictException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
+import com.fpt.swp391.nutribot.exception.RecipeValidationException;
 import com.fpt.swp391.nutribot.repository.CategoryRepository;
 import com.fpt.swp391.nutribot.repository.ContentRecipeSuggestionRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
@@ -68,6 +71,11 @@ class ContentRecipeSuggestionReviewServiceTest {
     private ApplicationEventPublisher eventPublisher;
     @Mock
     private RecipeSuggestionAuditService auditService;
+    @Mock
+    private RecipeSuggestionValidator validator;
+
+    private final RecipeSuggestionPayloadReader payloadReader =
+            new RecipeSuggestionPayloadReader(new ObjectMapper());
 
     private ContentRecipeSuggestionReviewService service;
 
@@ -82,13 +90,60 @@ class ContentRecipeSuggestionReviewServiceTest {
                 recipeIngredientRepository,
                 categoryRepository,
                 userRepository,
-                new ObjectMapper(),
-                new VegetarianTypeClassifier(),
+                payloadReader,
+                validator,
                 "salad-healthy",
                 "rau-cu",
                 "verified",
                 eventPublisher,
                 auditService);
+        lenient().when(validator.validate(any())).thenReturn(validValidation());
+    }
+
+    private RecipeSuggestionValidation validValidation() {
+        return RecipeSuggestionValidation.builder()
+                .valid(true)
+                .canApprove(true)
+                .vegetarianType("VEGAN")
+                .vegetarianVerdict("VEGETARIAN")
+                .issues(List.of())
+                .build();
+    }
+
+    private RecipeSuggestionValidation invalidValidation(String field, String code, String message) {
+        return RecipeSuggestionValidation.builder()
+                .valid(false)
+                .canApprove(false)
+                .issues(List.of(RecipeValidationIssue.builder()
+                        .field(field)
+                        .code(code)
+                        .severity(RecipeValidationIssue.SEVERITY_ERROR)
+                        .message(message)
+                        .build()))
+                .build();
+    }
+
+    private void stubCatalogCreation() {
+        when(categoryRepository.findById(20)).thenReturn(Optional.of(category(20, "RECIPE")));
+        when(categoryRepository.findBySlug("rau-cu")).thenReturn(Optional.of(category(5, "INGREDIENT")));
+        when(dishRepository.save(any(Dish.class))).thenAnswer(invocation -> {
+            Dish dish = invocation.getArgument(0);
+            dish.setDishId(50);
+            return dish;
+        });
+        when(recipeRepository.findByDishId(50)).thenReturn(Optional.empty());
+        when(recipeRepository.save(any(Recipe.class))).thenAnswer(invocation -> {
+            Recipe recipe = invocation.getArgument(0);
+            recipe.setRecipeId(60);
+            return recipe;
+        });
+        when(ingredientRepository.findByNameIgnoreCase("Bún gạo lứt")).thenReturn(Optional.empty());
+        when(ingredientRepository.save(any(Ingredient.class))).thenAnswer(invocation -> {
+            Ingredient ingredient = invocation.getArgument(0);
+            ingredient.setIngredientId(70);
+            return ingredient;
+        });
+        when(recipeIngredientRepository.existsById(any(RecipeIngredientId.class))).thenReturn(false);
     }
 
     private User admin() {
@@ -207,27 +262,7 @@ class ContentRecipeSuggestionReviewServiceTest {
         when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
         when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
-        when(categoryRepository.findById(20)).thenReturn(Optional.of(category(20, "RECIPE")));
-        when(categoryRepository.findBySlug("rau-cu")).thenReturn(Optional.of(category(5, "INGREDIENT")));
-        when(dishRepository.findByNameIgnoreCase("Bún gạo lứt rau củ")).thenReturn(Optional.empty());
-        when(dishRepository.save(any(Dish.class))).thenAnswer(invocation -> {
-            Dish dish = invocation.getArgument(0);
-            dish.setDishId(50);
-            return dish;
-        });
-        when(recipeRepository.findByDishId(50)).thenReturn(Optional.empty());
-        when(recipeRepository.save(any(Recipe.class))).thenAnswer(invocation -> {
-            Recipe recipe = invocation.getArgument(0);
-            recipe.setRecipeId(60);
-            return recipe;
-        });
-        when(ingredientRepository.findByNameIgnoreCase("Bún gạo lứt")).thenReturn(Optional.empty());
-        when(ingredientRepository.save(any(Ingredient.class))).thenAnswer(invocation -> {
-            Ingredient ingredient = invocation.getArgument(0);
-            ingredient.setIngredientId(70);
-            return ingredient;
-        });
-        when(recipeIngredientRepository.existsById(any(RecipeIngredientId.class))).thenReturn(false);
+        stubCatalogCreation();
 
         ContentRecipeSuggestionResponse response = service.review(700, request("APPROVE", null), "admin");
 
@@ -262,28 +297,22 @@ class ContentRecipeSuggestionReviewServiceTest {
     }
 
     @Test
-    @DisplayName("Approve liên kết Dish/Recipe đã tồn tại, không tạo trùng")
-    void review_approve_linksExistingCatalog() {
+    @DisplayName("NB-86: Approve bị chặn khi validator phát hiện món đã tồn tại, không tạo dữ liệu")
+    void review_approve_duplicateDish_blocked() {
         Content content = content(20);
         ContentRecipeSuggestion suggestion = pendingSuggestion(content);
-        suggestion.setIngredientsJson(null);
-        suggestion.setRecipeStepsJson(null);
-
-        Dish existingDish = Dish.builder().dishId(50).name("Bún gạo lứt rau củ").build();
-        Recipe existingRecipe = Recipe.builder().recipeId(60).dishId(50).build();
 
         when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
         when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
-        when(dishRepository.findByNameIgnoreCase("Bún gạo lứt rau củ")).thenReturn(Optional.of(existingDish));
-        when(recipeRepository.findByDishId(50)).thenReturn(Optional.of(existingRecipe));
+        when(validator.validate(any())).thenReturn(invalidValidation(
+                "dish.name", "DUPLICATE_DISH_NAME", "Món đã tồn tại trong hệ thống"));
 
-        ContentRecipeSuggestionResponse response = service.review(700, request("APPROVE", null), "admin");
-
-        assertEquals(50, response.getDishId());
-        assertEquals(60, response.getRecipeId());
+        assertThrows(RecipeValidationException.class,
+                () -> service.review(700, request("APPROVE", null), "admin"));
         verify(dishRepository, never()).save(any(Dish.class));
         verify(recipeRepository, never()).save(any(Recipe.class));
+        assertEquals("PENDING", suggestion.getStatus());
     }
 
     @Test
@@ -292,17 +321,11 @@ class ContentRecipeSuggestionReviewServiceTest {
         Content content = content(20);
         content.getUser().setStatus(AccountStatus.WARN);
         ContentRecipeSuggestion suggestion = pendingSuggestion(content);
-        suggestion.setIngredientsJson(null);
-        suggestion.setRecipeStepsJson(null);
-
-        Dish existingDish = Dish.builder().dishId(50).name("Bún gạo lứt rau củ").build();
-        Recipe existingRecipe = Recipe.builder().recipeId(60).dishId(50).build();
 
         when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
         when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
-        when(dishRepository.findByNameIgnoreCase("Bún gạo lứt rau củ")).thenReturn(Optional.of(existingDish));
-        when(recipeRepository.findByDishId(50)).thenReturn(Optional.of(existingRecipe));
+        stubCatalogCreation();
 
         ContentRecipeSuggestionResponse response = service.review(700, request("APPROVE", null), "admin");
 
@@ -381,8 +404,8 @@ class ContentRecipeSuggestionReviewServiceTest {
     }
 
     @Test
-    @DisplayName("Approve nhưng đề xuất thiếu tên món -> BadRequestException")
-    void review_approve_missingDishName_badRequest() {
+    @DisplayName("NB-86: Approve nhưng dữ liệu chưa hợp lệ -> RecipeValidationException, không tạo dữ liệu")
+    void review_approve_invalidPayload_blocked() {
         Content content = content(20);
         ContentRecipeSuggestion suggestion = pendingSuggestion(content);
         suggestion.setDishName("   ");
@@ -390,10 +413,14 @@ class ContentRecipeSuggestionReviewServiceTest {
         when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
         when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
+        when(validator.validate(any())).thenReturn(invalidValidation(
+                "dish.name", "DISH_NAME_REQUIRED", "Đề xuất thiếu tên món ăn"));
 
-        assertThrows(BadRequestException.class,
+        assertThrows(RecipeValidationException.class,
                 () -> service.review(700, request("APPROVE", null), "admin"));
         verify(dishRepository, never()).save(any(Dish.class));
+        verify(recipeRepository, never()).save(any(Recipe.class));
+        assertEquals("PENDING", suggestion.getStatus());
     }
 
     @Test
@@ -436,5 +463,62 @@ class ContentRecipeSuggestionReviewServiceTest {
         assertEquals(Boolean.TRUE, source.getRecipeConsent());
         assertEquals("v1", source.getRecipeConsentTermsVersion());
         assertNotNull(source.getRecipeConsentAt());
+    }
+
+    @Test
+    @DisplayName("NB-86: Chi tiết đề xuất PENDING trả kèm khối validation để Admin biết lỗi trước khi duyệt")
+    void getById_pending_includesValidation() {
+        ContentRecipeSuggestion suggestion = pendingSuggestion(content(20));
+
+        when(suggestionRepository.findDetailById(700)).thenReturn(Optional.of(suggestion));
+        when(validator.validate(suggestion)).thenReturn(invalidValidation(
+                "ingredients", "INGREDIENTS_REQUIRED", "Đề xuất công thức phải có ít nhất một nguyên liệu"));
+
+        ContentRecipeSuggestionResponse response = service.getById(700);
+
+        assertNotNull(response.getValidation());
+        assertFalse(response.getValidation().isValid());
+        assertFalse(response.getValidation().isCanApprove());
+        assertEquals("INGREDIENTS_REQUIRED",
+                response.getValidation().getIssues().get(0).getCode());
+    }
+
+    @Test
+    @DisplayName("NB-86: Loại ăn chay do validator quyết định được ghi vào Dish")
+    void review_approve_usesValidatedVegetarianType() {
+        Content content = content(20);
+        ContentRecipeSuggestion suggestion = pendingSuggestion(content);
+
+        when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
+        when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
+        when(validator.validate(any())).thenReturn(RecipeSuggestionValidation.builder()
+                .valid(true)
+                .canApprove(true)
+                .vegetarianType("LACTO_OVO")
+                .vegetarianVerdict("VEGETARIAN")
+                .issues(List.of())
+                .build());
+        stubCatalogCreation();
+
+        service.review(700, request("APPROVE", null), "admin");
+
+        ArgumentCaptor<Dish> dishCaptor = ArgumentCaptor.forClass(Dish.class);
+        verify(dishRepository).save(dishCaptor.capture());
+        assertEquals("LACTO_OVO", dishCaptor.getValue().getVegetarianType());
+    }
+
+    @Test
+    @DisplayName("NB-86: Danh sách không tính validation để tránh N+1 khi phân trang")
+    void list_doesNotComputeValidation() {
+        ContentRecipeSuggestion suggestion = pendingSuggestion(content(20));
+
+        when(suggestionRepository.findAllWithContent(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(suggestion)));
+
+        ContentRecipeSuggestionResponse item = service.list(null, 0, 10).getContent().get(0);
+
+        assertNull(item.getValidation());
+        verify(validator, never()).validate(any());
     }
 }

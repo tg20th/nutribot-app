@@ -5,10 +5,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.*;
 
-@DisplayName("Kiểm thử VegetarianTypeClassifier (NB-61)")
+@DisplayName("Kiểm thử VegetarianTypeClassifier (NB-61, NB-86)")
 class VegetarianTypeClassifierTest {
 
     private final VegetarianTypeClassifier classifier = new VegetarianTypeClassifier();
@@ -82,5 +81,68 @@ class VegetarianTypeClassifierTest {
     void classify_tokenBoundary_avoidsSubstringMatch() {
         assertEquals(VegetarianTypeClassifier.VEGAN,
                 classifier.classify(List.of("Các loại rau", "Bột gạo")));
+    }
+
+    @Test
+    @DisplayName("NB-86: Ba chỉ heo bị nhận diện là nguyên liệu động vật")
+    void baChiHeo_nonVegetarian() {
+        VegetarianTypeClassifier.Verdict verdict = classifier.evaluate(List.of("Ba chỉ heo", "Hành lá"));
+
+        assertEquals(VegetarianTypeClassifier.Status.NON_VEGETARIAN, verdict.status());
+        assertNull(verdict.type());
+        assertTrue(verdict.animalIngredients().contains("Ba chỉ heo"));
+    }
+
+    @Test
+    @DisplayName("NB-86: Ức gà bị nhận diện là nguyên liệu động vật")
+    void ucGa_nonVegetarian() {
+        assertEquals(VegetarianTypeClassifier.Status.NON_VEGETARIAN,
+                classifier.evaluate(List.of("Ức gà", "Rau thơm")).status());
+    }
+
+    @Test
+    @DisplayName("NB-86: Nước mắm và dầu hào bị nhận diện là nguyên liệu động vật")
+    void condimentsWithAnimalOrigin_nonVegetarian() {
+        assertEquals(VegetarianTypeClassifier.Status.NON_VEGETARIAN,
+                classifier.evaluate(List.of("Nước mắm", "Đường")).status());
+        assertEquals(VegetarianTypeClassifier.Status.NON_VEGETARIAN,
+                classifier.evaluate(List.of("Dầu hào", "Tỏi")).status());
+    }
+
+    @Test
+    @DisplayName("NB-86: Mắm cá cơm và chả cá bị nhận diện là nguyên liệu động vật")
+    void fishProducts_nonVegetarian() {
+        assertEquals(VegetarianTypeClassifier.Status.NON_VEGETARIAN,
+                classifier.evaluate(List.of("Mắm cá cơm")).status());
+        assertEquals(VegetarianTypeClassifier.Status.NON_VEGETARIAN,
+                classifier.evaluate(List.of("Chả cá")).status());
+    }
+
+    @Test
+    @DisplayName("NB-86: Món có chữ chay được miễn kiểm tra động vật")
+    void meatNamedChay_vegan() {
+        assertEquals(VegetarianTypeClassifier.VEGAN,
+                classifier.evaluate(List.of("Thịt chay", "Nước mắm chay")).type());
+    }
+
+    @Test
+    @DisplayName("NB-86: 'Sữa tươi' là LACTO")
+    void suaTuoi_lacto() {
+        assertEquals(VegetarianTypeClassifier.LACTO,
+                classifier.evaluate(List.of("Sữa tươi", "Đường")).type());
+    }
+
+    @Test
+    @DisplayName("NB-86: Trứng cá là động vật, không phải OVO")
+    void trungCa_nonVegetarian() {
+        assertEquals(VegetarianTypeClassifier.Status.NON_VEGETARIAN,
+                classifier.evaluate(List.of("Trứng cá")).status());
+    }
+
+    @Test
+    @DisplayName("NB-86: Danh sách nguyên liệu rỗng trả UNKNOWN")
+    void emptyIngredients_unknown() {
+        assertEquals(VegetarianTypeClassifier.Status.UNKNOWN, classifier.evaluate(List.of()).status());
+        assertEquals(VegetarianTypeClassifier.Status.UNKNOWN, classifier.evaluate(null).status());
     }
 }

@@ -835,3 +835,121 @@ Hệ thống tạo đề xuất công thức  ──► status = PENDING   (+ gh
 | `APPROVED` | Admin duyệt đề xuất. |
 | `REJECTED` | Admin từ chối đề xuất. |
 | `AUTO_REJECTED` | Hệ thống tự đóng đề xuất vì bài viết không còn đồng thuận dùng công thức. |
+
+## 11. Kiểm tra dữ liệu trước khi duyệt công thức (NB-86)
+
+> Phạm vi: NB-86 (Thắng). Áp dụng cho luồng Admin duyệt đề xuất công thức.
+
+### 11.1. Quy tắc chung
+
+- Validator chạy **trước khi** tạo `Dish`/`Recipe`/`RecipeIngredient`. Mọi lỗi mức `ERROR` chặn duyệt và trả **HTTP 422**.
+- Cảnh báo mức `WARNING` **không** chặn duyệt, chỉ hiển thị để Admin cân nhắc.
+- Không còn cơ chế "tự sửa" dữ liệu: thiếu `quantity`/`unit` **không** còn bị đổi thành `1`/`"g"`, thiếu bước làm **không** còn được duyệt với `instructions = null`.
+- `GET /api/v1/admin/content-recipe-suggestions/{suggestionId}` trả thêm khối `validation` khi đề xuất đang `PENDING`. Danh sách phân trang **không** trả khối này để tránh N+1.
+- Đề xuất đã `APPROVED`/`REJECTED` không có khối `validation`.
+
+### 11.2. Cấu trúc khối `validation`
+
+```json
+{
+  "valid": false,
+  "canApprove": false,
+  "vegetarianType": null,
+  "vegetarianVerdict": "NON_VEGETARIAN",
+  "issues": [
+    {
+      "field": "ingredients[0].quantity",
+      "code": "INGREDIENT_QUANTITY_REQUIRED",
+      "severity": "ERROR",
+      "message": "Nguyên liệu \"Ba chỉ heo\" thiếu định lượng"
+    }
+  ]
+}
+```
+
+| Trường | Kiểu | Ý nghĩa |
+|---|---|---|
+| `valid` | `boolean` | `true` khi không còn issue mức `ERROR`. |
+| `canApprove` | `boolean` | `true` khi `valid = true` **và** đề xuất đang `PENDING`. |
+| `vegetarianType` | `string \| null` | `VEGAN` / `LACTO` / `OVO` / `LACTO_OVO`; `null` khi không xác định hoặc có nguyên liệu động vật. |
+| `vegetarianVerdict` | `string` | `VEGETARIAN`, `NON_VEGETARIAN` hoặc `UNKNOWN`. |
+| `issues` | `array` | Danh sách vấn đề, mỗi phần tử gồm `field`, `code`, `severity`, `message`. |
+
+### 11.3. Mã lỗi chặn duyệt (`severity = ERROR`)
+
+| `code` | `field` | Điều kiện |
+|---|---|---|
+| `DISH_NAME_REQUIRED` | `dish.name` | Tên món rỗng. |
+| `DISH_NAME_TOO_LONG` | `dish.name` | Tên món > 150 ký tự. |
+| `RECIPE_TITLE_TOO_LONG` | `recipe.title` | Tiêu đề công thức > 200 ký tự. |
+| `INGREDIENTS_JSON_INVALID` | `ingredients` | Cột `ingredients_json` không parse được. |
+| `INGREDIENTS_REQUIRED` | `ingredients` | Danh sách nguyên liệu rỗng. |
+| `INGREDIENT_ENTRY_INVALID` | `ingredients[i]` | Phần tử nguyên liệu không đúng định dạng. |
+| `INGREDIENT_NAME_REQUIRED` | `ingredients[i].name` | Tên nguyên liệu rỗng. |
+| `INGREDIENT_NAME_TOO_LONG` | `ingredients[i].name` | Tên nguyên liệu > 150 ký tự. |
+| `INGREDIENT_DUPLICATED` | `ingredients[i].name` | Tên nguyên liệu lặp lại (sau chuẩn hóa). |
+| `INGREDIENT_QUANTITY_REQUIRED` | `ingredients[i].quantity` | `quantity` null. |
+| `INGREDIENT_QUANTITY_INVALID` | `ingredients[i].quantity` | `quantity` ≤ 0. |
+| `INGREDIENT_UNIT_REQUIRED` | `ingredients[i].unit` | `unit` rỗng. |
+| `INGREDIENT_UNIT_TOO_LONG` | `ingredients[i].unit` | `unit` > 30 ký tự. |
+| `STEPS_JSON_INVALID` | `recipe.steps` | Cột `recipe_steps_json` không parse được. |
+| `STEPS_REQUIRED` | `recipe.steps` | Không có bước làm nào (hoặc toàn rỗng). |
+| `TOO_MANY_STEPS` | `recipe.steps` | > 50 bước. |
+| `STEP_TOO_LONG` | `recipe.steps[i]` | Bước làm > 2000 ký tự. |
+| `SERVINGS_REQUIRED` | `recipe.servings` | `servings` null. |
+| `SERVINGS_INVALID` | `recipe.servings` | `servings` ≤ 0. |
+| `SERVINGS_EXCEEDED` | `recipe.servings` | `servings` > `app.content-recipe-suggestion.max-servings` (mặc định 50). |
+| `CALORIES_REQUIRED` | `nutrition.calories` | `calories` null. |
+| `CALORIES_INVALID` | `nutrition.calories` | `calories` ≤ 0. |
+| `PROTEIN_REQUIRED` / `CARBS_REQUIRED` / `FAT_REQUIRED` | `nutrition.proteinG` / `carbsG` / `fatG` | Macro null. |
+| `PROTEIN_INVALID` / `CARBS_INVALID` / `FAT_INVALID` | tương ứng | Macro < 0. |
+| `SERVING_SIZE_INVALID` | `dish.servingSize` | `servingSize` ≤ 0. |
+| `SERVING_UNIT_TOO_LONG` | `dish.servingUnit` | `servingUnit` > 30 ký tự. |
+| `NON_VEGETARIAN_INGREDIENT` | `ingredients` | Có nguyên liệu động vật (thịt/cá/hải sản/mắm/dầu hào/...). |
+| `VEGETARIAN_TYPE_UNKNOWN` | `ingredients` | Không suy ra được loại chay. |
+| `SOURCE_CONTENT_ALREADY_IMPORTED` | `sourceContent` | Bài viết nguồn đã được import thành công thức khác. |
+| `DUPLICATE_DISH_NAME` | `dish.name` | Slug tên món trùng món đã có trong `dishes`. |
+
+### 11.4. Mã cảnh báo (`severity = WARNING`)
+
+| `code` | `field` | Điều kiện |
+|---|---|---|
+| `FIBER_MISSING` | `nutrition.fiberG` | Thiếu chất xơ. |
+| `FIBER_INVALID` | `nutrition.fiberG` | Chất xơ âm. |
+| `NUTRITION_INCONSISTENT` | `nutrition.calories` | `calories` lệch > 20% so với `protein*4 + carbs*4 + fat*9`. |
+| `SERVING_INFO_MISSING` | `dish.serving` | Thiếu cả `servingSize` và `servingUnit`. |
+| `SERVING_SIZE_MISSING` | `dish.servingSize` | Có đơn vị nhưng thiếu khối lượng. |
+| `SERVING_UNIT_MISSING` | `dish.servingUnit` | Có khối lượng nhưng thiếu đơn vị. |
+| `POSSIBLE_DUPLICATE_RECIPE` | `ingredients` | Tập nguyên liệu trùng ≥ ngưỡng Jaccard (mặc định `0.8`) với công thức đã có. |
+
+### 11.5. Response khi duyệt thất bại
+
+- **Endpoint:** `PUT /api/v1/admin/content-recipe-suggestions/{suggestionId}/review` với `action = APPROVE`
+- **Response (422 Unprocessable Entity):**
+```json
+{
+  "success": false,
+  "code": "RECIPE_VALIDATION_FAILED",
+  "message": "Dữ liệu đề xuất công thức chưa hợp lệ để duyệt",
+  "data": [
+    {
+      "field": "recipe.servings",
+      "code": "SERVINGS_REQUIRED",
+      "severity": "ERROR",
+      "message": "Công thức thiếu số khẩu phần"
+    }
+  ],
+  "timestamp": "2026-10-22T10:00:00Z"
+}
+```
+
+- Đề xuất **giữ nguyên** `PENDING`; không tạo `Dish`/`Recipe`/`RecipeIngredient`; không ghi audit `APPROVED`; không gửi thông báo.
+- Kiểm tra nội dung nguồn (`published`, còn đồng thuận) vẫn chạy **trước** validator: bài viết đã ngừng công khai trả `409 Conflict` như cũ.
+
+### 11.6. Cấu hình
+
+| Property | Mặc định | Ý nghĩa |
+|---|---|---|
+| `app.content-recipe-suggestion.max-servings` | `50` | Giới hạn số khẩu phần tối đa. |
+| `app.content-recipe-suggestion.duplicate-similarity-threshold` | `0.8` | Ngưỡng Jaccard để cảnh báo trùng nguyên liệu. |
+
