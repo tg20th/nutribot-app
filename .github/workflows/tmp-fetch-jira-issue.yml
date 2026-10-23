@@ -11,6 +11,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chore/nb85-fetch-ticket
       - name: Fetch issue
         run: |
           curl -s -u ":${{ secrets.JIRA_AUTH }}" \
