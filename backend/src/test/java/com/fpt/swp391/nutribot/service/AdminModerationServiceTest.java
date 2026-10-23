@@ -6,11 +6,13 @@ import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentModeration;
+import com.fpt.swp391.nutribot.entity.Role;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.ContentModerationRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
+import com.fpt.swp391.nutribot.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,6 +44,15 @@ class AdminModerationServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private UserNotificationSender userNotificationSender;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private AdminModerationService adminModerationService;
@@ -135,18 +146,87 @@ class AdminModerationServiceTest {
     }
 
     @Test
-    @DisplayName("Admin từ chối bài (REJECT) -> chuyển sang rejected")
+    @DisplayName("Admin từ chối bài (REJECT) lần đầu -> tăng strikeCount lên 1, chuyển trạng thái sang WARN, gửi cảnh báo")
     void moderateContent_reject() {
         when(contentRepository.findById(10)).thenReturn(Optional.of(underReviewContent));
         when(contentRepository.save(any(Content.class))).thenAnswer(i -> i.getArgument(0));
 
         AdminModerationRequest request = new AdminModerationRequest();
         request.setAction("REJECT");
+        request.setReason("Nội dung spam quảng cáo");
 
         AdminContentResponse response = adminModerationService.moderateContent(10, request);
 
         assertEquals("rejected", response.getStatus());
         assertEquals("rejected", underReviewContent.getStatus());
+        assertEquals(1, sampleAuthor.getStrikeCount());
+        assertEquals(AccountStatus.WARN, sampleAuthor.getStatus());
+        verify(userRepository).save(sampleAuthor);
+        verify(userNotificationSender).sendWarningNotification(
+                eq("truong@example.com"),
+                eq("truong_author"),
+                eq(1),
+                eq("Nội dung spam quảng cáo")
+        );
+        verify(notificationService).createForContentModerationRejected(
+                eq(1),
+                eq(10),
+                eq("Salad thanh đạm"),
+                eq(1),
+                eq("Nội dung spam quảng cáo")
+        );
+    }
+
+    @Test
+    @DisplayName("Admin từ chối bài (REJECT) khi đã có 2 gậy -> đạt 3 gậy, tự động khóa tài khoản BANNED và gửi email ban")
+    void moderateContent_reject_thirdStrike_bansUser() {
+        sampleAuthor.setStrikeCount(2);
+        sampleAuthor.setStatus(AccountStatus.WARN);
+
+        when(contentRepository.findById(10)).thenReturn(Optional.of(underReviewContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(i -> i.getArgument(0));
+
+        AdminModerationRequest request = new AdminModerationRequest();
+        request.setAction("REJECT");
+        request.setReason("Tiếp tục đăng bài vi phạm nghiêm trọng");
+
+        AdminContentResponse response = adminModerationService.moderateContent(10, request);
+
+        assertEquals("rejected", response.getStatus());
+        assertEquals(3, sampleAuthor.getStrikeCount());
+        assertEquals(AccountStatus.BANNED, sampleAuthor.getStatus());
+        verify(userRepository).save(sampleAuthor);
+        verify(userNotificationSender).sendBannedNotification(
+                eq("truong@example.com"),
+                eq("truong_author"),
+                eq("Tiếp tục đăng bài vi phạm nghiêm trọng")
+        );
+        verify(notificationService).createForContentModerationRejected(
+                eq(1),
+                eq(10),
+                eq("Salad thanh đạm"),
+                eq(3),
+                eq("Tiếp tục đăng bài vi phạm nghiêm trọng")
+        );
+    }
+
+    @Test
+    @DisplayName("Admin từ chối bài nhưng tác giả là ROLE_ADMIN -> không phạt gậy")
+    void moderateContent_reject_adminAuthor_doesNotIncrementStrike() {
+        Role adminRole = Role.builder().roleId(1).roleName("ADMIN").build();
+        sampleAuthor.setRole(adminRole);
+
+        when(contentRepository.findById(10)).thenReturn(Optional.of(underReviewContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(i -> i.getArgument(0));
+
+        AdminModerationRequest request = new AdminModerationRequest();
+        request.setAction("REJECT");
+
+        adminModerationService.moderateContent(10, request);
+
+        assertEquals(0, sampleAuthor.getStrikeCount());
+        verify(userRepository, never()).save(any());
+        verifyNoInteractions(userNotificationSender);
     }
 
     @Test

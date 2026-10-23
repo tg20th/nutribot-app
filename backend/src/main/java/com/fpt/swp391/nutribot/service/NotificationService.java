@@ -35,6 +35,7 @@ public class NotificationService {
     public static final String TYPE_RECIPE_SUGGESTION_REJECTED = "RECIPE_SUGGESTION_REJECTED";
     public static final String TYPE_CONTENT_VOTED = "CONTENT_VOTED";
     public static final String TYPE_CONTENT_COMMENTED = "CONTENT_COMMENTED";
+    public static final String TYPE_CONTENT_MODERATION_REJECTED = "CONTENT_MODERATION_REJECTED";
     public static final String REFERENCE_TYPE_CONTENT_RECIPE_SUGGESTION = "CONTENT_RECIPE_SUGGESTION";
     public static final String REFERENCE_TYPE_CONTENT = "CONTENT";
     public static final String ACTION_APPROVE = "APPROVE";
@@ -190,6 +191,54 @@ public class NotificationService {
                 .title(TITLE_SUGGESTION_CLOSED)
                 .message(buildClosedMessage(dishName, contentTitle, reason))
                 .actionUrl(buildActionUrl(contentId))
+                .build();
+        notificationRepository.save(notification);
+    }
+
+    /**
+     * Thông báo cho tác giả khi bài viết bị Admin từ chối do vi phạm quy chuẩn nội dung,
+     * kèm số gậy (strike) hiện tại và cảnh báo nếu bị khóa tài khoản.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void createForContentModerationRejected(
+            Integer authorId,
+            Integer contentId,
+            String contentTitle,
+            int strikeCount,
+            String reason) {
+        if (authorId == null) {
+            return;
+        }
+        User recipient = userRepository.findById(authorId).orElse(null);
+        if (recipient == null) {
+            return;
+        }
+
+        String title = strikeCount >= 3
+                ? "Tài khoản của bạn đã bị khóa do vi phạm nhiều lần"
+                : "Bài viết của bạn đã bị từ chối do vi phạm quy chuẩn";
+
+        StringBuilder sb = new StringBuilder();
+        if (hasText(contentTitle)) {
+            sb.append("Bài viết \"").append(contentTitle.trim()).append("\" của bạn đã bị từ chối.");
+        } else {
+            sb.append("Bài viết của bạn đã bị từ chối.");
+        }
+        sb.append(" Lý do: ").append(hasText(reason) ? reason.trim() : "Vi phạm tiêu chuẩn cộng đồng").append(".");
+        sb.append(" Cảnh báo vi phạm: ").append(strikeCount).append("/3 gậy.");
+        if (strikeCount >= 3) {
+            sb.append(" Tài khoản của bạn đã bị tạm khóa do nhận đủ 3 gậy vi phạm.");
+        }
+
+        Notification notification = Notification.builder()
+                .recipient(recipient)
+                .actor(null)
+                .type(TYPE_CONTENT_MODERATION_REJECTED)
+                .referenceType(REFERENCE_TYPE_CONTENT)
+                .referenceId(contentId)
+                .title(truncate(title))
+                .message(truncate(sb.toString()))
+                .actionUrl("/profile")
                 .build();
         notificationRepository.save(notification);
     }
