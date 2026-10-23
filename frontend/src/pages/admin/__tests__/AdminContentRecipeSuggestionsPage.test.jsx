@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import AdminContentRecipeSuggestionsPage from '../AdminContentRecipeSuggestionsPage';
 import { contentRecipeSuggestionsApi } from '../../../services/contentRecipeSuggestionsApi';
+import { getAllergyIngredients } from '../../../services/profileApi';
+
+vi.mock('../../../services/profileApi', () => ({ getAllergyIngredients: vi.fn().mockResolvedValue([]) }));
 
 vi.mock('../../../services/contentRecipeSuggestionsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -128,7 +131,7 @@ describe('admin recipe suggestion review (NB-87)', () => {
     expect(await screen.findByRole('heading', { name: 'Approve this suggestion?' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
 
-    await waitFor(() => expect(contentRecipeSuggestionsApi.review).toHaveBeenCalledWith(5, 'APPROVE', ''));
+    await waitFor(() => expect(contentRecipeSuggestionsApi.review).toHaveBeenCalledWith(5, 'APPROVE', '', []));
   });
 
   it('shows server validation issues when approval is rejected with 422', async () => {
@@ -176,6 +179,28 @@ describe('admin recipe suggestion review (NB-87)', () => {
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Reject' }));
 
     await waitFor(() => expect(contentRecipeSuggestionsApi.review)
-      .toHaveBeenCalledWith(5, 'REJECT', 'Thiếu nguồn dinh dưỡng'));
+      .toHaveBeenCalledWith(5, 'REJECT', 'Thiếu nguồn dinh dưỡng', []));
+  });
+
+  it('lets Admin map an unresolved proposal to an existing ingredient before approval', async () => {
+    const unresolved = suggestion({ validation: {
+      valid: false,
+      canApprove: false,
+      issues: [{ field: 'ingredients[0]', code: 'INGREDIENT_MAPPING_REQUIRED', severity: 'ERROR', message: 'Select an existing catalog ingredient.' }],
+      ingredientResolutions: [{ proposalIndex: 0, proposedName: 'Bún gạo lứt', status: 'UNRESOLVED' }],
+    } });
+    getAllergyIngredients.mockResolvedValue([{ ingredientId: 12, name: 'Bún gạo' }]);
+    contentRecipeSuggestionsApi.list.mockResolvedValue({ content: [unresolved], totalElements: 1, totalPages: 1 });
+    contentRecipeSuggestionsApi.getById.mockResolvedValue(unresolved);
+    contentRecipeSuggestionsApi.review.mockResolvedValue({ ...unresolved, status: 'APPROVED' });
+
+    render(<AdminContentRecipeSuggestionsPage />);
+
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Catalog match for Bún gạo lứt' }), { target: { value: '12' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Approve suggestion' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Approve' }));
+
+    await waitFor(() => expect(contentRecipeSuggestionsApi.review)
+      .toHaveBeenCalledWith(5, 'APPROVE', '', [{ proposalIndex: 0, ingredientId: 12 }]));
   });
 });

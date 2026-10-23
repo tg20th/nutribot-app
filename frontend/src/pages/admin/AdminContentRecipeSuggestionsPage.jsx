@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, ErrorState, LoadingState, Toast } from '../../components/admin/AdminUi';
 import { contentRecipeSuggestionsApi, isRecipeConsentValid, RECIPE_CONSENT_TERMS_VERSION } from '../../services/contentRecipeSuggestionsApi';
 import { getPost } from '../../services/communityApi';
+import { getAllergyIngredients } from '../../services/profileApi';
 import '../../styles/admin-content-recipe-suggestions.css';
 
 const pageSize = 10;
@@ -67,14 +68,17 @@ function NutritionGrid({ nutrition }) {
   return <div className="recipe-suggestion-nutrition-grid">{values.map(([label, value, unit]) => <div key={label}><span>{label}</span><strong>{value}<small> {unit}</small></strong></div>)}</div>;
 }
 
-function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, submitting }) {
+function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, submitting, catalogIngredients = [], ingredientMappings = {}, onIngredientMapping }) {
   const { source, dish, recipe, nutrition, ingredients, restaurant, validation } = suggestion;
   const ContentIcon = source.contentType === 'VIDEO' ? PlaySquare : FileText;
   const consentValid = isRecipeConsentValid(source);
   const consentOutdated = source.recipeConsent === true
     && Boolean(source.recipeConsentTermsVersion)
     && source.recipeConsentTermsVersion !== RECIPE_CONSENT_TERMS_VERSION;
-  const approvalBlocked = !consentValid || validation?.canApprove === false;
+  const mappingCodes = ['INGREDIENT_MAPPING_REQUIRED', 'INGREDIENT_MAPPING_AMBIGUOUS', 'INGREDIENT_CATEGORY_INVALID', 'INGREDIENT_MAPPING_DUPLICATED', 'VEGETARIAN_TYPE_UNKNOWN'];
+  const errors = (validation?.issues ?? []).filter((issue) => issue.severity === 'ERROR');
+  const mappingOnlyBlocked = errors.length > 0 && errors.every((issue) => mappingCodes.includes(issue.code));
+  const approvalBlocked = !consentValid || (validation?.canApprove === false && !mappingOnlyBlocked);
   const blockedMessage = !consentValid
     ? (consentOutdated
       ? `Author consented to terms ${source.recipeConsentTermsVersion}; current terms are ${RECIPE_CONSENT_TERMS_VERSION}. The author must consent again.`
@@ -102,6 +106,11 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, 
       </section>
 
       <ValidationPanel validation={validation} />
+
+      {validation?.ingredientResolutions?.some((item) => ['UNRESOLVED', 'AMBIGUOUS', 'INVALID_CATEGORY', 'DUPLICATED'].includes(item.status)) && <section className="recipe-suggestion-section" aria-label="Ingredient catalog matching">
+        <div className="recipe-suggestion-section-title"><UtensilsCrossed size={17} /><h3>Match ingredients to catalog</h3></div>
+        {validation.ingredientResolutions.filter((item) => ['UNRESOLVED', 'AMBIGUOUS', 'INVALID_CATEGORY', 'DUPLICATED'].includes(item.status)).map((item) => <label key={item.proposalIndex} className="recipe-suggestion-ingredient-match">{item.proposedName}<select aria-label={`Catalog match for ${item.proposedName}`} value={ingredientMappings[item.proposalIndex] ?? ''} onChange={(event) => onIngredientMapping?.(item.proposalIndex, event.target.value)}><option value="">Select an active ingredient</option>{catalogIngredients.map((option) => <option key={option.ingredientId} value={option.ingredientId}>{option.name}</option>)}</select></label>)}
+      </section>}
 
       <section className="recipe-suggestion-section">
         <div className="recipe-suggestion-section-title"><Soup size={17} /><h3>Proposed dish</h3><span>Catalog candidate</span></div>
@@ -211,6 +220,15 @@ export default function AdminContentRecipeSuggestionsPage() {
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState(null);
   const [sourceRefresh, setSourceRefresh] = useState(0);
+  const [catalogIngredients, setCatalogIngredients] = useState([]);
+  const [ingredientMappings, setIngredientMappings] = useState({});
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getAllergyIngredients(controller.signal).then((items) => { if (!controller.signal.aborted) setCatalogIngredients(Array.isArray(items) ? items : []); })
+      .catch(() => { if (!controller.signal.aborted) setCatalogIngredients([]); });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -235,6 +253,7 @@ export default function AdminContentRecipeSuggestionsPage() {
     if (!selectedId) { setDetail(null); setDetailError(false); setDetailUnavailable(false); return undefined; }
     const controller = new AbortController();
     setDetail(null);
+    setIngredientMappings({});
     setDetailLoading(true);
     setDetailError(false);
     setDetailUnavailable(false);
@@ -269,8 +288,10 @@ export default function AdminContentRecipeSuggestionsPage() {
   const changeStatus = (nextStatus) => { setStatus(nextStatus); setPage(1); setSelectedId(null); };
   const retry = () => setRefreshKey((value) => value + 1);
   const openReview = (action) => {
+    const errors = (detail?.validation?.issues ?? []).filter((issue) => issue.severity === 'ERROR');
+    const mappingOnlyBlocked = errors.length > 0 && errors.every((issue) => ['INGREDIENT_MAPPING_REQUIRED', 'INGREDIENT_MAPPING_AMBIGUOUS', 'INGREDIENT_CATEGORY_INVALID', 'INGREDIENT_MAPPING_DUPLICATED', 'VEGETARIAN_TYPE_UNKNOWN'].includes(issue.code));
     if (action === 'APPROVE' && detail?.status === 'PENDING'
-      && (!isRecipeConsentValid(detail.source) || detail.validation?.canApprove === false)) {
+      && (!isRecipeConsentValid(detail.source) || (detail.validation?.canApprove === false && !mappingOnlyBlocked))) {
       setToast('This suggestion cannot be approved until consent and validation checks pass.');
       return;
     }
@@ -289,7 +310,8 @@ export default function AdminContentRecipeSuggestionsPage() {
     setReviewError('');
     setReviewIssues([]);
     try {
-      const updated = await contentRecipeSuggestionsApi.review(selectedId, reviewDialog, reviewReason);
+      const mappings = Object.entries(ingredientMappings).filter(([, id]) => id).map(([proposalIndex, ingredientId]) => ({ proposalIndex: Number(proposalIndex), ingredientId: Number(ingredientId) }));
+      const updated = await contentRecipeSuggestionsApi.review(selectedId, reviewDialog, reviewReason, mappings);
       setDetail(updated);
       setReviewDialog(null);
       setToast(reviewDialog === 'APPROVE' ? 'Suggestion approved.' : 'Suggestion rejected.');
@@ -306,6 +328,10 @@ export default function AdminContentRecipeSuggestionsPage() {
       } else {
         setReviewIssues(issues);
         setReviewError(requestError?.message || 'The review could not be saved.');
+        if (issues.some((issue) => ['INGREDIENT_MAPPING_REQUIRED', 'INGREDIENT_MAPPING_AMBIGUOUS'].includes(issue.code))) {
+          setReviewDialog(null);
+          setDetailRefresh((value) => value + 1);
+        }
       }
     } finally { setSubmittingReview(false); }
   };
@@ -338,7 +364,7 @@ export default function AdminContentRecipeSuggestionsPage() {
             {detailLoading ? <section className="admin-panel recipe-suggestion-detail-state"><LoadingState /></section>
               : detailError ? <section className="admin-panel recipe-suggestion-detail-state"><ErrorState onRetry={() => setDetailRefresh((value) => value + 1)} /></section>
                 : detailUnavailable ? <section className="admin-panel recipe-suggestion-detail-state"><EmptyState title="Suggestion is no longer available." text="The server reported that this suggestion or its source content cannot be reviewed." /></section>
-                : detail ? <RecipeDetail suggestion={detail} showReviewControls onReview={openReview} onOpenSource={(sourceInfo) => openSource(sourceInfo, detail)} submitting={submittingReview} />
+                : detail ? <RecipeDetail suggestion={detail} showReviewControls onReview={openReview} onOpenSource={(sourceInfo) => openSource(sourceInfo, detail)} submitting={submittingReview} catalogIngredients={catalogIngredients} ingredientMappings={ingredientMappings} onIngredientMapping={(index, id) => setIngredientMappings((current) => ({ ...current, [index]: id }))} />
                   : selected ? <section className="admin-panel recipe-suggestion-detail-state"><EmptyState title="Suggestion detail is unavailable." text="The source may have changed or is no longer available on the server." /></section> : null}
           </div>}
     {reviewDialog && <div className="admin-modal-backdrop" onMouseDown={closeReview}><section className="admin-dialog recipe-suggestion-review-dialog" role="dialog" aria-modal="true" aria-labelledby="suggestion-review-title" onMouseDown={(event) => event.stopPropagation()}><p>REVIEW</p><h2 id="suggestion-review-title">{reviewDialog === 'APPROVE' ? 'Approve this suggestion?' : 'Reject this suggestion?'}</h2><span>{reviewDialog === 'APPROVE' ? 'The proposed dish and recipe will be imported into the catalog.' : 'State why this proposal should not enter the catalog.'}</span>{reviewDialog === 'REJECT' && <label>Rejection reason<textarea value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} placeholder="Example: nutrition information needs a verifiable source" aria-invalid={Boolean(reviewError)} /></label>}{reviewError && <div className="recipe-suggestion-review-error" role="alert"><strong>{reviewDialog === 'APPROVE' ? 'Approval was blocked' : 'Review failed'}</strong><p>{reviewError}</p>{reviewIssues.length > 0 && <ul>{reviewIssues.map((issue, index) => <li key={`${issue.field}-${issue.code}-${index}`}><b>{issue.field || 'Suggestion'}</b>{issue.message}</li>)}</ul>}</div>}<div><button type="button" className="admin-btn secondary" disabled={submittingReview} onClick={closeReview}>Cancel</button><button type="button" className={`admin-btn ${reviewDialog === 'APPROVE' ? 'primary' : 'danger'}`} disabled={submittingReview} onClick={submitReview}>{submittingReview ? 'Saving...' : reviewDialog === 'APPROVE' ? 'Approve' : 'Reject'}</button></div></section></div>}

@@ -103,6 +103,7 @@ function mapValidation(raw) {
         message: issue.message ?? '',
       };
     }),
+    ingredientResolutions: asArray(raw.ingredientResolutions),
   };
 }
 
@@ -195,7 +196,7 @@ export const contentRecipeSuggestionsApi = {
     return mapContentRecipeSuggestion(item);
   },
 
-  async review(suggestionId, action, rejectionReason = '') {
+  async review(suggestionId, action, rejectionReason = '', ingredientMappings = []) {
     if (previewMode()) {
       const index = previewSuggestions.findIndex((item) => item.suggestionId === Number(suggestionId));
       const current = previewSuggestions[index];
@@ -213,7 +214,7 @@ export const contentRecipeSuggestionsApi = {
       return mapContentRecipeSuggestion(previewSuggestions[index]);
     }
     const item = unwrapData(await apiRequest(`${basePath}/${suggestionId}/review`, {
-      method: 'PUT', body: JSON.stringify({ action, rejectionReason: rejectionReason.trim() || null }),
+      method: 'PUT', body: JSON.stringify({ action, rejectionReason: rejectionReason.trim() || null, ingredientMappings }),
     }), {});
     return mapContentRecipeSuggestion(item);
   },

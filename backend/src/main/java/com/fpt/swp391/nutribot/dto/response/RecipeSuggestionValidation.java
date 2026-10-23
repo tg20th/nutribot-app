@@ -23,4 +23,5 @@ public class RecipeSuggestionValidation {
     private String vegetarianType;
     private String vegetarianVerdict;
     private List<RecipeValidationIssue> issues;
+    private List<ResolvedRecipeIngredient> ingredientResolutions;
 }

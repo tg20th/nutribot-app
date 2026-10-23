@@ -100,7 +100,7 @@ describe('contentRecipeSuggestionsApi (NB-87)', () => {
 
     expect(apiRequest).toHaveBeenCalledWith('/api/v1/admin/content-recipe-suggestions/5/review', {
       method: 'PUT',
-      body: JSON.stringify({ action: 'APPROVE', rejectionReason: null }),
+      body: JSON.stringify({ action: 'APPROVE', rejectionReason: null, ingredientMappings: [] }),
     });
     expect(item.status).toBe('APPROVED');
     expect(item.validation).toBeNull();
