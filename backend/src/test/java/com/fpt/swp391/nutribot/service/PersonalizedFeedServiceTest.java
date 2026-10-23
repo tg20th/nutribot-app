@@ -22,6 +22,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -151,6 +154,7 @@ class PersonalizedFeedServiceTest {
         RestClient.ResponseSpec response = mock(RestClient.ResponseSpec.class);
         CountDownLatch aiStarted = new CountDownLatch(1);
         CountDownLatch releaseAi = new CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicReference<Thread> secondRequestThread = new java.util.concurrent.atomic.AtomicReference<>();
         when(restClient.post()).thenReturn(request);
         when(request.uri(anyString())).thenReturn(body);
         when(body.contentType(any(MediaType.class))).thenReturn(body);
@@ -162,19 +166,58 @@ class PersonalizedFeedServiceTest {
             return personalizedObservedScoreResponse().getBytes(java.nio.charset.StandardCharsets.UTF_8);
         });
 
-        CompletableFuture<PersonalizedFeedResponse> first = CompletableFuture.supplyAsync(
-                () -> service.getPersonalizedFeed("concurrent-reader", 10, null));
-        assertTrue(aiStarted.await(2, TimeUnit.SECONDS));
-        CompletableFuture<PersonalizedFeedResponse> second = CompletableFuture.supplyAsync(
-                () -> service.getPersonalizedFeed("concurrent-reader", 10, null));
-        releaseAi.countDown();
+        ExecutorService executor = Executors.newFixedThreadPool(2, new ThreadFactory() {
+            private final java.util.concurrent.atomic.AtomicInteger threadNumber = new java.util.concurrent.atomic.AtomicInteger();
 
-        PersonalizedFeedResponse firstResponse = first.get(2, TimeUnit.SECONDS);
-        PersonalizedFeedResponse secondResponse = second.get(2, TimeUnit.SECONDS);
-        verify(restClient, times(1)).post();
-        assertEquals(firstResponse.getNextCursor(), secondResponse.getNextCursor());
-        assertEquals(firstResponse.getItems().stream().map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList(),
-                secondResponse.getItems().stream().map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList());
+            @Override
+            public Thread newThread(Runnable task) {
+                return new Thread(task, "feed-concurrency-test-" + threadNumber.incrementAndGet());
+            }
+        });
+        try {
+            CompletableFuture<PersonalizedFeedResponse> first = CompletableFuture.supplyAsync(
+                    () -> service.getPersonalizedFeed("concurrent-reader", 10, null), executor);
+            assertTrue(aiStarted.await(2, TimeUnit.SECONDS));
+            CompletableFuture<PersonalizedFeedResponse> second = CompletableFuture.supplyAsync(() -> {
+                secondRequestThread.set(Thread.currentThread());
+                return service.getPersonalizedFeed("concurrent-reader", 10, null);
+            }, executor);
+
+            assertTrue(awaitCoalescingWait(secondRequestThread, 2, TimeUnit.SECONDS),
+                    "Second request should be waiting on the first request's in-flight snapshot");
+            releaseAi.countDown();
+
+            PersonalizedFeedResponse firstResponse = first.get(2, TimeUnit.SECONDS);
+            PersonalizedFeedResponse secondResponse = second.get(2, TimeUnit.SECONDS);
+            verify(restClient, times(1)).post();
+            assertEquals(firstResponse.getNextCursor(), secondResponse.getNextCursor());
+            assertEquals(firstResponse.getItems().stream().map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList(),
+                    secondResponse.getItems().stream().map(PersonalizedFeedResponse.FeedItemResponse::getContentId).toList());
+        } finally {
+            releaseAi.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    private boolean awaitCoalescingWait(java.util.concurrent.atomic.AtomicReference<Thread> requestThread,
+                                        long timeout, TimeUnit unit) throws InterruptedException {
+        long deadline = System.nanoTime() + unit.toNanos(timeout);
+        while (System.nanoTime() < deadline) {
+            Thread thread = requestThread.get();
+            if (thread != null && thread.getState() == Thread.State.WAITING) {
+                boolean waitingOnFuture = false;
+                boolean inSnapshotCoalescer = false;
+                for (StackTraceElement frame : thread.getStackTrace()) {
+                    waitingOnFuture |= frame.getClassName().equals(CompletableFuture.class.getName())
+                            && frame.getMethodName().equals("waitingGet");
+                    inSnapshotCoalescer |= frame.getClassName().equals(PersonalizedFeedService.class.getName())
+                            && frame.getMethodName().equals("createSnapshotOnce");
+                }
+                if (waitingOnFuture && inSnapshotCoalescer) return true;
+            }
+            Thread.sleep(5);
+        }
+        return false;
     }
 
     @Test

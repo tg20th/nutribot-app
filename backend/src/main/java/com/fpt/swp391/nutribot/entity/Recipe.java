@@ -52,6 +52,22 @@ public class Recipe {
     @Column(name = "source_content_id")
     private Integer sourceContentId;
 
+    @Column(name = "source_type", nullable = false, length = 30)
+    @Builder.Default
+    private String sourceType = "SYSTEM";
+
+    @Column(name = "contributor_name_snapshot", length = 150)
+    private String contributorNameSnapshot;
+
+    @Column(name = "source_post_title_snapshot", length = 255)
+    private String sourcePostTitleSnapshot;
+
+    @Column(name = "approved_by")
+    private Integer approvedBy;
+
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
     @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
     private String status = "draft";

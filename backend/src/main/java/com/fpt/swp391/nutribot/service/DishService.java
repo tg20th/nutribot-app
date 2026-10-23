@@ -4,6 +4,7 @@ import com.fpt.swp391.nutribot.dto.response.DishDetailResponse;
 import com.fpt.swp391.nutribot.dto.response.IngredientDetailDto;
 import com.fpt.swp391.nutribot.dto.response.RecipeDetailDto;
 import com.fpt.swp391.nutribot.entity.Dish;
+import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Ingredient;
 import com.fpt.swp391.nutribot.entity.Recipe;
 import com.fpt.swp391.nutribot.entity.RecipeIngredient;
@@ -67,6 +68,9 @@ public class DishService {
             User sourceAuthor = recipe.getSourceUserId() == null
                     ? null
                     : userRepository.findById(recipe.getSourceUserId()).orElse(null);
+            if (sourceAuthor != null && sourceAuthor.getStatus() != AccountStatus.ACTIVE) {
+                sourceAuthor = null;
+            }
 
             recipeDto = RecipeDetailDto.builder()
                     .recipeId(recipe.getRecipeId())
@@ -78,9 +82,16 @@ public class DishService {
                     .cookTimeMin(recipe.getCookTimeMin())
                     .ingredients(ingredientDtos)
                     .sourceAuthorId(sourceAuthor != null ? sourceAuthor.getUserId() : null)
-                    .sourceAuthorName(sourceAuthor != null ? displayName(sourceAuthor) : null)
+                    .contributorUserId(recipe.getSourceUserId())
+                    .sourceAuthorName(sourceAuthor != null ? displayName(sourceAuthor) : recipe.getContributorNameSnapshot())
                     .sourceAuthorAvatar(sourceAuthor != null ? sourceAuthor.getAvatarUrl() : null)
                     .sourceContentId(recipe.getSourceContentId())
+                    .sourcePostId(recipe.getSourceContentId())
+                    .sourceType(recipe.getSourceType())
+                    .contributorName(recipe.getContributorNameSnapshot())
+                    .sourcePostTitle(recipe.getSourcePostTitleSnapshot())
+                    .approvedBy(recipe.getApprovedBy())
+                    .approvedAt(recipe.getApprovedAt())
                     .build();
         }
 

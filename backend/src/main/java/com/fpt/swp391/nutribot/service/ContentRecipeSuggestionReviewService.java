@@ -310,6 +310,11 @@ public class ContentRecipeSuggestionReviewService {
                     // NB-80: Ghi nguồn gốc tác giả community để hiển thị attribution
                     .sourceUserId(content.getUser() != null ? content.getUser().getUserId() : null)
                     .sourceContentId(content.getContentId())
+                    .sourceType("USER_CONTRIBUTED")
+                    .contributorNameSnapshot(content.getUser() == null ? null : displayName(content.getUser()))
+                    .sourcePostTitleSnapshot(content.getTitle())
+                    .approvedBy(admin.getUserId())
+                    .approvedAt(java.time.LocalDateTime.now())
                     .status(recipeStatus)
                     .build());
         });

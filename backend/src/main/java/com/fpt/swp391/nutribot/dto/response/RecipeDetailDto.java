@@ -22,7 +22,14 @@ public class RecipeDetailDto {
     private Integer cookTimeMin;
     private List<IngredientDetailDto> ingredients;
     private Integer sourceAuthorId;
+    private Integer contributorUserId;
     private String sourceAuthorName;
     private String sourceAuthorAvatar;
     private Integer sourceContentId;
+    private Integer sourcePostId;
+    private String sourceType;
+    private String contributorName;
+    private String sourcePostTitle;
+    private Integer approvedBy;
+    private java.time.LocalDateTime approvedAt;
 }

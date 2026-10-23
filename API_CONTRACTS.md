@@ -991,3 +991,11 @@ Hệ thống tạo đề xuất công thức  ──► status = PENDING   (+ gh
 - `409`/`404` khi duyệt: đóng hộp thoại, hiển thị toast "Suggestion changed on the server" và tải lại hàng đợi.
 
 
+
+## 13. Recipe Community provenance (NB-88)
+
+- `recipes.source_type` accepts `SYSTEM` or `USER_CONTRIBUTED`; existing recipes are backfilled as `SYSTEM`.
+- Only the admin approval flow imports a community recipe. Reaching view/vote thresholds or enabling consent creates a suggestion only.
+- On approval, the backend records `source_user_id` (contributorUserId), `source_content_id` (sourcePostId), contributor and post title snapshots, `approved_by`, and `approved_at`. Values come from the persisted post/suggestion and authenticated admin principal; clients cannot set attribution.
+- Recipe detail adds `sourceType`, `contributorUserId`, `sourcePostId` (alias of existing `sourceContentId`), `contributorName`, `sourcePostTitle`, `approvedBy`, and `approvedAt`. Existing attribution fields remain for compatibility.
+- If the contributor is not ACTIVE or the source post is no longer public, the recipe remains available using the stored snapshots; live avatar may be null. Hiding provenance does not remove dish, recipe, or ingredients used by Meal Planner, Weekly Menu, or recommendation.
