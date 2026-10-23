@@ -68,6 +68,15 @@ const getGuestSessionId = () => {
   return sessionId;
 };
 
+const getActionStorageKey = (sessionId, messageId) => `nutribot-action:${sessionId || 'guest'}:${messageId}`;
+const getInternalHistoryContent = (item) => {
+  const parts = [item.text || ''];
+  if (item.videoAnalysis) parts.push(`video_analysis: ${JSON.stringify(item.videoAnalysis)}`);
+  if (item.videoSummary) parts.push(`video_context: ${item.videoSummary}`);
+  if (item.videoSource) parts.push(`video_source: ${JSON.stringify(item.videoSource)}`);
+  return parts.filter(Boolean).join('\n');
+};
+
 const prefersReducedMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 const formatBytes = (value) => `${(value / (1024 * 1024)).toFixed(value >= 1024 * 1024 ? 1 : 2)} MB`;
 const normalizeList = (value) => Array.isArray(value) ? value.filter(Boolean) : [];
@@ -114,7 +123,7 @@ const readAsBase64 = (file) => new Promise((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
-function AnalysisCard({ attachment, videoAnalysis }) {
+function AnalysisCard({ attachment, videoAnalysis, videoSource, videoSummary, showSteps = false }) {
   const [expanded, setExpanded] = useState(false);
   if (attachment?.type === 'IMAGE') {
     const recognized = normalizeList(attachment.recognizedIngredients);
@@ -129,9 +138,9 @@ function AnalysisCard({ attachment, videoAnalysis }) {
     </section>;
   }
 
-  if (!videoAnalysis) return null;
+  if (attachment?.type === 'VIDEO' || !videoAnalysis) return null;
   const ingredients = normalizeList(videoAnalysis.ingredients);
-  const steps = normalizeList(videoAnalysis.steps);
+  const steps = showSteps ? normalizeList(videoAnalysis.steps) : [];
   const uncertainties = normalizeList(videoAnalysis.uncertainties);
   const visibleSteps = expanded ? steps : steps.slice(0, 3);
   return <section className="chatbot-analysis-card chatbot-analysis-card--video" aria-label="Video analyzed">
@@ -142,6 +151,19 @@ function AnalysisCard({ attachment, videoAnalysis }) {
     {steps.length > 0 && <div className="chatbot-analysis-card__group"><span className="chatbot-analysis-card__label">Instructions</span><ol>{visibleSteps.map((item, index) => <li key={`${item.instruction || item}-${index}`}>{typeof item === 'string' ? item : item.instruction}</li>)}</ol>{steps.length > 3 && <button type="button" className="chatbot-analysis-card__expand" onClick={() => setExpanded((current) => !current)}>{expanded ? 'Show less' : 'Show all'} <ChevronRight size={14} className={expanded ? 'is-rotated' : ''} /></button>}</div>}
     {uncertainties.length > 0 && <p className="chatbot-analysis-card__warning"><AlertCircle size={14} />{uncertainties.join(' ')}</p>}
   </section>;
+}
+
+function MessageText({ text }) {
+  return <>{String(text || '').split('\n').map((line, index, lines) => {
+    const stepHeading = line.match(/^\*\*(Step\s+\d+\s*[—-].*?)\*\*$/i);
+    return <span key={`${line}-${index}`}>{stepHeading ? <strong>{stepHeading[1]}</strong> : line}{index < lines.length - 1 && <br />}</span>;
+  })}</>;
+}
+
+function CookingFollowUp({ item, onSelect, disabled }) {
+  const action = normalizeList(item.suggestedActions || item.suggested_actions).find((candidate) => (candidate.type || '').toUpperCase() === 'COOKING_INSTRUCTIONS');
+  if (!action || item.actionState) return null;
+  return <section className="chatbot-cooking-follow-up" aria-label="Cooking instructions follow-up"><p>Would you like to see the cooking instructions?</p><div><button type="button" onClick={() => onSelect('yes')} disabled={disabled}>Yes, show steps</button><button type="button" className="is-secondary" onClick={() => onSelect('no')} disabled={disabled}>No, thanks</button></div></section>;
 }
 
 function YoutubeIcon() {
@@ -269,7 +291,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
       const persisted = await getChatMessages(sessionId);
       if (key !== conversationKeyRef.current) return;
       sessionIdRef.current = sessionId;
-      setMessages(persisted.map((item) => ({ id: item.messageId, sender: item.senderType === 'USER' ? 'user' : 'assistant', text: item.content, createdAt: item.createdAt, attachment: item.attachments?.[0] })));
+      setMessages(persisted.map((item) => ({ id: item.messageId, sender: item.senderType === 'USER' ? 'user' : 'assistant', text: item.content, createdAt: item.createdAt, attachment: item.attachments?.[0], actionState: localStorage.getItem(getActionStorageKey(sessionId, item.messageId)) || undefined, ...(item.metadata || {}) })));
       setConversationState('existing');
       setHistoryOpen(false);
       loaded = true;
@@ -400,44 +422,55 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const canConfirmYoutube = Boolean(youtubeValue && isValidYoutubeUrl(youtubeValue));
 
   const submitMessage = async (value = draft, retryContext = null) => {
-    const message = value.trim(); const selectedAttachment = retryContext?.attachment ?? attachment;
+    const message = value.trim(); const requestMessage = retryContext?.requestMessage ?? message; const displayMessage = retryContext?.displayMessage ?? message; const selectedAttachment = retryContext?.attachment ?? attachment;
     const selectedYoutube = retryContext?.youtubeUrl ?? youtubeUrl;
     const requestType = getRequestType(selectedAttachment, selectedYoutube);
-    if ((!message && !selectedAttachment && !selectedYoutube) || message.length > MAX_MESSAGE_LENGTH || isLoading || sendingRef.current) return;
+    if ((!requestMessage && !selectedAttachment && !selectedYoutube) || requestMessage.length > MAX_MESSAGE_LENGTH || isLoading || sendingRef.current) return;
     if ((selectedAttachment || selectedYoutube) && isGuest) { setMediaError('Sign in to send an image or video for analysis.'); return; }
     sendingRef.current = true;
-    const conversationHistory = retryContext?.conversationHistory ?? messages.filter((item) => item.id !== 'welcome' && !item.pending && !item.error).slice(-40).map((item) => ({ sender: item.sender === 'user' ? 'USER' : 'ASSISTANT', content: item.text }));
+    const conversationHistory = retryContext?.conversationHistory ?? messages.filter((item) => item.id !== 'welcome' && !item.pending && !item.error).slice(-40).map((item) => ({ sender: item.sender === 'user' ? 'USER' : 'ASSISTANT', content: getInternalHistoryContent(item) }));
     const guest = retryContext?.guest ?? isGuest;
     const sessionId = retryContext?.sessionId ?? (guest ? getGuestSessionId() : sessionIdRef.current);
     const conversationKey = retryContext?.conversationKey ?? conversationKeyRef.current;
     const idempotencyKey = retryContext?.idempotencyKey ?? `chat-${Date.now()}-${requestSequenceRef.current + 1}`;
     if (conversationKey !== conversationKeyRef.current) { sendingRef.current = false; return; }
     const requestId = ++requestSequenceRef.current;
-    const userMessage = { id: `user-${Date.now()}`, sender: 'user', text: message, attachment: selectedAttachment ? { type: selectedAttachment.type, filename: selectedAttachment.filename, mimeType: selectedAttachment.mimeType, preview: selectedAttachment.preview, size: selectedAttachment.size } : (selectedYoutube ? { type: 'VIDEO', url: selectedYoutube } : null) };
+    const userMessage = { id: `user-${Date.now()}`, sender: 'user', text: displayMessage, attachment: selectedAttachment ? { type: selectedAttachment.type, filename: selectedAttachment.filename, mimeType: selectedAttachment.mimeType, preview: selectedAttachment.preview, size: selectedAttachment.size } : (selectedYoutube ? { type: 'VIDEO', url: selectedYoutube } : null) };
     const pendingId = `pending-${Date.now()}`;
     setConversationState('active');
     setConversationError('');
-    setMessages((current) => [...current.filter((item) => item.id !== retryContext?.errorId), ...(retryContext ? [] : [userMessage]), { id: pendingId, sender: 'assistant', text: '', pending: true, mediaKind: selectedAttachment?.kind ?? (selectedYoutube ? 'video' : undefined) }]);
-    setDraft(''); setAttachment(null); setYoutubeUrl(''); setMediaError(''); setIsLoading(true); setActiveRequestType(requestType); setAttachmentMenuOpen(false); onSend?.(message);
+    const isRetry = Boolean(retryContext?.errorId);
+    setMessages((current) => [...current.filter((item) => item.id !== retryContext?.errorId), ...(isRetry ? [] : [userMessage]), { id: pendingId, sender: 'assistant', text: '', pending: true, mediaKind: selectedAttachment?.kind ?? (selectedYoutube ? 'video' : undefined) }]);
+    setDraft(''); setAttachment(null); setYoutubeUrl(''); setMediaError(''); setIsLoading(true); setActiveRequestType(requestType); setAttachmentMenuOpen(false); onSend?.(displayMessage);
     const controller = new AbortController(); requestControllerRef.current = controller; activeRequestRef.current = { id: requestId, conversationKey };
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => { timeoutId = window.setTimeout(() => { const timeoutError = new Error('NutriBot request timed out.'); timeoutError.code = 'CHATBOT_TIMEOUT'; controller.abort(); reject(timeoutError); }, CHATBOT_TIMEOUTS[requestType]); });
     try {
-      const response = await Promise.race([requestNutritionAdvice({ message, sessionId, conversationHistory: guest ? conversationHistory : [], attachment: selectedAttachment ? { type: selectedAttachment.type, dataBase64: selectedAttachment.dataBase64, mimeType: selectedAttachment.mimeType, filename: selectedAttachment.filename } : (selectedYoutube ? { type: 'VIDEO', url: selectedYoutube } : undefined), idempotencyKey, signal: controller.signal }), timeoutPromise]);
+      const response = await Promise.race([requestNutritionAdvice({ message: requestMessage, sessionId, conversationHistory: guest ? conversationHistory : [], attachment: selectedAttachment ? { type: selectedAttachment.type, dataBase64: selectedAttachment.dataBase64, mimeType: selectedAttachment.mimeType, filename: selectedAttachment.filename } : (selectedYoutube ? { type: 'VIDEO', url: selectedYoutube } : undefined), idempotencyKey, signal: controller.signal }), timeoutPromise]);
       if (activeRequestRef.current?.id !== requestId || conversationKey !== conversationKeyRef.current) return;
       const assistantText = typeof (response.content || response.reply) === 'string' ? (response.content || response.reply).trim() : '';
       if (!assistantText) { const invalid = new Error('NutriBot returned an incomplete response.'); invalid.code = 'CHATBOT_INVALID_RESPONSE'; throw invalid; }
       if (!guest && response.sessionId != null) sessionIdRef.current = response.sessionId;
       if (guest) syncGuestTrialCount(response.remainingTrialCount);
-      setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `assistant-${Date.now()}`, sender: 'assistant', text: assistantText, analysis: response.attachment, videoAnalysis: response.videoAnalysis || response.video_analysis }]);
+      setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `assistant-${Date.now()}`, sender: 'assistant', text: assistantText, analysis: response.attachment, videoAnalysis: response.videoAnalysis || response.video_analysis, videoSource: response.videoSource || response.video_source, videoSummary: response.videoSummary || response.video_summary, suggestedActions: response.suggestedActions || response.suggested_actions }]);
     } catch (error) {
       if (activeRequestRef.current?.id !== requestId || conversationKey !== conversationKeyRef.current) return;
-      if (error.name === 'AbortError') { setMessages((current) => current.filter((item) => item.id !== pendingId)); setDraft(message); setAttachment(selectedAttachment); setYoutubeUrl(selectedYoutube); return; }
+      if (error.name === 'AbortError') { setMessages((current) => current.filter((item) => item.id !== pendingId)); setDraft(displayMessage); setAttachment(selectedAttachment); setYoutubeUrl(selectedYoutube); return; }
       if (error.status === 429 && isGuest) syncGuestTrialCount(0);
-      setDraft(message); setAttachment(selectedAttachment); setYoutubeUrl(selectedYoutube);
+      setDraft(displayMessage); setAttachment(selectedAttachment); setYoutubeUrl(selectedYoutube);
       const messageText = error.status === 429 ? "AI is temporarily unavailable\n\nWe've reached the current AI usage limit. You can still view your previous conversations and analysis results. Please try again later." : error.code === 'CHATBOT_TIMEOUT' ? 'NutriBot phản hồi quá lâu. Vui lòng thử lại.' : error.code === 'CHATBOT_INVALID_RESPONSE' ? 'NutriBot returned an incomplete response. Please try again.' : error.status === 503 || error.status === 504 ? 'AI is temporarily unavailable. Please try again later.' : error.status === 413 ? 'The attachment exceeds the allowed size.' : 'NutriBot could not respond right now. Please try again.';
-      setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `error-${Date.now()}`, sender: 'assistant', text: messageText, error: true, retry: { message, sessionId, guest, conversationHistory, conversationKey, idempotencyKey, attachment: selectedAttachment, youtubeUrl: selectedYoutube } }]);
+      setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `error-${Date.now()}`, sender: 'assistant', text: messageText, error: true, retry: { message: requestMessage, displayMessage, sessionId, guest, conversationHistory, conversationKey, idempotencyKey, attachment: selectedAttachment, youtubeUrl: selectedYoutube } }]);
     } finally { window.clearTimeout(timeoutId); if (activeRequestRef.current?.id === requestId) { requestControllerRef.current = null; activeRequestRef.current = null; sendingRef.current = false; setIsLoading(false); setActiveRequestType('text'); } }
+  };
+  const selectCookingFollowUp = (item, choice) => {
+    if (item.actionState || isLoading || sendingRef.current) return;
+    setMessages((current) => current.map((message) => message.id === item.id ? { ...message, actionState: choice } : message));
+    localStorage.setItem(getActionStorageKey(sessionIdRef.current, item.id), choice);
+    if (choice !== 'yes') return;
+    submitMessage('Yes, show me the cooking steps.', {
+      requestMessage: 'Show the cooking instructions using the structured video analysis already present in the conversation history.',
+      displayMessage: 'Yes, show me the cooking steps.',
+    });
   };
   const retryMessage = (item) => item.retry && submitMessage(item.retry.message, { ...item.retry, errorId: item.id });
   const openAuth = (mode) => { setShowLimitModal(false); setIsOpen(false); setIsMounted(false); onAuth ? onAuth(mode) : navigate('/', { state: { authMode: mode } }); };
@@ -489,7 +522,8 @@ export default function ChatbotWidget({ onSend, onAuth }) {
                 if (!hasMedia && !hasMessageContent) return null;
                 return <div key={item.id} className={`chatbot-widget__message-row chatbot-widget__message-row--${item.sender}`} data-latest-message={index === messages.length - 1 ? 'true' : undefined}>
                   {hasMedia && <SentMedia attachment={item.attachment} />}
-                  {hasMessageContent && <div className={`chatbot-widget__message chatbot-widget__message--${item.sender}`}>{item.pending ? <span className="chatbot-widget__typing" aria-label={item.mediaKind === 'video' ? 'Analyzing video' : item.mediaKind === 'image' ? 'Analyzing image' : 'NutriBot is thinking'}><i /><i /><i /></span> : <>{item.text}{item.analysis && <AnalysisCard attachment={item.analysis} videoAnalysis={item.videoAnalysis} />}{item.videoAnalysis && !item.analysis && <AnalysisCard videoAnalysis={item.videoAnalysis} />}{item.error && item.retry && <button type="button" className="chatbot-widget__retry" onClick={() => retryMessage(item)}>Retry</button>}</>}</div>}
+                  {hasMessageContent && <div className={`chatbot-widget__message chatbot-widget__message--${item.sender}`}>{item.pending ? <span className="chatbot-widget__typing" aria-label={item.mediaKind === 'video' ? 'Analyzing video' : item.mediaKind === 'image' ? 'Analyzing image' : 'NutriBot is thinking'}><i /><i /><i /></span> : <><MessageText text={item.text} />{item.analysis && <AnalysisCard attachment={item.analysis} />}{item.error && item.retry && <button type="button" className="chatbot-widget__retry" onClick={() => retryMessage(item)}>Retry</button>}</>}</div>}
+                  {!item.pending && item.sender === 'assistant' && <CookingFollowUp item={item} onSelect={(choice) => selectCookingFollowUp(item, choice)} disabled={isLoading || Boolean(item.actionState)} />}
                 </div>;
               })}</div>
               {showWelcome && <div className="chatbot-widget__prompts" aria-label="Suggested questions">{QUICK_PROMPTS.map((prompt) => <button key={prompt} type="button" className="chatbot-widget__prompt" onClick={() => submitMessage(prompt)} disabled={isLoading}><span>{prompt}</span><span aria-hidden="true">+</span></button>)}</div>}

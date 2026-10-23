@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service @RequiredArgsConstructor
@@ -114,17 +115,18 @@ public class ChatHistoryService {
                 .content(stored.text())
                 .createdAt(m.getCreatedAt())
                 .attachments(stored.attachments())
+                .metadata(stored.metadata())
                 .build();
     }
 
     private String encodeMessageContent(ChatMessageCreateRequest request) {
         String text = request.getContent() == null ? "" : request.getContent().trim();
         List<ChatAttachmentRequest> attachments = request.getAttachments();
-        if (attachments == null || attachments.isEmpty()) {
+        if ((attachments == null || attachments.isEmpty()) && (request.getMetadata() == null || request.getMetadata().isEmpty())) {
             return text;
         }
         try {
-            StoredPayload payload = new StoredPayload(text, toAttachmentResponses(attachments));
+            StoredPayload payload = new StoredPayload(text, toAttachmentResponses(attachments), request.getMetadata());
             return objectMapper.writeValueAsString(payload);
         } catch (Exception ex) {
             log.warn("Failed to serialize chat attachments; storing plain text only", ex);
@@ -150,6 +152,7 @@ public class ChatHistoryService {
     }
 
     private List<ChatAttachmentResponse> toAttachmentResponses(List<ChatAttachmentRequest> attachments) {
+        if (attachments == null || attachments.isEmpty()) return null;
         return attachments.stream().map(a -> ChatAttachmentResponse.builder()
                 .type(a.getType())
                 .url(a.getUrl())
@@ -167,5 +170,9 @@ public class ChatHistoryService {
         return value.length() <= 70 ? value : value.substring(0, 67).stripTrailing() + "...";
     }
 
-    private record StoredPayload(String text, List<ChatAttachmentResponse> attachments) { }
+    private record StoredPayload(String text, List<ChatAttachmentResponse> attachments, Map<String, Object> metadata) {
+        private StoredPayload(String text, List<ChatAttachmentResponse> attachments) {
+            this(text, attachments, null);
+        }
+    }
 }

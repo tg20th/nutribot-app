@@ -133,7 +133,8 @@ public class ChatbotGatewayService {
                     safeRecommendations(response.recommendations()),
                     remaining,
                     false,
-                    parsedAttachment);
+                    parsedAttachment,
+                    response.videoAnalysis(), response.videoSource(), response.videoSummary(), response.suggestedActions());
         } catch (RestClientException exception) {
             if (quotaKey != null) rateLimitFilter.releaseReservedTurn(quotaKey);
             String errorCode = exception instanceof RestClientResponseException responseException
@@ -175,7 +176,7 @@ public class ChatbotGatewayService {
         String quotaKey = guest ? (String) httpRequest.getAttribute("guestQuotaKey") : null;
         if (quotaKey != null) rateLimitFilter.consumeReservedTurn(quotaKey);
         Integer remaining = guest && quotaKey != null ? rateLimitFilter.remainingForKey(quotaKey) : null;
-        return new ChatbotReply(reply, List.of(), remaining, false, null);
+        return new ChatbotReply(reply, List.of(), remaining, false, null, null, null, null, List.of());
     }
 
     private void appendAttachmentToAiRequest(Map<String, Object> aiRequest, ChatAttachmentRequest attachment) {
@@ -351,7 +352,11 @@ public class ChatbotGatewayService {
             List<String> recommendations,
             Integer remainingTrialCount,
             boolean fallback,
-            ChatAttachmentResponse attachment) { }
+            ChatAttachmentResponse attachment,
+            Map<String, Object> videoAnalysis,
+            Map<String, Object> videoSource,
+            String videoSummary,
+            List<Map<String, Object>> suggestedActions) { }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record AiChatResponse(
@@ -361,7 +366,11 @@ public class ChatbotGatewayService {
             List<String> uncertainIngredients,
             List<String> warnings,
             String imageContext,
-            String videoContext) { }
+            String videoContext,
+            @com.fasterxml.jackson.annotation.JsonProperty("video_analysis") Map<String, Object> videoAnalysis,
+            @com.fasterxml.jackson.annotation.JsonProperty("video_source") Map<String, Object> videoSource,
+            @com.fasterxml.jackson.annotation.JsonProperty("video_summary") String videoSummary,
+            @com.fasterxml.jackson.annotation.JsonProperty("suggested_actions") List<Map<String, Object>> suggestedActions) { }
 
     private enum CircuitState { CLOSED, OPEN, HALF_OPEN }
 }

@@ -239,6 +239,53 @@ describe('ChatbotWidget', () => {
     })));
   });
 
+  it('renders verified YouTube attribution and offers one contextual cooking follow-up', async () => {
+    const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    requestNutritionAdvice.mockResolvedValueOnce({
+      reply: "I analyzed the video 'Tofu bowl recipe' from the YouTube channel 'Nutri Kitchen'.\n\nThe identified dish is tofu bowl.\n\nIngredients:\n- tofu",
+      attachment: { type: 'VIDEO', url: 'https://youtu.be/dQw4w9WgXcQ' },
+      videoAnalysis: { dish_name: 'Tofu bowl', ingredients: [{ name: 'tofu' }], steps: [{ order: 1, instruction: 'Bake the tofu.' }], uncertainties: [] },
+      videoSource: { url: 'https://youtu.be/dQw4w9WgXcQ', title: 'Tofu bowl recipe', channelName: 'Nutri Kitchen', thumbnailUrl: 'https://img.youtube.com/thumb.jpg', metadataVerified: true },
+      videoSummary: 'A tofu bowl is assembled and baked.',
+      suggestedActions: [{ type: 'COOKING_INSTRUCTIONS', label: 'Show cooking instructions' }],
+    });
+    requestNutritionAdvice.mockResolvedValueOnce({ reply: '1. Bake the tofu as shown in the analyzed video context.' });
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add attachment/i }));
+    fireEvent.click(screen.getByRole('button', { name: /youtube link/i }));
+    fireEvent.change(screen.getByPlaceholderText('Paste YouTube URL...'), { target: { value: 'https://youtu.be/dQw4w9WgXcQ' } });
+    fireEvent.click(screen.getByRole('button', { name: /confirm youtube url/i }));
+    fireEvent.click(screen.getByRole('button', { name: /send message/i }));
+
+    await waitFor(() => expect(screen.getByText(/I analyzed the video/)).toBeInTheDocument());
+    expect(screen.queryByText('Nutri Kitchen', { selector: 'strong' })).not.toBeInTheDocument();
+    expect(document.querySelector('.chatbot-video-source')).not.toBeInTheDocument();
+    expect(screen.getByText('Would you like to see the cooking instructions?')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /yes, show steps/i }));
+    await waitFor(() => expect(screen.getByText(/1\. Bake the tofu as shown/)).toBeInTheDocument());
+    expect(screen.getByText('Yes, show me the cooking steps.')).toBeInTheDocument();
+    expect(screen.queryByText('Would you like to see the cooking instructions?')).not.toBeInTheDocument();
+    expect(requestNutritionAdvice).toHaveBeenCalledTimes(2);
+    expect(requestNutritionAdvice.mock.calls[1][0].attachment).toBeUndefined();
+    expect(requestNutritionAdvice.mock.calls[1][0].message).toMatch(/structured video analysis/i);
+  });
+
+  it('dismisses the cooking follow-up without sending another request', async () => {
+    const { requestNutritionAdvice } = await import('../../../services/chatbotApi');
+    localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
+    requestNutritionAdvice.mockResolvedValueOnce({ reply: 'Ingredients identified.', attachment: { type: 'IMAGE', recognizedIngredients: ['tofu'] }, suggestedActions: [{ type: 'COOKING_INSTRUCTIONS', label: 'Show cooking instructions' }] });
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    fireEvent.change(screen.getByLabelText(/message nutribot/i), { target: { value: 'Analyze my ingredients' } });
+    fireEvent.submit(screen.getByLabelText(/message nutribot/i).closest('form'));
+    await waitFor(() => expect(screen.getByRole('button', { name: /no, thanks/i })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /no, thanks/i }));
+    expect(requestNutritionAdvice).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Would you like to see the cooking instructions?')).not.toBeInTheDocument();
+  });
+
   it('validates the YouTube URL in the inline editor and supports Escape', async () => {
     localStorage.setItem('nutribot-auth-token', 'fake-jwt-token');
     renderWithRouter(<ChatbotWidget />);

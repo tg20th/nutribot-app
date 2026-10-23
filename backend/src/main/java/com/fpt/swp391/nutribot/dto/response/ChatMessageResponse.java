@@ -5,6 +5,7 @@ import lombok.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -14,4 +15,5 @@ public class ChatMessageResponse {
     private String content;
     private LocalDateTime createdAt;
     private List<ChatAttachmentResponse> attachments;
+    private Map<String, Object> metadata;
 }

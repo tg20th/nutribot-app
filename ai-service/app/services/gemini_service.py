@@ -49,7 +49,9 @@ from app.schemas.chat import (
     GeminiVideoExtraction,
     VideoAnalysis,
     VideoIngredient,
+    VideoSource,
     VideoStep,
+    SuggestedAction,
 )
 from app.services.model_router import (
     IMAGE_TASK,
@@ -185,6 +187,7 @@ def _refine_image_result(result: GeminiChatResult, request: ChatRequest) -> Gemi
             "uncertain_ingredients": uncertain,
             "warnings": warnings,
             "image_context": image_context,
+            "suggested_actions": ([SuggestedAction(type="COOKING_INSTRUCTIONS", label="Show cooking instructions")] if kept_recognized else []),
         }
     )
 
@@ -535,7 +538,8 @@ class GeminiService:
             )
             telemetry["inference_duration_ms"] = round((time.perf_counter() - inference_started) * 1000)
             extraction = self._parse_video_extraction(response)
-            result = self._build_video_result(extraction)
+            video_source = await self._youtube_source(request.video_url) if request.video_url else None
+            result = self._build_video_result(extraction, video_source)
             finish_reason, token_usage = self._response_telemetry(response)
             logger.info(
                 "Gemini video completed source=%s size_bytes=%s duration=%s upload_ms=%s processing_ms=%s inference_ms=%s models=%s calls=%d latency_ms=%d finish_reason=%s token_usage=%s",
@@ -674,6 +678,8 @@ class GeminiService:
                 if has_video_context and not is_image_request
                 else self._parse_response(response)
             )
+            if has_video_context and any(term in request.message.casefold() for term in ("cooking instruction", "cooking step", "show me the cooking", "show the cooking")):
+                result = result.model_copy(update={"recommendations": []})
             if is_image_request:
                 result = _refine_image_result(result, request)
             usage = getattr(response, "usage_metadata", None)
@@ -1020,8 +1026,28 @@ class GeminiService:
                 "NutriBot nhận được dữ liệu video không hợp lệ, vui lòng thử lại"
             ) from exc
 
+    async def _youtube_source(self, url: str | None) -> VideoSource | None:
+        if not url:
+            return None
+        source = VideoSource(url=url, metadata_status="unavailable")
+        try:
+            async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
+                response = await client.get("https://www.youtube.com/oembed", params={"url": url, "format": "json"})
+                response.raise_for_status()
+                payload = response.json()
+            return source.model_copy(update={
+                "title": payload.get("title") if isinstance(payload.get("title"), str) else None,
+                "channel_name": payload.get("author_name") if isinstance(payload.get("author_name"), str) else None,
+                "thumbnail_url": payload.get("thumbnail_url") if isinstance(payload.get("thumbnail_url"), str) else None,
+                "metadata_verified": bool(payload.get("title") and payload.get("author_name")),
+                "metadata_status": "verified" if payload.get("title") and payload.get("author_name") else "partial",
+            })
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
+            logger.info("YouTube metadata unavailable error_type=%s", type(exc).__name__)
+            return source
+
     @staticmethod
-    def _build_video_result(extraction: GeminiVideoExtraction) -> ChatResponse:
+    def _build_video_result(extraction: GeminiVideoExtraction, video_source: VideoSource | None = None) -> ChatResponse:
         dish_name = extraction.dish_name.strip() if extraction.dish_name else None
         ingredients = []
         seen_ingredients: set[str] = set()
@@ -1049,15 +1075,20 @@ class GeminiService:
             steps=steps,
             uncertainties=uncertainties,
         )
+        attribution = ""
+        if video_source and video_source.metadata_verified and video_source.title and video_source.channel_name:
+            attribution = (
+                f"I analyzed the video '{video_source.title}' from the YouTube channel "
+                f"'{video_source.channel_name}'. "
+            )
         if not dish_name and not ingredients and not steps:
-            reply = "Video không cho phép xác định đầy đủ một món ăn hoặc quy trình nấu."
+            reply = attribution + "The video does not provide enough verified cooking information to identify a complete dish or process."
         else:
-            subject = f"món {dish_name}" if dish_name else "một món ăn"
-            reply = f"Video ghi nhận {subject}."
+            reply = attribution + f"The identified dish is {dish_name or 'unavailable'}."
             if ingredients:
-                reply += " Nguyên liệu: " + ", ".join(item.name for item in ingredients) + "."
+                reply += "\n\nIngredients:\n" + "\n".join(f"- {item.name}" for item in ingredients)
             if steps:
-                reply += " Đã ghi nhận " + str(len(steps)) + " bước theo thứ tự trong video."
+                reply += f"\n\nThe video contains {len(steps)} cooking steps."
         if uncertainties:
             reply += " Lưu ý: " + " ".join(uncertainties)
 
@@ -1076,6 +1107,9 @@ class GeminiService:
             recommendations=[],
             video_analysis=analysis,
             video_context=context[:2_000],
+            video_source=video_source,
+            video_summary=context[:2_000],
+            suggested_actions=([SuggestedAction(type="COOKING_INSTRUCTIONS", label="Show cooking instructions")] if ingredients else []),
         )
     @staticmethod
     def _parse_video_followup_response(response: Any) -> ChatResponse:

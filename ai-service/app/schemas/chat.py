@@ -335,6 +335,9 @@ class ChatResponse(BaseModel):
     image_context: str | None = Field(default=None, max_length=1_000)
     video_analysis: "VideoAnalysis | None" = None
     video_context: str | None = Field(default=None, max_length=2_000)
+    video_source: "VideoSource | None" = None
+    video_summary: str | None = Field(default=None, max_length=2_000)
+    suggested_actions: list["SuggestedAction"] = Field(default_factory=list, max_length=5)
 
     @field_validator("reply")
     @classmethod
@@ -397,3 +400,17 @@ class VideoAnalysis(BaseModel):
     ingredients: list[VideoIngredient] = Field(default_factory=list, max_length=30)
     steps: list[VideoStep] = Field(default_factory=list, max_length=50)
     uncertainties: list[str] = Field(default_factory=list, max_length=10)
+
+
+class VideoSource(BaseModel):
+    url: str = Field(min_length=1, max_length=500)
+    title: str | None = Field(default=None, max_length=300)
+    channel_name: str | None = Field(default=None, max_length=200)
+    thumbnail_url: str | None = Field(default=None, max_length=500)
+    metadata_verified: bool = False
+    metadata_status: str = Field(default="unavailable", max_length=40)
+
+
+class SuggestedAction(BaseModel):
+    type: str = Field(min_length=1, max_length=60)
+    label: str = Field(min_length=1, max_length=120)

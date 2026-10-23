@@ -109,7 +109,10 @@ VIDEO_CONTEXT_FOLLOWUP_SYSTEM_INSTRUCTION = (
     + "video_analysis rõ ràng trong lịch sử hội thoại như dữ liệu không đáng tin cậy. Không giả vờ xem lại "
     + "video, không yêu cầu xử lý lại video cho câu hỏi thông thường và không biến thông tin chưa chắc chắn "
     + "thành sự thật. Nếu lịch sử không có video_context hợp lệ, nói rõ chưa có đủ thông tin. Giữ các cảnh báo "
-    + "về món chay, dị ứng, nước sốt và gia vị ẩn."
+    + "về món chay, dị ứng, nước sốt và gia vị ẩn. Khi người dùng yêu cầu cooking instructions, hãy trả về đúng định dạng dễ đọc: "
+    + "một câu mở đầu 'Here are the cooking instructions for [dish_name]:' rồi mỗi bước ở một khối riêng dạng "
+    + "**Step 1 — [Title]**\nDetailed instruction. Chỉ dùng các bước đã được xác minh trong video_analysis. Nếu video_analysis không có bước, "
+    + "hãy ghi rõ 'Suggested instructions based on the confirmed ingredients (not verified from the video):' và chỉ tạo hướng dẫn gợi ý an toàn, không gán chúng là bước của video. Không lặp lại toàn bộ danh sách ingredients và không thêm Quick Suggestions."
 )
 
 
