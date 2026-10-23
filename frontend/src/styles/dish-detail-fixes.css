@@ -7,16 +7,39 @@
 .dish-detail-dialog {
   display: flex;
   flex-direction: column;
+  position: relative;
   min-width: 0;
   min-height: 0;
   max-height: calc(100dvh - 48px);
   overflow: hidden;
 }
 
-.dish-detail-topbar {
-  position: relative;
-  flex: 0 0 auto;
-  justify-content: flex-end;
+.dish-detail-close {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+  border-radius: 50%;
+  background: transparent;
+  color: #40634b;
+}
+
+.dish-detail-close:hover {
+  background: #eff5e5;
+}
+
+.dish-detail-close:focus-visible {
+  outline: 2px solid #315c2b;
+  outline-offset: 2px;
+}
+
+.dish-detail-content {
+  padding-top: clamp(40px, 5vw, 52px);
 }
 
 .dish-detail-scroll {
@@ -43,45 +66,80 @@
   background-clip: padding-box;
 }
 
-.dish-detail-grid ol.detail-method-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  list-style: none;
-  padding: 0;
-  margin: 24px 0 0;
-}
-
-.dish-detail-grid ol.detail-method-steps li {
-  display: grid;
-  grid-template-columns: 29px minmax(0, 1fr);
-  gap: 20px;
+.dish-detail-recipe-grid {
   align-items: start;
-  padding: 0;
+  width: 100%;
+  margin: 30px 0 0;
 }
 
-.dish-detail-grid ol.detail-method-steps li b {
-  display: grid;
-  place-items: center;
-  width: 29px;
-  height: 29px;
-  flex: 0 0 29px;
-  border-radius: 50%;
-  background: var(--primary);
-  color: #fffefa;
+.dish-detail-recipe-grid .detail-ingredients,
+.dish-detail-recipe-grid .detail-method {
+  min-width: 0;
+  padding: 32px 28px 34px;
+}
+
+.dish-detail-recipe-grid .detail-section-head {
+  margin-bottom: 22px;
+}
+
+.dish-detail-recipe-grid .detail-section-head h2 {
+  font-size: 32px;
+}
+
+.dish-detail-recipe-grid .detail-section-head small {
+  bottom: 2px;
+}
+
+.dish-detail-recipe-grid .detail-ingredients li {
+  padding: 10px 0;
   font-size: 12px;
-  font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif) !important;
+}
+
+.dish-detail-recipe-grid .detail-method ol {
+  margin-top: 0;
+}
+
+.dish-detail-recipe-grid .detail-method li {
+  padding-bottom: 16px;
+}
+
+.dish-detail-recipe-grid .detail-method li b {
+  width: 27px;
+  height: 27px;
+  font-size: 11px;
+}
+
+.dish-detail-recipe-grid .detail-method li p {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.dish-detail-recipe-grid .detail-ingredients li,
+.dish-detail-recipe-grid .detail-method li p,
+.dish-detail-recipe-grid .detail-method li b,
+.dish-detail-recipe-grid .detail-ingredients li i {
   font-variant-numeric: tabular-nums;
 }
 
-.dish-detail-grid ol.detail-method-steps li p {
-  margin: 0;
-  min-width: 0;
+.dish-detail-recipe-grid .detail-ingredients li {
   overflow-wrap: anywhere;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.6;
-  font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif) !important;
+}
+
+@media (max-width: 650px) {
+  .dish-detail-recipe-grid {
+    grid-template-columns: 1fr;
+    margin-top: 26px;
+  }
+
+  .dish-detail-recipe-grid .detail-ingredients,
+  .dish-detail-recipe-grid .detail-method {
+    padding: 27px 20px 30px;
+  }
+
+  .dish-detail-content {
+    padding-top: 40px;
+  }
 }
 
 @media (max-width: 650px) {

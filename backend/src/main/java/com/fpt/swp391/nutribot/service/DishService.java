@@ -57,8 +57,10 @@ public class DishService {
                             return IngredientDetailDto.builder()
                                     .ingredientId(ri.getIngredientId())
                                     .name(ing != null ? ing.getName() : null)
-                                    .quantity(null)
-                                    .unit(null)
+                                    .quantity(ri.getQuantity() != null
+                                            ? ri.getQuantity().stripTrailingZeros().toPlainString()
+                                            : null)
+                                    .unit(ri.getUnit())
                                     .build();
                         })
                         .toList();
