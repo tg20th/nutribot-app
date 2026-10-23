@@ -256,3 +256,10 @@
   - *Phạm vi:* Giữ recipe cũ là `SYSTEM`; chỉ admin approval mới ghi recipe `USER_CONTRIBUTED`, contributor/post, snapshot và approvedBy/At. Không nhận attribution từ client.
   - *Tương thích:* Recipe detail có fallback khi user/post ẩn; Meal Planner, Weekly Menu và Recommendation tiếp tục dùng catalog hiện có.
   - *Dependency:* Task nhóm mới 03, 09 (Jira key chưa được cung cấp).
+
+## NB-90 (quản trị nguyên liệu)
+- [ ] **[BE] Admin list/search/filter và CRUD nguyên liệu**
+  - *Phạm vi:* Tái sử dụng `Ingredient`, `IngredientRepository`, category và bảng hiện có; hỗ trợ tạo/sửa/deactivate/reactivate với role Admin.
+  - *Tương thích:* Không hard-delete; giữ nguyên recipe_ingredients, user_allergies, `GET /api/v1/ingredients` và contract Health Profile/Meal Planner.
+  - *File:* `AdminIngredientController`, `AdminIngredientService`, request/response DTOs, repository query, tests và API_CONTRACTS.md.
+  - *Dependency:* Ingredient Entity/Repository hiện có (#11).

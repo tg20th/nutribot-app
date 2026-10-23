@@ -173,6 +173,16 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
 - **Header:** `Authorization: Bearer <token>`
 - **Mô tả:** Trả về các nguyên liệu đang hoạt động từ bảng `ingredients`, sắp xếp theo tên.
 
+### 2.8. Quản trị nguyên liệu (NB-90)
+- Mọi endpoint dưới đây yêu cầu role `ADMIN`; response dùng envelope `ApiResponse<T>`.
+- `GET /api/v1/admin/ingredients?keyword=<text>&categoryId=<id>&active=<true|false>&page=0&size=10` trả danh sách phân trang, tìm trong tên/slug và lọc tùy chọn theo category/trạng thái. Bỏ `active` để xem cả nguyên liệu đang hoạt động và đã vô hiệu hóa.
+- `POST /api/v1/admin/ingredients` tạo nguyên liệu, request gồm `name`, `slug`, `description` (tùy chọn), `categoryId`; nguyên liệu mới active mặc định.
+- `PUT /api/v1/admin/ingredients/{ingredientId}` cập nhật các trường trên.
+- `PUT /api/v1/admin/ingredients/{ingredientId}/status` nhận `{ "active": false }` để vô hiệu hóa hoặc `{ "active": true }` để kích hoạt lại.
+- Tên/slug phải duy nhất (không phân biệt hoa thường). Category phải tồn tại, đang active và có `categoryType = INGREDIENT`.
+- Deactivate là soft update `is_active`; không xóa ingredient hay các liên kết `recipe_ingredients`/`user_allergies`. `GET /api/v1/ingredients` hiện tại giữ nguyên contract và chỉ trả ingredient active cho lựa chọn dị ứng.
+- `page` mặc định `0`; `size` mặc định `10`, giới hạn tối đa `100`. Các lỗi trùng dữ liệu/category không hợp lệ trả `400`; ingredient không tồn tại trả `404`.
+
 ---
 
 ## 3. Quản lý Danh mục (Categories - Thắng)
