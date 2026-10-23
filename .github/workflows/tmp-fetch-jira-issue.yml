@@ -1,0 +1,29 @@
+name: tmp-fetch-jira-issue
+
+on:
+  push:
+    branches: [chore/nb85-fetch-ticket]
+
+jobs:
+  fetch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Fetch issue
+        run: |
+          curl -s -u ":${{ secrets.JIRA_AUTH }}" \
+            -H "Content-Type: application/json" \
+            "https://danyngo06.atlassian.net/rest/api/3/issue/NB-85?fields=summary,description,status,issuetype,labels,priority,comment" \
+            > /tmp/issue.json
+          echo "size=$(wc -c < /tmp/issue.json)" >> $GITHUB_STEP_SUMMARY
+      - name: Save to branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          mkdir -p tmp-jira
+          cp /tmp/issue.json tmp-jira/issue.json
+          git add tmp-jira/issue.json
+          git commit -m 'tmp: fetch jira issue snapshot [skip ci]' || echo 'no change'
+          git push origin HEAD:chore/nb85-fetch-ticket
