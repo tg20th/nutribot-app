@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.util.List;
+import java.util.Map;
 
 @Getter @Setter
 public class ChatMessageCreateRequest {
@@ -24,4 +25,6 @@ public class ChatMessageCreateRequest {
 
     @Size(max = 1, message = "Chỉ được gửi tối đa một đính kèm")
     private List<@Valid ChatAttachmentRequest> attachments;
+
+    private Map<String, Object> metadata;
 }

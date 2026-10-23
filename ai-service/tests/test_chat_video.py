@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from app.config import Settings
 from app.exceptions import AIProviderUnavailableError, AIResponseInvalidError
-from app.schemas.chat import ChatRequest, GeminiChatResult
+from app.schemas.chat import ChatRequest, GeminiChatResult, GeminiVideoExtraction, VideoSource
 from app.services.gemini_service import GeminiService
 
 
@@ -286,3 +286,15 @@ def test_non_cooking_result_is_valid_without_fabricated_recipe():
     assert result.video_analysis.ingredients == []
     assert result.video_analysis.steps == []
     assert "not a cooking video" in result.reply
+
+
+def test_video_result_keeps_verified_attribution_and_structured_steps():
+    result = GeminiService._build_video_result(
+        GeminiVideoExtraction(dish_name="Tofu bowl", ingredients=["tofu"], steps=["Bake the tofu"], uncertainties=[]),
+        VideoSource(url="https://youtu.be/9hE5-98ZeCg", title="Tofu bowl recipe", channel_name="Nutri Kitchen", metadata_verified=True, metadata_status="verified"),
+    )
+
+    assert "Tofu bowl recipe" in result.reply
+    assert "Nutri Kitchen" in result.reply
+    assert result.video_analysis.steps[0].instruction == "Bake the tofu"
+    assert result.suggested_actions[0].type == "COOKING_INSTRUCTIONS"

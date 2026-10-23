@@ -17,6 +17,7 @@ import com.fpt.swp391.nutribot.service.ChatbotGatewayService;
 import com.fpt.swp391.nutribot.service.ChatbotGatewayService.ConversationTurn;
 import com.fpt.swp391.nutribot.service.ChatbotHealthProfileCache;
 import com.fpt.swp391.nutribot.service.ChatbotIntentRouter;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -51,6 +52,7 @@ public class ChatbotController {
     private final ChatbotIntentRouter chatbotIntentRouter;
     private final ChatMessageRepository chatMessageRepository;
     private final ChatMediaValidator chatMediaValidator;
+    private final ObjectMapper objectMapper;
 
     @PostMapping("/query")
     public ResponseEntity<ApiResponse<ChatbotQueryResponse>> query(
@@ -125,9 +127,15 @@ public class ChatbotController {
         String assistantContent = toStoredAssistantContent(reply);
         LocalDateTime createdAt = null;
         if (!guest) {
+            Map<String, Object> responseMetadata = new HashMap<>();
+            if (reply.videoAnalysis() != null) responseMetadata.put("videoAnalysis", reply.videoAnalysis());
+            if (reply.videoSource() != null) responseMetadata.put("videoSource", reply.videoSource());
+            if (reply.videoSummary() != null) responseMetadata.put("videoSummary", reply.videoSummary());
+            if (reply.suggestedActions() != null && !reply.suggestedActions().isEmpty()) responseMetadata.put("suggestedActions", reply.suggestedActions());
+            if (reply.attachment() != null) responseMetadata.put("analysis", reply.attachment());
             ChatMessageResponse savedReply = saveMessage(
                     username(authentication), memberSessionId, "ASSISTANT", assistantContent,
-                    request.idempotencyKey(), null);
+                    request.idempotencyKey(), null, responseMetadata);
             createdAt = savedReply.getCreatedAt();
         }
 
@@ -142,7 +150,7 @@ public class ChatbotController {
                         reply.recommendations(),
                         reply.remainingTrialCount(),
                         reply.fallback(),
-                        reply.attachment())));
+                        reply.attachment(), reply.videoAnalysis(), reply.videoSource(), reply.videoSummary(), reply.suggestedActions())));
     }
 
     private Integer findOrCreateMemberSession(String username, String requestedSessionId) {
@@ -199,12 +207,29 @@ public class ChatbotController {
         String content = assistant.getContent() == null ? "" : assistant.getContent();
         return new ChatbotQueryResponse(
                 sessionId, "ASSISTANT", content, assistant.getCreatedAt(), content,
-                List.of(), null, false, null);
+                List.of(), null, false, null, null, null, null, List.of());
     }
 
     /** Keep media-only turns valid for the AI contract without changing stored data. */
     private String canonicalHistoryContent(ChatMessageResponse message) {
-        return canonicalHistoryContent(message.getContent(), message.getAttachments());
+        String content = canonicalHistoryContent(message.getContent(), message.getAttachments());
+        Map<String, Object> metadata = message.getMetadata();
+        if (metadata == null || metadata.isEmpty()) return content;
+        StringBuilder internalContext = new StringBuilder(content);
+        appendInternalMetadata(internalContext, metadata, "videoAnalysis", "video_analysis");
+        appendInternalMetadata(internalContext, metadata, "videoSummary", "video_context");
+        appendInternalMetadata(internalContext, metadata, "videoSource", "video_source");
+        return internalContext.toString();
+    }
+
+    private void appendInternalMetadata(StringBuilder target, Map<String, Object> metadata, String key, String label) {
+        Object value = metadata.get(key);
+        if (value == null) return;
+        try {
+            target.append("\n").append(label).append(": ").append(objectMapper.writeValueAsString(value));
+        } catch (Exception ignored) {
+            log.debug("Could not serialize chatbot metadata key={}", key);
+        }
     }
 
     static String canonicalHistoryContent(String content, List<ChatAttachmentResponse> attachments) {
@@ -229,6 +254,10 @@ public class ChatbotController {
     }
 
     private ChatMessageResponse saveMessage(String username, Integer sessionId, String senderType, String content, String idempotencyKey, ChatAttachmentRequest attachment) {
+        return saveMessage(username, sessionId, senderType, content, idempotencyKey, attachment, Map.of());
+    }
+
+    private ChatMessageResponse saveMessage(String username, Integer sessionId, String senderType, String content, String idempotencyKey, ChatAttachmentRequest attachment, Map<String, Object> metadata) {
         ChatMessageCreateRequest request = new ChatMessageCreateRequest();
         request.setSenderType(senderType);
         request.setContent(content);
@@ -236,6 +265,7 @@ public class ChatbotController {
         if (attachment != null) {
             request.setAttachments(new java.util.ArrayList<>(List.of(attachment)));
         }
+        request.setMetadata(metadata);
         return chatHistoryService.addMessage(username, sessionId, request);
     }
 
@@ -296,5 +326,9 @@ public class ChatbotController {
             List<String> recommendations,
             Integer remainingTrialCount,
             boolean fallback,
-            ChatAttachmentResponse attachment) { }
+                ChatAttachmentResponse attachment,
+                Map<String, Object> videoAnalysis,
+                Map<String, Object> videoSource,
+                String videoSummary,
+                List<Map<String, Object>> suggestedActions) { }
 }
