@@ -212,6 +212,11 @@ CREATE TABLE recipes (
     status          NVARCHAR(20) NOT NULL CONSTRAINT DF_recipes_status DEFAULT (N'draft'),
     source_user_id      INT NULL,                   -- Tác giả community đóng góp công thức (NB-80)
     source_content_id   INT NULL,                   -- Bài post nguồn khi import (NB-80)
+    source_type         NVARCHAR(30) NOT NULL CONSTRAINT DF_recipes_source_type DEFAULT (N'SYSTEM'),
+    contributor_name_snapshot NVARCHAR(150) NULL,
+    source_post_title_snapshot NVARCHAR(255) NULL,
+    approved_by         INT NULL,
+    approved_at         DATETIME2(3) NULL,
     created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_recipes_created_at DEFAULT (SYSUTCDATETIME()),
     updated_at      DATETIME2(3) NOT NULL CONSTRAINT DF_recipes_updated_at DEFAULT (SYSUTCDATETIME()),
     CONSTRAINT UQ_recipes_slug UNIQUE (slug),
@@ -219,6 +224,7 @@ CREATE TABLE recipes (
     CONSTRAINT FK_recipes_users FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL,
     CONSTRAINT FK_recipes_source_users FOREIGN KEY (source_user_id) REFERENCES users(user_id) ON DELETE NO ACTION,
     CONSTRAINT CK_recipes_status CHECK (status IN (N'draft', N'verified', N'flagged', N'inactive')),
+    CONSTRAINT CK_recipes_source_type CHECK (source_type IN (N'SYSTEM', N'USER_CONTRIBUTED')),
     CONSTRAINT CK_recipes_prep CHECK (prep_time_min IS NULL OR prep_time_min >= 0),
     CONSTRAINT CK_recipes_cook CHECK (cook_time_min IS NULL OR cook_time_min >= 0),
     CONSTRAINT CK_recipes_servings CHECK (servings IS NULL OR servings > 0)
@@ -661,6 +667,27 @@ BEGIN
         ON notifications(recipient_id, type, reference_type, reference_id, updated_at DESC);
     PRINT 'NB-83: Da them index idx_notifications_recipient_type_ref';
 END
+GO
+
+-- NB-88: provenance and admin approval snapshot for community recipes.
+IF COL_LENGTH('recipes', 'source_type') IS NULL
+    ALTER TABLE recipes ADD source_type NVARCHAR(30) NOT NULL
+        CONSTRAINT DF_recipes_source_type DEFAULT (N'SYSTEM') WITH VALUES;
+IF COL_LENGTH('recipes', 'contributor_name_snapshot') IS NULL
+    ALTER TABLE recipes ADD contributor_name_snapshot NVARCHAR(150) NULL;
+IF COL_LENGTH('recipes', 'source_post_title_snapshot') IS NULL
+    ALTER TABLE recipes ADD source_post_title_snapshot NVARCHAR(255) NULL;
+IF COL_LENGTH('recipes', 'approved_by') IS NULL
+    ALTER TABLE recipes ADD approved_by INT NULL;
+IF COL_LENGTH('recipes', 'approved_at') IS NULL
+    ALTER TABLE recipes ADD approved_at DATETIME2(3) NULL;
+GO
+
+UPDATE recipes SET source_type = N'SYSTEM' WHERE source_type IS NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_recipes_source_type' AND parent_object_id = OBJECT_ID('recipes'))
+    ALTER TABLE recipes ADD CONSTRAINT CK_recipes_source_type CHECK (source_type IN (N'SYSTEM', N'USER_CONTRIBUTED'));
 GO
 
 -- Backfill gia tri updated_at cho du lieu cu (dung created_at) de khong anh huong nhom vote.

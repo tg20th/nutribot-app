@@ -248,3 +248,11 @@
   - *Mô tả:* Hiển thị dưới trang chi tiết món ăn/công thức: "Bạn có thể thưởng thức món này tại các nhà hàng sau". Tự động tìm kiếm nhà hàng theo món ăn qua Goong Maps.
 - [x] **#58 [FE] Component Khối Nội dung Liên quan** ✅
   - *Mô tả:* Hiển thị các bài viết và video gợi ý liên quan ở cuối trang bài viết.
+
+---
+
+## NB-88 (nhóm task mới; chờ ánh xạ dependency 03, 09 sang Jira keys)
+- [ ] **[BE] Recipe provenance và snapshot attribution**
+  - *Phạm vi:* Giữ recipe cũ là `SYSTEM`; chỉ admin approval mới ghi recipe `USER_CONTRIBUTED`, contributor/post, snapshot và approvedBy/At. Không nhận attribution từ client.
+  - *Tương thích:* Recipe detail có fallback khi user/post ẩn; Meal Planner, Weekly Menu và Recommendation tiếp tục dùng catalog hiện có.
+  - *Dependency:* Task nhóm mới 03, 09 (Jira key chưa được cung cấp).
