@@ -6,6 +6,7 @@ import com.fpt.swp391.nutribot.dto.response.ContentRecipeSuggestionResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.dto.response.RecipeSuggestionValidation;
 import com.fpt.swp391.nutribot.dto.response.RecipeValidationIssue;
+import com.fpt.swp391.nutribot.dto.response.ResolvedRecipeIngredient;
 import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Category;
 import com.fpt.swp391.nutribot.entity.Content;
@@ -87,18 +88,17 @@ class ContentRecipeSuggestionReviewServiceTest {
                 contentRepository,
                 dishRepository,
                 recipeRepository,
-                ingredientRepository,
                 recipeIngredientRepository,
                 categoryRepository,
                 userRepository,
                 payloadReader,
                 validator,
                 "salad-healthy",
-                "rau-cu",
                 "verified",
                 eventPublisher,
                 auditService);
         lenient().when(validator.validate(any())).thenReturn(validValidation());
+        lenient().when(validator.validate(any(), any())).thenReturn(validValidation());
     }
 
     private RecipeSuggestionValidation validValidation() {
@@ -108,6 +108,9 @@ class ContentRecipeSuggestionReviewServiceTest {
                 .vegetarianType("VEGAN")
                 .vegetarianVerdict("VEGETARIAN")
                 .issues(List.of())
+                .ingredientResolutions(List.of(ResolvedRecipeIngredient.builder()
+                        .proposalIndex(0).proposedName("Bún gạo lứt").ingredientId(70)
+                        .ingredientName("Bún gạo lứt").status("MATCHED").build()))
                 .build();
     }
 
@@ -126,7 +129,6 @@ class ContentRecipeSuggestionReviewServiceTest {
 
     private void stubCatalogCreation() {
         when(categoryRepository.findById(20)).thenReturn(Optional.of(category(20, "RECIPE")));
-        when(categoryRepository.findBySlug("rau-cu")).thenReturn(Optional.of(category(5, "INGREDIENT")));
         when(dishRepository.save(any(Dish.class))).thenAnswer(invocation -> {
             Dish dish = invocation.getArgument(0);
             dish.setDishId(50);
@@ -138,13 +140,14 @@ class ContentRecipeSuggestionReviewServiceTest {
             recipe.setRecipeId(60);
             return recipe;
         });
-        when(ingredientRepository.findByNameIgnoreCase("Bún gạo lứt")).thenReturn(Optional.empty());
-        when(ingredientRepository.save(any(Ingredient.class))).thenAnswer(invocation -> {
-            Ingredient ingredient = invocation.getArgument(0);
-            ingredient.setIngredientId(70);
-            return ingredient;
-        });
-        when(recipeIngredientRepository.existsById(any(RecipeIngredientId.class))).thenReturn(false);
+        when(recipeIngredientRepository.findAllByRecipeId(60)).thenReturn(List.of(
+                RecipeIngredient.builder()
+                        .recipeId(60)
+                        .ingredientId(70)
+                        .quantity(BigDecimal.ONE)
+                        .unit("old")
+                        .notes("old note")
+                        .build()));
     }
 
     private User admin() {
@@ -192,7 +195,7 @@ class ContentRecipeSuggestionReviewServiceTest {
                 .carbsG(new BigDecimal("64.2"))
                 .fatG(new BigDecimal("11.6"))
                 .fiberG(new BigDecimal("9.4"))
-                .ingredientsJson("[{\"name\":\"Bún gạo lứt\",\"quantity\":90,\"unit\":\"g\",\"notes\":null}]")
+                .ingredientsJson("[{\"name\":\"Bún gạo lứt\",\"quantity\":90,\"unit\":\"g\",\"notes\":\"Ngâm trước\"}]")
                 .recipeTitle("Bún gạo lứt rau củ")
                 .recipeDescription("Công thức")
                 .prepTimeMin(12)
@@ -257,7 +260,7 @@ class ContentRecipeSuggestionReviewServiceTest {
     }
 
     @Test
-    @DisplayName("Approve hợp lệ tạo mới Dish/Recipe/Ingredients và cập nhật trạng thái APPROVED")
+    @DisplayName("NB-92: Approve liên kết ingredient catalog hiện có, không tự tạo nguyên liệu")
     void review_approve_createsCatalog() {
         Content content = content(20);
         ContentRecipeSuggestion suggestion = pendingSuggestion(content);
@@ -297,6 +300,8 @@ class ContentRecipeSuggestionReviewServiceTest {
         assertEquals(70, riCaptor.getValue().getIngredientId());
         assertEquals(new BigDecimal("90"), riCaptor.getValue().getQuantity());
         assertEquals("g", riCaptor.getValue().getUnit());
+        assertEquals("Ngâm trước", riCaptor.getValue().getNotes());
+        verify(ingredientRepository, never()).save(any(Ingredient.class));
         // NB-87: Duyệt đề xuất không được sửa nội dung gốc của tác giả
         verify(contentRepository, never()).save(any(Content.class));
     }
@@ -310,7 +315,7 @@ class ContentRecipeSuggestionReviewServiceTest {
         when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
         when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
-        when(validator.validate(any())).thenReturn(invalidValidation(
+        when(validator.validate(any(), any())).thenReturn(invalidValidation(
                 "dish.name", "DUPLICATE_DISH_NAME", "Món đã tồn tại trong hệ thống"));
 
         assertThrows(RecipeValidationException.class,
@@ -507,7 +512,7 @@ class ContentRecipeSuggestionReviewServiceTest {
         when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
         when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
-        when(validator.validate(any())).thenReturn(invalidValidation(
+        when(validator.validate(any(), any())).thenReturn(invalidValidation(
                 "dish.name", "DISH_NAME_REQUIRED", "Đề xuất thiếu tên món ăn"));
 
         assertThrows(RecipeValidationException.class,
@@ -586,12 +591,15 @@ class ContentRecipeSuggestionReviewServiceTest {
         when(suggestionRepository.findByIdForUpdate(700)).thenReturn(Optional.of(suggestion));
         when(userRepository.findByUsername("admin")).thenReturn(Optional.of(admin()));
         when(contentRepository.findByContentIdAndStatus(82, "published")).thenReturn(Optional.of(content));
-        when(validator.validate(any())).thenReturn(RecipeSuggestionValidation.builder()
+        when(validator.validate(any(), any())).thenReturn(RecipeSuggestionValidation.builder()
                 .valid(true)
                 .canApprove(true)
                 .vegetarianType("LACTO_OVO")
                 .vegetarianVerdict("VEGETARIAN")
                 .issues(List.of())
+                .ingredientResolutions(List.of(ResolvedRecipeIngredient.builder()
+                        .proposalIndex(0).proposedName("Bún gạo lứt").ingredientId(70)
+                        .ingredientName("Bún gạo lứt").status("MATCHED").build()))
                 .build());
         stubCatalogCreation();
 

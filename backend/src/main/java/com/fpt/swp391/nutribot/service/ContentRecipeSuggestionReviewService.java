@@ -9,10 +9,8 @@ import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestion;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestionAudit;
 import com.fpt.swp391.nutribot.entity.Dish;
-import com.fpt.swp391.nutribot.entity.Ingredient;
 import com.fpt.swp391.nutribot.entity.Recipe;
 import com.fpt.swp391.nutribot.entity.RecipeIngredient;
-import com.fpt.swp391.nutribot.entity.RecipeIngredientId;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.event.RecipeSuggestionReviewedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
@@ -23,7 +21,6 @@ import com.fpt.swp391.nutribot.repository.CategoryRepository;
 import com.fpt.swp391.nutribot.repository.ContentRecipeSuggestionRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.DishRepository;
-import com.fpt.swp391.nutribot.repository.IngredientRepository;
 import com.fpt.swp391.nutribot.repository.RecipeIngredientRepository;
 import com.fpt.swp391.nutribot.repository.RecipeRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
@@ -63,21 +60,18 @@ public class ContentRecipeSuggestionReviewService {
     private static final String ACTION_REJECT = "REJECT";
     private static final String PUBLISHED_STATUS = "published";
     private static final String DISH_CATEGORY_TYPE = "RECIPE";
-    private static final String INGREDIENT_CATEGORY_TYPE = "INGREDIENT";
     private static final int MAX_PAGE_SIZE = 50;
 
     private final ContentRecipeSuggestionRepository suggestionRepository;
     private final ContentRepository contentRepository;
     private final DishRepository dishRepository;
     private final RecipeRepository recipeRepository;
-    private final IngredientRepository ingredientRepository;
     private final RecipeIngredientRepository recipeIngredientRepository;
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
     private final RecipeSuggestionPayloadReader payloadReader;
     private final RecipeSuggestionValidator validator;
     private final String dishDefaultCategorySlug;
-    private final String ingredientDefaultCategorySlug;
     private final String recipeStatus;
     private final ApplicationEventPublisher eventPublisher;
     private final RecipeSuggestionAuditService auditService;
@@ -87,14 +81,12 @@ public class ContentRecipeSuggestionReviewService {
             ContentRepository contentRepository,
             DishRepository dishRepository,
             RecipeRepository recipeRepository,
-            IngredientRepository ingredientRepository,
             RecipeIngredientRepository recipeIngredientRepository,
             CategoryRepository categoryRepository,
             UserRepository userRepository,
             RecipeSuggestionPayloadReader payloadReader,
             RecipeSuggestionValidator validator,
             @Value("${app.content-recipe-suggestion.dish-default-category-slug:salad-healthy}") String dishDefaultCategorySlug,
-            @Value("${app.content-recipe-suggestion.ingredient-default-category-slug:rau-cu}") String ingredientDefaultCategorySlug,
             @Value("${app.content-recipe-suggestion.recipe-status:verified}") String recipeStatus,
             ApplicationEventPublisher eventPublisher,
             RecipeSuggestionAuditService auditService) {
@@ -102,14 +94,12 @@ public class ContentRecipeSuggestionReviewService {
         this.contentRepository = contentRepository;
         this.dishRepository = dishRepository;
         this.recipeRepository = recipeRepository;
-        this.ingredientRepository = ingredientRepository;
         this.recipeIngredientRepository = recipeIngredientRepository;
         this.categoryRepository = categoryRepository;
         this.userRepository = userRepository;
         this.payloadReader = payloadReader;
         this.validator = validator;
         this.dishDefaultCategorySlug = dishDefaultCategorySlug;
-        this.ingredientDefaultCategorySlug = ingredientDefaultCategorySlug;
         this.recipeStatus = recipeStatus;
         this.eventPublisher = eventPublisher;
         this.auditService = auditService;
@@ -164,7 +154,7 @@ public class ContentRecipeSuggestionReviewService {
         User admin = resolveAdmin(adminUsername);
         try {
             if (ACTION_APPROVE.equals(action)) {
-                approve(suggestion, admin);
+                approve(suggestion, admin, request.getIngredientMappings());
             } else {
                 reject(suggestion, request.getRejectionReason(), admin);
             }
@@ -224,7 +214,8 @@ public class ContentRecipeSuggestionReviewService {
         suggestion.setReviewedAt(LocalDateTime.now());
     }
 
-    private void approve(ContentRecipeSuggestion suggestion, User admin) {
+    private void approve(ContentRecipeSuggestion suggestion, User admin,
+                         List<com.fpt.swp391.nutribot.dto.request.RecipeIngredientMapping> ingredientMappings) {
         Content content = suggestion.getContent();
         if (content == null || content.getContentId() == null) {
             throw new ConflictException("Đề xuất không gắn với nội dung nguồn hợp lệ");
@@ -248,14 +239,14 @@ public class ContentRecipeSuggestionReviewService {
                     + RecipeConsentPolicy.CURRENT_TERMS_VERSION + " trước khi duyệt");
         }
 
-        RecipeSuggestionValidation validation = validator.validate(suggestion);
+        RecipeSuggestionValidation validation = validator.validate(suggestion, ingredientMappings);
         if (!validation.isValid()) {
             throw new RecipeValidationException(validation.getIssues());
         }
 
         Dish dish = resolveOrCreateDish(suggestion, freshContent, validation.getVegetarianType());
         Recipe recipe = resolveOrCreateRecipe(suggestion, dish, admin, freshContent);
-        persistIngredients(suggestion, recipe);
+        persistIngredients(suggestion, recipe, validation.getIngredientResolutions());
 
         suggestion.setDishId(dish.getDishId());
         suggestion.setRecipeId(recipe.getRecipeId());
@@ -320,41 +311,36 @@ public class ContentRecipeSuggestionReviewService {
         });
     }
 
-    private void persistIngredients(ContentRecipeSuggestion suggestion, Recipe recipe) {
-        for (RecipeExtractionGatewayService.IngredientProposal proposal
-                : payloadReader.readIngredients(suggestion.getIngredientsJson()).value()) {
-            if (proposal == null || proposal.name() == null || proposal.name().isBlank()) {
-                continue;
-            }
-            Ingredient ingredient = resolveOrCreateIngredient(proposal.name());
-            RecipeIngredientId id = new RecipeIngredientId(recipe.getRecipeId(), ingredient.getIngredientId());
-            if (recipeIngredientRepository.existsById(id)) {
-                continue;
-            }
-            BigDecimal quantity = proposal.quantity();
-            String unit = proposal.unit() == null ? null : proposal.unit().trim();
-            if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0 || unit == null || unit.isEmpty()) {
-                throw new IllegalStateException(
-                        "Nguyên liệu chưa được kiểm tra hợp lệ trước khi nhập: " + proposal.name());
-            }
-            recipeIngredientRepository.save(RecipeIngredient.builder()
-                    .recipeId(recipe.getRecipeId())
-                    .ingredientId(ingredient.getIngredientId())
-                    .quantity(quantity)
-                    .unit(unit)
-                    .notes(proposal.notes())
-                    .build());
+    private void persistIngredients(ContentRecipeSuggestion suggestion, Recipe recipe,
+                                    List<com.fpt.swp391.nutribot.dto.response.ResolvedRecipeIngredient> resolutions) {
+        List<RecipeExtractionGatewayService.IngredientProposal> proposals =
+                payloadReader.readIngredients(suggestion.getIngredientsJson()).value();
+        if (resolutions == null || resolutions.size() != proposals.size()) {
+            throw new RecipeValidationException(List.of(com.fpt.swp391.nutribot.dto.response.RecipeValidationIssue.builder()
+                    .field("ingredients").code("INGREDIENT_MAPPING_REQUIRED")
+                    .severity(com.fpt.swp391.nutribot.dto.response.RecipeValidationIssue.SEVERITY_ERROR)
+                    .message("Không thể xác nhận mapping nguyên liệu; tải lại đề xuất và xử lý lại").build()));
         }
-    }
-
-    private Ingredient resolveOrCreateIngredient(String rawName) {
-        String name = rawName.trim();
-        return ingredientRepository.findByNameIgnoreCase(name).orElseGet(() -> ingredientRepository.save(Ingredient.builder()
-                .name(name)
-                .slug(uniqueSlug(name, "ingredient", ingredientRepository::existsBySlug))
-                .categoryId(resolveDefaultCategoryId(ingredientDefaultCategorySlug, INGREDIENT_CATEGORY_TYPE))
-                .active(true)
-                .build()));
+        Map<Integer, RecipeIngredient> existing = recipeIngredientRepository.findAllByRecipeId(recipe.getRecipeId())
+                .stream().collect(Collectors.toMap(RecipeIngredient::getIngredientId, row -> row, (a, b) -> a));
+        for (int index = 0; index < proposals.size(); index++) {
+            RecipeExtractionGatewayService.IngredientProposal proposal = proposals.get(index);
+            com.fpt.swp391.nutribot.dto.response.ResolvedRecipeIngredient resolution = resolutions.get(index);
+            if (proposal == null || resolution.getIngredientId() == null
+                    || !Objects.equals(resolution.getProposalIndex(), index)) {
+                throw new RecipeValidationException(List.of(com.fpt.swp391.nutribot.dto.response.RecipeValidationIssue.builder()
+                        .field("ingredients[" + index + "]").code("INGREDIENT_MAPPING_REQUIRED")
+                        .severity(com.fpt.swp391.nutribot.dto.response.RecipeValidationIssue.SEVERITY_ERROR)
+                        .message("Nguyên liệu chưa được ánh xạ hợp lệ").build()));
+            }
+            RecipeIngredient row = existing.get(resolution.getIngredientId());
+            if (row == null) row = RecipeIngredient.builder().recipeId(recipe.getRecipeId())
+                    .ingredientId(resolution.getIngredientId()).build();
+            row.setQuantity(proposal.quantity());
+            row.setUnit(proposal.unit().trim());
+            row.setNotes(proposal.notes() == null ? null : proposal.notes().trim());
+            recipeIngredientRepository.save(row);
+        }
     }
 
     private Integer resolveDishCategoryId(Content content) {

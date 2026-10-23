@@ -39,4 +39,14 @@ public final class RecipeTextNormalizer {
                 .replaceAll("\\s+", " ")
                 .toLowerCase(Locale.ROOT);
     }
+
+    public static String normalizeIngredientCatalogName(String input) {
+        if (input == null) return "";
+        String decomposed = Normalizer.normalize(input.trim(), Normalizer.Form.NFD);
+        String withoutMarks = COMBINING_MARKS.matcher(decomposed).replaceAll("")
+                .replace('đ', 'd').replace('Đ', 'D');
+        return withoutMarks.toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\p{Alnum}]+", " ")
+                .trim().replaceAll("\\s+", " ");
+    }
 }

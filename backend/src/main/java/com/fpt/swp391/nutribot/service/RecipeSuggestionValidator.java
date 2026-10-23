@@ -2,15 +2,19 @@ package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.response.RecipeSuggestionValidation;
 import com.fpt.swp391.nutribot.dto.response.RecipeValidationIssue;
+import com.fpt.swp391.nutribot.dto.response.ResolvedRecipeIngredient;
+import com.fpt.swp391.nutribot.dto.request.RecipeIngredientMapping;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestion;
 import com.fpt.swp391.nutribot.service.RecipeExtractionGatewayService.IngredientProposal;
 import com.fpt.swp391.nutribot.service.RecipeSuggestionPayloadReader.ParsedPayload;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -42,6 +46,7 @@ public class RecipeSuggestionValidator {
     private final RecipeSuggestionPayloadReader payloadReader;
     private final VegetarianTypeClassifier vegetarianTypeClassifier;
     private final RecipeDuplicateDetector duplicateDetector;
+    private final RecipeIngredientResolver ingredientResolver;
     private final int maxServings;
 
     public RecipeSuggestionValidator(
@@ -49,13 +54,28 @@ public class RecipeSuggestionValidator {
             VegetarianTypeClassifier vegetarianTypeClassifier,
             RecipeDuplicateDetector duplicateDetector,
             @Value("${app.content-recipe-suggestion.max-servings:50}") int maxServings) {
+        this(payloadReader, vegetarianTypeClassifier, duplicateDetector, maxServings, null);
+    }
+
+    @Autowired
+    public RecipeSuggestionValidator(
+            RecipeSuggestionPayloadReader payloadReader,
+            VegetarianTypeClassifier vegetarianTypeClassifier,
+            RecipeDuplicateDetector duplicateDetector,
+            @Value("${app.content-recipe-suggestion.max-servings:50}") int maxServings,
+            RecipeIngredientResolver ingredientResolver) {
         this.payloadReader = payloadReader;
         this.vegetarianTypeClassifier = vegetarianTypeClassifier;
         this.duplicateDetector = duplicateDetector;
         this.maxServings = maxServings;
+        this.ingredientResolver = ingredientResolver;
     }
 
     public RecipeSuggestionValidation validate(ContentRecipeSuggestion suggestion) {
+        return validate(suggestion, null);
+    }
+
+    public RecipeSuggestionValidation validate(ContentRecipeSuggestion suggestion, List<RecipeIngredientMapping> mappings) {
         if (suggestion == null) {
             List<RecipeValidationIssue> issues = new ArrayList<>();
             addIssue(issues, SEVERITY_ERROR, "suggestion", "SUGGESTION_REQUIRED",
@@ -73,8 +93,13 @@ public class RecipeSuggestionValidator {
         validateNutrition(suggestion, issues);
         validateServingInfo(suggestion, issues);
 
-        VegetarianTypeClassifier.Verdict verdict =
-                vegetarianTypeClassifier.evaluate(ingredientNames(ingredientsCheck.ingredients()));
+        RecipeIngredientResolver.Resolution resolution = ingredientResolver == null ? null
+                : ingredientResolver.resolve(ingredientsCheck.ingredients(), mappings);
+        List<String> classificationNames = resolution == null
+                ? ingredientNames(ingredientsCheck.ingredients())
+                : resolution.ingredients().stream().map(r -> r.getIngredientName() != null
+                        ? r.getIngredientName() : r.getProposedName()).toList();
+        VegetarianTypeClassifier.Verdict verdict = vegetarianTypeClassifier.evaluate(classificationNames);
         if (ingredientsCheck.present()) {
             if (verdict.status() == VegetarianTypeClassifier.Status.NON_VEGETARIAN) {
                 addIssue(issues, SEVERITY_ERROR, "ingredients", "NON_VEGETARIAN_INGREDIENT",
@@ -90,8 +115,11 @@ public class RecipeSuggestionValidator {
             issues.addAll(duplicateDetector.detect(suggestion, ingredientsCheck.ingredients()));
         }
 
-        return build(issues, verdict.type(), verdict.status(),
+        if (resolution != null) issues.addAll(resolution.issues());
+        RecipeSuggestionValidation result = build(issues, verdict.type(), verdict.status(),
                 "PENDING".equalsIgnoreCase(suggestion.getStatus()));
+        result.setIngredientResolutions(resolution == null ? List.of() : resolution.ingredients());
+        return result;
     }
 
     private RecipeSuggestionValidation build(
@@ -146,7 +174,6 @@ public class RecipeSuggestionValidator {
             return new IngredientsCheck(List.of(), false);
         }
 
-        List<IngredientProposal> usable = new ArrayList<>();
         Set<String> seenNames = new HashSet<>();
         for (int index = 0; index < proposals.size(); index++) {
             IngredientProposal proposal = proposals.get(index);
@@ -180,6 +207,11 @@ public class RecipeSuggestionValidator {
                 addIssue(issues, SEVERITY_ERROR, field + ".quantity", "INGREDIENT_QUANTITY_INVALID",
                         "Định lượng của \"" + name + "\" phải lớn hơn 0");
             }
+            if (proposal.quantity() != null && (proposal.quantity().precision() - proposal.quantity().scale() > 8
+                    || proposal.quantity().scale() > 2)) {
+                addIssue(issues, SEVERITY_ERROR, field + ".quantity", "INGREDIENT_QUANTITY_INVALID",
+                        "Định lượng vượt giới hạn lưu trữ (tối đa 10 chữ số, 2 chữ số thập phân)");
+            }
 
             String unit = proposal.unit() == null ? "" : proposal.unit().trim();
             if (unit.isEmpty()) {
@@ -189,12 +221,13 @@ public class RecipeSuggestionValidator {
                 addIssue(issues, SEVERITY_ERROR, field + ".unit", "INGREDIENT_UNIT_TOO_LONG",
                         "Đơn vị đo của \"" + name + "\" vượt quá " + MAX_UNIT_LENGTH + " ký tự");
             }
-
-            if (!name.isEmpty()) {
-                usable.add(new IngredientProposal(name, proposal.quantity(), unit, proposal.notes()));
+            if (proposal.notes() != null && proposal.notes().length() > 200) {
+                addIssue(issues, SEVERITY_ERROR, field + ".notes", "INGREDIENT_NOTES_TOO_LONG",
+                        "Ghi chú nguyên liệu không được vượt quá 200 ký tự");
             }
+
         }
-        return new IngredientsCheck(List.copyOf(usable), true);
+        return new IngredientsCheck(Collections.unmodifiableList(new ArrayList<>(proposals)), true);
     }
 
     private void validateSteps(String json, List<RecipeValidationIssue> issues) {
@@ -331,6 +364,7 @@ public class RecipeSuggestionValidator {
 
     private List<String> ingredientNames(List<IngredientProposal> ingredients) {
         return ingredients.stream()
+                .filter(java.util.Objects::nonNull)
                 .map(IngredientProposal::name)
                 .filter(name -> name != null && !name.isBlank())
                 .toList();

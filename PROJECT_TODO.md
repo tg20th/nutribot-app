@@ -263,3 +263,9 @@
   - *Tương thích:* Không hard-delete; giữ nguyên recipe_ingredients, user_allergies, `GET /api/v1/ingredients` và contract Health Profile/Meal Planner.
   - *File:* `AdminIngredientController`, `AdminIngredientService`, request/response DTOs, repository query, tests và API_CONTRACTS.md.
   - *Dependency:* Ingredient Entity/Repository hiện có (#11).
+
+## NB-92 (đối chiếu nguyên liệu khi duyệt recipe cộng đồng)
+- [x] **[BE/FE] Map ingredient đề xuất vào catalog hiện có và yêu cầu Admin xử lý trường hợp chưa rõ**
+  - *Phạm vi:* Chuẩn hóa và đối chiếu ingredients, xác thực mapping/quantity/unit/category, persist recipe_ingredients theo ID đã xác nhận; không tự import nguyên liệu.
+  - *Tương thích:* Giữ NB-86/NB-87, Health Profile/Meal Planner và allergy theo ingredient ID; không suy diễn thuộc tính dietary/allergen không lưu trong DB.
+  - *Dependency:* NB-86, NB-87, NB-90.
