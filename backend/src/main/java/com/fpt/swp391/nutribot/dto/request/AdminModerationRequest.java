@@ -13,4 +13,6 @@ public class AdminModerationRequest {
     @Pattern(regexp = "APPROVE|HIDE|REJECT",
              message = "Action phải là APPROVE, HIDE hoặc REJECT")
     private String action;
+
+    private String reason;
 }

@@ -104,14 +104,15 @@ const getModerationQueue = async (params = {}, signal) => {
   const result = unwrapData(payload, {});
   return { ...result, content: (result.content ?? []).map(mapModerationItem) };
 };
-const moderateContent = async (contentId, action) => {
+const moderateContent = async (contentId, action, reason) => {
   if (isModerationPreview()) {
     moderationPreviewState = moderationPreviewState.map((item) => item.contentId === contentId ? { ...item, status: action.toLowerCase() } : item);
     return mapModerationItem(moderationPreviewState.find((item) => item.contentId === contentId));
   }
+  const body = reason ? { action, reason } : { action };
   const payload = await apiRequest(`/api/v1/admin/moderation/${contentId}/action`, {
     method: 'PUT',
-    body: JSON.stringify({ action }),
+    body: JSON.stringify(body),
   });
   return mapModerationItem(unwrapData(payload, {}));
 };
