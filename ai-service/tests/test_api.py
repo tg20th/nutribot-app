@@ -83,6 +83,7 @@ def test_chat_matches_internal_api_contract():
     assert response.json() == {
         "reply": "Bạn có thể dùng sốt mè rang và kiểm tra nguy cơ nhiễm chéo.",
         "recommendations": ["Sốt mè rang", "Sốt hạt hướng dương"],
+        "suggested_actions": [],
     }
     assert service.request.session_id == "session-1234"
     assert service.request.user_context.allergies == ["Đậu phộng"]
