@@ -25,9 +25,7 @@ export default function DishDetailModal({ meal, onClose, initialDish = null }) {
 
   return <div className="dish-detail-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="dish-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="dish-detail-title">
-      <header className="dish-detail-topbar">
-        <button type="button" onClick={onClose} aria-label="Close dish details"><X size={18} /></button>
-      </header>
+      <button className="dish-detail-close" type="button" onClick={onClose} aria-label="Close dish details"><X size={18} /></button>
       <div className="dish-detail-scroll">
         {!dish && !error && <div className="dish-detail-state"><Loader2 className="is-spinning" size={22} /><span>Loading dish details...</span></div>}
         {error && <div className="dish-detail-state dish-detail-state--error" role="alert"><p>{error}</p><button type="button" onClick={onClose}>Return to weekly menu</button></div>}
@@ -53,10 +51,10 @@ export default function DishDetailModal({ meal, onClose, initialDish = null }) {
             </p>
           )}
           {facts.length > 0 && <section className="dish-detail-nutrition">{facts.map(([label, value, unit]) => <div key={label}><b><span className="dish-detail-nutrition-value">{value}</span><small className="dish-detail-nutrition-unit">{unit}</small></b><span>{label}</span></div>)}</section>}
-          <div className="dish-detail-grid">
-            {dish.ingredients.length > 0 && <section><span>Ingredients</span><h3>What you need</h3><ul>{dish.ingredients.map((item, index) => <li key={index}>{[item.quantity, item.unit, item.name ?? item.ingredientName].filter(Boolean).join(' ')}</li>)}</ul></section>}
-            {dish.steps.length > 0 && <section><span>Method</span><h3>Cook step by step</h3><ol className="detail-method-steps">{dish.steps.map((step, index) => <li key={index}><b>{String(index + 1).padStart(2, '0')}</b><p>{step.description ?? step.instruction ?? step}</p></li>)}</ol></section>}
-          </div>
+          {(dish.ingredients.length > 0 || dish.steps.length > 0) && <section className="detail-content-grid dish-detail-recipe-grid">
+            {dish.ingredients.length > 0 && <article className="detail-ingredients"><div className="detail-section-head"><span>What you need</span><h2>Ingredients</h2>{dish.servings != null && <small>Serves {dish.servings}</small>}</div><ul>{dish.ingredients.map((item, index) => <li key={item.ingredientId ?? index}><i>{String(index + 1).padStart(2, '0')}</i>{[item.quantity, item.unit, item.name ?? item.ingredientName].filter((value) => value !== null && value !== undefined && String(value).trim() !== '').join(' ')}</li>)}</ul></article>}
+            {dish.steps.length > 0 && <article className="detail-method"><div className="detail-section-head"><span>Make it yours</span><h2>Method</h2>{(dish.prepTimeMinutes != null || dish.cookTimeMinutes != null) && <small>{dish.prepTimeMinutes != null ? `${dish.prepTimeMinutes} prep` : ''}{dish.prepTimeMinutes != null && dish.cookTimeMinutes != null ? ' / ' : ''}{dish.cookTimeMinutes != null ? `${dish.cookTimeMinutes} cook` : ''}</small>}</div><ol>{dish.steps.map((step, index) => <li key={index}><b>{index + 1}</b><p>{step.description ?? step.instruction ?? step}</p></li>)}</ol></article>}
+          </section>}
           {!dish.ingredients.length && !dish.steps.length && <p className="dish-detail-empty">Recipe instructions are not available for this dish yet.</p>}
         </div>}
       </div>
