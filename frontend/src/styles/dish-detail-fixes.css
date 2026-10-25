@@ -156,13 +156,13 @@
   }
 }
 
-/* NB-80: Community recipe attribution */
+/* NB-89: Recipe provenance and contributor attribution */
 .dish-detail-attribution {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin: 16px 0 0;
-  padding: 10px 14px;
+  padding: 12px 14px;
   border: 1px solid rgba(23, 53, 41, .12);
   border-radius: 12px;
   background: #eff5e5;
@@ -171,8 +171,41 @@
   line-height: 1.5;
 }
 
-.dish-detail-attribution b {
+.dish-detail-attribution-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.dish-detail-attribution-label {
+  color: #40634b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.dish-detail-attribution-author,
+.dish-detail-attribution-fallback,
+.dish-detail-attribution-post {
+  overflow-wrap: anywhere;
+}
+
+.dish-detail-attribution-author {
+  width: fit-content;
   color: #173529;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.dish-detail-attribution-author:hover,
+.dish-detail-attribution-author:focus-visible {
+  text-decoration: underline;
+}
+
+.dish-detail-attribution-post {
+  color: #69796e;
+  font-size: 11px;
 }
 
 .dish-detail-attribution-avatar {
