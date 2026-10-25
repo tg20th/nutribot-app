@@ -179,6 +179,8 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
 - `POST /api/v1/admin/ingredients` tạo nguyên liệu, request gồm `name`, `slug`, `description` (tùy chọn), `categoryId`; nguyên liệu mới active mặc định.
 - `PUT /api/v1/admin/ingredients/{ingredientId}` cập nhật các trường trên.
 - `PUT /api/v1/admin/ingredients/{ingredientId}/status` nhận `{ "active": false }` để vô hiệu hóa hoặc `{ "active": true }` để kích hoạt lại.
+- Response danh sách và chi tiết thao tác có `allergyReferenceCount` và `recipeReferenceCount` để Admin biết nguyên liệu đang được sử dụng ở đâu.
+- Nếu nguyên liệu đã được dùng trong hồ sơ dị ứng hoặc công thức, không được đổi `name`, `slug` hoặc `categoryId` (HTTP 400). Tạo nguyên liệu mới và vô hiệu hóa nguyên liệu cũ để giữ nguyên ý nghĩa của các tham chiếu đã lưu; vẫn có thể sửa mô tả và trạng thái.
 - Tên/slug phải duy nhất (không phân biệt hoa thường). Category phải tồn tại, đang active và có `categoryType = INGREDIENT`.
 - Deactivate là soft update `is_active`; không xóa ingredient hay các liên kết `recipe_ingredients`/`user_allergies`. `GET /api/v1/ingredients` hiện tại giữ nguyên contract và chỉ trả ingredient active cho lựa chọn dị ứng.
 - `page` mặc định `0`; `size` mặc định `10`, giới hạn tối đa `100`. Các lỗi trùng dữ liệu/category không hợp lệ trả `400`; ingredient không tồn tại trả `404`.

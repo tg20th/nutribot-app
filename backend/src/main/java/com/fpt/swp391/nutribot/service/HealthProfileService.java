@@ -25,6 +25,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -66,12 +67,21 @@ public class HealthProfileService {
 
         Set<Integer> requestedIds = new LinkedHashSet<>(
                 request.getAllergyIngredientIds() == null ? List.of() : request.getAllergyIngredientIds());
+        Set<Integer> existingAllergyIds = profile.getAllergies().stream()
+                .map(UserAllergy::getIngredientId)
+                .collect(Collectors.toSet());
         List<Ingredient> ingredients = requestedIds.isEmpty()
                 ? List.of()
-                : ingredientRepository.findAllByIngredientIdInAndActiveTrue(requestedIds);
+                : ingredientRepository.findAllById(requestedIds);
 
         if (ingredients.size() != requestedIds.size()) {
             throw new BadRequestException("Danh sách nguyên liệu dị ứng chứa lựa chọn không hợp lệ");
+        }
+        boolean includesNewInactiveIngredient = ingredients.stream()
+                .anyMatch(ingredient -> !Boolean.TRUE.equals(ingredient.getActive())
+                        && !existingAllergyIds.contains(ingredient.getIngredientId()));
+        if (includesNewInactiveIngredient) {
+            throw new BadRequestException("Không thể thêm nguyên liệu đã bị vô hiệu hóa vào danh sách dị ứng");
         }
 
         profile.setUser(user);

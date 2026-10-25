@@ -10,11 +10,16 @@ import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.CategoryRepository;
 import com.fpt.swp391.nutribot.repository.IngredientRepository;
+import com.fpt.swp391.nutribot.repository.IngredientReferenceSummary;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -31,10 +36,14 @@ public class AdminIngredientService {
         int safePage = Math.max(page, 0);
         int safeSize = size <= 0 ? 10 : Math.min(size, MAX_PAGE_SIZE);
         String normalizedKeyword = keyword == null || keyword.isBlank() ? null : keyword.trim();
-        return PagedResponse.of(ingredientRepository.searchAdminIngredients(
+        var results = ingredientRepository.searchAdminIngredients(
                         normalizedKeyword, categoryId, active,
-                        PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "name", "ingredientId")))
-                .map(this::toResponse));
+                        PageRequest.of(safePage, safeSize, Sort.by(Sort.Direction.ASC, "name", "ingredientId")));
+        var ids = results.getContent().stream().map(Ingredient::getIngredientId).toList();
+        Map<Integer, IngredientReferenceSummary> references = ids.isEmpty() ? Map.of()
+                : referenceSummaries(ids).stream()
+                .collect(Collectors.toMap(IngredientReferenceSummary::getIngredientId, Function.identity()));
+        return PagedResponse.of(results.map(ingredient -> toResponse(ingredient, references.get(ingredient.getIngredientId()))));
     }
 
     @Transactional
@@ -61,6 +70,13 @@ public class AdminIngredientService {
         String slug = request.getSlug().trim();
         ensureUnique(name, slug, ingredientId);
         validateIngredientCategory(request.getCategoryId());
+
+        boolean identityChanged = !ingredient.getName().equals(name)
+                || !ingredient.getSlug().equals(slug)
+                || !ingredient.getCategoryId().equals(request.getCategoryId());
+        if (identityChanged && hasReferences(ingredientId)) {
+            throw new BadRequestException("This ingredient is referenced by saved allergies or recipes. Create a new ingredient and deactivate this one instead of changing its identity.");
+        }
 
         ingredient.setName(name);
         ingredient.setSlug(slug);
@@ -105,7 +121,12 @@ public class AdminIngredientService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
-    private AdminIngredientResponse toResponse(Ingredient ingredient) {
+    private boolean hasReferences(Integer ingredientId) {
+        return referenceSummaries(java.util.List.of(ingredientId)).stream()
+                .anyMatch(summary -> summary.getAllergyReferenceCount() > 0 || summary.getRecipeReferenceCount() > 0);
+    }
+
+    private AdminIngredientResponse toResponse(Ingredient ingredient, IngredientReferenceSummary references) {
         return AdminIngredientResponse.builder()
                 .ingredientId(ingredient.getIngredientId())
                 .name(ingredient.getName())
@@ -114,6 +135,18 @@ public class AdminIngredientService {
                 .categoryId(ingredient.getCategoryId())
                 .active(ingredient.getActive())
                 .createdAt(ingredient.getCreatedAt())
+                .allergyReferenceCount(references == null ? 0L : references.getAllergyReferenceCount())
+                .recipeReferenceCount(references == null ? 0L : references.getRecipeReferenceCount())
                 .build();
+    }
+
+    private AdminIngredientResponse toResponse(Ingredient ingredient) {
+        return toResponse(ingredient, referenceSummaries(
+                java.util.List.of(ingredient.getIngredientId())).stream().findFirst().orElse(null));
+    }
+
+    private java.util.List<IngredientReferenceSummary> referenceSummaries(java.util.Collection<Integer> ids) {
+        java.util.List<IngredientReferenceSummary> summaries = ingredientRepository.findReferenceSummaries(ids);
+        return summaries == null ? java.util.List.of() : summaries;
     }
 }

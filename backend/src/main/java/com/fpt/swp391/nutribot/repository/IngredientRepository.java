@@ -32,4 +32,10 @@ public interface IngredientRepository extends JpaRepository<Ingredient, Integer>
                                              @Param("categoryId") Integer categoryId,
                                              @Param("active") Boolean active,
                                              Pageable pageable);
+
+    @Query("SELECT i.ingredientId AS ingredientId, "
+            + "(SELECT COUNT(ua) FROM UserAllergy ua WHERE ua.ingredientId = i.ingredientId) AS allergyReferenceCount, "
+            + "(SELECT COUNT(ri) FROM RecipeIngredient ri WHERE ri.ingredientId = i.ingredientId) AS recipeReferenceCount "
+            + "FROM Ingredient i WHERE i.ingredientId IN :ingredientIds")
+    List<IngredientReferenceSummary> findReferenceSummaries(@Param("ingredientIds") Collection<Integer> ingredientIds);
 }

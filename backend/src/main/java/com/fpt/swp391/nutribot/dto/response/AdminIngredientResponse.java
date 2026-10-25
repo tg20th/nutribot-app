@@ -12,6 +12,8 @@ public record AdminIngredientResponse(
         String description,
         Integer categoryId,
         Boolean active,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        Long allergyReferenceCount,
+        Long recipeReferenceCount
 ) {
 }
