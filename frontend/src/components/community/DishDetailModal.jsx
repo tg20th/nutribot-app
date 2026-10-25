@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Clock3, Loader2, UserRound, UsersRound, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { BookOpenText, Clock3, Loader2, Sparkles, UserRound, UsersRound, X } from 'lucide-react';
 import { getDishDetail } from '../../services/dishService';
+import UserProfileLink from '../UserProfileLink';
 import '../../styles/dish-detail.css';
 import '../../styles/dish-detail-fixes.css';
 
@@ -22,6 +24,8 @@ export default function DishDetailModal({ meal, onClose, initialDish = null }) {
   }, [initialDish, meal.dishId]);
 
   const facts = dish && [['Calories', dish.calories, 'kcal'], ['Protein', dish.proteinG, 'g'], ['Carbs', dish.carbsG, 'g'], ['Fat', dish.healthyFatsG, 'g']].filter(([, value]) => value != null);
+  const isCommunityRecipe = Boolean(dish?.sourceAuthorId || dish?.sourceAuthorName || dish?.sourceContentId);
+  const canOpenSourcePost = Boolean(isCommunityRecipe && dish?.sourceContentId && dish?.sourceContentPublic);
 
   return <div className="dish-detail-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
     <section className="dish-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="dish-detail-title">
@@ -42,14 +46,27 @@ export default function DishDetailModal({ meal, onClose, initialDish = null }) {
             </div>
             {dish.imageUrl && <img src={dish.imageUrl} alt={dish.name} />}
           </header>
-          {dish.sourceAuthorName && (
-            <p className="dish-detail-attribution">
-              {dish.sourceAuthorAvatar
-                ? <img className="dish-detail-attribution-avatar" src={dish.sourceAuthorAvatar} alt="" aria-hidden="true" />
-                : <span className="dish-detail-attribution-icon" aria-hidden="true"><UserRound size={14} /></span>}
-              <span>Community recipe shared by <b>{dish.sourceAuthorName}</b></span>
-            </p>
-          )}
+          <section className="dish-detail-attribution" aria-label="Recipe source">
+            {isCommunityRecipe ? (
+              <>
+                {dish.sourceAuthorAvatar
+                  ? <img className="dish-detail-attribution-avatar" src={dish.sourceAuthorAvatar} alt="" aria-hidden="true" />
+                  : <span className="dish-detail-attribution-icon" aria-hidden="true"><UserRound size={14} /></span>}
+                <div className="dish-detail-attribution-copy">
+                  <span className="dish-detail-attribution-label">Community contribution</span>
+                  {dish.sourceAuthorName && dish.sourceAuthorId != null
+                    ? <UserProfileLink userId={dish.sourceAuthorId} className="dish-detail-attribution-author">By {dish.sourceAuthorName}</UserProfileLink>
+                    : <span className="dish-detail-attribution-fallback">Contributor details are unavailable.</span>}
+                </div>
+                {canOpenSourcePost && <Link className="dish-detail-attribution-link" to={`/community/posts/${dish.sourceContentId}`}>View original post <BookOpenText size={14} /></Link>}
+              </>
+            ) : (
+              <>
+                <span className="dish-detail-attribution-icon" aria-hidden="true"><Sparkles size={14} /></span>
+                <div className="dish-detail-attribution-copy"><span className="dish-detail-attribution-label">NutriBot recipe</span><span className="dish-detail-attribution-fallback">Created by the NutriBot recipe catalog.</span></div>
+              </>
+            )}
+          </section>
           {facts.length > 0 && <section className="dish-detail-nutrition">{facts.map(([label, value, unit]) => <div key={label}><b><span className="dish-detail-nutrition-value">{value}</span><small className="dish-detail-nutrition-unit">{unit}</small></b><span>{label}</span></div>)}</section>}
           {(dish.ingredients.length > 0 || dish.steps.length > 0) && <section className="detail-content-grid dish-detail-recipe-grid">
             {dish.ingredients.length > 0 && <article className="detail-ingredients"><div className="detail-section-head"><span>What you need</span><h2>Ingredients</h2>{dish.servings != null && <small>Serves {dish.servings}</small>}</div><ul>{dish.ingredients.map((item, index) => <li key={item.ingredientId ?? index}><i>{String(index + 1).padStart(2, '0')}</i>{[item.quantity, item.unit, item.name ?? item.ingredientName].filter((value) => value !== null && value !== undefined && String(value).trim() !== '').join(' ')}</li>)}</ul></article>}

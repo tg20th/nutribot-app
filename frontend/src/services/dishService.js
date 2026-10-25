@@ -72,6 +72,10 @@ export async function getDishDetail(dishId, signal) {
     sourceAuthorId: recipe.sourceAuthorId ?? null,
     sourceAuthorName: recipe.sourceAuthorName ?? null,
     sourceAuthorAvatar: recipe.sourceAuthorAvatar ?? null,
-    sourceContentId: recipe.sourceContentId ?? null
+    sourceContentId: recipe.sourceContentId ?? null,
+    // The detail endpoint can expose this when it has verified that the
+    // original community post remains public. Until then the UI deliberately
+    // omits its link instead of inferring visibility from an ID.
+    sourceContentPublic: recipe.sourceContentPublic ?? recipe.sourcePostPublic ?? false
   };
 }
