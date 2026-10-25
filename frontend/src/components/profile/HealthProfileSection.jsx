@@ -104,7 +104,17 @@ export default function HealthProfileSection() {
         setSavedHealth(mapped);
         setSavedBmi(profile.bmi ?? calculateBmi(mapped.heightCm, mapped.weightKg));
         setAllergiesConfirmed(mapped.allergyIngredientIds.length > 0 || window.localStorage.getItem(allergyConfirmationKey()) === 'true');
-        setIngredients(Array.isArray(ingredientOptions) ? ingredientOptions : []);
+        const activeIngredients = Array.isArray(ingredientOptions) ? ingredientOptions : [];
+        const activeIds = new Set(activeIngredients.map(({ ingredientId }) => ingredientId));
+        const savedNames = Array.isArray(profile.allergies) ? profile.allergies : [];
+        const inactiveSavedIngredients = mapped.allergyIngredientIds
+          .filter((ingredientId) => !activeIds.has(ingredientId))
+          .map((ingredientId) => ({
+            ingredientId,
+            name: savedNames[mapped.allergyIngredientIds.indexOf(ingredientId)] || `Ingredient #${ingredientId}`,
+            active: false,
+          }));
+        setIngredients([...activeIngredients, ...inactiveSavedIngredients]);
       })
       .catch((error) => {
         if (controller.signal.aborted || error?.name === 'AbortError') return;
@@ -130,6 +140,7 @@ export default function HealthProfileSection() {
     () => ingredients.filter(({ ingredientId }) => selectedIds.has(ingredientId)),
     [ingredients, selectedIds],
   );
+  const hasInactiveAllergy = selectedIngredients.some(({ active }) => active === false);
   const visibleIngredients = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('vi');
     if (!normalized) return ingredients;
@@ -281,10 +292,11 @@ export default function HealthProfileSection() {
             <b>{selectedIds.size} selected</b>
           </header>
           <p>Select any ingredient that causes an allergy or intolerance. NutriBot will use the exact database IDs when planning around them.</p>
+          {hasInactiveAllergy && <p className="health-inactive-allergy-notice" role="status">Some saved allergy ingredients are no longer available in the catalog. They remain selected and cannot be removed here, so other profile changes will not discard them.</p>}
 
           {selectedIngredients.length > 0 && (
             <div className="health-selected-allergies" aria-label="Selected allergies">
-              {selectedIngredients.map(({ ingredientId, name }) => <button type="button" key={ingredientId} onClick={() => toggleAllergy(ingredientId)}>{name}<X size={13} /></button>)}
+              {selectedIngredients.map(({ ingredientId, name, active }) => <button type="button" key={ingredientId} disabled={active === false} title={active === false ? 'This saved allergy is unavailable and remains selected.' : undefined} onClick={() => toggleAllergy(ingredientId)}>{name}{active === false ? <small>Unavailable</small> : <X size={13} />}</button>)}
             </div>
           )}
 
@@ -295,9 +307,9 @@ export default function HealthProfileSection() {
           </label>
 
           <div className="health-ingredient-list" role="group" aria-label="Allergy ingredients">
-            {visibleIngredients.map(({ ingredientId, name }) => {
+            {visibleIngredients.map(({ ingredientId, name, active }) => {
               const selected = selectedIds.has(ingredientId);
-              return <button type="button" key={ingredientId} className={selected ? 'is-selected' : ''} onClick={() => toggleAllergy(ingredientId)} aria-pressed={selected}><span>{selected && <Check size={13} />}</span>{name}</button>;
+              return <button type="button" key={ingredientId} className={`${selected ? 'is-selected' : ''}${active === false ? ' is-unavailable' : ''}`} disabled={active === false} onClick={() => toggleAllergy(ingredientId)} aria-pressed={selected}><span>{selected && <Check size={13} />}</span>{name}{active === false && <small>Unavailable</small>}</button>;
             })}
             {visibleIngredients.length === 0 && <p>No ingredients match your search.</p>}
           </div>

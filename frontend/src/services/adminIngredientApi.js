@@ -8,6 +8,8 @@ const mapIngredient = (ingredient = {}) => ({
   categoryId: ingredient.categoryId ?? '',
   active: Boolean(ingredient.active),
   createdAt: ingredient.createdAt ?? null,
+  allergyReferenceCount: Number(ingredient.allergyReferenceCount ?? 0),
+  recipeReferenceCount: Number(ingredient.recipeReferenceCount ?? 0),
 });
 
 const normalizeSearchKeyword = (value = '') => value.trim().toLowerCase().normalize('NFD')
