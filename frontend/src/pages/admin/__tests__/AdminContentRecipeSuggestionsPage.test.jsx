@@ -4,8 +4,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import AdminContentRecipeSuggestionsPage from '../AdminContentRecipeSuggestionsPage';
 import { contentRecipeSuggestionsApi } from '../../../services/contentRecipeSuggestionsApi';
 import { getAllergyIngredients } from '../../../services/profileApi';
+import { adminIngredientApi } from '../../../services/adminIngredientApi';
 
 vi.mock('../../../services/profileApi', () => ({ getAllergyIngredients: vi.fn().mockResolvedValue([]) }));
+vi.mock('../../../services/adminIngredientApi', () => ({
+  adminIngredientApi: { getCategories: vi.fn().mockResolvedValue([]), createIngredient: vi.fn() },
+}));
 
 vi.mock('../../../services/contentRecipeSuggestionsApi', async (importOriginal) => {
   const actual = await importOriginal();
@@ -196,11 +200,42 @@ describe('admin recipe suggestion review (NB-87)', () => {
 
     render(<AdminContentRecipeSuggestionsPage />);
 
-    fireEvent.change(await screen.findByRole('combobox', { name: 'Catalog match for Bún gạo lứt' }), { target: { value: '12' } });
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Catalog match for Bún gạo lứt' }), { target: { value: 'Bún gạo' } });
+    fireEvent.click(await screen.findByRole('option', { name: 'Bún gạo' }));
     fireEvent.click(screen.getByRole('button', { name: 'Approve suggestion' }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Approve' }));
 
     await waitFor(() => expect(contentRecipeSuggestionsApi.review)
       .toHaveBeenCalledWith(5, 'APPROVE', '', [{ proposalIndex: 0, ingredientId: 12 }]));
+  });
+
+  it('creates a missing ingredient and selects it for the proposal', async () => {
+    const unresolved = suggestion({ validation: {
+      valid: false,
+      canApprove: false,
+      issues: [{ field: 'ingredients[0]', code: 'INGREDIENT_MAPPING_REQUIRED', severity: 'ERROR', message: 'Select an existing catalog ingredient.' }],
+      ingredientResolutions: [{ proposalIndex: 0, proposedName: 'Bột mè đen', status: 'UNRESOLVED' }],
+    } });
+    adminIngredientApi.getCategories.mockResolvedValue([{ id: 4, name: 'Spices' }]);
+    adminIngredientApi.createIngredient.mockResolvedValue({ id: 88, name: 'Bột mè đen', categoryId: 4, active: true });
+    contentRecipeSuggestionsApi.list.mockResolvedValue({ content: [unresolved], totalElements: 1, totalPages: 1 });
+    contentRecipeSuggestionsApi.getById.mockResolvedValue(unresolved);
+    contentRecipeSuggestionsApi.review.mockResolvedValue({ ...unresolved, status: 'APPROVED' });
+
+    render(<AdminContentRecipeSuggestionsPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create ingredient' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Ingredient category' }), { target: { value: '4' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create and select' }));
+
+    await waitFor(() => expect(adminIngredientApi.createIngredient).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'Bột mè đen', slug: 'bot-me-den', categoryId: '4',
+    })));
+    expect(await screen.findByRole('combobox', { name: 'Catalog match for Bột mè đen' })).toHaveValue('Bột mè đen');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Approve suggestion' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(contentRecipeSuggestionsApi.review)
+      .toHaveBeenCalledWith(5, 'APPROVE', '', [{ proposalIndex: 0, ingredientId: 88 }]));
   });
 });
