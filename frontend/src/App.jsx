@@ -15,6 +15,7 @@ import AdminDashboard from './pages/admin/AdminDashboard';
 import UserManagementPage from './pages/admin/UserManagementPage';
 import UserDetailPage from './pages/admin/UserDetailPage';
 import CategoryManagementPage from './pages/admin/CategoryManagementPage';
+import IngredientManagementPage from './pages/admin/IngredientManagementPage';
 import AdminModerationPage from './pages/admin/AdminModerationPage';
 import AdminContentRecipeSuggestionsPage from './pages/admin/AdminContentRecipeSuggestionsPage';
 import { ContentDetailPage, ContentManagementPage } from './pages/admin/ContentPages';
@@ -106,6 +107,7 @@ export default function App() {
       <Route path="users" element={<UserManagementPage />} />
       <Route path="users/:id" element={<UserDetailPage />} />
       <Route path="categories" element={<CategoryManagementPage />} />
+      <Route path="ingredients" element={<IngredientManagementPage />} />
       <Route path="moderation" element={<AdminModerationPage />} />
       <Route path="content" element={<ContentManagementPage kind="Blog" />} />
       <Route path="content/blogs" element={<ContentManagementPage kind="Blog" />} />

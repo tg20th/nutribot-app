@@ -3,6 +3,8 @@
 @import './admin-overrides.css';
 @import './admin-moderation.css';
 @import './admin-navigation.css';
+@import './admin-ingredients.css';
+@import './admin-ingredients-overrides.css';
 @import './community.css';
 @import './weekly-planner-popups.css';
 @import './dish-detail-nutrition.css';
