@@ -68,10 +68,16 @@ export async function getDishDetail(dishId, signal) {
     cookTimeMinutes: recipe.cookTimeMin ?? null,
     ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
     steps: normalizeCookingSteps(recipe.steps ?? recipe.instructions),
-    // NB-80: Attribution — công thức import từ bài post cộng đồng đã đồng thuận
+    // NB-89: provenance fields are server-derived and safe to display as snapshots.
     sourceAuthorId: recipe.sourceAuthorId ?? null,
+    contributorUserId: recipe.contributorUserId ?? recipe.sourceAuthorId ?? null,
     sourceAuthorName: recipe.sourceAuthorName ?? null,
     sourceAuthorAvatar: recipe.sourceAuthorAvatar ?? null,
-    sourceContentId: recipe.sourceContentId ?? null
+    sourceContentId: recipe.sourceContentId ?? recipe.sourcePostId ?? null,
+    sourceType: recipe.sourceType ?? 'SYSTEM',
+    contributorName: recipe.contributorName ?? recipe.sourceAuthorName ?? null,
+    sourcePostTitle: recipe.sourcePostTitle ?? null,
+    approvedBy: recipe.approvedBy ?? null,
+    approvedAt: recipe.approvedAt ?? null,
   };
 }
