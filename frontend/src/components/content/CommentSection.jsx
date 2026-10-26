@@ -51,7 +51,7 @@ function ReplyComposer({ comment, inputRef, value, submitting, error, onChange, 
   </form>;
 }
 
-function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, submittingReply, replyError, expandedReplyIds, onReplyChange, onReplyCancel, onReplySubmit, onStartReply, onToggleReplies }) {
+function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, submittingReply, replyError, expandedReplyIds, onReplyChange, onReplyCancel, onReplySubmit, onStartReply, onToggleReplies, readOnly = false }) {
   const replies = depth === 0 ? replyList(comment) : depth === 1 ? flattenReplies(comment) : [];
   const hasReplies = replies.length > 0;
   const isExpanded = expandedReplyIds.has(comment.commentId);
@@ -69,7 +69,7 @@ function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, 
         {timestamp && <time dateTime={comment.createdAt}>{timestamp}</time>}</div>
       <p>{nested && <span className="content-comment-mention">@{memberName(comment.parentComment || {})}</span>}{comment.body}</p>
       <div className="content-comment-actions">
-        <button type="button" onClick={() => onStartReply(depth > 0 ? (comment.parentComment || comment) : comment)}>Reply</button>
+        {!readOnly && <button type="button" onClick={() => onStartReply(depth > 0 ? (comment.parentComment || comment) : comment)}>Reply</button>}
         {hasReplies && <button type="button" onClick={() => onToggleReplies(comment.commentId)} aria-expanded={isExpanded}>
           {isExpanded ? 'Hide replies' : `View replies (${replyTotal})`}
         </button>}
@@ -82,12 +82,12 @@ function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, 
         {replies.map((reply) => <CommentItem key={reply.commentId} comment={depth === 0 ? { ...reply, parentComment: comment } : reply} depth={depth === 0 ? 1 : 2}
           activeReplyId={activeReplyId} replyText={replyText} replyInputRef={replyInputRef} submittingReply={submittingReply} replyError={replyError}
           expandedReplyIds={expandedReplyIds} onReplyChange={onReplyChange} onReplyCancel={onReplyCancel} onReplySubmit={onReplySubmit}
-          onStartReply={onStartReply} onToggleReplies={onToggleReplies}/>)}</div>}
+          onStartReply={onStartReply} onToggleReplies={onToggleReplies} readOnly={readOnly}/>)}</div>}
     </div>
   </article>;
 }
 
-export default function CommentSection({ contentId, loadComments = getContentComments, submitComment = createContentComment, composerTarget, showFilter = false, onCommentCountChange, currentUser = {} }) {
+export default function CommentSection({ contentId, loadComments = getContentComments, submitComment = createContentComment, composerTarget, showFilter = false, onCommentCountChange, currentUser = {}, readOnly = false }) {
   const [comments, setComments] = useState([]);
   const [totalThreads, setTotalThreads] = useState(0);
   const [nextPage, setNextPage] = useState(0);
@@ -246,14 +246,14 @@ export default function CommentSection({ contentId, loadComments = getContentCom
     <div className="content-comments-heading"><span>Join the conversation</span><h2 id="content-comments-heading">Comments</h2>
       {!loading && !loadError && <small>{totalThreads} {totalThreads === 1 ? 'comment' : 'comments'}</small>}
       {showFilter && <label className="content-comments-filter"><span className="sr-only">Comment order</span><select value={commentFilter} onChange={(event) => setCommentFilter(event.target.value)}><option value="all">All comments</option><option value="newest">Newest</option></select></label>}</div>
-    {composerTarget ? createPortal(composer, composerTarget) : composer}
+    {!readOnly && (composerTarget ? createPortal(composer, composerTarget) : composer)}
     {loading && <p className="content-comment-status" role="status">Loading comments...</p>}
     {!loading && loadError && !comments.length && <div className="content-comment-status" role="alert">{loadError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button></div>}
     {!loading && !loadError && !comments.length && <p className="content-comment-status">No comments yet. Start the conversation.</p>}
     {!!visibleComments.length && <div className="content-comment-list">{visibleComments.map((comment) => <CommentItem key={comment.commentId} comment={comment} depth={0}
       activeReplyId={replyTo?.commentId} replyText={replyText} replyInputRef={replyInput} submittingReply={submittingReply} replyError={replyError}
       expandedReplyIds={expandedReplyIds} onReplyChange={setReplyText} onReplyCancel={cancelReply} onReplySubmit={submitReply}
-      onStartReply={startReply} onToggleReplies={toggleReplies}/>)}</div>}
+      onStartReply={startReply} onToggleReplies={toggleReplies} readOnly={readOnly}/>)}</div>}
     {loadError && !!comments.length && <p className="content-comment-error" role="alert">{loadError}</p>}
     {nextPage < totalPages && <button className="content-comments-more" type="button" disabled={loadingMore} onClick={loadMore}>
       <MessageCircle size={16}/>{loadingMore ? 'Loading...' : 'Load more comments'}</button>}

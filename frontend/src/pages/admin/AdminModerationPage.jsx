@@ -181,6 +181,7 @@ function ModerationSubmissionContent({ body }) {
 
 export default function AdminModerationPage() {
   const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview') === '1';
+  const requestedSelectedId = new URLSearchParams(window.location.search).get('selected');
   const [items, setItems] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [contentType, setContentType] = useState('');
@@ -204,7 +205,11 @@ export default function AdminModerationPage() {
         setItems(nextItems);
         setTotalPages(Math.max(result.totalPages || 1, 1));
         setTotalElements(result.totalElements ?? nextItems.length);
-        setSelectedId((current) => nextItems.some((item) => item.id === current) ? current : nextItems[0]?.id ?? null);
+        setSelectedId((current) => {
+          const requested = nextItems.find((item) => String(item.id) === requestedSelectedId);
+          if (requested) return requested.id;
+          return nextItems.some((item) => item.id === current) ? current : nextItems[0]?.id ?? null;
+        });
       })
       .catch((requestError) => {
         if (!controller.signal.aborted) setError(true);
@@ -213,7 +218,7 @@ export default function AdminModerationPage() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [contentType, page, refreshKey]);
+  }, [contentType, page, refreshKey, requestedSelectedId]);
 
   const filtered = useMemo(() => {
     const value = query.trim().toLowerCase();

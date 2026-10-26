@@ -152,14 +152,20 @@ const getDashboard = async (signal) => {
   const [users, moderation, blogs, videos, categories] = await Promise.all([
     apiRequest(adminUserQuery({ page: 0, size: 1 }), { signal }).then((payload) => unwrapData(payload, {})),
     getModerationQueue({ page: 0, size: 5 }, signal),
-    publicContentTotal('/api/v1/blogs', signal),
-    publicContentTotal('/api/v1/videos', signal),
+    getAllPublicContent('/api/v1/blogs', signal),
+    getAllPublicContent('/api/v1/videos', signal),
     getCategories(signal),
   ]);
+  const content = [...blogs, ...videos];
+  const categoryCounts = content.reduce((counts, item) => {
+    if (item.categoryId != null) counts[item.categoryId] = (counts[item.categoryId] ?? 0) + 1;
+    return counts;
+  }, {});
   return {
-    metrics: { totalUsers: Number(users.totalElements ?? 0), publishedContent: blogs + videos, pendingModeration: Number(moderation.totalElements ?? 0) },
+    metrics: { totalUsers: Number(users.totalElements ?? 0), publishedContent: content.length, pendingModeration: Number(moderation.totalElements ?? 0) },
     moderationQueue: moderation.content ?? [],
-    categories: categories.slice(0, 6),
+    categories: categories.map((category) => ({ ...category, contentCount: categoryCounts[category.id] ?? 0 })),
+    content,
   };
 };
 export const adminApi = {
