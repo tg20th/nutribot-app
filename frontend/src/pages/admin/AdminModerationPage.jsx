@@ -263,13 +263,13 @@ export default function AdminModerationPage() {
           <input aria-label="Search title or author" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search title or author on this page..." />
           {query && <button type="button" onClick={() => setQuery('')} aria-label="Clear search"><X size={15} /></button>}
         </label>
-        <label className="moderation-type-filter">Content type
-          <select value={contentType} onChange={(event) => changeType(event.target.value)}>
+        <div className="moderation-type-filter">
+          <select aria-label="Content type" value={contentType} onChange={(event) => changeType(event.target.value)}>
             <option value="">All content</option>
             <option value="BLOG">Blogs</option>
             <option value="VIDEO">Videos</option>
           </select>
-        </label>
+        </div>
       </div>
     </section>
 

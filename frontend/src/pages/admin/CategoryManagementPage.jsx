@@ -1,15 +1,26 @@
 import { CircleCheck, CircleX, Pencil, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { ConfirmDialog, EmptyState, LoadingState, PageHeader, SearchBox, StatusBadge, Toast } from '../../components/admin/AdminUi';
+import { ConfirmDialog, EmptyState, LoadingState, PageHeader, SearchBox, Toast } from '../../components/admin/AdminUi';
 import { adminApi } from '../../services/adminApi';
+import { adminIngredientApi } from '../../services/adminIngredientApi';
 
-const empty = { name: '', type: 'FOOD_TYPE', description: '' };
+const empty = { name: '', type: 'RECIPE_TYPE', description: '' };
+
+const getIngredientCounts = async (categories, signal) => {
+  const foodCategories = categories.filter((category) => category.type === 'FOOD_TYPE');
+  const results = await Promise.all(foodCategories.map(async (category) => {
+    const page = await adminIngredientApi.getIngredients({ categoryId: category.id, page: 0, size: 1 }, signal);
+    return [category.id, Number(page.totalElements ?? page.content?.length ?? 0)];
+  }));
+  return Object.fromEntries(results);
+};
 
 export default function CategoryManagementPage() {
   const [items, setItems] = useState([]);
-  const [type, setType] = useState('');
+  const [type, setType] = useState('RECIPE_TYPE');
   const [query, setQuery] = useState('');
   const [contentCounts, setContentCounts] = useState(null);
+  const [ingredientCounts, setIngredientCounts] = useState(null);
   const [form, setForm] = useState(null);
   const [confirm, setConfirm] = useState(null);
   const [toast, setToast] = useState('');
@@ -23,9 +34,17 @@ export default function CategoryManagementPage() {
     ]);
     if (signal?.aborted) return;
 
-    if (categoriesResult.status === 'fulfilled') setItems(categoriesResult.value);
-    else {
+    if (categoriesResult.status === 'fulfilled') {
+      setItems(categoriesResult.value);
+      const ingredientCountsResult = await Promise.allSettled([
+        getIngredientCounts(categoriesResult.value, signal),
+      ]);
+      if (!signal?.aborted) {
+        setIngredientCounts(ingredientCountsResult[0].status === 'fulfilled' ? ingredientCountsResult[0].value : null);
+      }
+    } else {
       setItems([]);
+      setIngredientCounts(null);
       setToast(categoriesResult.reason?.message || 'Could not load categories.');
     }
     setContentCounts(countsResult.status === 'fulfilled' ? countsResult.value : null);
@@ -74,10 +93,12 @@ export default function CategoryManagementPage() {
 
   const normalizedQuery = query.trim().toLowerCase();
   const list = items.filter((item) => (
-    (!type || item.type === type)
+    item.type === type
     && (!normalizedQuery || [item.name, item.description]
       .some((value) => String(value ?? '').toLowerCase().includes(normalizedQuery)))
   ));
+  const selectedCounts = type === 'RECIPE_TYPE' ? contentCounts : ingredientCounts;
+  const countLabel = type === 'RECIPE_TYPE' ? 'Published content' : 'Ingredients';
 
   return <div className="category-admin-page">
     <div className="category-admin-hero">
@@ -86,31 +107,28 @@ export default function CategoryManagementPage() {
 
     <div className="admin-toolbar category-admin-toolbar">
       <SearchBox value={query} onChange={setQuery} placeholder="Search name or description..." />
-      <select value={type} onChange={(event) => setType(event.target.value)} aria-label="Filter category type">
-        <option value="">All types</option>
-        <option value="FOOD_TYPE">Food Type</option>
-        <option value="RECIPE_TYPE">Recipe Type</option>
-      </select>
+      <div className={`category-type-toggle is-${type}`} role="group" aria-label="Filter category type">
+        <button type="button" className={type === 'RECIPE_TYPE' ? 'is-active' : ''} onClick={() => setType('RECIPE_TYPE')} aria-pressed={type === 'RECIPE_TYPE'}>Recipe Type</button>
+        <button type="button" className={type === 'FOOD_TYPE' ? 'is-active' : ''} onClick={() => setType('FOOD_TYPE')} aria-pressed={type === 'FOOD_TYPE'}>Food Type</button>
+      </div>
       <button className="admin-btn primary" onClick={() => setForm(empty)}><Plus size={19} /> Add Category</button>
     </div>
 
     <section className="admin-panel table-panel category-table-panel">
       {loading ? <LoadingState /> : list.length ? <table className="admin-table category-admin-table">
         <thead><tr>
-          <th className="category-id-column">Category ID</th>
+          <th className="category-id-column">No.</th>
           <th>Category name</th>
-          <th>Type</th>
           <th>Description</th>
-          <th>Published content</th>
+          <th className="category-content-count"><span className="category-count-value">{countLabel}</span></th>
           <th aria-label="Actions" />
         </tr></thead>
         <tbody>{list.map((item) => <tr key={item.id}>
           <td className="category-id-column">{item.id}</td>
           <td><b>{item.name}</b></td>
-          <td><StatusBadge status={item.type === 'FOOD_TYPE' ? 'Food Type' : 'Recipe Type'} /></td>
           <td>{item.description}</td>
-          <td className="category-content-count" title={contentCounts === null ? 'Content count is unavailable.' : undefined}>
-            {contentCounts === null ? '-' : contentCounts[item.id] ?? 0}
+          <td className="category-content-count" title={selectedCounts === null ? `${countLabel} count is unavailable.` : undefined}>
+            <span className="category-count-value">{selectedCounts === null ? '-' : selectedCounts[item.id] ?? 0}</span>
           </td>
           <td className="row-actions">
             <button onClick={() => setForm(item)} aria-label={`Edit ${item.name}`} title="Edit category"><Pencil size={19} /></button>
