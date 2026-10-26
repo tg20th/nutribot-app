@@ -117,7 +117,8 @@ const moderateContent = async (contentId, action, reason) => {
   return mapModerationItem(unwrapData(payload, {}));
 };
 const formatAdminDate = (value) => value ? new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
-const mapAdminUser = (user) => ({ id: user.userId, username: user.username, email: user.email, name: user.fullName || user.username, avatarUrl: user.avatarUrl ?? null, role: user.roleName, status: user.status, joinedAt: formatAdminDate(user.createdAt), updatedAt: formatAdminDate(user.updatedAt), strikeCount: user.strikeCount ?? 0 });
+const mapViolationReason = (reason) => typeof reason === 'string' ? reason : { contentId: reason?.contentId ?? null, contentTitle: reason?.contentTitle ?? null, reason: reason?.reason ?? reason?.message ?? reason?.adminNote ?? 'Lý do đang chờ API quản lý thành viên đồng bộ.', reviewedAt: reason?.reviewedAt ?? null };
+const mapAdminUser = (user) => { const violations = user.violationReasons ?? user.violations ?? []; return { id: user.userId, username: user.username, email: user.email, name: user.fullName || user.username, avatarUrl: user.avatarUrl ?? null, role: user.roleName, status: user.status, joinedAt: formatAdminDate(user.createdAt), updatedAt: formatAdminDate(user.updatedAt), strikeCount: user.strikeCount ?? 0, violationReasons: (Array.isArray(violations) ? violations : [violations]).filter(Boolean).map(mapViolationReason) }; };
 const mapAdminUserPage = (page) => ({ ...page, content: (page.content ?? []).map(mapAdminUser) });
 const adminUserQuery = ({ keyword = '', status = '', page = 0, size = 10 } = {}) => {
   const params = new URLSearchParams({ page: String(page), size: String(size) });
