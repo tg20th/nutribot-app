@@ -28,7 +28,7 @@
 .members-admin-table .joined-column{width:12%}
 .members-admin-table .actions-column{width:96px}
 .members-admin-table .member-cell{position:relative;display:table-cell;min-width:0}
-.member-profile{display:flex;align-items:center;gap:12px;min-width:0}.member-profile>span{display:grid;min-width:0;gap:3px}.member-avatar{width:42px;height:42px;display:grid;flex:none;place-items:center;overflow:hidden;border:1px solid #c8d8c0;border-radius:50%;background:#e4f0dc;color:#315c2b;font-size:13px;font-weight:800;letter-spacing:.02em}.member-avatar img{width:100%;height:100%;object-fit:cover}
+.member-profile{display:flex;align-items:center;gap:12px;min-width:0}.member-profile>span{display:grid;min-width:0;gap:3px}.member-avatar{width:42px;height:42px;display:grid;flex:none;place-items:center;overflow:hidden;border:1px solid #c8d8c0;border-radius:50%;background:#e4f0dc;color:#315c2b;font-size:13px;font-weight:800;letter-spacing:.02em}.member-avatar img{width:100%;height:100%;object-fit:cover}.violation-tooltip{position:absolute;z-index:15;visibility:hidden;opacity:0;pointer-events:none;transform:translateY(4px);transition:opacity .16s ease,transform .16s ease}.violation-flag:hover .violation-tooltip,.violation-flag:focus-within .violation-tooltip{visibility:visible;opacity:1;transform:translateY(0)}
 .members-admin-table .member-cell b,.members-admin-table .member-cell small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .members-admin-table .member-cell b{font-size:16px}
 .members-admin-table .member-cell small{font-size:13px}
@@ -40,7 +40,7 @@
 .members-admin-table th:nth-child(2),.members-admin-table th:nth-child(3),.members-admin-table td.content-count,.members-admin-table td:nth-child(3){text-align:center}
 .members-admin-table .content-count{padding-left:0;padding-right:0;font-variant-numeric:tabular-nums;font-weight:700}
 .members-admin-table td:nth-child(3){padding-left:0;padding-right:0}
-.violation-flags{display:inline-flex;align-items:center;justify-content:center;min-width:60px;min-height:20px;gap:3px;color:#9f6e13}.violation-flags.has-2{color:#a6651e}.violation-flags.has-3{color:#a24b3e}.violation-flags.is-clear{color:#8a968c;font-weight:700}
+.violation-flags{display:inline-flex;align-items:center;justify-content:center;min-width:60px;min-height:20px;gap:3px;color:#9f6e13}.violation-flags.has-2{color:#a6651e}.violation-flags.has-3{color:#a24b3e}.violation-flags.is-clear{color:#8a968c;font-weight:700}.violation-flag{position:relative;display:grid;place-items:center;outline:0}.violation-flag:focus-visible{outline:2px solid currentColor;outline-offset:3px;border-radius:3px}.violation-tooltip{right:0;bottom:calc(100% + 10px);width:230px;padding:10px 11px;border:1px solid #e2c9a5;border-radius:9px;background:#fffaf1;color:#5e461d;box-shadow:0 12px 24px rgba(92,66,23,.16);text-align:left;font-size:12px;line-height:1.4}.violation-tooltip b,.violation-tooltip small,.violation-tooltip span{display:block}.violation-tooltip b{margin-bottom:3px;font-size:11px}.violation-tooltip small{margin-bottom:4px;color:#8a703d;font-size:11px}.violation-tooltip span{color:#735b2f}
 .members-admin-table th:last-child,.members-admin-table td.row-actions{width:96px;padding:0;text-align:center;vertical-align:middle}
 .members-admin-table td.row-actions{display:table-cell}
 .members-admin-table .row-actions>a,.members-admin-table .row-actions button{display:inline-grid;padding:0;vertical-align:middle}
