@@ -5,6 +5,8 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "content_recipe_suggestions")
@@ -67,9 +69,6 @@ public class ContentRecipeSuggestion {
     @Column(name = "fiber_g", precision = 6, scale = 2)
     private BigDecimal fiberG;
 
-    @Column(name = "ingredients_json", columnDefinition = "NVARCHAR(MAX)")
-    private String ingredientsJson;
-
     @Column(name = "recipe_title", length = 200)
     private String recipeTitle;
 
@@ -84,9 +83,6 @@ public class ContentRecipeSuggestion {
 
     @Column(name = "servings")
     private Integer servings;
-
-    @Column(name = "recipe_steps_json", columnDefinition = "NVARCHAR(MAX)")
-    private String recipeStepsJson;
 
     @Column(name = "restaurant_name", length = 200)
     private String restaurantName;
@@ -111,6 +107,24 @@ public class ContentRecipeSuggestion {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    @OneToMany(mappedBy = "suggestion", fetch = FetchType.LAZY)
+    @OrderBy("sortOrder ASC")
+    @Builder.Default
+    private List<ContentRecipeSuggestionIngredient> ingredients = new ArrayList<>();
+
+    @OneToMany(mappedBy = "suggestion", fetch = FetchType.LAZY)
+    @OrderBy("stepNumber ASC")
+    @Builder.Default
+    private List<ContentRecipeSuggestionStep> steps = new ArrayList<>();
+
+    /** In-memory compatibility only for legacy unit fixtures; never persisted. */
+    @Transient
+    private String ingredientsJson;
+
+    /** In-memory compatibility only for legacy unit fixtures; never persisted. */
+    @Transient
+    private String recipeStepsJson;
 
     @PrePersist
     protected void onCreate() {

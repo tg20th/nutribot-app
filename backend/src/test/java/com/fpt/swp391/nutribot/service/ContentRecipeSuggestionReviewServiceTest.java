@@ -28,6 +28,7 @@ import com.fpt.swp391.nutribot.repository.DishRepository;
 import com.fpt.swp391.nutribot.repository.IngredientRepository;
 import com.fpt.swp391.nutribot.repository.RecipeIngredientRepository;
 import com.fpt.swp391.nutribot.repository.RecipeRepository;
+import com.fpt.swp391.nutribot.repository.RecipeStepRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -66,6 +67,8 @@ class ContentRecipeSuggestionReviewServiceTest {
     @Mock
     private RecipeIngredientRepository recipeIngredientRepository;
     @Mock
+    private RecipeStepRepository recipeStepRepository;
+    @Mock
     private CategoryRepository categoryRepository;
     @Mock
     private UserRepository userRepository;
@@ -89,6 +92,7 @@ class ContentRecipeSuggestionReviewServiceTest {
                 dishRepository,
                 recipeRepository,
                 recipeIngredientRepository,
+                recipeStepRepository,
                 categoryRepository,
                 userRepository,
                 payloadReader,
@@ -293,6 +297,7 @@ class ContentRecipeSuggestionReviewServiceTest {
         // NB-80: Recipe import từ cộng đồng phải ghi nguồn gốc tác giả
         assertEquals(9, recipeCaptor.getValue().getSourceUserId());
         assertEquals(82, recipeCaptor.getValue().getSourceContentId());
+        verify(recipeStepRepository, times(2)).save(any());
 
         ArgumentCaptor<RecipeIngredient> riCaptor = ArgumentCaptor.forClass(RecipeIngredient.class);
         verify(recipeIngredientRepository).save(riCaptor.capture());

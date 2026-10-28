@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "recipes")
@@ -31,7 +33,8 @@ public class Recipe {
     @Column(name = "description", columnDefinition = "NVARCHAR(MAX)")
     private String description;
 
-    @Column(name = "instructions", columnDefinition = "NVARCHAR(MAX)")
+    /** Response-only compatibility field; never persisted to recipes. */
+    @Transient
     private String instructions;
 
     @Column(name = "prep_time_min")
@@ -81,6 +84,12 @@ public class Recipe {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "dish_id", insertable = false, updatable = false)
     private Dish dish;
+
+    @OneToMany(mappedBy = "recipe", fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("stepNumber ASC")
+    @Builder.Default
+    private List<RecipeStep> steps = new ArrayList<>();
 
     @PrePersist
     protected void onCreate() {

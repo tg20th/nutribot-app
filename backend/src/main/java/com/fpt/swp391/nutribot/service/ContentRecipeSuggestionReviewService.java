@@ -8,9 +8,12 @@ import com.fpt.swp391.nutribot.entity.Category;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestion;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestionAudit;
+import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestionIngredient;
+import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestionStep;
 import com.fpt.swp391.nutribot.entity.Dish;
 import com.fpt.swp391.nutribot.entity.Recipe;
 import com.fpt.swp391.nutribot.entity.RecipeIngredient;
+import com.fpt.swp391.nutribot.entity.RecipeStep;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.event.RecipeSuggestionReviewedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
@@ -23,6 +26,7 @@ import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.DishRepository;
 import com.fpt.swp391.nutribot.repository.RecipeIngredientRepository;
 import com.fpt.swp391.nutribot.repository.RecipeRepository;
+import com.fpt.swp391.nutribot.repository.RecipeStepRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
@@ -67,6 +71,7 @@ public class ContentRecipeSuggestionReviewService {
     private final DishRepository dishRepository;
     private final RecipeRepository recipeRepository;
     private final RecipeIngredientRepository recipeIngredientRepository;
+    private final RecipeStepRepository recipeStepRepository;
     private final CategoryRepository categoryRepository;
     private final UserRepository userRepository;
     private final RecipeSuggestionPayloadReader payloadReader;
@@ -82,6 +87,7 @@ public class ContentRecipeSuggestionReviewService {
             DishRepository dishRepository,
             RecipeRepository recipeRepository,
             RecipeIngredientRepository recipeIngredientRepository,
+            RecipeStepRepository recipeStepRepository,
             CategoryRepository categoryRepository,
             UserRepository userRepository,
             RecipeSuggestionPayloadReader payloadReader,
@@ -95,6 +101,7 @@ public class ContentRecipeSuggestionReviewService {
         this.dishRepository = dishRepository;
         this.recipeRepository = recipeRepository;
         this.recipeIngredientRepository = recipeIngredientRepository;
+        this.recipeStepRepository = recipeStepRepository;
         this.categoryRepository = categoryRepository;
         this.userRepository = userRepository;
         this.payloadReader = payloadReader;
@@ -247,6 +254,7 @@ public class ContentRecipeSuggestionReviewService {
         Dish dish = resolveOrCreateDish(suggestion, freshContent, validation.getVegetarianType());
         Recipe recipe = resolveOrCreateRecipe(suggestion, dish, admin, freshContent);
         persistIngredients(suggestion, recipe, validation.getIngredientResolutions());
+        persistSteps(suggestion, recipe);
 
         suggestion.setDishId(dish.getDishId());
         suggestion.setRecipeId(recipe.getRecipeId());
@@ -288,12 +296,11 @@ public class ContentRecipeSuggestionReviewService {
             String title = suggestion.getRecipeTitle() == null || suggestion.getRecipeTitle().isBlank()
                     ? dish.getName()
                     : suggestion.getRecipeTitle().trim();
-            return recipeRepository.save(Recipe.builder()
+            Recipe created = recipeRepository.save(Recipe.builder()
                     .dishId(dish.getDishId())
                     .title(title)
                     .slug(uniqueSlug(title, "recipe", recipeRepository::existsBySlug))
                     .description(suggestion.getRecipeDescription())
-                    .instructions(joinSteps(suggestion.getRecipeStepsJson()))
                     .prepTimeMin(suggestion.getPrepTimeMin())
                     .cookTimeMin(suggestion.getCookTimeMin())
                     .servings(suggestion.getServings())
@@ -308,13 +315,28 @@ public class ContentRecipeSuggestionReviewService {
                     .approvedAt(java.time.LocalDateTime.now())
                     .status(recipeStatus)
                     .build());
+            List<String> steps = suggestion.getSteps().stream()
+                    .sorted(java.util.Comparator.comparing(ContentRecipeSuggestionStep::getStepNumber))
+                    .map(ContentRecipeSuggestionStep::getInstruction)
+                    .toList();
+            if (steps.isEmpty()) {
+                steps = payloadReader.readSteps(suggestion.getRecipeStepsJson()).value();
+            }
+            created.setInstructions(steps.stream().filter(Objects::nonNull).collect(Collectors.joining("\n")));
+            return created;
         });
     }
 
     private void persistIngredients(ContentRecipeSuggestion suggestion, Recipe recipe,
                                     List<com.fpt.swp391.nutribot.dto.response.ResolvedRecipeIngredient> resolutions) {
-        List<RecipeExtractionGatewayService.IngredientProposal> proposals =
-                payloadReader.readIngredients(suggestion.getIngredientsJson()).value();
+        List<RecipeExtractionGatewayService.IngredientProposal> proposals = suggestion.getIngredients().stream()
+                .sorted(java.util.Comparator.comparing(ContentRecipeSuggestionIngredient::getSortOrder))
+                .map(row -> new RecipeExtractionGatewayService.IngredientProposal(
+                        row.getIngredientName(), row.getQuantity(), row.getUnit(), row.getNotes()))
+                .toList();
+        if (proposals.isEmpty()) {
+            proposals = payloadReader.readIngredients(suggestion.getIngredientsJson()).value();
+        }
         if (resolutions == null || resolutions.size() != proposals.size()) {
             throw new RecipeValidationException(List.of(com.fpt.swp391.nutribot.dto.response.RecipeValidationIssue.builder()
                     .field("ingredients").code("INGREDIENT_MAPPING_REQUIRED")
@@ -340,6 +362,32 @@ public class ContentRecipeSuggestionReviewService {
             row.setUnit(proposal.unit().trim());
             row.setNotes(proposal.notes() == null ? null : proposal.notes().trim());
             recipeIngredientRepository.save(row);
+        }
+    }
+
+    private void persistSteps(ContentRecipeSuggestion suggestion, Recipe recipe) {
+        recipeStepRepository.deleteAllByRecipeId(recipe.getRecipeId());
+        List<ContentRecipeSuggestionStep> sourceSteps = suggestion.getSteps().stream()
+                .sorted(java.util.Comparator.comparing(ContentRecipeSuggestionStep::getStepNumber))
+                .toList();
+        if (sourceSteps.isEmpty()) {
+            List<String> legacySteps = payloadReader.readSteps(suggestion.getRecipeStepsJson()).value();
+            for (int index = 0; index < legacySteps.size(); index++) {
+                sourceSteps = new java.util.ArrayList<>(sourceSteps);
+                sourceSteps.add(ContentRecipeSuggestionStep.builder()
+                        .stepNumber(index + 1)
+                        .instruction(legacySteps.get(index))
+                        .build());
+            }
+        }
+        for (ContentRecipeSuggestionStep source : sourceSteps) {
+            recipeStepRepository.save(RecipeStep.builder()
+                        .recipeId(recipe.getRecipeId())
+                        .stepNumber(source.getStepNumber())
+                        .instruction(source.getInstruction().trim())
+                        .durationMin(source.getDurationMin())
+                        .recipe(recipe)
+                        .build());
         }
     }
 
@@ -379,17 +427,6 @@ public class ContentRecipeSuggestionReviewService {
         }
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new NotFoundException("Không tìm thấy tài khoản quản trị: " + username));
-    }
-
-    private String joinSteps(String stepsJson) {
-        List<String> steps = payloadReader.readSteps(stepsJson).value();
-        if (steps.isEmpty()) {
-            return null;
-        }
-        return steps.stream()
-                .filter(step -> step != null && !step.isBlank())
-                .map(String::trim)
-                .collect(Collectors.joining("\n"));
     }
 
     private Map<Integer, String> resolveReviewerNames(Collection<ContentRecipeSuggestion> suggestions) {
@@ -477,21 +514,33 @@ public class ContentRecipeSuggestionReviewService {
                         .fatG(suggestion.getFatG())
                         .fiberG(suggestion.getFiberG())
                         .build())
-                .ingredients(payloadReader.readIngredients(suggestion.getIngredientsJson()).value().stream()
+                .ingredients((suggestion.getIngredients().isEmpty()
+                        ? payloadReader.readIngredients(suggestion.getIngredientsJson()).value().stream()
+                            .map(ingredient -> ContentRecipeSuggestionResponse.IngredientInfo.builder()
+                                    .name(ingredient.name()).quantity(ingredient.quantity())
+                                    .unit(ingredient.unit()).notes(ingredient.notes()).build())
+                            .toList()
+                        : suggestion.getIngredients().stream()
+                        .sorted(java.util.Comparator.comparing(ContentRecipeSuggestionIngredient::getSortOrder))
                         .map(ingredient -> ContentRecipeSuggestionResponse.IngredientInfo.builder()
-                                .name(ingredient.name())
-                                .quantity(ingredient.quantity())
-                                .unit(ingredient.unit())
-                                .notes(ingredient.notes())
+                                .name(ingredient.getIngredientName())
+                                .quantity(ingredient.getQuantity())
+                                .unit(ingredient.getUnit())
+                                .notes(ingredient.getNotes())
                                 .build())
-                        .toList())
+                        .toList()))
                 .recipe(ContentRecipeSuggestionResponse.RecipeInfo.builder()
                         .title(suggestion.getRecipeTitle())
                         .description(suggestion.getRecipeDescription())
                         .prepTimeMin(suggestion.getPrepTimeMin())
                         .cookTimeMin(suggestion.getCookTimeMin())
                         .servings(suggestion.getServings())
-                        .steps(payloadReader.readSteps(suggestion.getRecipeStepsJson()).value())
+                        .steps((suggestion.getSteps().isEmpty()
+                                ? payloadReader.readSteps(suggestion.getRecipeStepsJson()).value()
+                                : suggestion.getSteps().stream()
+                                .sorted(java.util.Comparator.comparing(ContentRecipeSuggestionStep::getStepNumber))
+                                .map(ContentRecipeSuggestionStep::getInstruction)
+                                .toList()))
                         .build())
                 .restaurant(ContentRecipeSuggestionResponse.RestaurantInfo.builder()
                         .name(suggestion.getRestaurantName())

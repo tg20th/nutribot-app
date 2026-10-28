@@ -5,6 +5,8 @@ import com.fpt.swp391.nutribot.dto.response.RecipeValidationIssue;
 import com.fpt.swp391.nutribot.dto.response.ResolvedRecipeIngredient;
 import com.fpt.swp391.nutribot.dto.request.RecipeIngredientMapping;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestion;
+import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestionIngredient;
+import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestionStep;
 import com.fpt.swp391.nutribot.service.RecipeExtractionGatewayService.IngredientProposal;
 import com.fpt.swp391.nutribot.service.RecipeSuggestionPayloadReader.ParsedPayload;
 import org.springframework.beans.factory.annotation.Value;
@@ -87,8 +89,8 @@ public class RecipeSuggestionValidator {
         validateDishName(suggestion.getDishName(), issues);
         validateRecipeTitle(suggestion.getRecipeTitle(), issues);
 
-        IngredientsCheck ingredientsCheck = validateIngredients(suggestion.getIngredientsJson(), issues);
-        validateSteps(suggestion.getRecipeStepsJson(), issues);
+        IngredientsCheck ingredientsCheck = validateIngredients(suggestion, issues);
+        validateSteps(suggestion, issues);
         validateServings(suggestion.getServings(), issues);
         validateNutrition(suggestion, issues);
         validateServingInfo(suggestion, issues);
@@ -160,8 +162,8 @@ public class RecipeSuggestionValidator {
         }
     }
 
-    private IngredientsCheck validateIngredients(String json, List<RecipeValidationIssue> issues) {
-        ParsedPayload<List<IngredientProposal>> payload = payloadReader.readIngredients(json);
+    private IngredientsCheck validateIngredients(ContentRecipeSuggestion suggestion, List<RecipeValidationIssue> issues) {
+        ParsedPayload<List<IngredientProposal>> payload = relationalIngredients(suggestion);
         if (payload.malformed()) {
             addIssue(issues, SEVERITY_ERROR, "ingredients", "INGREDIENTS_JSON_INVALID",
                     "Dữ liệu nguyên liệu bị hỏng, không đọc được");
@@ -230,8 +232,8 @@ public class RecipeSuggestionValidator {
         return new IngredientsCheck(Collections.unmodifiableList(new ArrayList<>(proposals)), true);
     }
 
-    private void validateSteps(String json, List<RecipeValidationIssue> issues) {
-        ParsedPayload<List<String>> payload = payloadReader.readSteps(json);
+    private void validateSteps(ContentRecipeSuggestion suggestion, List<RecipeValidationIssue> issues) {
+        ParsedPayload<List<String>> payload = relationalSteps(suggestion);
         if (payload.malformed()) {
             addIssue(issues, SEVERITY_ERROR, "recipe.steps", "STEPS_JSON_INVALID",
                     "Dữ liệu các bước làm bị hỏng, không đọc được");
@@ -255,6 +257,26 @@ public class RecipeSuggestionValidator {
                         "Bước làm thứ " + (index + 1) + " vượt quá " + MAX_STEP_LENGTH + " ký tự");
             }
         }
+    }
+
+    private ParsedPayload<List<IngredientProposal>> relationalIngredients(ContentRecipeSuggestion suggestion) {
+        if (suggestion.getIngredients() != null && !suggestion.getIngredients().isEmpty()) {
+            return new ParsedPayload<>(suggestion.getIngredients().stream()
+                    .sorted(java.util.Comparator.comparing(ContentRecipeSuggestionIngredient::getSortOrder))
+                    .map(row -> new IngredientProposal(row.getIngredientName(), row.getQuantity(), row.getUnit(), row.getNotes()))
+                    .toList(), false);
+        }
+        return payloadReader.readIngredients(suggestion.getIngredientsJson());
+    }
+
+    private ParsedPayload<List<String>> relationalSteps(ContentRecipeSuggestion suggestion) {
+        if (suggestion.getSteps() != null && !suggestion.getSteps().isEmpty()) {
+            return new ParsedPayload<>(suggestion.getSteps().stream()
+                    .sorted(java.util.Comparator.comparing(ContentRecipeSuggestionStep::getStepNumber))
+                    .map(ContentRecipeSuggestionStep::getInstruction)
+                    .toList(), false);
+        }
+        return payloadReader.readSteps(suggestion.getRecipeStepsJson());
     }
 
     private void validateServings(Integer servings, List<RecipeValidationIssue> issues) {
