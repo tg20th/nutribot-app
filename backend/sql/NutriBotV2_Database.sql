@@ -1,3 +1,9 @@
+﻿-- WARNING: FULL REBUILD SCRIPT. DROPS NutriBotV2 AND ALL ITS DATA.
+-- Run ONLY on a disposable/new environment after backup.
+-- Chatbot tables and contents media structure preserved from original.
+-- This is a fresh-install schema, NOT a migration for existing data.
+-- Application code must be updated for removed columns.
+
 -- =============================================
 -- Database: NutriBot
 -- Microsoft SQL Server (T-SQL) - CONSOLIDATED INIT 2026-09-28
@@ -204,7 +210,6 @@ CREATE TABLE recipes (
     title           NVARCHAR(255) NOT NULL,
     slug            NVARCHAR(280) NOT NULL,
     description     NVARCHAR(MAX) NULL,
-    instructions    NVARCHAR(MAX) NULL,
     prep_time_min   INT NULL,
     cook_time_min   INT NULL,
     servings        INT NULL,
@@ -245,6 +250,23 @@ CREATE TABLE recipe_ingredients (
     CONSTRAINT FK_recipe_ingredients_ingredients FOREIGN KEY (ingredient_id) REFERENCES ingredients(ingredient_id),
     CONSTRAINT CK_recipe_ingredients_quantity CHECK (quantity > 0)
 );
+GO
+
+-- RECIPE STEPS: structured instructions (no JSON)
+IF OBJECT_ID(N'dbo.recipe_steps', N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.recipe_steps (
+   recipe_id INT NOT NULL,
+   step_number INT NOT NULL,
+   instruction NVARCHAR(MAX) NOT NULL,
+   duration_min INT NULL,
+   CONSTRAINT PK_recipe_steps PRIMARY KEY (recipe_id, step_number),
+   CONSTRAINT FK_recipe_steps_recipe FOREIGN KEY (recipe_id) REFERENCES dbo.recipes(recipe_id) ON DELETE CASCADE,
+   CONSTRAINT CK_recipe_steps_number CHECK (step_number > 0),
+   CONSTRAINT CK_recipe_steps_duration CHECK (duration_min IS NULL OR duration_min >= 0),
+   CONSTRAINT CK_recipe_steps_instruction CHECK (LEN(LTRIM(RTRIM(instruction))) > 0)
+ );
+END;
 GO
 
 ------------------------------------------------
@@ -542,13 +564,11 @@ CREATE TABLE content_recipe_suggestions (
     carbs_g DECIMAL(6,2) NULL,
     fat_g DECIMAL(6,2) NULL,
     fiber_g DECIMAL(6,2) NULL,
-    ingredients_json NVARCHAR(MAX) NULL,
     recipe_title NVARCHAR(200) NULL,
     recipe_description NVARCHAR(MAX) NULL,
     prep_time_min INT NULL,
     cook_time_min INT NULL,
     servings INT NULL,
-    recipe_steps_json NVARCHAR(MAX) NULL,
     restaurant_name NVARCHAR(200) NULL,
     restaurant_address NVARCHAR(300) NULL,
     restaurant_reference NVARCHAR(500) NULL,
@@ -562,6 +582,45 @@ CREATE TABLE content_recipe_suggestions (
     CONSTRAINT fk_suggestion_recipe FOREIGN KEY (recipe_id) REFERENCES recipes(recipe_id),
     CONSTRAINT fk_suggestion_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(user_id)
 );
+
+-- Structured recipe suggestion ingredients and steps (no JSON)
+IF OBJECT_ID(N'dbo.content_recipe_suggestion_ingredients', N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.content_recipe_suggestion_ingredients (
+   suggestion_ingredient_id INT IDENTITY(1,1) NOT NULL,
+   suggestion_id INT NOT NULL,
+   ingredient_id INT NULL,
+   ingredient_name NVARCHAR(150) NOT NULL,
+   quantity DECIMAL(10,2) NULL,
+   unit NVARCHAR(30) NULL,
+   notes NVARCHAR(200) NULL,
+   sort_order INT NOT NULL,
+   CONSTRAINT PK_crsi PRIMARY KEY (suggestion_ingredient_id),
+   CONSTRAINT FK_crsi_suggestion FOREIGN KEY (suggestion_id) REFERENCES dbo.content_recipe_suggestions(suggestion_id),
+   CONSTRAINT FK_crsi_ingredient FOREIGN KEY (ingredient_id) REFERENCES dbo.ingredients(ingredient_id),
+   CONSTRAINT UQ_crsi_order UNIQUE (suggestion_id, sort_order),
+   CONSTRAINT CK_crsi_order CHECK (sort_order > 0),
+   CONSTRAINT CK_crsi_quantity CHECK (quantity IS NULL OR quantity > 0),
+   CONSTRAINT CK_crsi_name CHECK (LEN(LTRIM(RTRIM(ingredient_name))) > 0)
+ );
+ CREATE INDEX IX_crsi_ingredient ON dbo.content_recipe_suggestion_ingredients(ingredient_id) WHERE ingredient_id IS NOT NULL;
+END;
+GO
+IF OBJECT_ID(N'dbo.content_recipe_suggestion_steps', N'U') IS NULL
+BEGIN
+ CREATE TABLE dbo.content_recipe_suggestion_steps (
+   suggestion_id INT NOT NULL,
+   step_number INT NOT NULL,
+   instruction NVARCHAR(MAX) NOT NULL,
+   duration_min INT NULL,
+   CONSTRAINT PK_crss PRIMARY KEY (suggestion_id, step_number),
+   CONSTRAINT FK_crss_suggestion FOREIGN KEY (suggestion_id) REFERENCES dbo.content_recipe_suggestions(suggestion_id),
+   CONSTRAINT CK_crss_number CHECK (step_number > 0),
+   CONSTRAINT CK_crss_duration CHECK (duration_min IS NULL OR duration_min >= 0),
+   CONSTRAINT CK_crss_instruction CHECK (LEN(LTRIM(RTRIM(instruction))) > 0)
+ );
+END;
+GO
 
 ----------------------------------------------
 -- 13.2 CONTENT RECIPE SUGGESTION AUDIT (NB-84)

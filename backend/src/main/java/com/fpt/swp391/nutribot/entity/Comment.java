@@ -20,7 +20,7 @@ public class Comment {
     @Column(name = "content_id", nullable = false)
     private Integer contentId;
 
-    @Column(name = "user_id", nullable = false)
+    @Column(name = "user_id")
     private Integer userId;
 
     @Column(name = "parent_id")

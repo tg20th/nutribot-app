@@ -17,6 +17,7 @@ public class RecipeDetailDto {
     private String title;
     private String description;
     private String instructions;
+    private List<String> steps;
     private Integer servings;
     private Integer prepTimeMin;
     private Integer cookTimeMin;

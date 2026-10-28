@@ -5,7 +5,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestion;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestionAudit;
+import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestionIngredient;
+import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestionStep;
 import com.fpt.swp391.nutribot.repository.ContentRecipeSuggestionRepository;
+import com.fpt.swp391.nutribot.repository.ContentRecipeSuggestionIngredientRepository;
+import com.fpt.swp391.nutribot.repository.ContentRecipeSuggestionStepRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.DishRepository;
 import com.fpt.swp391.nutribot.repository.VoteRepository;
@@ -35,6 +39,8 @@ public class ContentRecipeSuggestionService {
     private final ContentRepository contentRepository;
     private final VoteRepository voteRepository;
     private final ContentRecipeSuggestionRepository suggestionRepository;
+    private final ContentRecipeSuggestionIngredientRepository suggestionIngredientRepository;
+    private final ContentRecipeSuggestionStepRepository suggestionStepRepository;
     private final DishRepository dishRepository;
     private final ContentRecipeBodyParser bodyParser;
     private final RecipeExtractionGatewayService extractionGateway;
@@ -49,6 +55,8 @@ public class ContentRecipeSuggestionService {
             ContentRepository contentRepository,
             VoteRepository voteRepository,
             ContentRecipeSuggestionRepository suggestionRepository,
+            ContentRecipeSuggestionIngredientRepository suggestionIngredientRepository,
+            ContentRecipeSuggestionStepRepository suggestionStepRepository,
             DishRepository dishRepository,
             ContentRecipeBodyParser bodyParser,
             RecipeExtractionGatewayService extractionGateway,
@@ -61,6 +69,8 @@ public class ContentRecipeSuggestionService {
         this.contentRepository = contentRepository;
         this.voteRepository = voteRepository;
         this.suggestionRepository = suggestionRepository;
+        this.suggestionIngredientRepository = suggestionIngredientRepository;
+        this.suggestionStepRepository = suggestionStepRepository;
         this.dishRepository = dishRepository;
         this.bodyParser = bodyParser;
         this.extractionGateway = extractionGateway;
@@ -173,7 +183,18 @@ public class ContentRecipeSuggestionService {
 
         ContentRecipeSuggestion suggestion = buildSuggestion(content, extraction, voteCount);
         try {
-            suggestionRepository.save(suggestion);
+            ContentRecipeSuggestion savedSuggestion = suggestionRepository.save(suggestion);
+            if (savedSuggestion == null) {
+                savedSuggestion = suggestion;
+            }
+            for (ContentRecipeSuggestionIngredient ingredient : suggestion.getIngredients()) {
+                ingredient.setSuggestionId(savedSuggestion.getSuggestionId());
+                suggestionIngredientRepository.save(ingredient);
+            }
+            for (ContentRecipeSuggestionStep step : suggestion.getSteps()) {
+                step.setSuggestionId(savedSuggestion.getSuggestionId());
+                suggestionStepRepository.save(step);
+            }
         } catch (DataIntegrityViolationException ex) {
             // Một luồng khác đã tạo trước đó (ràng buộc unique trên content_id + status active).
             log.debug("Bỏ qua tạo trùng suggestion cho content {}: {}", contentId, ex.getMessage());
@@ -256,7 +277,7 @@ public class ContentRecipeSuggestionService {
         var nutrition = extraction.nutrition();
         var recipe = extraction.recipe();
 
-        return ContentRecipeSuggestion.builder()
+        ContentRecipeSuggestion suggestion = ContentRecipeSuggestion.builder()
                 .content(content)
                 .status("PENDING")
                 .sourceViewCount(content.getViewCount() == null ? 0 : content.getViewCount())
@@ -270,14 +291,37 @@ public class ContentRecipeSuggestionService {
                 .carbsG(nutrition != null ? nutrition.carbsG() : null)
                 .fatG(nutrition != null ? nutrition.fatG() : null)
                 .fiberG(nutrition != null ? nutrition.fiberG() : null)
-                .ingredientsJson(writeJson(extraction.ingredients()))
                 .recipeTitle(recipe != null ? trim(recipe.title()) : null)
                 .recipeDescription(recipe != null ? recipe.description() : null)
                 .prepTimeMin(recipe != null ? recipe.prepTimeMin() : null)
                 .cookTimeMin(recipe != null ? recipe.cookTimeMin() : null)
                 .servings(recipe != null ? recipe.servings() : null)
-                .recipeStepsJson(recipe != null ? writeJson(recipe.steps()) : null)
                 .build();
+        for (int index = 0; index < extraction.ingredients().size(); index++) {
+            var proposal = extraction.ingredients().get(index);
+            suggestion.getIngredients().add(ContentRecipeSuggestionIngredient.builder()
+                    .suggestion(suggestion)
+                    .ingredientName(proposal.name() == null ? "" : proposal.name().trim())
+                    .quantity(proposal.quantity())
+                    .unit(proposal.unit() == null ? null : proposal.unit().trim())
+                    .notes(proposal.notes() == null ? null : proposal.notes().trim())
+                    .sortOrder(index + 1)
+                    .build());
+        }
+        if (recipe != null && recipe.steps() != null) {
+            for (int index = 0; index < recipe.steps().size(); index++) {
+                String instruction = recipe.steps().get(index);
+                suggestion.getSteps().add(ContentRecipeSuggestionStep.builder()
+                        .suggestion(suggestion)
+                        .stepNumber(index + 1)
+                        .instruction(instruction == null ? "" : instruction.trim())
+                        .build());
+            }
+        }
+        // Legacy in-memory view only; these fields are @Transient and never reach SQL Server.
+        suggestion.setIngredientsJson(writeJson(extraction.ingredients()));
+        suggestion.setRecipeStepsJson(recipe != null ? writeJson(recipe.steps()) : null);
+        return suggestion;
     }
 
     private String writeJson(Object value) {

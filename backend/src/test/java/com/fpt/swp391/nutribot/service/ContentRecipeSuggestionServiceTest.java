@@ -5,6 +5,8 @@ import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestion;
 import com.fpt.swp391.nutribot.entity.Dish;
 import com.fpt.swp391.nutribot.repository.ContentRecipeSuggestionRepository;
+import com.fpt.swp391.nutribot.repository.ContentRecipeSuggestionIngredientRepository;
+import com.fpt.swp391.nutribot.repository.ContentRecipeSuggestionStepRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.DishRepository;
 import com.fpt.swp391.nutribot.repository.VoteRepository;
@@ -44,6 +46,12 @@ class ContentRecipeSuggestionServiceTest {
     private ContentRecipeSuggestionRepository suggestionRepository;
 
     @Mock
+    private ContentRecipeSuggestionIngredientRepository suggestionIngredientRepository;
+
+    @Mock
+    private ContentRecipeSuggestionStepRepository suggestionStepRepository;
+
+    @Mock
     private DishRepository dishRepository;
 
     @Mock
@@ -73,6 +81,8 @@ class ContentRecipeSuggestionServiceTest {
                 contentRepository,
                 voteRepository,
                 suggestionRepository,
+                suggestionIngredientRepository,
+                suggestionStepRepository,
                 dishRepository,
                 new ContentRecipeBodyParser(new ObjectMapper()),
                 extractionGateway,
@@ -123,6 +133,12 @@ class ContentRecipeSuggestionServiceTest {
         assertEquals(MIN_VIEWS, saved.getSourceViewCount());
         assertEquals(MIN_VOTES, saved.getSourceVoteCount());
         assertEquals(418, saved.getCalories());
+        assertEquals(1, saved.getIngredients().size());
+        assertEquals(1, saved.getIngredients().get(0).getSortOrder());
+        assertEquals(2, saved.getSteps().size());
+        assertEquals(1, saved.getSteps().get(0).getStepNumber());
+        verify(suggestionIngredientRepository).save(any());
+        verify(suggestionStepRepository, times(2)).save(any());
         assertNotNull(saved.getIngredientsJson());
         assertNotNull(saved.getRecipeStepsJson());
     }
@@ -212,7 +228,8 @@ class ContentRecipeSuggestionServiceTest {
     @DisplayName("Bỏ qua hoàn toàn khi tính năng bị tắt")
     void evaluateContent_skipsWhenDisabled() {
         ContentRecipeSuggestionService disabled = new ContentRecipeSuggestionService(
-                contentRepository, voteRepository, suggestionRepository, dishRepository,
+                contentRepository, voteRepository, suggestionRepository,
+                suggestionIngredientRepository, suggestionStepRepository, dishRepository,
                 new ContentRecipeBodyParser(new ObjectMapper()), extractionGateway,
                 new ObjectMapper(), false, MIN_VIEWS, MIN_VOTES, auditService, selfProvider());
 

@@ -10,7 +10,7 @@ import java.time.LocalDateTime;
 public class ChatSession {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "session_id") private Integer sessionId;
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "user_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "user_id")
     private User user;
     @Column(length = 200) private String title;
     @Column(name = "is_trial", nullable = false) @Builder.Default private boolean trial = false;

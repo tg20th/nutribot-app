@@ -8,12 +8,14 @@ import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Ingredient;
 import com.fpt.swp391.nutribot.entity.Recipe;
 import com.fpt.swp391.nutribot.entity.RecipeIngredient;
+import com.fpt.swp391.nutribot.entity.RecipeStep;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.DishRepository;
 import com.fpt.swp391.nutribot.repository.IngredientRepository;
 import com.fpt.swp391.nutribot.repository.RecipeIngredientRepository;
 import com.fpt.swp391.nutribot.repository.RecipeRepository;
+import com.fpt.swp391.nutribot.repository.RecipeStepRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -31,6 +33,7 @@ public class DishService {
     private final DishRepository dishRepository;
     private final RecipeRepository recipeRepository;
     private final RecipeIngredientRepository recipeIngredientRepository;
+    private final RecipeStepRepository recipeStepRepository;
     private final IngredientRepository ingredientRepository;
     private final UserRepository userRepository;
 
@@ -43,6 +46,7 @@ public class DishService {
         Recipe recipe = recipeRepository.findByDishId(dishId).orElse(null);
         if (recipe != null) {
             List<RecipeIngredient> recipeIngredients = recipeIngredientRepository.findAllByRecipeId(recipe.getRecipeId());
+            List<RecipeStep> recipeSteps = recipeStepRepository.findAllByRecipeIdOrderByStepNumberAsc(recipe.getRecipeId());
 
             List<IngredientDetailDto> ingredientDtos = List.of();
             if (!recipeIngredients.isEmpty()) {
@@ -78,7 +82,11 @@ public class DishService {
                     .recipeId(recipe.getRecipeId())
                     .title(recipe.getTitle())
                     .description(recipe.getDescription())
-                    .instructions(recipe.getInstructions())
+                    .instructions(recipeSteps.stream()
+                            .map(RecipeStep::getInstruction)
+                            .filter(java.util.Objects::nonNull)
+                            .collect(Collectors.joining("\n")))
+                    .steps(recipeSteps.stream().map(RecipeStep::getInstruction).toList())
                     .servings(recipe.getServings())
                     .prepTimeMin(recipe.getPrepTimeMin())
                     .cookTimeMin(recipe.getCookTimeMin())
