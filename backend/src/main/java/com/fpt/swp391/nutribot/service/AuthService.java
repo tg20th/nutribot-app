@@ -1,5 +1,11 @@
 package com.fpt.swp391.nutribot.service;
 
+import java.util.Optional;
+
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.fpt.swp391.nutribot.config.JwtTokenProvider;
 import com.fpt.swp391.nutribot.dto.request.LoginRequest;
 import com.fpt.swp391.nutribot.dto.request.RegisterRequest;
@@ -10,13 +16,9 @@ import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.repository.RoleRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
@@ -127,13 +129,13 @@ public class AuthService {
             throw new BadRequestException("Tài khoản hoặc mật khẩu không chính xác");
         }
 
-        if (user.getStatus() != AccountStatus.ACTIVE) {
+        if (user.getStatus() != AccountStatus.ACTIVE && user.getStatus() != AccountStatus.WARN) {
             log.warn("Đăng nhập bị từ chối: tài khoản {} đang có trạng thái {}", user.getUsername(), user.getStatus());
             switch (user.getStatus()) {
                 case PENDING_VERIFY:
                     throw new BadRequestException("Tài khoản chưa xác thực email. Vui lòng kiểm tra hộp thư.");
-                case WARN:
-                    throw new BadRequestException("Tài khoản đang bị cảnh báo. Vui lòng liên hệ hỗ trợ.");
+                // case WARN:
+                //     throw new BadRequestException("Tài khoản đang bị cảnh báo. Vui lòng liên hệ hỗ trợ.");
                 case BANNED:
                     throw new BadRequestException("Tài khoản đã bị khóa. Không thể đăng nhập.");
                 default:
@@ -163,7 +165,7 @@ public class AuthService {
     @Transactional(readOnly = true)
     public Optional<String> getRoleNameByUsername(String username) {
         return userRepository.findByUsername(username)
-                .filter(user -> user.getStatus() == AccountStatus.ACTIVE)
+                .filter(user -> user.getStatus() == AccountStatus.ACTIVE || user.getStatus() == AccountStatus.WARN)
                 .map(user -> user.getRole().getRoleName());
     }
 
@@ -215,7 +217,7 @@ public class AuthService {
         }
 
         // Chỉ block account bị khóa thực sự (SUSPENDED, BANNED, WARN)
-        if (user.getStatus() != AccountStatus.ACTIVE) {
+        if (user.getStatus() == AccountStatus.BANNED) {
             throw new BadRequestException("Tài khoản đã bị khóa hoặc suspend");
         }
 
