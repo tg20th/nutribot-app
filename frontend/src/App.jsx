@@ -33,6 +33,7 @@ import ChatHistoryPage from './pages/ChatHistoryPage';
 import RestaurantMapPage from './pages/RestaurantMapPage';
 import PublicProfilePage from './pages/PublicProfilePage';
 import PublicRecipeDetailPage from './pages/PublicRecipeDetailPage';
+import { NotificationProvider } from './components/notifications/NotificationProvider';
 
 
 function AuthFailureHandler() {
@@ -72,7 +73,7 @@ function WeeklyPlannerEntry() {
 }
 
 export default function App() {
-  return <><AuthFailureHandler /><Routes>
+  return <NotificationProvider><AuthFailureHandler /><Routes>
     {import.meta.env.DEV && <Route path="/review/nb-26" element={<NB26ReviewPage />} />}
     {import.meta.env.DEV && <Route path="/dev/nb-07-email-change-verification" element={<NB07EmailChangeVerificationPreviewPage />} />}
     {import.meta.env.DEV && <Route path="/dev/nb-01-email-verification" element={<NB01EmailVerificationPreviewPage />} />}
@@ -120,5 +121,5 @@ export default function App() {
     <Route path="/restaurants/map" element={<MemberRoute><RestaurantMapPage /></MemberRoute>} />
     {import.meta.env.DEV && <Route path="/dev/nb-56" element={<RestaurantRecommendationsPreviewPage />} />}
     <Route path="*" element={<HomePage />} />
-  </Routes></>;
+  </Routes></NotificationProvider>;
 }

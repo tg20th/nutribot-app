@@ -4,10 +4,10 @@ import { Bell, Check, CheckCheck, ChevronDown, CircleAlert, Heart, Info, LoaderC
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   getNotifications,
-  getUnreadNotificationCount,
   markAllNotificationsAsRead,
   markNotificationAsRead
 } from '../../services/notificationsApi';
+import { useNotificationUnreadCount } from './NotificationProvider';
 
 const PAGE_SIZE = 10;
 
@@ -100,7 +100,7 @@ export default function NotificationCenter() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('all');
   const [items, setItems] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { unreadCount, refreshUnreadCount, changeUnreadCount } = useNotificationUnreadCount();
   const [listState, setListState] = useState({ loading: false, loadingMore: false, error: '' });
   const [page, setPage] = useState({ current: 0, totalPages: 1, last: true });
   const [markingId, setMarkingId] = useState(null);
@@ -108,38 +108,10 @@ export default function NotificationCenter() {
   const triggerRef = useRef(null);
   const popoverRef = useRef(null);
   const listController = useRef(null);
-  const countController = useRef(null);
-  const countRequest = useRef(false);
-  const countRequestVersion = useRef(0);
   const listRequest = useRef(0);
   const readMutationIds = useRef(new Set());
   const readOverrides = useRef(new Map());
-  const readMutationVersion = useRef(0);
   const markAllInFlight = useRef(false);
-
-  const refreshUnreadCount = useCallback(async ({ force = false } = {}) => {
-    if (!localStorage.getItem('nutribot-auth-token')) return;
-    if (force) {
-      countController.current?.abort();
-      countRequest.current = false;
-    }
-    if (countRequest.current) return;
-    countRequest.current = true;
-    const requestVersion = ++countRequestVersion.current;
-    const mutationVersionAtRequest = readMutationVersion.current;
-    const controller = new AbortController();
-    countController.current = controller;
-    try {
-      const count = await getUnreadNotificationCount(controller.signal);
-      if (!controller.signal.aborted
-        && requestVersion === countRequestVersion.current
-        && mutationVersionAtRequest === readMutationVersion.current) setUnreadCount(count);
-    } catch (error) {
-      if (error.name !== 'AbortError') return;
-    } finally {
-      if (countController.current === controller) countRequest.current = false;
-    }
-  }, []);
 
   const loadNotifications = useCallback(async ({ reset = false } = {}) => {
     if (!reset && (listState.loading || listState.loadingMore || page.last)) return;
@@ -167,11 +139,7 @@ export default function NotificationCenter() {
     }
   }, [listState.loading, listState.loadingMore, page.current, page.last]);
 
-  useEffect(() => {
-    refreshUnreadCount();
-    const timer = window.setInterval(refreshUnreadCount, 30000);
-    return () => { window.clearInterval(timer); countController.current?.abort(); listController.current?.abort(); };
-  }, [refreshUnreadCount]);
+  useEffect(() => () => { listController.current?.abort(); }, []);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -213,7 +181,6 @@ export default function NotificationCenter() {
   const showDrawer = () => {
     setOpen(true);
     if (!listState.loading) loadNotifications({ reset: true });
-    refreshUnreadCount();
   };
 
   const handleSelect = async (notification) => {
@@ -221,10 +188,9 @@ export default function NotificationCenter() {
     const notificationId = notification.notificationId;
     if (!notification.read && !readMutationIds.current.has(notificationId)) {
       readMutationIds.current.add(notificationId);
-      readMutationVersion.current += 1;
       readOverrides.current.set(notificationId, true);
       setItems((current) => current.map((item) => item.notificationId === notification.notificationId ? { ...item, read: true } : item));
-      setUnreadCount((count) => Math.max(0, count - 1));
+      changeUnreadCount((count) => Math.max(0, count - 1));
       setMarkingId(notificationId);
       try {
         await markNotificationAsRead(notificationId);
@@ -232,7 +198,7 @@ export default function NotificationCenter() {
       } catch {
         readOverrides.current.delete(notificationId);
         setItems((current) => current.map((item) => item.notificationId === notificationId ? { ...item, read: false } : item));
-        setUnreadCount((count) => count + 1);
+        changeUnreadCount((count) => count + 1);
         refreshUnreadCount({ force: true });
       } finally {
         readMutationIds.current.delete(notificationId);
@@ -247,14 +213,13 @@ export default function NotificationCenter() {
   const markAll = async () => {
     if (!unreadCount || markAllInFlight.current) return;
     markAllInFlight.current = true;
-    readMutationVersion.current += 1;
     try {
       await markAllNotificationsAsRead();
       setItems((current) => {
         current.forEach((item) => readOverrides.current.set(item.notificationId, true));
         return current.map((item) => ({ ...item, read: true }));
       });
-      setUnreadCount(0);
+      changeUnreadCount(0);
       await refreshUnreadCount({ force: true });
     } catch {
       refreshUnreadCount({ force: true });
