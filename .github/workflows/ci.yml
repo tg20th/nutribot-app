@@ -26,12 +26,14 @@ jobs:
           distribution: 'oracle'
           cache: maven
 
-      - name: Grant execute permission for mvnw
+      - name: Verify runner Maven
+        run: mvn --version
+
+      - name: Run backend tests
         run: |
           if [ -d "backend" ]; then
             cd backend
-            chmod +x mvnw || true
-            ./mvnw clean test
+            mvn -B clean test
           else
             echo "Backend directory not found, skipping."
           fi
