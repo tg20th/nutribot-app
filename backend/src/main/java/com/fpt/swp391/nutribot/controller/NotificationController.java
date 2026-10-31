@@ -3,7 +3,9 @@ package com.fpt.swp391.nutribot.controller;
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
 import com.fpt.swp391.nutribot.dto.response.NotificationResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
+import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.User;
+import com.fpt.swp391.nutribot.exception.ForbiddenException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.service.NotificationService;
@@ -62,6 +64,9 @@ public class NotificationController {
         }
         if (user == null) {
             throw new NotFoundException("Không tìm thấy thông tin người dùng");
+        }
+        if (!AccountStatus.canAccessSystem(user.getStatus())) {
+            throw new ForbiddenException("Tài khoản không đủ điều kiện sử dụng thông báo");
         }
         return user.getUserId();
     }

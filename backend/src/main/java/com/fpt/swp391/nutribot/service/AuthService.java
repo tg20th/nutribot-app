@@ -129,13 +129,11 @@ public class AuthService {
             throw new BadRequestException("Tài khoản hoặc mật khẩu không chính xác");
         }
 
-        if (user.getStatus() != AccountStatus.ACTIVE && user.getStatus() != AccountStatus.WARN) {
+        if (!AccountStatus.canAccessSystem(user.getStatus())) {
             log.warn("Đăng nhập bị từ chối: tài khoản {} đang có trạng thái {}", user.getUsername(), user.getStatus());
             switch (user.getStatus()) {
                 case PENDING_VERIFY:
                     throw new BadRequestException("Tài khoản chưa xác thực email. Vui lòng kiểm tra hộp thư.");
-                // case WARN:
-                //     throw new BadRequestException("Tài khoản đang bị cảnh báo. Vui lòng liên hệ hỗ trợ.");
                 case BANNED:
                     throw new BadRequestException("Tài khoản đã bị khóa. Không thể đăng nhập.");
                 default:
@@ -165,7 +163,7 @@ public class AuthService {
     @Transactional(readOnly = true)
     public Optional<String> getRoleNameByUsername(String username) {
         return userRepository.findByUsername(username)
-                .filter(user -> user.getStatus() == AccountStatus.ACTIVE || user.getStatus() == AccountStatus.WARN)
+                .filter(user -> AccountStatus.canAccessSystem(user.getStatus()))
                 .map(user -> user.getRole().getRoleName());
     }
 
@@ -216,8 +214,8 @@ public class AuthService {
             user = userRepository.save(user);
         }
 
-        // Chỉ block account bị khóa thực sự (SUSPENDED, BANNED, WARN)
-        if (user.getStatus() == AccountStatus.BANNED) {
+        // Chỉ block các trạng thái không đủ điều kiện truy cập (ví dụ BANNED).
+        if (!AccountStatus.canAccessSystem(user.getStatus())) {
             throw new BadRequestException("Tài khoản đã bị khóa hoặc suspend");
         }
 

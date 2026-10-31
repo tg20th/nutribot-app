@@ -11,6 +11,11 @@ public enum AccountStatus {
     BANNED,
     PENDING_VERIFY;
 
+    /** Trạng thái được phép sử dụng các chức năng thông thường của hệ thống. */
+    public static boolean canAccessSystem(AccountStatus status) {
+        return status == ACTIVE || status == WARN;
+    }
+
     public static AccountStatus fromString(String status) {
         if (status == null || status.isBlank()) {
             return null;

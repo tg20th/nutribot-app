@@ -85,7 +85,7 @@ public class CommentService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
 
-        if (user.getStatus() != AccountStatus.ACTIVE) {
+        if (!AccountStatus.canAccessSystem(user.getStatus())) {
             throw new ForbiddenException("Tài khoản chưa được kích hoạt hoặc đã bị khóa");
         }
 
@@ -130,7 +130,7 @@ public class CommentService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
 
-        if (user.getStatus() != AccountStatus.ACTIVE) {
+        if (!AccountStatus.canAccessSystem(user.getStatus())) {
             throw new ForbiddenException("Tài khoản chưa được kích hoạt hoặc đã bị khóa");
         }
 

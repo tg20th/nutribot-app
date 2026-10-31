@@ -74,7 +74,7 @@ public class DishService {
             User sourceAuthor = recipe.getSourceUserId() == null
                     ? null
                     : userRepository.findById(recipe.getSourceUserId()).orElse(null);
-            if (sourceAuthor != null && sourceAuthor.getStatus() != AccountStatus.ACTIVE) {
+            if (sourceAuthor != null && !AccountStatus.canAccessSystem(sourceAuthor.getStatus())) {
                 sourceAuthor = null;
             }
 
