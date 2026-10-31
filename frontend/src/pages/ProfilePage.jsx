@@ -3,8 +3,6 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import {
   AlertCircle,
-  ArrowLeft,
-  ArrowRight,
   CalendarDays,
   Camera,
   Check,
@@ -12,28 +10,27 @@ import {
   Eye,
   EyeOff,
   Grid3X3,
-  ImageUp,
   LoaderCircle,
   LockKeyhole,
   Mail,
   RotateCcw,
   Save,
-  Trash2,
   UserRound,
   UtensilsCrossed,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import AuthModal from '../components/AuthModal';
 import { useToast } from '../components/notifications/ToastProvider';
 import { changeMyPassword, deleteMyAvatar, getMyProfile, getMyRecipes, updateMyAvatar, updateMyProfile, verifyMyEmailChange } from '../services/profileApi';
+import { getPublicProfileContent } from '../services/publicProfileApi';
 import { getCurrentUserFromToken } from '../utils/auth';
 import ImageWithFallback from '../components/ImageWithFallback';
 import DishDetailModal from '../components/community/DishDetailModal';
-import freshProduce from '../assets/fresh-produce.jpg';
 import '../styles/profile.css';
 import '../styles/public-profile.css';
 import '../styles/public-profile-recipe-button.css';
@@ -65,11 +62,7 @@ const getTrustedAvatarUrl = (value) => {
   }
 };
 
-const PROFILE_NOTES = [
-  'A clear photo and short bio help your NutriBot space feel recognizably yours.',
-  'Your account details stay separate from health metrics, so you always know what you are editing.',
-  'You can return at any time to update how your name, photo, and story appear across the experience.',
-];
+const profileViewState = { tab: 'info', scrollY: 0 };
 
 const publishProfileUpdate = (profile) => {
   if (profile.avatarUrl) {
@@ -153,6 +146,7 @@ const validatePasswordChange = (passwords, hasExistingPassword = true) => {
 
 export default function ProfilePage() {
   const { toast } = useToast();
+  const location = useLocation();
   const pageRef = useRef(null);
   const avatarInputRef = useRef(null);
   const savingRef = useRef(false);
@@ -170,21 +164,24 @@ export default function ProfilePage() {
   const [serverPendingEmail, setServerPendingEmail] = useState('');
   const [confirmedEmail, setConfirmedEmail] = useState('');
   const [notice, setNotice] = useState(null);
-  const [activeNote, setActiveNote] = useState(0);
   const [headerQuery, setHeaderQuery] = useState('');
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState('');
-  const [isAvatarViewerOpen, setIsAvatarViewerOpen] = useState(false);
   const [avatarRemoved, setAvatarRemoved] = useState(false);
   const [passwordForm, setPasswordForm] = useState(EMPTY_PASSWORD_FORM);
   const [passwordErrors, setPasswordErrors] = useState({});
   const [passwordVisibility, setPasswordVisibility] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
-  const [activeTab, setActiveTab] = useState('info');
+  const [activeTab, setActiveTab] = useState(() => location.state?.profileTab || profileViewState.tab || 'info');
+  const [myPosts, setMyPosts] = useState([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [postsLoaded, setPostsLoaded] = useState(false);
+  const [postsError, setPostsError] = useState('');
   const [myRecipes, setMyRecipes] = useState([]);
   const [recipesLoading, setRecipesLoading] = useState(false);
   const [recipesLoaded, setRecipesLoaded] = useState(false);
+  const [recipesError, setRecipesError] = useState('');
   const [selectedRecipe, setSelectedRecipe] = useState(null);
 
   useEffect(() => {
@@ -217,6 +214,29 @@ export default function ProfilePage() {
   }, [fallbackUser, profileLoadAttempt]);
 
   useEffect(() => {
+    if (activeTab !== 'posts' || postsLoaded || !profile.username) return undefined;
+    const controller = new AbortController();
+    setPostsLoading(true);
+    setPostsError('');
+    getPublicProfileContent(profile.username, { signal: controller.signal })
+      .then((content) => {
+        if (controller.signal.aborted) return;
+        setMyPosts(Array.isArray(content?.posts) ? content.posts : []);
+        setPostsLoaded(true);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted || error?.name === 'AbortError') return;
+        setMyPosts([]);
+        setPostsError('We could not load your published posts. Please try again.');
+        setPostsLoaded(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setPostsLoading(false);
+      });
+    return () => controller.abort();
+  }, [activeTab, postsLoaded, profile.username]);
+
+  useEffect(() => {
     if (activeTab !== 'recipes' || recipesLoaded) return undefined;
     const controller = new AbortController();
     setRecipesLoading(true);
@@ -230,6 +250,7 @@ export default function ProfilePage() {
       .catch(() => {
         if (!controller.signal.aborted) {
           setMyRecipes([]);
+          setRecipesError('We could not load your approved recipes. Please try again.');
           setRecipesLoaded(true);
         }
       })
@@ -240,6 +261,23 @@ export default function ProfilePage() {
       });
     return () => controller.abort();
   }, [activeTab, recipesLoaded]);
+
+  useEffect(() => {
+    profileViewState.tab = activeTab;
+    profileViewState.scrollY = window.scrollY;
+    return () => {
+      profileViewState.tab = activeTab;
+      profileViewState.scrollY = window.scrollY;
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!hasLoadedProfile) return undefined;
+    const scrollY = location.state?.profileScrollY ?? profileViewState.scrollY;
+    if (!scrollY) return undefined;
+    const frame = window.requestAnimationFrame(() => window.scrollTo({ top: scrollY, left: 0, behavior: 'auto' }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [hasLoadedProfile, location.state?.profileScrollY]);
 
   useEffect(() => {
     if (!notice) return;
@@ -256,19 +294,6 @@ export default function ProfilePage() {
         stagger: 0.08,
         ease: 'power3.out',
       });
-      gsap.fromTo('.nb-profile-hero__image',
-        { scale: 0.88, opacity: 0.72 },
-        {
-          scale: 1.06,
-          opacity: 0.42,
-          ease: 'none',
-          scrollTrigger: {
-            trigger: '.nb-profile-hero',
-            start: 'top top+=76',
-            end: 'bottom top+=76',
-            scrub: true,
-          },
-        });
       gsap.fromTo('.nb-profile-intro__word',
         { opacity: 0.15 },
         {
@@ -282,18 +307,6 @@ export default function ProfilePage() {
             scrub: true,
           },
         });
-      gsap.from('.nb-profile-aside > *', {
-        y: 70,
-        scale: 0.94,
-        opacity: 0,
-        stagger: 0.16,
-        duration: 0.8,
-        ease: 'power3.out',
-        scrollTrigger: {
-          trigger: '.nb-profile-grid',
-          start: 'top 76%',
-        },
-      });
     });
     return () => media.revert();
   }, { scope: pageRef });
@@ -494,6 +507,8 @@ export default function ProfilePage() {
     setIsPasswordDialogOpen(true);
   };
 
+  const profileReturnTo = `${location.pathname}${location.search}${location.hash}`;
+
   return (
     <div className="community-page nb-profile-page" ref={pageRef}>
       <CommunityTopBar query={headerQuery} onQueryChange={setHeaderQuery} activePath="/profile" />
@@ -502,23 +517,18 @@ export default function ProfilePage() {
         <span className="community-sidenav-spacer" aria-hidden="true" />
 
         <main className="nb-profile-main">
-          <section className="nb-profile-hero" aria-labelledby="profile-title">
-            <img className="nb-profile-hero__image" src={freshProduce} alt="" />
-            <div className="nb-profile-hero__shade" />
+          <section className="nb-profile-hero nb-profile-hero--compact" aria-labelledby="profile-title">
             <div className="nb-profile-hero__copy">
-              <p>Personal account</p>
-              <h1 id="profile-title">
-                Your profile, <span className="nb-profile-title-image" aria-hidden="true" /> made for you.
-              </h1>
-              <span>Keep the essentials current and let NutriBot build from a better understanding of you.</span>
+              <p>Personal profile</p>
+              <h1 id="profile-title">{profile.fullName || profile.username || 'Your profile'}</h1>
+              {profile.username && <span className="nb-profile-hero__username">@{profile.username}</span>}
+              {profile.bio && <blockquote>{profile.bio}</blockquote>}
             </div>
             <button
               type="button"
               className="nb-profile-avatar"
-              onClick={() => visibleAvatar && setIsAvatarViewerOpen(true)}
-              aria-label={visibleAvatar ? 'View profile photo' : 'No profile photo'}
-              aria-haspopup={visibleAvatar ? 'dialog' : undefined}
-              disabled={!visibleAvatar}
+              onClick={() => avatarInputRef.current?.click()}
+              aria-label={visibleAvatar ? 'Change profile photo' : 'Upload profile photo'}
             >
               {visibleAvatar ? <span className="nb-profile-avatar__crop"><img src={visibleAvatar} alt="Your profile preview" /></span> : <span>{getInitials(profile)}</span>}
               <i><Camera size={14} strokeWidth={2.5} /></i>
@@ -529,7 +539,10 @@ export default function ProfilePage() {
           <div className="nb-profile-grid">
             <nav className="public-profile-tabs nb-profile-tabs" aria-label="Profile content">
               <button type="button" className={activeTab === 'info' ? 'is-active' : ''} onClick={() => setActiveTab('info')}>
-                <Grid3X3 size={16} /> Personal info
+                <Grid3X3 size={16} /> About
+              </button>
+              <button type="button" className={activeTab === 'posts' ? 'is-active' : ''} onClick={() => setActiveTab('posts')}>
+                <Grid3X3 size={16} /> Posts
               </button>
               <button type="button" className={activeTab === 'recipes' ? 'is-active' : ''} onClick={() => setActiveTab('recipes')}>
                 <UtensilsCrossed size={16} /> Recipes
@@ -540,11 +553,26 @@ export default function ProfilePage() {
             <form className="nb-profile-form" onSubmit={handleSubmit} noValidate>
               <header>
                 <div>
-                  <p>Account details</p>
-                  <h2>Tell us who you are</h2>
+                  <p>Personal information</p>
+                  <h2>About you</h2>
+                  <span className="nb-profile-form-intro">A little about you and your journey with NutriBot.</span>
                 </div>
                 <span className="nb-profile-secure"><LockKeyhole size={14} /> Secure profile</span>
               </header>
+
+              {!isLoading && hasLoadedProfile && (
+                <section className={`nb-profile-completion-inline${completion === 100 ? ' is-complete' : ''}`} aria-label="Profile completion">
+                  <div className="nb-profile-completion-copy">
+                    <span className="nb-profile-completion-status">
+                      {completion === 100 && <Check size={15} strokeWidth={2.5} />}
+                      {completion === 100 ? 'Profile complete' : 'Profile progress'}
+                    </span>
+                    <small>{completion === 100 ? 'Your essential details are up to date.' : 'Complete the essential details in your profile.'}</small>
+                  </div>
+                  <strong>{completion}%</strong>
+                  {completion < 100 && <span className="nb-profile-completion-track" aria-hidden="true"><span style={{ width: `${completion}%` }} /></span>}
+                </section>
+              )}
 
               {isLoading ? (
                 <div className="nb-profile-loading" role="status">
@@ -562,18 +590,8 @@ export default function ProfilePage() {
                 </div>
               ) : (
                 <div className="nb-profile-fields">
-                  <div className="nb-profile-photo-field nb-profile-field--wide">
-                    <div className="nb-profile-photo-preview">
-                      {visibleAvatar ? <img src={visibleAvatar} alt="Selected profile" /> : <span>{getInitials(profile)}</span>}
-                    </div>
-                    <div className="nb-profile-photo-copy">
-                      <b>Profile photo</b>
-                      <span>JPG, PNG or WebP. Maximum file size is 5 MB.</span>
-                      <div>
-                        <button type="button" onClick={() => avatarInputRef.current?.click()}><ImageUp size={15} /> {visibleAvatar ? 'Change photo' : 'Upload photo'}</button>
-                        {visibleAvatar && <button type="button" className="is-danger" onClick={removeAvatar}><Trash2 size={15} /> Remove</button>}
-                      </div>
-                    </div>
+                  <div className="nb-profile-section-label nb-profile-field--wide">
+                    <span>Basic details</span>
                   </div>
 
                   <label className="nb-profile-field nb-profile-field--wide">
@@ -596,7 +614,11 @@ export default function ProfilePage() {
 
                   {profileEmailMatchesPending && hasDismissedEmailVerification && !isEmailVerificationOpen && <button type="button" className="nb-profile-button nb-profile-button--secondary nb-profile-field--wide" onClick={() => { setEmailVerificationTarget(pendingEmail); setHasDismissedEmailVerification(false); setIsEmailVerificationOpen(true); }}>Reopen email verification</button>}
 
-                  <label className="nb-profile-field nb-profile-field--wide">
+                  <div className="nb-profile-section-label nb-profile-section-label--security nb-profile-field--wide">
+                    <span>Account security</span>
+                  </div>
+
+                  <label className="nb-profile-field nb-profile-field--wide nb-profile-security-field">
                     <span>Password</span>
                     <div className="is-readonly nb-profile-password-summary">
                       <LockKeyhole size={17} />
@@ -631,7 +653,7 @@ export default function ProfilePage() {
                   <label className="nb-profile-field nb-profile-field--wide">
                     <span>Bio</span>
                     <div className="nb-profile-textarea"><textarea name="bio" value={profile.bio} onChange={updateField} placeholder="Share a little about your food journey..." maxLength={500} aria-invalid={Boolean(errors.bio)} aria-describedby={errors.bio ? 'bio-error' : 'bio-help'} /></div>
-                    {errors.bio ? <small id="bio-error">{errors.bio}</small> : <em id="bio-help">{profile.bio.length}/500 characters</em>}
+                    {errors.bio ? <small id="bio-error">{errors.bio}</small> : <em id="bio-help">A short introduction shown on your public profile. {profile.bio.length}/500 characters</em>}
                   </label>
 
                 </div>
@@ -644,12 +666,62 @@ export default function ProfilePage() {
             </form>
             )}
 
+            {activeTab === 'posts' && (
+              <section className="nb-profile-content nb-profile-posts" aria-label="Your published posts">
+                <header className="nb-profile-content-head">
+                  <div>
+                    <p>Published stories</p>
+                    <h2>Your posts</h2>
+                  </div>
+                  <Link className="nb-profile-manage-link" to="/community/my-blogs">Manage posts</Link>
+                </header>
+                {postsLoading ? (
+                  <div className="nb-profile-loading" role="status">
+                    <LoaderCircle size={25} className="nb-profile-spinner" />
+                    <span>Loading your published posts...</span>
+                  </div>
+                ) : postsError ? (
+                  <div className="nb-profile-content-error" role="alert">
+                    <span>{postsError}</span>
+                    <button type="button" onClick={() => setPostsLoaded(false)}>Try again</button>
+                  </div>
+                ) : myPosts.length > 0 ? (
+                  <div className="public-profile-grid">
+                    {myPosts.map((post) => (
+                      <Link
+                        key={`${post.type}-${post.id}`}
+                        to={`/community/posts/${post.id}`}
+                        state={{ returnTo: profileReturnTo, returnState: { profileTab: 'posts', profileScrollY: window.scrollY } }}
+                        className="public-profile-grid-item"
+                      >
+                        {post.image ? <ImageWithFallback src={post.image} alt={post.title || 'Post'} loading="lazy" /> : <span>{post.title || 'Published post'}</span>}
+                        {post.images?.length > 1 && <small aria-label="Gallery">{post.images.length}</small>}
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="public-profile-empty">No published posts yet. Your public stories will appear here.</p>
+                )}
+              </section>
+            )}
+
             {activeTab === 'recipes' && (
-              <section className="nb-profile-recipes" aria-label="Your recipes">
+              <section className="nb-profile-content nb-profile-recipes" aria-label="Your recipes">
+                <header className="nb-profile-content-head">
+                  <div>
+                    <p>Approved contributions</p>
+                    <h2>Your recipes</h2>
+                  </div>
+                </header>
                 {recipesLoading ? (
                   <div className="nb-profile-loading" role="status">
                     <LoaderCircle size={25} className="nb-profile-spinner" />
                     <span>Loading your recipes...</span>
+                  </div>
+                ) : recipesError ? (
+                  <div className="nb-profile-content-error" role="alert">
+                    <span>{recipesError}</span>
+                    <button type="button" onClick={() => { setRecipesError(''); setRecipesLoaded(false); }}>Try again</button>
                   </div>
                 ) : myRecipes.length > 0 ? (
                   <div className="public-profile-recipes">
@@ -689,45 +761,10 @@ export default function ProfilePage() {
               />
             )}
 
-            <aside className="nb-profile-aside" aria-label="Profile summary">
-              <div className="nb-profile-completion">
-                <div className="nb-profile-completion__head"><span>Profile completion</span><b>{completion}%</b></div>
-                <div className="nb-profile-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={completion}><span style={{ width: `${completion}%` }} /></div>
-                <p>{completion === 100 ? 'Everything looks good. Your essentials are complete.' : 'Add the missing details to complete your personal profile.'}</p>
-              </div>
-
-              <div className="nb-profile-identity-card">
-                <div className="nb-profile-identity-card__avatar">{visibleAvatar ? <img src={visibleAvatar} alt="" /> : getInitials(profile)}</div>
-                <span className="nb-profile-identity-card__username">@{profile.username || 'member'}</span>
-                <h3>{profile.fullName || profile.username || 'NutriBot Member'}</h3>
-                <p>{currentEmail || 'No email available'}</p>
-                {pendingEmail && <small className="nb-profile-pending-email">New email: {pendingEmail}</small>}
-                {profile.bio && <blockquote>{profile.bio}</blockquote>}
-              </div>
-
-              <div className="nb-profile-feedback" aria-live="polite">
-                <blockquote>“{PROFILE_NOTES[activeNote]}”</blockquote>
-                <footer>
-                  <span>{activeNote + 1} / {PROFILE_NOTES.length}</span>
-                  <div>
-                    <button type="button" onClick={() => setActiveNote((current) => (current - 1 + PROFILE_NOTES.length) % PROFILE_NOTES.length)} aria-label="Previous profile note"><ArrowLeft size={15} /></button>
-                    <button type="button" onClick={() => setActiveNote((current) => (current + 1) % PROFILE_NOTES.length)} aria-label="Next profile note"><ArrowRight size={15} /></button>
-                  </div>
-                </footer>
-              </div>
-            </aside>
           </div>
 
         </main>
       </div>
-      {isAvatarViewerOpen && visibleAvatar && (
-        <div className="nb-avatar-preview-backdrop" role="presentation" onClick={() => setIsAvatarViewerOpen(false)}>
-          <section className="nb-avatar-preview-dialog" role="dialog" aria-modal="true" aria-label="Profile photo" onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="nb-avatar-preview-close" onClick={() => setIsAvatarViewerOpen(false)} aria-label="Close photo preview"><X size={20} /></button>
-            <img src={visibleAvatar} alt="Profile photo enlarged" />
-          </section>
-        </div>
-      )}
       {isEmailVerificationOpen && emailVerificationTarget && (
         <AuthModal
           mode="verify-email"
