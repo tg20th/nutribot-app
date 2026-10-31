@@ -111,10 +111,12 @@ public class PublicProfileService {
         if (identifier != null && identifier.matches("\\d+")) {
             Integer userId = Integer.valueOf(identifier.trim());
             return userRepository.findById(userId)
-                    .filter(user -> user.getStatus() == AccountStatus.ACTIVE)
+                    .filter(user -> AccountStatus.canAccessSystem(user.getStatus()))
                     .orElseThrow(() -> new NotFoundException("Người dùng không tồn tại"));
         }
         return userRepository.findByUsernameIgnoreCaseAndStatus(identifier, AccountStatus.ACTIVE)
+                .or(() -> userRepository.findByUsernameIgnoreCase(identifier)
+                        .filter(user -> AccountStatus.canAccessSystem(user.getStatus())))
                 .orElseThrow(() -> new NotFoundException("Người dùng không tồn tại"));
     }
 
