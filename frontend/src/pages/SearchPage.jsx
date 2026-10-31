@@ -20,8 +20,6 @@ const TYPES = [
   { value: 'BLOG', label: 'Articles' },
   { value: 'VIDEO', label: 'Videos' }
 ];
-const SUGGESTIONS = ['High-protein breakfast', 'Plant-based meals', 'Healthy eating', '20-minute dinner'];
-
 const normalizeItem = (item, selectedType) => ({
   ...item,
   id: item.contentId ?? item.id,
@@ -267,7 +265,6 @@ function SearchExperience({ isMember, onAuth }) {
     <section className="public-search-filters" aria-label="Search filters">
       <div className="public-type-tabs">{TYPES.map(({ value, label }) => <button type="button" key={label} className={contentType === value ? 'is-active' : ''} onClick={() => updateParams({ type: value })}>{label}</button>)}</div>
       <label>Category<select value={categoryId} onChange={(event) => updateParams({ category: event.target.value })}><option value="">All</option>{categories.map((category) => { const id = String(category.categoryId ?? category.id); return <option value={id} key={id}>{category.name}</option>; })}</select></label>
-      <label>Sort by<select value={sort} onChange={(event) => updateParams({ sort: event.target.value === 'newest' ? '' : event.target.value })}><option value="newest">Newest</option><option value="popular">Most viewed</option><option value="oldest">Oldest</option></select></label>
     </section>
 
     <section className="public-search-results" id="search-results" aria-live="polite">
@@ -280,16 +277,15 @@ function SearchExperience({ isMember, onAuth }) {
 
   return <main className="search-experience search-experience--member" ref={pageRef}>
     <section className="member-search-header" aria-labelledby="search-title">
-      <div><span className="search-eyebrow">Nutrition library</span><h1 id="search-title">Find the nutrition content you need.</h1><p>Search articles and videos, then narrow results with simple filters.</p></div>
-      <form className="search-main-form" onSubmit={submitSearch}><label><span className="sr-only">Search keyword</span><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Try: high-protein breakfast" />{draft && <button type="button" onClick={() => setDraft('')} aria-label="Clear keyword"><X size={17} /></button>}</label><button type="submit"><Search size={18} /> Search</button></form>
+      <div><span className="search-eyebrow">Nutrition library</span><h1 id="search-title">Explore nutrition.</h1><p>Find useful articles and videos for your everyday goals.</p></div>
+      <div className="search-discovery-tools">
+        <form className="search-main-form" onSubmit={submitSearch}><label><Search size={16} aria-hidden="true" /><span className="sr-only">Search keyword</span><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Search articles and videos" />{draft && <button type="button" className="search-inline-clear" onClick={() => setDraft('')} aria-label="Clear keyword"><X size={15} /></button>}</label></form>
+        <label className="search-category-control"><select aria-label="Filter by category" value={categoryId} onChange={(event) => updateParams({ category: event.target.value })}><option value="">All categories</option>{categories.map((category) => { const id = String(category.categoryId ?? category.id); return <option value={id} key={id}>{category.name}</option>; })}</select></label>
+      </div>
     </section>
 
-    <div className="member-search-suggestions" aria-label="Search suggestions">{SUGGESTIONS.map((suggestion) => <button type="button" key={suggestion} onClick={() => setDraft(suggestion)}>{suggestion}<ArrowRight size={14} /></button>)}</div>
-
     <section className="search-controls" aria-label="Search filters">
-      <div className="search-type-accordion" role="group" aria-label="Content type">{TYPES.map(({ value, label }) => <button type="button" key={label} className={contentType === value ? 'is-active' : ''} aria-pressed={contentType === value} onClick={() => updateParams({ type: value })}>{label}</button>)}</div>
-      <label className="search-category-control">Category<select value={categoryId} onChange={(event) => updateParams({ category: event.target.value })}><option value="">All</option>{categories.map((category) => { const id = String(category.categoryId ?? category.id); return <option value={id} key={id}>{category.name}</option>; })}</select></label>
-      <label className="search-sort-control">Sort by<select value={sort} onChange={(event) => updateParams({ sort: event.target.value === 'newest' ? '' : event.target.value })}><option value="newest">Newest</option><option value="popular">Most viewed</option><option value="oldest">Oldest</option></select></label>
+      <div className="search-type-accordion" role="tablist" aria-label="Content type">{TYPES.map(({ value, label }) => <button type="button" role="tab" key={label} className={contentType === value ? 'is-active' : ''} aria-selected={contentType === value} onClick={() => updateParams({ type: value })}>{label}</button>)}</div>
     </section>
 
     <section className="search-results" id="search-results" aria-live="polite">

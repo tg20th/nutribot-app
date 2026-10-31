@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { AlertCircle, ArrowUpRight, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, Film, LoaderCircle, Pencil, Send, Trash2, Undo2, X } from 'lucide-react';
+import { AlertCircle, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, Film, LoaderCircle, Pencil, Send, Trash2, Undo2, X } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
@@ -33,7 +33,6 @@ function errorMessage(error, fallback, type) {
   if (error.status === 404) return `This ${type} is no longer available. Refresh the list to continue.`;
   return fallback;
 }
-
 function RequestError({ error, fallback, type }) {
   return <div className="my-blogs-alert my-blogs-alert--error" role="alert">
     <AlertCircle size={18}/><span>{errorMessage(error, fallback, type)}
@@ -430,6 +429,12 @@ export default function MyBlogsPage() {
     headingRef.current?.focus();
   }
 
+  function changeStatusFilter(nextFilter) {
+    setStatusFilter(nextFilter);
+    if (page !== 0) changePage(0);
+    else headingRef.current?.focus();
+  }
+
   const displayedContent = result.content.filter((item) => {
     if (statusFilter === 'all') return true;
     if (statusFilter === 'under_review') {
@@ -443,23 +448,22 @@ export default function MyBlogsPage() {
     <CommunityTopBar/><div className="community-shell"><CommunitySideNav/><span className="community-sidenav-spacer" aria-hidden="true"/>
       <main className="my-blogs-main">
         <header className="my-blogs-header">
-          <div><p className="my-blogs-eyebrow">YOUR PERSONAL CONTENT</p><h1>My content<span>.</span></h1><p>Manage your blogs and videos together. Drafts, published posts, and reviews stay in one library.</p></div>
-          <span className="my-blogs-header-mark" aria-hidden="true"><Icon size={38} strokeWidth={1.3}/></span>
+          <div><p className="my-blogs-eyebrow">YOUR PERSONAL CONTENT</p><h1>My Blog<span>.</span></h1><p>Your stories, drafts, and videos in one quiet workspace.</p></div>
         </header>
 
-        <div className="my-blogs-tabs" role="tablist" aria-label="Lọc theo trạng thái">
-          <button type="button" className={statusFilter === 'all' ? 'is-active' : ''} onClick={() => setStatusFilter('all')}>All ({result.content.length})</button>
-          <button type="button" className={statusFilter === 'published' ? 'is-active' : ''} onClick={() => setStatusFilter('published')}>Published ({result.content.filter((x) => x.status === 'published').length})</button>
-          <button type="button" className={statusFilter === 'under_review' ? 'is-active' : ''} onClick={() => setStatusFilter('under_review')}>Under review ({result.content.filter((x) => x.status === 'under_review' || x.status === 'ai_processing').length})</button>
-          <button type="button" className={statusFilter === 'draft' ? 'is-active' : ''} onClick={() => setStatusFilter('draft')}>Draft ({result.content.filter((x) => x.status === 'draft').length})</button>
-          <button type="button" className={statusFilter === 'rejected' ? 'is-active' : ''} onClick={() => setStatusFilter('rejected')}>Rejected ({result.content.filter((x) => x.status === 'rejected').length})</button>
+        <div className="my-blogs-tabs" role="tablist" aria-label="Filter by status">
+          <button type="button" className={statusFilter === 'all' ? 'is-active' : ''} onClick={() => changeStatusFilter('all')}>All ({result.content.length})</button>
+          <button type="button" className={statusFilter === 'published' ? 'is-active' : ''} onClick={() => changeStatusFilter('published')}>Published ({result.content.filter((x) => x.status === 'published').length})</button>
+          <button type="button" className={statusFilter === 'under_review' ? 'is-active' : ''} onClick={() => changeStatusFilter('under_review')}>Under review ({result.content.filter((x) => x.status === 'under_review' || x.status === 'ai_processing').length})</button>
+          <button type="button" className={statusFilter === 'draft' ? 'is-active' : ''} onClick={() => changeStatusFilter('draft')}>Draft ({result.content.filter((x) => x.status === 'draft').length})</button>
+          <button type="button" className={statusFilter === 'rejected' ? 'is-active' : ''} onClick={() => changeStatusFilter('rejected')}>Rejected ({result.content.filter((x) => x.status === 'rejected').length})</button>
         </div>
 
         <section className="my-blogs-collection" aria-labelledby="my-blogs-list-title" aria-busy={loading}>
           <div className="my-blogs-list-heading"><h2 id="my-blogs-list-title" ref={headingRef} tabIndex={-1}>Your posts {!loading && !error && <span>{displayedContent.length}</span>}</h2><Link className="my-blog-button" to="/community/blogs/new">Create post</Link></div>
           {loading ? <div className="my-blogs-state" role="status"><LoaderCircle className="my-blogs-spinner" size={28}/><h3>Gathering your content...</h3><p>Your blogs and videos will be ready in a moment.</p></div>
             : error ? <div className="my-blogs-state"><RequestError error={error} type="content" fallback="We couldn't load your content. Please try again."/><button className="my-blog-button" onClick={() => setRevision((value) => value + 1)}>Try again</button></div>
-              : !displayedContent.length ? <div className="my-blogs-state"><span className="my-blogs-empty-icon"><Icon size={32}/></span><p className="my-blogs-eyebrow">A FRESH PAGE</p><h3>{statusFilter === 'all' ? 'Your first post starts here.' : `No posts in ${statuses[statusFilter] || statusFilter}.`}</h3><p>{statusFilter === 'all' ? 'Share a recipe, note, story, or helpful video with the community.' : 'You have no posts matching this filter.'}</p><Link className="my-blog-button" to="/community/blogs/new">Create post <ArrowUpRight size={16}/></Link></div>
+              : !displayedContent.length ? <div className="my-blogs-empty-state"><h3>{statusFilter === 'all' ? 'Your first post starts here.' : `No posts in ${statuses[statusFilter] || statusFilter}.`}</h3><p>{statusFilter === 'all' ? 'Share a recipe, note, story, or helpful video with the community.' : 'You have no posts matching this filter.'}</p></div>
                 : <div className="my-blogs-list">{displayedContent.map((item) => { const itemConfig = CONTENT_TYPES[item.contentType]; return <article className="my-blog-card" key={`${item.contentType}-${item.contentId}`}>
                   <Thumbnail src={item.thumbnailUrl} type={item.contentType}/><div className="my-blog-card-body">
                     <div className="my-blog-meta"><span className="my-blog-content-type">{item.contentType === 'video' ? <><Film size={13}/> Video</> : <><BookOpen size={13}/> Blog</>}</span><span className={`my-blog-status my-blog-status--${statuses[item.status] ? item.status : 'unknown'}`}>{item.status === 'ai_processing' ? <><LoaderCircle className="my-blogs-spinner" size={12}/> {statuses[item.status]}</> : (statuses[item.status] ?? 'Unknown status')}</span><span>Updated {formattedDate(item.updatedAt ?? item.createdAt)}</span>{item.contentType === 'video' && item.durationSec ? <span>{Math.round(item.durationSec / 60)} min</span> : null}</div>
@@ -475,7 +479,7 @@ export default function MyBlogsPage() {
                     </div></div>
                   </div>
                 </article>; })}</div>}
-          {!loading && !error && result.totalElements > 0 && <nav className="my-blogs-pagination" aria-label={`${config.label} pagination`}><span>Showing {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, result.totalElements)} of {result.totalElements}</span>{result.totalPages > 1 && <div><button type="button" disabled={page === 0} onClick={() => changePage(page - 1)} aria-label="Previous page"><ChevronLeft size={17}/></button><span>Page {page + 1} of {result.totalPages}</span><button type="button" disabled={page >= result.totalPages - 1} onClick={() => changePage(page + 1)} aria-label="Next page"><ChevronRight size={17}/></button></div>}</nav>}
+          {!loading && !error && displayedContent.length > 0 && <nav className="my-blogs-pagination" aria-label={`${config.label} pagination`}><span>{statusFilter === 'all' ? `Showing ${page * PAGE_SIZE + 1}-${Math.min((page + 1) * PAGE_SIZE, result.totalElements)} of ${result.totalElements}` : `Showing ${displayedContent.length} matching ${displayedContent.length === 1 ? 'post' : 'posts'}`}</span>{result.totalPages > 1 && <div><button type="button" disabled={page === 0} onClick={() => changePage(page - 1)} aria-label="Previous page"><ChevronLeft size={17}/></button><span>Page {page + 1} of {result.totalPages}</span><button type="button" disabled={page >= result.totalPages - 1} onClick={() => changePage(page + 1)} aria-label="Next page"><ChevronRight size={17}/></button></div>}</nav>}
         </section>
         <p className="my-blogs-footer-note"><FileText size={14}/> One library for everything you share with the community.</p>
       </main>

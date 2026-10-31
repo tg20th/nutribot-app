@@ -17,6 +17,20 @@ const CONTENT_TYPES = { BLOG: 'blog', VIDEO: 'video' };
 const MAX_VIDEO_SIZE = 200 * 1024 * 1024;
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
+function handleEditorPaste(event) {
+  event.preventDefault();
+  const html = event.clipboardData.getData('text/html');
+  const text = event.clipboardData.getData('text/plain');
+  const container = document.createElement('div');
+  container.innerHTML = html || text.replace(/[&<>]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[character])).replace(/\r?\n/g, '<br>');
+  container.querySelectorAll('*').forEach((element) => {
+    element.style.removeProperty('font-family');
+    element.removeAttribute('face');
+  });
+  document.execCommand('insertHTML', false, container.innerHTML);
+  event.currentTarget.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
 const FALLBACK_INGREDIENTS = [
   'Đậu phụ (Tofu)', 'Cà chua', 'Hành tây', 'Cà rốt', 'Rau cải xanh', 'Bắp cải', 'Khoai tây',
   'Hành lá', 'Ớt chuông', 'Gừng', 'Tỏi', 'Nấm hương', 'Nấm đùi gà', 'Nấm rơm', 'Súp lơ (Bông cải xanh)',
@@ -625,7 +639,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
           {videoPreviewUrl && <video className="create-video-preview" src={videoPreviewUrl} controls preload="metadata" onLoadedMetadata={(event) => setVideoDuration(event.currentTarget.duration)} aria-label="Video file preview"/>}
         </div>}
         <label htmlFor="create-blog-body">{isVideo ? 'Video description' : 'Post content'}</label>
-        <div className="create-blog-editor"><div id="create-blog-body" ref={bodyRef} className="create-blog-rich-editor" contentEditable={!busy} role="textbox" aria-multiline="true" aria-label={isVideo ? 'Video description' : 'Article'} data-placeholder={isVideo ? 'Describe what viewers will learn...' : 'Start writing your story...'} onInput={(event) => setBody(event.currentTarget.innerHTML)} /></div>
+        <div className="create-blog-editor"><div id="create-blog-body" ref={bodyRef} className="create-blog-rich-editor" contentEditable={!busy} role="textbox" aria-multiline="true" aria-label={isVideo ? 'Video description' : 'Article'} data-placeholder={isVideo ? 'Describe what viewers will learn...' : 'Start writing your story...'} onInput={(event) => setBody(event.currentTarget.innerHTML)} onPaste={handleEditorPaste} /></div>
         
         <section className="create-blog-detail-fields">
           <div className="create-recipe-toggle">
