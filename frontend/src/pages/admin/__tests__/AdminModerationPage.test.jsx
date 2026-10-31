@@ -115,6 +115,38 @@ describe('admin moderation screen', () => {
     expect(screen.getByText(/Confidence: 91%/)).toBeTruthy();
   });
 
+  it('renders a YouTube player for a VIDEO submission instead of its thumbnail', async () => {
+    adminApi.getModerationQueue.mockResolvedValueOnce({
+      content: [{ ...second, mediaUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', thumbnailUrl: 'https://cdn.example.test/video-thumb.jpg' }],
+      totalElements: 1,
+      totalPages: 1,
+    });
+
+    render(<AdminModerationPage />);
+
+    expect(await screen.findByTitle('Play Prep fresh produce')).toHaveAttribute('src', 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0');
+    expect(screen.getByRole('link', { name: 'Open original video' })).toHaveAttribute('href', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    expect(screen.queryByRole('button', { name: 'Open cover image' })).toBeNull();
+  });
+
+  it('renders uploaded video URLs with native controls and handles missing URLs', async () => {
+    adminApi.getModerationQueue.mockResolvedValueOnce({
+      content: [{ ...second, mediaUrl: 'https://cdn.example.test/submission.mp4' }],
+      totalElements: 1,
+      totalPages: 1,
+    });
+
+    const { unmount } = render(<AdminModerationPage />);
+    await waitFor(() => expect(document.querySelector('video')).toBeTruthy());
+    expect(document.querySelector('video')).toHaveAttribute('src', 'https://cdn.example.test/submission.mp4');
+    expect(document.querySelector('video')).toHaveAttribute('controls');
+    unmount();
+
+    adminApi.getModerationQueue.mockResolvedValueOnce({ content: [second], totalElements: 1, totalPages: 1 });
+    render(<AdminModerationPage />);
+    expect(await screen.findByText('No video URL is available for this submission.')).toBeInTheDocument();
+  });
+
   it('opens submitted images in an accessible lightbox and closes with Escape', async () => {
     adminApi.getModerationQueue.mockResolvedValueOnce({
       content: [{ ...first, thumbnailUrl: 'https://cdn.example.test/cover.jpg', body: '<p>Story</p><img src="https://cdn.example.test/inline.jpg" />' }],
