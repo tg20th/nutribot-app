@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { CheckCircle2, Clock3 } from 'lucide-react';
 import { adminApi } from '../../services/adminApi';
 import { adminIngredientApi } from '../../services/adminIngredientApi';
-import { ErrorState, LoadingState } from '../../components/admin/AdminUi';
+import { ErrorState, LoadingState, PageHeader } from '../../components/admin/AdminUi';
 import '../../styles/admin-dashboard.css';
 
 const trendPeriods = {
@@ -167,21 +167,20 @@ export default function AdminDashboard() {
 
   return (
     <main className="admin-dashboard">
-      <section className="admin-dashboard__heading" aria-labelledby="dashboard-title">
-        <div className="admin-dashboard__heading-main">
-          <p className="admin-dashboard__eyebrow">ADMIN OVERVIEW</p>
-          <h1 id="dashboard-title">Dashboard overview</h1>
-          <p>Monitor NutriBot activity, content publishing, and review workload.</p>
-        </div>
-        <div className="dashboard-filter-bar" aria-label="Dashboard filters">
+      <PageHeader
+        titleId="dashboard-title"
+        eyebrow="ADMIN OVERVIEW"
+        title="Dashboard overview"
+        text="Monitor NutriBot activity, content publishing, and review workload."
+        action={<div className="dashboard-filter-bar" aria-label="Dashboard filters">
           <label htmlFor="dashboard-period">
             <span>Growth range</span>
             <select id="dashboard-period" value={trendPeriod} onChange={(event) => setTrendPeriod(event.target.value)}>
               {Object.entries(trendPeriods).map(([key, period]) => <option key={key} value={key}>{period.label}</option>)}
             </select>
           </label>
-        </div>
-      </section>
+        </div>}
+      />
 
       <section className="admin-dashboard__metrics" aria-label="Key metrics">
         <Metric label="Total users" value={dashboard.metrics.totalUsers} to="/admin/users" description="Registered members" />

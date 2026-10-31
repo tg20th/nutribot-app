@@ -1,6 +1,6 @@
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, ExternalLink, Eye, FileText, ListOrdered, MapPin, PlaySquare, Plus, Search, Soup, UserRound, UtensilsCrossed, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { EmptyState, ErrorState, LoadingState, Toast } from '../../components/admin/AdminUi';
+import { AdminToolbar, EmptyState, ErrorState, LoadingState, PageHeader, Toast } from '../../components/admin/AdminUi';
 import { contentRecipeSuggestionsApi, isRecipeConsentValid, RECIPE_CONSENT_TERMS_VERSION } from '../../services/contentRecipeSuggestionsApi';
 import { getPost } from '../../services/communityApi';
 import { getAllergyIngredients } from '../../services/profileApi';
@@ -404,14 +404,16 @@ export default function AdminContentRecipeSuggestionsPage() {
   };
 
   return <div className="recipe-suggestions-page">
-    <header className="recipe-suggestions-hero">
-      <div><p>ADMINISTRATION / CONTENT REVIEW</p><h1>Recipe suggestions</h1><span>Review server-generated dish and recipe proposals from published community content.</span></div>
-      <div className="recipe-suggestions-total" aria-live="polite"><Soup size={20} /><div><strong>{result.totalElements}</strong><span>server suggestions</span></div></div>
-    </header>
+    <PageHeader
+      eyebrow="ADMINISTRATION / CONTENT REVIEW"
+      title="Recipe suggestions"
+      text="Review server-generated dish and recipe proposals from published community content."
+      action={<div className="recipe-suggestions-total" aria-live="polite"><Soup size={18} /><div><strong>{result.totalElements}</strong><span>server suggestions</span></div></div>}
+    />
 
-    <section className="recipe-suggestions-toolbar" aria-label="Suggestion filters">
-      <select aria-label="Filter suggestions by status" value={status} onChange={(event) => changeStatus(event.target.value)}><option value="">All statuses</option><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option></select>
-    </section>
+    <AdminToolbar className="recipe-suggestions-toolbar" label="Suggestion filters">
+      <select className="admin-filter-select" aria-label="Filter suggestions by status" value={status} onChange={(event) => changeStatus(event.target.value)}><option value="">All statuses</option><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option></select>
+    </AdminToolbar>
 
     {loading ? <section className="admin-panel recipe-suggestions-state"><LoadingState /></section>
       : error ? <section className="admin-panel recipe-suggestions-state"><ErrorState onRetry={retry} /></section>

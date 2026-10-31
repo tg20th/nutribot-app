@@ -111,9 +111,25 @@ describe('admin moderation screen', () => {
 
   it('renders AI moderation evaluation and confidence when available', async () => {
     render(<AdminModerationPage />);
-    expect(await screen.findByText('Đánh giá kiểm duyệt AI')).toBeTruthy();
-    expect(screen.getByText('Phát hiện nghi vấn cần duyệt tay')).toBeTruthy();
-    expect(screen.getByText(/Độ tin cậy: 91%/)).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'AI Review' })).toBeTruthy();
+    expect(screen.getByText(/Confidence: 91%/)).toBeTruthy();
+  });
+
+  it('opens submitted images in an accessible lightbox and closes with Escape', async () => {
+    adminApi.getModerationQueue.mockResolvedValueOnce({
+      content: [{ ...first, thumbnailUrl: 'https://cdn.example.test/cover.jpg', body: '<p>Story</p><img src="https://cdn.example.test/inline.jpg" />' }],
+      totalElements: 1,
+      totalPages: 1,
+    });
+
+    render(<AdminModerationPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open cover image' }));
+    expect(screen.getByRole('dialog', { name: 'Image inspection' })).toBeInTheDocument();
+    expect(screen.getByText('1 / 2')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    expect(screen.getByAltText('Submitted content image 2 of 2')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Image inspection' })).toBeNull();
   });
 
   it('renders structured recipe view instead of raw JSON for recipe submissions', async () => {
@@ -154,14 +170,16 @@ describe('admin moderation screen', () => {
 
     // Check that structured elements are rendered
     expect(await screen.findByText('Một đĩa salad thanh mát, giòn rụm với sắc màu rực rỡ.')).toBeInTheDocument();
-    expect(screen.getByText(/Cooking time & Servings/i)).toBeInTheDocument();
-    expect(screen.getByText('15 min')).toBeInTheDocument();
-    expect(screen.getByText('5 min')).toBeInTheDocument();
-    expect(screen.getByText('2 portions')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Recipe overview' })).toBeInTheDocument();
+    expect(screen.getByText('20 min total')).toBeInTheDocument();
+    expect(screen.getByText('2 servings')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Expand recipe overview' }));
+    expect(screen.getByText('Prep 15 min · Cook 5 min')).toBeInTheDocument();
+    expect(screen.getByText('Preparation steps')).toBeInTheDocument();
 
     // Check nutrition facts
-    expect(screen.getByText(/Nutrition facts/i)).toBeInTheDocument();
-    expect(screen.getByText(/384/)).toBeInTheDocument();
+    expect(screen.getByText(/Nutrition/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/384/).length).toBeGreaterThan(0);
     expect(screen.getByText(/16.5/)).toBeInTheDocument();
 
     // Check ingredients
