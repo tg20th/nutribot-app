@@ -89,6 +89,16 @@
 .my-blog-delete-icon { display: grid; place-items: center; width: 54px; height: 54px; margin-bottom: 18px; border-radius: 17px; background: #f6e8df; color: #a34633; }
 .my-blog-delete-copy strong { display: block; font-size: 18px; line-height: 1.4; overflow-wrap: anywhere; }
 .my-blog-delete-copy p { font-size: 14px; color: #637068; line-height: 1.65; }
+.my-blog-dialog--video-delete { width: min(420px, calc(100% - 32px)); padding: 26px 28px 24px; border-radius: 18px; }
+.my-blog-dialog--video-delete .my-blog-dialog-header { gap: 12px; }
+.my-blog-dialog--video-delete .my-blog-dialog-header .my-blogs-eyebrow { margin-bottom: 8px; color: #637068; font-size: 9px; letter-spacing: .14em; }
+.my-blog-dialog--video-delete .my-blog-dialog-header h2 { font-size: 28px; letter-spacing: -.035em; }
+.my-blog-dialog--video-delete .my-blog-delete-copy { padding-top: 18px; }
+.my-blog-dialog--video-delete .my-blog-delete-copy strong { color: #173529; font-size: 16px; line-height: 1.35; }
+.my-blog-dialog--video-delete .my-blog-delete-copy p { margin: 10px 0 0; font-size: 13px; line-height: 1.55; }
+.my-blog-dialog--video-delete .my-blog-dialog-actions { display: flex; flex-direction: row; align-items: center; justify-content: flex-end; flex-wrap: nowrap; gap: 10px; min-height: 0; height: auto; margin-top: 16px; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.my-blog-dialog--video-delete .my-blog-dialog-actions > button { flex: 0 0 auto; min-width: 0; }
+.my-blog-dialog--video-delete .my-blog-dialog-actions .my-blog-button--danger svg { width: 16px; height: 16px; stroke-width: 2.3; }
 .my-blogs-spinner { animation: my-blogs-spin .8s linear infinite; }
 @keyframes my-blogs-spin { to { transform: rotate(360deg); } }
 @media (max-width: 1000px) {
@@ -109,8 +119,11 @@
   .my-blog-meta { gap: 9px; font-size: 10px; }
   .my-blog-dialog { padding: 22px 18px; }
   .my-blog-dialog-header h2 { font-size: 26px; }
-  .my-blog-dialog--delete .my-blog-dialog-actions { flex-wrap: wrap; }
-  .my-blog-dialog--delete .my-blog-dialog-actions > button { flex-basis: 100%; }
+  .my-blog-dialog--delete:not(.my-blog-dialog--video-delete) .my-blog-dialog-actions { flex-wrap: wrap; }
+  .my-blog-dialog--delete:not(.my-blog-dialog--video-delete) .my-blog-dialog-actions > button { flex-basis: 100%; }
+  .my-blog-dialog--video-delete { padding: 22px 20px 20px; }
+  .my-blog-dialog--video-delete .my-blog-dialog-actions { flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .my-blog-dialog--video-delete .my-blog-dialog-actions > button { flex: 0 1 auto; }
   .my-blogs-pagination { gap: 12px; }
 }
 @media (max-width: 760px) {

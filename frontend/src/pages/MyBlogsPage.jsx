@@ -92,7 +92,7 @@ function Thumbnail({ src, type }) {
   </div>;
 }
 
-function ContentDialog({ title, descriptionId, busy, onClose, children, danger = false }) {
+function ContentDialog({ title, descriptionId, busy, onClose, children, danger = false, dialogClassName = '', eyebrow }) {
   const ref = useRef(null);
   useEffect(() => {
     const dialog = ref.current;
@@ -106,11 +106,11 @@ function ContentDialog({ title, descriptionId, busy, onClose, children, danger =
       if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, []);
-  return <dialog ref={ref} className={`my-blog-dialog${danger ? ' my-blog-dialog--delete' : ''}`}
+  return <dialog ref={ref} className={`my-blog-dialog${danger ? ' my-blog-dialog--delete' : ''}${dialogClassName ? ` ${dialogClassName}` : ''}`}
     aria-labelledby="content-dialog-title" aria-describedby={descriptionId} aria-modal="true"
     onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}>
     <header className="my-blog-dialog-header">
-      <div><p className="my-blogs-eyebrow">{danger ? 'PLEASE CONFIRM' : 'YOUR CONTENT'}</p><h2 id="content-dialog-title">{title}</h2></div>
+      <div><p className="my-blogs-eyebrow">{eyebrow || (danger ? 'PLEASE CONFIRM' : 'YOUR CONTENT')}</p><h2 id="content-dialog-title">{title}</h2></div>
       <button type="button" className="my-blog-icon-button" aria-label="Close dialog" disabled={busy} onClick={onClose}><X size={20}/></button>
     </header>
     {children}
@@ -219,15 +219,24 @@ function DeleteContentDialog({ item, config, onClose, onDeleted }) {
       setBusy(false);
     }
   }
-  return <ContentDialog title={`Delete this ${config.single}?`} descriptionId="content-delete-description" danger busy={busy} onClose={onClose}>
+  const isVideo = config.key === 'video';
+  return <ContentDialog
+    title={`Delete this ${config.single}?`}
+    descriptionId="content-delete-description"
+    danger
+    busy={busy}
+    onClose={onClose}
+    eyebrow={isVideo ? 'CONFIRM DELETION' : undefined}
+    dialogClassName={isVideo ? 'my-blog-dialog--video-delete' : ''}
+  >
     <div className="my-blog-delete-copy" id="content-delete-description">
-      <span className="my-blog-delete-icon"><Trash2 size={25}/></span>
+      {!isVideo && <span className="my-blog-delete-icon"><Trash2 size={25}/></span>}
       <strong>{item.title}</strong>
-      <p>This will permanently delete your {config.single} and its comments. This action cannot be undone.</p>
+      <p>{isVideo ? 'This video and its comments will be permanently deleted. This action cannot be undone.' : `This will permanently delete your ${config.single} and its comments. This action cannot be undone.`}</p>
     </div>
     {error && <RequestError error={error} type={config.single} fallback={config.fallbackDelete}/>}<footer className="my-blog-dialog-actions">
-      <button type="button" className="my-blog-button my-blog-button--secondary" disabled={busy} onClick={onClose}>Keep {config.single}</button>
-      <button type="button" className="my-blog-button my-blog-button--danger" disabled={busy} onClick={confirmDelete}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Deleting...</> : <><Trash2 size={16}/> Delete {config.single}</>}</button>
+      <button type="button" className="my-blog-button my-blog-button--secondary" disabled={busy} onClick={onClose}>{isVideo ? 'Cancel' : `Keep ${config.single}`}</button>
+      <button type="button" className="my-blog-button my-blog-button--danger" disabled={busy} onClick={confirmDelete}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Deleting...</> : <><Trash2 size={16}/> {isVideo ? 'Delete video' : `Delete ${config.single}`}</>}</button>
     </footer>
   </ContentDialog>;
 }
