@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Clock3, FileVideo, ImagePlus, LoaderCircle, Plus, Save, Send, Sparkles, Trash2, X } from 'lucide-react';
+import { CheckCircle2, Clock3, FileVideo, ImagePlus, LoaderCircle, Plus, Save, Send, Sparkles, Trash2, X } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
@@ -605,7 +605,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
 
   const EditorTag = modal ? 'div' : 'main';
   const editor = <EditorTag className="create-blog-main">
-    {modal ? <button type="button" className="create-blog-close" onClick={onClose} aria-label="Close editor" disabled={busy}><X size={19}/></button> : <Link to="/community/my-blogs" className="my-blogs-back"><ArrowLeft size={15}/> Back to my content</Link>}
+    {modal && <button type="button" className="create-blog-close" onClick={onClose} aria-label="Close editor" disabled={busy}><X size={19}/></button>}
     <header className="create-blog-header">
       <div className="create-blog-hero-copy"><p className="my-blogs-eyebrow">YOUR PERSONAL CONTENT</p><h1 id="create-blog-dialog-title">{isEditing ? 'Edit your post' : 'Create a post'}<span>.</span></h1><p>{isEditing ? 'Update the content, media, recipe details, and category, then save your changes.' : 'Choose Blog post or Video clip below, then add the information your community needs.'}</p></div>
     </header>
