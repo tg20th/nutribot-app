@@ -23,6 +23,10 @@ const getCategories = async (signal) => {
   const categories = unwrapData(await apiRequest('/api/v1/categories', { signal }), []);
   return categories.map(mapCategory);
 };
+const getContentCategories = async (signal) => {
+  const categories = unwrapData(await apiRequest('/api/v1/categories?type=RECIPE', { signal }), []);
+  return categories.map(mapCategory);
+};
 const getAllPublishedContent = async (path, signal) => {
   const firstPage = unwrapData(await apiRequest(`${path}?page=0&size=50`, { signal }), {});
   const totalPages = Math.max(1, Number(firstPage.totalPages ?? 1));
@@ -155,17 +159,22 @@ const getDashboard = async (signal) => {
     getModerationQueue({ page: 0, size: 5 }, signal),
     getAllPublicContent('/api/v1/blogs', signal),
     getAllPublicContent('/api/v1/videos', signal),
-    getCategories(signal),
+    getContentCategories(signal),
   ]);
   const content = [...blogs, ...videos];
   const categoryCounts = content.reduce((counts, item) => {
     if (item.categoryId != null) counts[item.categoryId] = (counts[item.categoryId] ?? 0) + 1;
     return counts;
   }, {});
+  const uncategorizedContent = content.filter((item) => item.categoryId == null).length;
+  const categoryData = categories.map((category) => ({ ...category, contentCount: categoryCounts[category.id] ?? 0 }));
+  if (uncategorizedContent > 0) {
+    categoryData.push({ id: 'uncategorized', name: 'Uncategorized', type: 'CONTENT', contentCount: uncategorizedContent, active: true, isUncategorized: true });
+  }
   return {
     metrics: { totalUsers: Number(users.totalElements ?? 0), publishedContent: content.length, pendingModeration: Number(moderation.totalElements ?? 0) },
     moderationQueue: moderation.content ?? [],
-    categories: categories.map((category) => ({ ...category, contentCount: categoryCounts[category.id] ?? 0 })),
+    categories: categoryData,
     content,
   };
 };
