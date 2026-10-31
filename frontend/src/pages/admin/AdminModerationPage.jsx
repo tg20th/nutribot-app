@@ -78,6 +78,58 @@ function extractContentImages(body) {
   return [...new Set(images)];
 }
 
+function getYouTubeVideoId(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    const hostname = url.hostname.toLowerCase().replace(/^www\./, '');
+    let id = null;
+    if (hostname === 'youtu.be') id = url.pathname.split('/').filter(Boolean)[0];
+    if (hostname === 'youtube.com' || hostname === 'youtube-nocookie.com') {
+      if (url.pathname === '/watch') id = url.searchParams.get('v');
+      if (url.pathname.startsWith('/shorts/')) id = url.pathname.split('/')[2];
+      if (url.pathname.startsWith('/embed/')) id = url.pathname.split('/')[2];
+    }
+    return id && /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function getSafeVideoUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function VideoPreview({ source, poster, title }) {
+  const [failed, setFailed] = useState(false);
+  const safeSource = getSafeVideoUrl(source);
+  const youtubeId = getYouTubeVideoId(source);
+  const embedUrl = youtubeId ? `https://www.youtube-nocookie.com/embed/${youtubeId}?rel=0` : null;
+
+  useEffect(() => setFailed(false), [source]);
+
+  if (!safeSource) {
+    return <div className="moderation-video-state"><Video size={24} /><p>{source ? 'This video URL is not supported.' : 'No video URL is available for this submission.'}</p></div>;
+  }
+
+  if (failed) {
+    return <div className="moderation-video-state"><Video size={24} /><p>This video could not be loaded.</p><a href={safeSource} target="_blank" rel="noreferrer">Open original video</a></div>;
+  }
+
+  return <div className="moderation-video-preview">
+    {embedUrl
+      ? <iframe title={`Play ${title}`} src={embedUrl} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen onError={() => setFailed(true)} />
+      : <video controls playsInline preload="metadata" src={safeSource} poster={poster || undefined} aria-label={title} onError={() => setFailed(true)} />}
+    <a className="moderation-video-link" href={safeSource} target="_blank" rel="noreferrer">Open original video</a>
+  </div>;
+}
+
 function ContentImageGallery({ images, onOpen }) {
   if (images.length === 0) return null;
   return <div className="moderation-content-images" aria-label="Submitted content images">
@@ -400,7 +452,9 @@ export default function AdminModerationPage() {
                   <div><span className="moderation-detail-kicker">{selected.type === 'VIDEO' ? 'VIDEO SUBMISSION' : 'BLOG SUBMISSION'}</span><span className="moderation-pending">{statusLabel(selected.status)}</span></div>
                   {selected.submittedAt && <time dateTime={selected.submittedAt}>Submitted {formatDate(selected.submittedAt)}</time>}
                 </div>
-                {contentImages[0] && !brokenImages.has(contentImages[0])
+                {selected.type === 'VIDEO'
+                  ? <VideoPreview source={selected.mediaUrl} poster={contentImages[0]} title={selected.title} />
+                  : contentImages[0] && !brokenImages.has(contentImages[0])
                   ? <button type="button" className="moderation-cover-button" onClick={() => openImage(0)} aria-label="Open cover image">
                     <img className="moderation-cover" src={contentImages[0]} alt="" onError={() => setBrokenImages((current) => new Set(current).add(contentImages[0]))} />
                   </button>
