@@ -1,4 +1,10 @@
 .create-blog-main{position:relative;width:100%;min-width:0;max-width:1180px;margin:0 auto;padding:32px clamp(20px,4vw,60px) 120px;color:var(--community-ink)}
+/* Create Post follows the loaded NutriBot fonts instead of the fallback-only global stack. */
+body:not(:has(.admin-shell)) #root .create-blog-page{--create-blog-body-font:'Outfit',Arial,sans-serif;--create-blog-heading-font:'Playfair Display',Georgia,serif;font-family:var(--create-blog-body-font)!important}
+body:not(:has(.admin-shell)) #root .create-blog-page :is(button,input,select,textarea,h1,h2,h3,h4,h5,h6,p,span,label,small,b,strong,em,li,a,option,blockquote,legend,dt,dd){font-family:var(--create-blog-body-font)!important}
+body:not(:has(.admin-shell)) #root .create-blog-page :is(h1,h2,h3,h4,h5,h6,h1 a,h2 a,h3 a,h4 a,h5 a,h6 a){font-family:var(--create-blog-heading-font)!important}
+body:not(:has(.admin-shell)) #root .create-blog-page .create-blog-rich-editor :is(p,ul,ol,li,span){font-family:var(--create-blog-body-font)!important}
+body:not(:has(.admin-shell)) #root .create-blog-page .create-blog-rich-editor :is(h1,h2,h3,h4,h5,h6){font-family:var(--create-blog-heading-font)!important}
 body:not(:has(.admin-shell)) #root .create-blog-page #create-blog-title,
 body:not(:has(.admin-shell)) #root .create-blog-page #create-blog-body,
 body:not(:has(.admin-shell)) #root .create-blog-page #create-blog-body *{font-family:"Google Sans","Roboto",Arial,sans-serif!important}
@@ -7,7 +13,7 @@ body:not(:has(.admin-shell)) #root .create-blog-page #create-blog-body:empty:bef
 .create-blog-header:after{content:"";position:absolute;right:-100px;bottom:-160px;width:300px;height:300px;border:1px solid rgba(255,255,255,.18);border-radius:50%;box-shadow:0 0 0 32px rgba(255,255,255,.035),0 0 0 64px rgba(255,255,255,.025);pointer-events:none}
 .create-blog-hero-copy{position:relative;z-index:1}
 .create-blog-header .my-blogs-eyebrow{margin:0 0 13px;color:#d9f18a}
-.create-blog-header h1{margin:0;font:700 clamp(44px,5vw,64px)/.97 'Cabinet Grotesk','Outfit',sans-serif;letter-spacing:-.065em;color:#fffefa}
+.create-blog-header h1{margin:0;font:600 clamp(44px,5vw,64px)/.97 var(--create-blog-heading-font);letter-spacing:-.065em;color:#fffefa}
 .create-blog-header h1 span{color:#d7f261}
 .create-blog-header .create-blog-hero-copy>p:last-child{max-width:620px;margin:12px 0 0;color:rgba(255,255,255,.78);font-size:14px;line-height:1.6}
 .create-blog-form{display:grid;grid-template-columns:minmax(0,1.8fr) minmax(260px,1fr);gap:16px;align-items:stretch;padding-top:16px}
@@ -23,10 +29,10 @@ body:not(:has(.admin-shell)) #root .create-blog-page #create-blog-body:empty:bef
 .create-blog-section-heading p{margin:5px 0 0;color:#637068;font-size:12px;line-height:1.5}
 .create-blog-form label:not(.create-blog-upload){display:flex;justify-content:space-between;margin:11px 0 6px;font-size:13px;font-weight:700}
 .create-blog-form label small{color:#68746c;font-size:11px;font-weight:400}
-.create-blog-form input:not([type=file]),.create-blog-form select,.create-blog-form textarea{width:100%;min-width:0;border:1px solid #d2dbca;border-radius:10px;background:#fffefa;color:#173529;font:400 14px/1.6 'Outfit',sans-serif}
+.create-blog-form input:not([type=file]),.create-blog-form select,.create-blog-form textarea{width:100%;min-width:0;border:1px solid #d2dbca;border-radius:10px;background:#fffefa;color:#173529;font:400 14px/1.6 var(--create-blog-body-font)}
 .create-blog-form input:not([type=file]),.create-blog-form select{min-height:46px;padding:10px 13px}
 .create-blog-editor{display:flex;flex:1;flex-direction:column;overflow:hidden;border:1px solid #d2dbca;border-radius:10px;background:#fffefa}
-.create-blog-form textarea{display:block;flex:1 0 auto;min-height:116px;padding:12px 15px;border:0;border-radius:0;resize:none;overflow:hidden}.create-blog-rich-editor{min-height:170px;padding:15px;border:0;outline:0;background:#fffefa;color:#173529;font:400 14px/1.65 'Outfit',sans-serif}.create-blog-rich-editor:empty:before{content:attr(data-placeholder);color:#78837b;pointer-events:none}.create-blog-rich-editor h2{margin:0 0 10px;font-size:21px}.create-blog-rich-editor p{margin:0 0 11px}.create-blog-rich-editor ul{margin:0 0 11px;padding-left:22px}
+.create-blog-form textarea{display:block;flex:1 0 auto;min-height:116px;padding:12px 15px;border:0;border-radius:0;resize:none;overflow:hidden}.create-blog-rich-editor{min-height:170px;padding:15px;border:0;outline:0;background:#fffefa;color:#173529;font:400 14px/1.65 var(--create-blog-body-font)}.create-blog-rich-editor:empty:before{content:attr(data-placeholder);color:#78837b;pointer-events:none;font:400 14px/1.65 var(--create-blog-body-font)}.create-blog-rich-editor h2{margin:0 0 10px;font:600 21px/1.2 var(--create-blog-heading-font)}.create-blog-rich-editor p{margin:0 0 11px}.create-blog-rich-editor ul{margin:0 0 11px;padding-left:22px}
 .create-video-preview{grid-column:1/-1;width:100%;max-height:280px;border-radius:12px;background:#173529}
 .create-video-upload{display:flex;flex-direction:column;gap:9px;margin:14px 0}.create-video-upload>label{display:flex!important;align-items:center!important;justify-content:flex-start!important;gap:11px;padding:13px;border:1px dashed #b9c9ac;border-radius:12px;background:#f1f5ea;color:#47653a;cursor:pointer}.create-video-upload>label span{display:flex;flex-direction:column;gap:2px}.create-video-upload>label b{font-size:12px}.create-video-upload>label small{font-size:10px;color:#68746c}.create-video-upload input[type=file]{position:absolute;width:1px;height:1px;opacity:0}
 .create-blog-detail-fields{margin-top:22px;padding-top:20px;border-top:1px solid #dce2d5}.create-blog-detail-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px}.create-blog-detail-grid label{display:grid!important;gap:5px;margin:0!important}.create-blog-detail-grid label small{margin-left:4px}.create-blog-detail-grid input{min-height:42px!important;padding:8px 10px!important}.create-recipe-toggle{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.create-recipe-toggle .create-blog-section-heading{margin-bottom:12px}.create-recipe-toggle button{flex:none;min-height:34px;padding:0 12px;border:1px solid #b9c9ac;border-radius:9px;background:#f1f5ea;color:#365342;font-size:11px;font-weight:800}.create-recipe-toggle button.is-active{background:#173529;border-color:#173529;color:#fffefa!important}
