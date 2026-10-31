@@ -305,8 +305,29 @@ class GeminiService:
 
         config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=ModelModeration, temperature=0)
         response = await self._generate_with_fallback(client, contents, config)
+        return self._parse_moderation_response(response).model_dump()
+
+    @staticmethod
+    def _parse_moderation_response(response: Any):
+        """Validate Gemini moderation output without weakening the schema."""
+        from app.schemas.moderation import ModelModeration
+
         parsed = getattr(response, "parsed", None)
-        return (parsed if isinstance(parsed, ModelModeration) else ModelModeration.model_validate(parsed if parsed is not None else getattr(response, "text", None))).model_dump()
+        if isinstance(parsed, ModelModeration):
+            return parsed
+        if isinstance(parsed, dict):
+            return ModelModeration.model_validate(parsed)
+        if isinstance(parsed, str):
+            return ModelModeration.model_validate_json(parsed)
+        if parsed is not None:
+            return ModelModeration.model_validate(parsed)
+
+        text = getattr(response, "text", None)
+        if isinstance(text, str):
+            return ModelModeration.model_validate_json(text)
+        if isinstance(text, dict):
+            return ModelModeration.model_validate(text)
+        return ModelModeration.model_validate(text)
 
     async def verify_image_relevance(self, request):
         """Verify whether an image matches the food/recipe caption and context."""

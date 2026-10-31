@@ -11,6 +11,7 @@ TEXT_TASK = "text"
 IMAGE_TASK = "image"
 COMPLEX_TASK = "complex"
 VIDEO_TASK = "video"
+LEGACY_TASK = "legacy"
 
 
 @dataclass
@@ -116,6 +117,8 @@ class GeminiModelRouter:
         self._image_alternative = image_alt
         all_tasks = {TEXT_TASK, IMAGE_TASK, COMPLEX_TASK}
         model_tasks = [
+            (settings.gemini_model, {LEGACY_TASK}),
+            (settings.gemini_fallback_model, {LEGACY_TASK}),
             (routine, all_tasks),
             (routine_alt, all_tasks),
             (image, {IMAGE_TASK, COMPLEX_TASK}),
@@ -131,7 +134,7 @@ class GeminiModelRouter:
         self._tracker = ModelAvailabilityTracker(models)
 
     def candidates(self, task: str) -> list[str]:
-        if task == "legacy":
+        if task == LEGACY_TASK:
             configured = [self._settings.gemini_model, self._settings.gemini_fallback_model]
         elif task == IMAGE_TASK:
             configured = [self._image_primary, self._image_alternative]
@@ -168,7 +171,7 @@ class GeminiModelRouter:
         self._tracker.mark_success(model)
 
     def all_quota_exhausted(self, task: str) -> bool:
-        if task == "legacy":
+        if task == LEGACY_TASK:
             models = [self._settings.gemini_model, self._settings.gemini_fallback_model]
         elif task == IMAGE_TASK:
             models = [self._image_primary, self._image_alternative]
