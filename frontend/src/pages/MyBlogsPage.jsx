@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, ArrowUpRight, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, Film, LoaderCircle, Pencil, Send, Trash2, Undo2, X } from 'lucide-react';
+import { AlertCircle, ArrowUpRight, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, Film, LoaderCircle, Pencil, Send, Trash2, Undo2, X } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
@@ -442,7 +442,6 @@ export default function MyBlogsPage() {
   return <div className="community-page my-blogs-page">
     <CommunityTopBar/><div className="community-shell"><CommunitySideNav/><span className="community-sidenav-spacer" aria-hidden="true"/>
       <main className="my-blogs-main">
-        <Link className="my-blogs-back" to="/home"><ArrowLeft size={15}/> Back to the community</Link>
         <header className="my-blogs-header">
           <div><p className="my-blogs-eyebrow">YOUR PERSONAL CONTENT</p><h1>My content<span>.</span></h1><p>Manage your blogs and videos together. Drafts, published posts, and reviews stay in one library.</p></div>
           <span className="my-blogs-header-mark" aria-hidden="true"><Icon size={38} strokeWidth={1.3}/></span>
