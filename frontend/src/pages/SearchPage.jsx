@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useNavigationType, useSearchParams } fr
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { ArrowRight, BookOpen, Eye, LoaderCircle, Play, Search, X } from 'lucide-react';
+import { ArrowRight, Eye, LoaderCircle, Play, Search, X } from 'lucide-react';
 import MemberPageLayout from '../layouts/MemberPageLayout';
 import Header from '../components/Header';
 import ImageWithFallback from '../components/ImageWithFallback';
@@ -37,12 +37,10 @@ const appendUnique = (current, incoming) => {
 };
 
 function ResultCard({ item, index, isMember, onPreview, onOpen, returnTo }) {
-  const isVideo = item.type === 'VIDEO';
   const date = item.createdAt ? new Date(item.createdAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Recently updated';
   const content = <>
     <div className="search-result-media">
       <ImageWithFallback src={item.thumbnailUrl} alt="" loading="lazy" />
-      <span className="search-result-kind">{isVideo ? <Play size={12} fill="currentColor" /> : <BookOpen size={12} />}{isVideo ? 'Video' : item.type === 'BLOG' ? 'Article' : 'Content'}</span>
       <span className="search-result-arrow"><ArrowRight size={17} /></span>
     </div>
     <div className="search-result-copy">

@@ -5,7 +5,6 @@ import { ArrowUpRight, Play, Sparkles } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import MemberPageLayout from '../layouts/MemberPageLayout';
 import CommunityComposer from '../components/community/CommunityComposer';
-import CommunityFilters from '../components/community/CommunityFilters';
 import CommunityPostCard from '../components/community/CommunityPostCard';
 import CommunityRightRail from '../components/community/CommunityRightRail';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
@@ -27,7 +26,6 @@ function FeedPostSkeleton() {
         <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--author"/>
         <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--meta"/>
       </div>
-      <span className="feed-skeleton-shape feed-skeleton-options"/>
     </header>
     <div className="feed-skeleton-copy">
       <span className="feed-skeleton-shape feed-skeleton-line feed-skeleton-line--title"/>
@@ -300,7 +298,6 @@ export default function CommunityFeedPage() {
           </section>}
           <div className="feed-stream-heading"><div><span>The community stream</span><h2>What&apos;s nourishing people now</h2></div></div>
           <CommunityComposer onOpen={openComposer} profile={profile}/>
-          <CommunityFilters filters={filters} active={filter} onChange={setFilter}/>
            {loading ? <div className="feed-skeleton-list" role="status" aria-label="Loading community posts" aria-busy="true">
             {Array.from({ length: 3 }, (_, index) => <FeedPostSkeleton key={index}/>)}
            </div> : error && !posts.length ? <p className="content-status content-status--error">{error}</p> : visiblePosts.length ? visiblePosts.map((post) => <CommunityPostCard key={postKey(post)} post={post} profile={profile} routeDetail onOpenPost={openPost}/>) : <div className="empty-results">No posts match that filter yet.</div>}

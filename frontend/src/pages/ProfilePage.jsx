@@ -29,6 +29,7 @@ import { useToast } from '../components/notifications/ToastProvider';
 import { changeMyPassword, deleteMyAvatar, getMyProfile, getMyRecipes, updateMyAvatar, updateMyProfile, verifyMyEmailChange } from '../services/profileApi';
 import { getPublicProfileContent } from '../services/publicProfileApi';
 import { getCurrentUserFromToken } from '../utils/auth';
+import { getTrustedAvatarUrl } from '../utils/avatar';
 import ImageWithFallback from '../components/ImageWithFallback';
 import DishDetailModal from '../components/community/DishDetailModal';
 import '../styles/profile.css';
@@ -50,17 +51,6 @@ const EMPTY_PROFILE = {
 const normalizeProfileText = (value, maxLength = Number.POSITIVE_INFINITY) => (
   typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
 );
-
-const getTrustedAvatarUrl = (value) => {
-  if (typeof value !== 'string' || !value.trim()) return '';
-  if (value.startsWith('/')) return value;
-  try {
-    const url = new URL(value);
-    return (url.protocol === 'https:' || url.protocol === 'http:') ? url.toString() : '';
-  } catch {
-    return '';
-  }
-};
 
 const profileViewState = { tab: 'info', scrollY: 0 };
 
