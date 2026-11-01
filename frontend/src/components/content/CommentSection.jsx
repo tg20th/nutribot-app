@@ -101,7 +101,7 @@ function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, 
   </article>;
 }
 
-export default function CommentSection({ contentId, loadComments = getContentComments, submitComment = createContentComment, composerTarget, showFilter = false, onCommentCountChange, currentUser = {}, readOnly = false, heading = 'Comments' }) {
+export default function CommentSection({ contentId, loadComments = getContentComments, submitComment = createContentComment, composerTarget, showFilter = false, onCommentCountChange, currentUser = {}, readOnly = false, heading = 'Comments', showEmptyState = true }) {
   const [comments, setComments] = useState([]);
   const [totalThreads, setTotalThreads] = useState(0);
   const [nextPage, setNextPage] = useState(0);
@@ -247,7 +247,7 @@ export default function CommentSection({ contentId, loadComments = getContentCom
       <div className="content-comment-composer-field">
         <textarea id="new-content-comment" value={text} onChange={(event) => setText(event.target.value)} maxLength={2000} rows={3}
           placeholder="Write a comment..." disabled={submittingComment} onKeyDown={submitOnEnter}/>
-        <button type="submit" disabled={submittingComment || !text.trim()} aria-label={submittingComment ? 'Posting comment' : 'Post'}><Send size={15}/><span className="sr-only">{submittingComment ? 'Posting...' : 'Post'}</span></button>
+        <button className="content-comment-submit" type="submit" disabled={submittingComment || !text.trim()} aria-label={submittingComment ? 'Posting comment' : 'Post'}><Send size={15}/><span className="sr-only">{submittingComment ? 'Posting...' : 'Post'}</span></button>
       </div>
     </form>
     {commentError && <p className="content-comment-error" role="alert">{commentError}</p>}
@@ -264,7 +264,8 @@ export default function CommentSection({ contentId, loadComments = getContentCom
     {!readOnly && (composerTarget ? createPortal(composer, composerTarget) : composer)}
     {loading && <p className="content-comment-status" role="status">Loading comments...</p>}
     {!loading && loadError && !comments.length && <div className="content-comment-status" role="alert">{loadError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button></div>}
-    {!loading && !loadError && !comments.length && <div className="content-comments-empty"><MessageCircle size={22} strokeWidth={1.5}/><strong>No comments yet</strong><span>Be the first to share your thoughts.</span></div>}
+    {showEmptyState && !loading && !loadError && !comments.length && totalThreads === 0 && <div className="content-comments-empty"><MessageCircle size={22} strokeWidth={1.5}/><strong>No comments yet</strong><span>Be the first to share your thoughts.</span></div>}
+    {!loading && !loadError && !comments.length && totalThreads > 0 && <p className="content-comment-status" role="status">Comments are temporarily unavailable.</p>}
     {!!visibleComments.length && <div className="content-comment-list">{visibleComments.map((comment) => <CommentItem key={comment.commentId} comment={comment} depth={0}
       activeReplyId={replyTo?.commentId} replyText={replyText} replyInputRef={replyInput} submittingReply={submittingReply} replyError={replyError}
       expandedReplyIds={expandedReplyIds} onReplyChange={setReplyText} onReplyCancel={cancelReply} onReplySubmit={submitReply}

@@ -175,7 +175,7 @@ export default function CommunityContentDetailPage() {
         <RelatedContentSection contentId={post.id} contentType={post.type}/>
         <RestaurantRecommendations dishName={post.title}/>
         <section className="detail-actions detail-reveal"><VoteButton contentId={post.id}/></section>
-        <section className="detail-comments detail-reveal"><CommentSection contentId={post.id}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><Link to="/home">Open the feed</Link></div></section>
+        <section className="detail-comments detail-reveal"><CommentSection contentId={post.id} showEmptyState={false}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><Link to="/home">Open the feed</Link></div></section>
       </main>
     </div>
     <ChatbotWidget/>
