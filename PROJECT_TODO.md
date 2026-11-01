@@ -269,3 +269,9 @@
   - *Phạm vi:* Chuẩn hóa và đối chiếu ingredients, xác thực mapping/quantity/unit/category, persist recipe_ingredients theo ID đã xác nhận; không tự import nguyên liệu.
   - *Tương thích:* Giữ NB-86/NB-87, Health Profile/Meal Planner và allergy theo ingredient ID; không suy diễn thuộc tính dietary/allergen không lưu trong DB.
   - *Dependency:* NB-86, NB-87, NB-90.
+
+## NB-96 (lọc trạng thái hàng chờ kiểm duyệt nội dung)
+- [x] **[BE] Bổ sung lọc trạng thái cho hàng chờ kiểm duyệt nội dung**
+  - *Phạm vi:* Bổ sung query parameter `status` cho `GET /api/v1/admin/moderation`, ánh xạ `pending` -> `pending` & `under_review`, `published` -> `published`, `rejected` -> `rejected`; kết hợp phân trang, contentType và thông điệp phản hồi tương ứng.
+  - *File:* `AdminModerationController`, `AdminModerationService`, `AdminModerationServiceTest`, `AdminModerationControllerTest`.
+  - *Dependency:* NB-38.

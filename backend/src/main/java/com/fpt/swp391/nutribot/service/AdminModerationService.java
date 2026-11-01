@@ -42,18 +42,18 @@ public class AdminModerationService {
     private final NotificationService notificationService;
 
     @Transactional(readOnly = true)
-    public PagedResponse<AdminContentResponse> getPendingContents(String contentType, int page, int size) {
+    public PagedResponse<AdminContentResponse> getContents(String status, String contentType, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        List<String> pendingStatuses = List.of("under_review", "pending");
+        List<String> targetStatuses = resolveStatuses(status);
 
-        Page<Content> pendingPage;
+        Page<Content> contentPage;
         if (contentType != null && !contentType.isBlank()) {
-            pendingPage = contentRepository.findByStatusInAndContentType(pendingStatuses, contentType, pageable);
+            contentPage = contentRepository.findByStatusInAndContentType(targetStatuses, contentType.trim(), pageable);
         } else {
-            pendingPage = contentRepository.findByStatusIn(pendingStatuses, pageable);
+            contentPage = contentRepository.findByStatusIn(targetStatuses, pageable);
         }
 
-        List<Integer> contentIds = pendingPage.getContent().stream()
+        List<Integer> contentIds = contentPage.getContent().stream()
                 .map(Content::getContentId)
                 .toList();
 
@@ -65,7 +65,25 @@ public class AdminModerationService {
                         (existing, replacement) -> existing
                 ));
 
-        return PagedResponse.of(pendingPage.map(c -> toResponse(c, moderationMap.get(c.getContentId()))));
+        return PagedResponse.of(contentPage.map(c -> toResponse(c, moderationMap.get(c.getContentId()))));
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<AdminContentResponse> getPendingContents(String contentType, int page, int size) {
+        return getContents(null, contentType, page, size);
+    }
+
+    private List<String> resolveStatuses(String status) {
+        if (status == null || status.isBlank()) {
+            return List.of("under_review", "pending");
+        }
+        String normalized = status.trim().toLowerCase();
+        return switch (normalized) {
+            case "pending", "under_review" -> List.of("under_review", "pending");
+            case "published" -> List.of("published");
+            case "rejected" -> List.of("rejected");
+            default -> List.of(normalized);
+        };
     }
 
     @Transactional

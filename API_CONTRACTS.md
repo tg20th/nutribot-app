@@ -185,6 +185,20 @@ Nếu có lỗi (HTTP status 4xx, 5xx):
 - Deactivate là soft update `is_active`; không xóa ingredient hay các liên kết `recipe_ingredients`/`user_allergies`. `GET /api/v1/ingredients` hiện tại giữ nguyên contract và chỉ trả ingredient active cho lựa chọn dị ứng.
 - `page` mặc định `0`; `size` mặc định `10`, giới hạn tối đa `100`. Các lỗi trùng dữ liệu/category không hợp lệ trả `400`; ingredient không tồn tại trả `404`.
 
+### 2.9. Kiểm duyệt nội dung bài viết/video Admin (NB-38, NB-96)
+- **Yêu cầu:** Role `ADMIN`, response dùng envelope `ApiResponse<T>`.
+- `GET /api/v1/admin/moderation?status=<status>&contentType=<type>&page=0&size=10` lọc hàng chờ/kết quả duyệt:
+  - `status` (tùy chọn):
+    - `pending` (hoặc để trống/null): trả về nội dung `under_review` và `pending` (hàng chờ duyệt). Message: `Lấy danh sách nội dung chờ duyệt thành công`.
+    - `published`: trả về nội dung `published` (đã duyệt). Message: `Lấy danh sách nội dung đã duyệt thành công`.
+    - `rejected`: trả về nội dung `rejected` (đã từ chối). Message: `Lấy danh sách nội dung đã từ chối thành công`.
+    - Khác: trả theo status chỉ định. Message: `Lấy danh sách nội dung thành công`.
+  - `contentType` (tùy chọn): `BLOG`, `VIDEO` hoặc để trống.
+  - Phân trang: `page` (mặc định 0), `size` (mặc định 10), sắp xếp `createdAt DESC`.
+- `PUT /api/v1/admin/moderation/{contentId}/action` thực hiện duyệt bài:
+  - Request body: `{ "action": "APPROVE" | "REJECT" | "HIDE", "reason": "Lý do nếu từ chối" }`.
+  - Tác giả thường bị REJECT tăng gậy vi phạm; 1-2 gậy gán `WARN`, 3 gậy tự động khóa `BANNED`.
+
 ---
 
 ## 3. Quản lý Danh mục (Categories - Thắng)

@@ -18,12 +18,13 @@ public class AdminModerationController {
     private final AdminModerationService adminModerationService;
 
     @GetMapping
-    public ResponseEntity<ApiResponse<PagedResponse<AdminContentResponse>>> getPendingContents(
+    public ResponseEntity<ApiResponse<PagedResponse<AdminContentResponse>>> getContents(
+            @RequestParam(required = false) String status,
             @RequestParam(required = false) String contentType,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        PagedResponse<AdminContentResponse> result = adminModerationService.getPendingContents(contentType, page, size);
-        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách nội dung chờ duyệt thành công", result));
+        PagedResponse<AdminContentResponse> result = adminModerationService.getContents(status, contentType, page, size);
+        return ResponseEntity.ok(ApiResponse.success(resolveMessage(status), result));
     }
 
     @PutMapping("/{contentId}/action")
@@ -32,5 +33,17 @@ public class AdminModerationController {
             @Valid @RequestBody AdminModerationRequest request) {
         AdminContentResponse result = adminModerationService.moderateContent(contentId, request);
         return ResponseEntity.ok(ApiResponse.success("Duyệt nội dung thành công", result));
+    }
+
+    private String resolveMessage(String status) {
+        if (status == null || status.isBlank() || "pending".equalsIgnoreCase(status.trim()) || "under_review".equalsIgnoreCase(status.trim())) {
+            return "Lấy danh sách nội dung chờ duyệt thành công";
+        }
+        String s = status.trim().toLowerCase();
+        return switch (s) {
+            case "published" -> "Lấy danh sách nội dung đã duyệt thành công";
+            case "rejected" -> "Lấy danh sách nội dung đã từ chối thành công";
+            default -> "Lấy danh sách nội dung thành công";
+        };
     }
 }

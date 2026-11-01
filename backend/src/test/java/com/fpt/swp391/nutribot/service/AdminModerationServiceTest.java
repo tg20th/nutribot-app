@@ -59,6 +59,8 @@ class AdminModerationServiceTest {
 
     private User sampleAuthor;
     private Content underReviewContent;
+    private Content publishedContent;
+    private Content rejectedContent;
     private ContentModeration sampleModeration;
 
     @BeforeEach
@@ -80,6 +82,30 @@ class AdminModerationServiceTest {
                 .thumbnailUrl("https://example.com/thumb.jpg")
                 .status("under_review")
                 .viewCount(5)
+                .build();
+
+        publishedContent = Content.builder()
+                .contentId(20)
+                .user(sampleAuthor)
+                .contentType("VIDEO")
+                .title("Video nấu ăn")
+                .slug("video-nau-an-20")
+                .body("Cách nấu canh chua")
+                .thumbnailUrl("https://example.com/video-thumb.jpg")
+                .status("published")
+                .viewCount(100)
+                .build();
+
+        rejectedContent = Content.builder()
+                .contentId(30)
+                .user(sampleAuthor)
+                .contentType("BLOG")
+                .title("Bài viết vi phạm")
+                .slug("bai-viet-vi-pham-30")
+                .body("Spam link quảng cáo")
+                .thumbnailUrl("https://example.com/spam-thumb.jpg")
+                .status("rejected")
+                .viewCount(0)
                 .build();
 
         sampleModeration = ContentModeration.builder()
@@ -128,6 +154,90 @@ class AdminModerationServiceTest {
 
         assertNotNull(result);
         assertEquals(1, result.getContent().size());
+    }
+
+    @Test
+    @DisplayName("NB-96: Lọc danh sách theo status=published -> chỉ gọi tìm status published")
+    void getContents_withStatusPublished_returnsPublishedItems() {
+        when(contentRepository.findByStatusIn(eq(List.of("published")), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(publishedContent)));
+        when(contentModerationRepository.findByContentIdIn(eq(List.of(20))))
+                .thenReturn(List.of());
+
+        PagedResponse<AdminContentResponse> result = adminModerationService.getContents("published", null, 0, 10);
+
+        assertNotNull(result);
+        assertEquals(1, result.getContent().size());
+        assertEquals("published", result.getContent().get(0).getStatus());
+        assertEquals("video-nau-an-20", result.getContent().get(0).getSlug());
+        verify(contentRepository).findByStatusIn(eq(List.of("published")), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("NB-96: Lọc danh sách theo status=rejected -> chỉ gọi tìm status rejected")
+    void getContents_withStatusRejected_returnsRejectedItems() {
+        when(contentRepository.findByStatusIn(eq(List.of("rejected")), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(rejectedContent)));
+        when(contentModerationRepository.findByContentIdIn(eq(List.of(30))))
+                .thenReturn(List.of());
+
+        PagedResponse<AdminContentResponse> result = adminModerationService.getContents("rejected", null, 0, 10);
+
+        assertNotNull(result);
+        assertEquals(1, result.getContent().size());
+        assertEquals("rejected", result.getContent().get(0).getStatus());
+        assertEquals("bai-viet-vi-pham-30", result.getContent().get(0).getSlug());
+        verify(contentRepository).findByStatusIn(eq(List.of("rejected")), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("NB-96: Lọc danh sách theo status=pending -> tìm cả under_review và pending")
+    void getContents_withStatusPending_returnsUnderReviewAndPending() {
+        when(contentRepository.findByStatusIn(eq(List.of("under_review", "pending")), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(underReviewContent)));
+        when(contentModerationRepository.findByContentIdIn(eq(List.of(10))))
+                .thenReturn(List.of(sampleModeration));
+
+        PagedResponse<AdminContentResponse> result = adminModerationService.getContents("pending", null, 0, 10);
+
+        assertNotNull(result);
+        assertEquals(1, result.getContent().size());
+        assertEquals("under_review", result.getContent().get(0).getStatus());
+        verify(contentRepository).findByStatusIn(eq(List.of("under_review", "pending")), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("NB-96: Lọc kết hợp status=published và contentType=VIDEO")
+    void getContents_withStatusPublishedAndContentType_callsFindByStatusInAndContentType() {
+        when(contentRepository.findByStatusInAndContentType(eq(List.of("published")), eq("VIDEO"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(publishedContent)));
+        when(contentModerationRepository.findByContentIdIn(eq(List.of(20))))
+                .thenReturn(List.of());
+
+        PagedResponse<AdminContentResponse> result = adminModerationService.getContents("PUBLISHED", "VIDEO", 0, 10);
+
+        assertNotNull(result);
+        assertEquals(1, result.getContent().size());
+        assertEquals("VIDEO", result.getContent().get(0).getContentType());
+        verify(contentRepository).findByStatusInAndContentType(eq(List.of("published")), eq("VIDEO"), any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("NB-96: Status rỗng hoặc null -> mặc định trả về hàng chờ duyệt (under_review, pending)")
+    void getContents_withNullOrBlankStatus_defaultsToPendingAndUnderReview() {
+        when(contentRepository.findByStatusIn(eq(List.of("under_review", "pending")), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(underReviewContent)));
+        when(contentModerationRepository.findByContentIdIn(eq(List.of(10))))
+                .thenReturn(List.of(sampleModeration));
+
+        PagedResponse<AdminContentResponse> resultNull = adminModerationService.getContents(null, null, 0, 10);
+        PagedResponse<AdminContentResponse> resultBlank = adminModerationService.getContents("   ", null, 0, 10);
+
+        assertNotNull(resultNull);
+        assertEquals(1, resultNull.getContent().size());
+        assertNotNull(resultBlank);
+        assertEquals(1, resultBlank.getContent().size());
+        verify(contentRepository, times(2)).findByStatusIn(eq(List.of("under_review", "pending")), any(Pageable.class));
     }
 
     @Test
