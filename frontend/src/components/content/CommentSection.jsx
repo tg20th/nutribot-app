@@ -4,6 +4,7 @@ import { MessageCircle, Send } from 'lucide-react';
 import { createContentComment, getContentComments } from '../../services/contentInteractionApi';
 import '../../styles/content-interactions.css';
 import UserProfileLink from '../UserProfileLink';
+import { getProfileAvatarUrl } from '../../utils/avatar';
 
 const memberName = (comment) => comment.userName || 'NutriBot member';
 const replyList = (comment) => Array.isArray(comment.replies) ? comment.replies : [];
@@ -20,6 +21,19 @@ function formatDate(value) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function CurrentUserAvatar({ user }) {
+  const [failed, setFailed] = useState(false);
+  const avatarUrl = getProfileAvatarUrl(user);
+  const fallback = (user.fullName || user.name || user.username || 'N').charAt(0).toUpperCase();
+
+  useEffect(() => setFailed(false), [avatarUrl]);
+
+  if (avatarUrl && !failed) {
+    return <img className="content-comment-composer-avatar" src={avatarUrl} alt="" onError={() => setFailed(true)} />;
+  }
+  return <span className="content-comment-composer-avatar" aria-hidden="true">{fallback}</span>;
 }
 
 function appendReply(comments, parentId, reply) {
@@ -87,7 +101,7 @@ function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, 
   </article>;
 }
 
-export default function CommentSection({ contentId, loadComments = getContentComments, submitComment = createContentComment, composerTarget, showFilter = false, onCommentCountChange, currentUser = {}, readOnly = false }) {
+export default function CommentSection({ contentId, loadComments = getContentComments, submitComment = createContentComment, composerTarget, showFilter = false, onCommentCountChange, currentUser = {}, readOnly = false, heading = 'Comments' }) {
   const [comments, setComments] = useState([]);
   const [totalThreads, setTotalThreads] = useState(0);
   const [nextPage, setNextPage] = useState(0);
@@ -228,12 +242,13 @@ export default function CommentSection({ contentId, loadComments = getContentCom
 
   const composer = <>
     <form className="content-comment-form" onSubmit={submitCommentForm}>
-      {currentUser.avatarUrl && <img className="content-comment-composer-avatar" src={currentUser.avatarUrl} alt=""/>}
-      {!currentUser.avatarUrl && composerTarget && <span className="content-comment-composer-avatar" aria-hidden="true">{(currentUser.fullName || currentUser.name || currentUser.username || 'N').charAt(0).toUpperCase()}</span>}
+      {composerTarget && <CurrentUserAvatar user={currentUser}/>}
       <label className="sr-only" htmlFor="new-content-comment">Write a comment</label>
-      <textarea id="new-content-comment" value={text} onChange={(event) => setText(event.target.value)} maxLength={2000} rows={3}
-        placeholder="Write a comment..." disabled={submittingComment} onKeyDown={submitOnEnter}/>
-      <button type="submit" disabled={submittingComment || !text.trim()}><Send size={15}/>{submittingComment ? 'Posting...' : 'Post'}</button>
+      <div className="content-comment-composer-field">
+        <textarea id="new-content-comment" value={text} onChange={(event) => setText(event.target.value)} maxLength={2000} rows={3}
+          placeholder="Write a comment..." disabled={submittingComment} onKeyDown={submitOnEnter}/>
+        <button type="submit" disabled={submittingComment || !text.trim()} aria-label={submittingComment ? 'Posting comment' : 'Post'}><Send size={15}/><span className="sr-only">{submittingComment ? 'Posting...' : 'Post'}</span></button>
+      </div>
     </form>
     {commentError && <p className="content-comment-error" role="alert">{commentError}</p>}
   </>;
@@ -243,13 +258,13 @@ export default function CommentSection({ contentId, loadComments = getContentCom
   });
 
   return <section className="content-comments" aria-labelledby="content-comments-heading">
-    <div className="content-comments-heading"><span>Join the conversation</span><h2 id="content-comments-heading">Comments</h2>
-      {!loading && !loadError && <small>{totalThreads} {totalThreads === 1 ? 'comment' : 'comments'}</small>}
-      {showFilter && <label className="content-comments-filter"><span className="sr-only">Comment order</span><select value={commentFilter} onChange={(event) => setCommentFilter(event.target.value)}><option value="all">All comments</option><option value="newest">Newest</option></select></label>}</div>
+    <div className="content-comments-heading"><div className="content-comments-heading-title"><h2 id="content-comments-heading">{heading}</h2>
+      {!loading && !loadError && <small className="content-comments-count" aria-label={`${totalThreads} comments`}>{totalThreads}</small>}</div>
+      {showFilter && totalThreads > 0 && <label className="content-comments-filter"><span className="sr-only">Comment order</span><select value={commentFilter} onChange={(event) => setCommentFilter(event.target.value)}><option value="all">All comments</option><option value="newest">Newest</option></select></label>}</div>
     {!readOnly && (composerTarget ? createPortal(composer, composerTarget) : composer)}
     {loading && <p className="content-comment-status" role="status">Loading comments...</p>}
     {!loading && loadError && !comments.length && <div className="content-comment-status" role="alert">{loadError} <button type="button" onClick={() => setRetry((value) => value + 1)}>Try again</button></div>}
-    {!loading && !loadError && !comments.length && <p className="content-comment-status">No comments yet. Start the conversation.</p>}
+    {!loading && !loadError && !comments.length && <div className="content-comments-empty"><MessageCircle size={22} strokeWidth={1.5}/><strong>No comments yet</strong><span>Be the first to share your thoughts.</span></div>}
     {!!visibleComments.length && <div className="content-comment-list">{visibleComments.map((comment) => <CommentItem key={comment.commentId} comment={comment} depth={0}
       activeReplyId={replyTo?.commentId} replyText={replyText} replyInputRef={replyInput} submittingReply={submittingReply} replyError={replyError}
       expandedReplyIds={expandedReplyIds} onReplyChange={setReplyText} onReplyCancel={cancelReply} onReplySubmit={submitReply}

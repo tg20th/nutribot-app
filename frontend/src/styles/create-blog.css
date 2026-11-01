@@ -48,7 +48,12 @@ body:not(:has(.admin-shell)) #root .create-blog-page #create-blog-body:empty:bef
 .create-blog-submit-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px}.create-blog-submit{width:100%;min-height:48px;max-height:52px;flex:none}.create-blog-submit--secondary{background:#eef3e9!important;color:#173529!important}
 .create-blog-page :focus-visible{outline:2px solid #597d39;outline-offset:3px}
 .create-blog-backdrop{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:20px;background:rgba(13,35,26,.68);backdrop-filter:blur(5px)}
-.create-blog-dialog{width:min(1050px,100%);max-height:calc(100dvh - 40px);overflow-y:auto;border-radius:24px;background:#fbfcf7;box-shadow:0 28px 80px rgba(10,29,21,.28)}
+.create-blog-dialog{width:min(1050px,100%);max-height:calc(100dvh - 40px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#a9bba5 transparent;border-radius:24px;background:#fbfcf7;box-shadow:0 28px 80px rgba(10,29,21,.28)}
+.create-blog-dialog::-webkit-scrollbar{width:6px}
+.create-blog-dialog::-webkit-scrollbar-track{background:transparent}
+.create-blog-dialog::-webkit-scrollbar-thumb{border-radius:999px;background:#a9bba5}
+.create-blog-dialog::-webkit-scrollbar-thumb:hover{background:#789579}
+.create-blog-dialog::-webkit-scrollbar-button{display:none;width:0;height:0}
 .create-blog-dialog .create-blog-main{max-width:none;padding:20px clamp(20px,4vw,32px) 20px}
 .create-blog-dialog .create-blog-header{min-height:175px}
 .create-blog-dialog .create-blog-header h1{font-size:clamp(40px,4.3vw,56px)}
@@ -71,7 +76,11 @@ body:not(:has(.admin-shell)) #root .create-blog-page #create-blog-body:empty:bef
 
 /* NB-80: Recipe usage consent checkbox */
 .recipe-consent-checkbox{display:flex!important;align-items:flex-start;gap:9px;margin:6px 0 0;cursor:pointer;font-size:12px!important;line-height:1.5;color:#173529}
-.recipe-consent-checkbox input[type=checkbox]{flex:none;width:16px;height:16px;margin-top:2px;accent-color:#498031;cursor:pointer}
+.recipe-consent-checkbox input[type=checkbox]{display:grid;flex:none;width:16px!important;height:16px;min-height:16px!important;margin:2px 0 0;padding:0!important;appearance:none;border:1px solid #9bb09a!important;border-radius:4px;background:#fffefa;place-content:center;cursor:pointer}
+.recipe-consent-checkbox input[type=checkbox]::before{width:5px;height:9px;transform:translateY(-1px) rotate(45deg) scale(0);border-right:2px solid #fffefa;border-bottom:2px solid #fffefa;content:'';transition:transform .12s ease-in-out}
+.recipe-consent-checkbox input[type=checkbox]:checked{border-color:#315c2b!important;background:#315c2b}
+.recipe-consent-checkbox input[type=checkbox]:checked::before{transform:translateY(-1px) rotate(45deg) scale(1)}
+.recipe-consent-checkbox input[type=checkbox]:focus-visible{outline:2px solid rgba(49,92,43,.42);outline-offset:2px}
 
 .recipe-ingredient-rows{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
 .recipe-ingredient-row{display:grid;grid-template-columns:minmax(140px,1.8fr) minmax(80px,1fr) minmax(90px,1fr) 36px;gap:8px;align-items:center}
