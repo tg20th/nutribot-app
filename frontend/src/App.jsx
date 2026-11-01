@@ -34,6 +34,7 @@ import RestaurantMapPage from './pages/RestaurantMapPage';
 import PublicProfilePage from './pages/PublicProfilePage';
 import PublicRecipeDetailPage from './pages/PublicRecipeDetailPage';
 import { NotificationProvider } from './components/notifications/NotificationProvider';
+import ErrorPage from './components/errors/ErrorPage';
 
 
 function AuthFailureHandler() {
@@ -120,6 +121,6 @@ export default function App() {
     <Route path="/restaurants" element={<MemberRoute><RestaurantMapPage /></MemberRoute>} />
     <Route path="/restaurants/map" element={<MemberRoute><RestaurantMapPage /></MemberRoute>} />
     {import.meta.env.DEV && <Route path="/dev/nb-56" element={<RestaurantRecommendationsPreviewPage />} />}
-    <Route path="*" element={<HomePage />} />
+    <Route path="*" element={<ErrorPage status={404} />} />
   </Routes></NotificationProvider>;
 }
