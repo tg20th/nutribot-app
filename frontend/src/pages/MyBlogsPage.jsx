@@ -219,24 +219,22 @@ function DeleteContentDialog({ item, config, onClose, onDeleted }) {
       setBusy(false);
     }
   }
-  const isVideo = config.key === 'video';
   return <ContentDialog
     title={`Delete this ${config.single}?`}
     descriptionId="content-delete-description"
     danger
     busy={busy}
     onClose={onClose}
-    eyebrow={isVideo ? 'CONFIRM DELETION' : undefined}
-    dialogClassName={isVideo ? 'my-blog-dialog--video-delete' : ''}
+    eyebrow="CONFIRM DELETION"
+    dialogClassName="my-blog-dialog--video-delete"
   >
     <div className="my-blog-delete-copy" id="content-delete-description">
-      {!isVideo && <span className="my-blog-delete-icon"><Trash2 size={25}/></span>}
       <strong>{item.title}</strong>
-      <p>{isVideo ? 'This video and its comments will be permanently deleted. This action cannot be undone.' : `This will permanently delete your ${config.single} and its comments. This action cannot be undone.`}</p>
+      <p>This {config.single} and its comments will be permanently deleted. This action cannot be undone.</p>
     </div>
     {error && <RequestError error={error} type={config.single} fallback={config.fallbackDelete}/>}<footer className="my-blog-dialog-actions">
-      <button type="button" className="my-blog-button my-blog-button--secondary" disabled={busy} onClick={onClose}>{isVideo ? 'Cancel' : `Keep ${config.single}`}</button>
-      <button type="button" className="my-blog-button my-blog-button--danger" disabled={busy} onClick={confirmDelete}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Deleting...</> : <><Trash2 size={16}/> {isVideo ? 'Delete video' : `Delete ${config.single}`}</>}</button>
+      <button type="button" className="my-blog-button my-blog-button--secondary" disabled={busy} onClick={onClose}>Cancel</button>
+      <button type="button" className="my-blog-button my-blog-button--danger" disabled={busy} onClick={confirmDelete}>{busy ? <><LoaderCircle className="my-blogs-spinner" size={16}/> Deleting...</> : <><Trash2 size={16}/> Delete {config.single}</>}</button>
     </footer>
   </ContentDialog>;
 }

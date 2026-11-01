@@ -4,6 +4,7 @@ import { CheckCircle2, Clock3 } from 'lucide-react';
 import { adminApi } from '../../services/adminApi';
 import { adminIngredientApi } from '../../services/adminIngredientApi';
 import { ErrorState, LoadingState, PageHeader } from '../../components/admin/AdminUi';
+import ErrorPage from '../../components/errors/ErrorPage';
 import '../../styles/admin-dashboard.css';
 
 const trendPeriods = {
@@ -125,7 +126,8 @@ export default function AdminDashboard() {
   const [dashboard, setDashboard] = useState(null);
   const [ingredientTotal, setIngredientTotal] = useState(0);
   const [trendPeriod, setTrendPeriod] = useState('month');
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -136,10 +138,10 @@ export default function AdminDashboard() {
       setDashboard(dashboardData);
       setIngredientTotal(Number(ingredientPage.totalElements ?? 0));
     }).catch((requestError) => {
-      if (requestError.name !== 'AbortError') setError(requestError.message || 'Unable to load dashboard data.');
+      if (requestError.name !== 'AbortError') setError(requestError);
     });
     return () => controller.abort();
-  }, []);
+  }, [retryKey]);
 
   const trend = useMemo(() => buildContentTrend(dashboard?.content ?? [], trendPeriod), [dashboard, trendPeriod]);
   const allCategories = useMemo(() => buildCategorySlices(dashboard?.categories ?? []), [dashboard]);
@@ -162,7 +164,8 @@ export default function AdminDashboard() {
   const growthHeight = growthBaseline - growthPlotTop;
   const growthMidpoint = growthPlotTop + growthHeight / 2;
 
-  if (error) return <ErrorState message={error} />;
+  if (error?.status === 503) return <ErrorPage status={503} onRetry={() => { setDashboard(null); setError(null); setRetryKey((key) => key + 1); }}/>;
+  if (error) return <ErrorState message={error.message || 'Unable to load dashboard data.'} />;
   if (!dashboard) return <LoadingState label="Loading dashboard..." />;
 
   return (

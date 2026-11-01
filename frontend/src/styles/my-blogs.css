@@ -70,7 +70,6 @@
 .my-blog-icon-button:hover { background: rgba(23, 53, 41, .06); }
 .my-blog-dialog { width: min(640px, calc(100% - 32px)); max-height: calc(100dvh - 40px); padding: 28px; border: 1px solid #d8dfd1; border-radius: 22px; background: #fbfbf7; color: #173529; box-shadow: 0 24px 80px #17352926; font-family: 'Cabinet Grotesk', 'Outfit', sans-serif; }
 .my-blog-dialog::backdrop { background: rgba(16, 33, 24, .48); backdrop-filter: blur(5px); }
-.my-blog-dialog--delete { width: min(460px, calc(100% - 32px)); }
 .my-blog-dialog-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 .my-blog-dialog-header h2 { margin: 0; font-size: 30px; letter-spacing: -.045em; }
 .my-blog-dialog-header .my-blogs-eyebrow { margin-bottom: 10px; }
@@ -81,12 +80,8 @@
 .my-blog-form input, .my-blog-form textarea, .my-blog-form select { width: 100%; min-width: 0; padding: 12px; margin-bottom: 12px; border: 1px solid #d2dbca; border-radius: 10px; background: #fffefa; color: #173529; font: 400 14px/1.6 'Outfit', sans-serif; }
 .my-blog-form textarea { min-height: 180px; resize: vertical; }
 .my-blog-dialog-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 22px; padding-top: 20px; border-top: 1px solid #dce2d5; }
-.my-blog-dialog--delete .my-blog-dialog-actions { justify-content: center; flex-wrap: nowrap; }
-.my-blog-dialog--delete .my-blog-dialog-actions > button { flex: 1 1 0; min-width: 0; white-space: nowrap; }
-.my-blog-dialog--delete .my-blog-dialog-actions .my-blog-button--danger svg { width: 20px; height: 20px; stroke-width: 2.5; }
 .my-blog-dialog-state { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 24px 0; font-size: 14px; }
 .my-blog-delete-copy { padding-top: 24px; }
-.my-blog-delete-icon { display: grid; place-items: center; width: 54px; height: 54px; margin-bottom: 18px; border-radius: 17px; background: #f6e8df; color: #a34633; }
 .my-blog-delete-copy strong { display: block; font-size: 18px; line-height: 1.4; overflow-wrap: anywhere; }
 .my-blog-delete-copy p { font-size: 14px; color: #637068; line-height: 1.65; }
 .my-blog-dialog--video-delete { width: min(420px, calc(100% - 32px)); padding: 26px 28px 24px; border-radius: 18px; }
@@ -119,8 +114,6 @@
   .my-blog-meta { gap: 9px; font-size: 10px; }
   .my-blog-dialog { padding: 22px 18px; }
   .my-blog-dialog-header h2 { font-size: 26px; }
-  .my-blog-dialog--delete:not(.my-blog-dialog--video-delete) .my-blog-dialog-actions { flex-wrap: wrap; }
-  .my-blog-dialog--delete:not(.my-blog-dialog--video-delete) .my-blog-dialog-actions > button { flex-basis: 100%; }
   .my-blog-dialog--video-delete { padding: 22px 20px 20px; }
   .my-blog-dialog--video-delete .my-blog-dialog-actions { flex-wrap: wrap; gap: 10px; margin-top: 14px; }
   .my-blog-dialog--video-delete .my-blog-dialog-actions > button { flex: 0 1 auto; }
