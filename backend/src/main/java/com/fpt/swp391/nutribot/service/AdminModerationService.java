@@ -43,7 +43,9 @@ public class AdminModerationService {
 
     @Transactional(readOnly = true)
     public PagedResponse<AdminContentResponse> getPendingContents(String contentType, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Pageable pageable = PageRequest.of(page, size, Sort.by(
+                Sort.Order.asc("createdAt"),
+                Sort.Order.asc("contentId")));
         List<String> pendingStatuses = List.of("under_review", "pending");
 
         Page<Content> pendingPage;

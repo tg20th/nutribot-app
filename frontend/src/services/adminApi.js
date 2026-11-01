@@ -102,7 +102,9 @@ const moderationParams = ({ contentType = '', page = 0, size = 10 } = {}) => {
 };
 const getModerationQueue = async (params = {}, signal) => {
   if (isModerationPreview()) {
-    const content = moderationPreviewState.filter((item) => item.status === 'pending' && (!params.contentType || item.contentType === params.contentType));
+    const content = moderationPreviewState
+      .filter((item) => item.status === 'pending' && (!params.contentType || item.contentType === params.contentType))
+      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt) || a.contentId - b.contentId);
     return { content: content.map(mapModerationItem), page: 0, size: content.length, totalElements: content.length, totalPages: content.length ? 1 : 0 };
   }
   const payload = await apiRequest(`/api/v1/admin/moderation?${moderationParams(params)}`, { signal });

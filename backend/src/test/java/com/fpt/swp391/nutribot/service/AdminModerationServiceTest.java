@@ -17,12 +17,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -128,6 +130,25 @@ class AdminModerationServiceTest {
 
         assertNotNull(result);
         assertEquals(1, result.getContent().size());
+    }
+
+    @Test
+    @DisplayName("Hàng đợi kiểm duyệt sắp xếp bài đăng trước lên trước (FIFO)")
+    void getPendingContents_sortsByOldestSubmissionFirst() {
+        when(contentRepository.findByStatusIn(eq(List.of("under_review", "pending")), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(underReviewContent)));
+        when(contentModerationRepository.findByContentIdIn(eq(List.of(10))))
+                .thenReturn(List.of(sampleModeration));
+
+        adminModerationService.getPendingContents(null, 0, 10);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(contentRepository).findByStatusIn(eq(List.of("under_review", "pending")), pageableCaptor.capture());
+        Sort sort = pageableCaptor.getValue().getSort();
+        assertNotNull(sort.getOrderFor("createdAt"));
+        assertEquals(Sort.Direction.ASC, sort.getOrderFor("createdAt").getDirection());
+        assertNotNull(sort.getOrderFor("contentId"));
+        assertEquals(Sort.Direction.ASC, sort.getOrderFor("contentId").getDirection());
     }
 
     @Test
