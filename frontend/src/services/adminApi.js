@@ -95,15 +95,17 @@ const moderationPreviewItems = [
 let moderationPreviewState = [...moderationPreviewItems];
 const isModerationPreview = () => import.meta.env.DEV && typeof window !== 'undefined'
   && new URLSearchParams(window.location.search).get('preview') === '1';
-const moderationParams = ({ contentType = '', page = 0, size = 10 } = {}) => {
+const moderationParams = ({ contentType = '', status = '', page = 0, size = 10 } = {}) => {
   const params = new URLSearchParams({ page: String(page), size: String(size) });
   if (contentType) params.set('contentType', contentType);
+  if (status) params.set('status', status);
   return params.toString();
 };
 const getModerationQueue = async (params = {}, signal) => {
   if (isModerationPreview()) {
     const content = moderationPreviewState
-      .filter((item) => item.status === 'pending' && (!params.contentType || item.contentType === params.contentType))
+      .filter((item) => (!params.status || item.status === params.status)
+        && (!params.contentType || item.contentType === params.contentType))
       .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt) || a.contentId - b.contentId);
     return { content: content.map(mapModerationItem), page: 0, size: content.length, totalElements: content.length, totalPages: content.length ? 1 : 0 };
   }
