@@ -86,6 +86,7 @@ const mapModerationItem = (item) => ({
   aiReason: item.aiReason,
   aiConfidence: item.aiConfidence,
   mediaUrl: item.mediaUrl ?? null,
+  decisionReason: item.decisionReason ?? null,
 });
 const moderationPreviewItems = [
   { contentId: 201, contentType: 'BLOG', title: 'A colorful bowl for busy mornings', slug: 'colorful-bowl-mornings', status: 'pending', authorUsername: 'minhanh', authorEmail: 'minhanh@example.com', createdAt: '2026-09-26T08:30:00', viewCount: 0, body: 'Fresh fruit, yogurt, and oats make a bright start to the day.', thumbnailUrl: moderationBowl, aiFlagged: true, aiReason: 'Nội dung và hình ảnh an toàn, được kiểm duyệt tự động', aiConfidence: 0.95 },
@@ -125,6 +126,21 @@ const moderateContent = async (contentId, action, reason) => {
   });
   return mapModerationItem(unwrapData(payload, {}));
 };
+const mapModerationAudit = (item) => ({
+  id: item.auditId, contentId: item.contentId, type: item.contentType, title: item.contentTitle,
+  author: item.authorUsername || 'Unavailable author', action: item.action, previousStatus: item.previousStatus,
+  newStatus: item.newStatus, admin: item.adminUsername || 'Unavailable administrator', reason: item.adminReason,
+  reviewedAt: item.decidedAt, aiFlagged: item.aiFlagged, aiReason: item.aiReason, aiConfidence: item.aiConfidence,
+  body: item.contentBodySnapshot, thumbnailUrl: item.thumbnailUrlSnapshot, mediaUrl: item.mediaUrlSnapshot,
+});
+const getModerationHistory = async (params = {}, signal) => {
+  const query = new URLSearchParams({ page: String(params.page ?? 0), size: String(params.size ?? 10) });
+  ['query', 'action', 'contentType', 'adminUsername', 'from', 'to'].forEach((key) => { if (params[key]) query.set(key, params[key]); });
+  const data = unwrapData(await apiRequest(`/api/v1/admin/moderation/history?${query}`, { signal }), {});
+  return { ...data, content: (data.content ?? []).map(mapModerationAudit) };
+};
+const getModerationAudit = async (auditId, signal) => mapModerationAudit(unwrapData(await apiRequest(`/api/v1/admin/moderation/history/${auditId}`, { signal }), {}));
+const getModerationTimeline = async (contentId, signal) => (unwrapData(await apiRequest(`/api/v1/admin/moderation/contents/${contentId}/timeline`, { signal }), [])).map(mapModerationAudit);
 const formatAdminDate = (value) => value ? new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
 const mapViolationReason = (reason) => typeof reason === 'string' ? reason : { contentId: reason?.contentId ?? null, contentTitle: reason?.contentTitle ?? null, reason: reason?.reason ?? reason?.message ?? reason?.adminNote ?? 'Lý do đang chờ API quản lý thành viên đồng bộ.', reviewedAt: reason?.reviewedAt ?? null };
 const mapAdminUser = (user) => { const violations = user.violationReasons ?? user.violations ?? []; return { id: user.userId, username: user.username, email: user.email, name: user.fullName || user.username, avatarUrl: user.avatarUrl ?? null, role: user.roleName, status: user.status, joinedAt: formatAdminDate(user.createdAt), updatedAt: formatAdminDate(user.updatedAt), strikeCount: user.strikeCount ?? 0, violationReasons: (Array.isArray(violations) ? violations : [violations]).filter(Boolean).map(mapViolationReason) }; };
@@ -186,7 +202,7 @@ const getDashboard = async (signal) => {
 export const adminApi = {
   getDashboard,
   getUsers: (params, signal) => apiRequest(adminUserQuery(params), { signal }).then((payload) => mapAdminUserPage(unwrapData(payload, {}))), getMemberContentCounts, getUserById: one('/api/admin/users'), updateUserStatus: (id, value) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: value }) }).then((payload) => mapAdminUser(unwrapData(payload, {}))), lockUser: (id) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'BANNED' }) }),
-  getModerationQueue, moderateContent,
+  getModerationQueue, moderateContent, getModerationHistory, getModerationAudit, getModerationTimeline,
   getCategories, getCategoryContentCounts, createCategory, updateCategory, deleteCategory,
   getBlogs: list('/api/admin/blogs'), getBlogById: one('/api/admin/blogs'), hideBlog: (id) => status('/api/admin/blogs')(id, 'Hidden'), deleteBlog: (id) => apiRequest(`/api/admin/blogs/${id}`, { method: 'DELETE' }),
   getVideos: list('/api/admin/videos'), getVideoById: one('/api/admin/videos'), hideVideo: (id) => status('/api/admin/videos')(id, 'Hidden'), deleteVideo: (id) => apiRequest(`/api/admin/videos/${id}`, { method: 'DELETE' }),

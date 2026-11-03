@@ -25,4 +25,5 @@ public class AdminContentResponse {
     private Boolean aiFlagged;
     private String aiReason;
     private Double aiConfidence;
+    private String decisionReason;
 }

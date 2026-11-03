@@ -1,17 +1,41 @@
-import { Bot, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, FileText, ListOrdered, Maximize2, Search, ShieldCheck, Sparkles, UtensilsCrossed, Video, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { Bot, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleCheck, CircleX, FileText, ListOrdered, Maximize2, Search, ShieldCheck, SlidersHorizontal, Sparkles, UtensilsCrossed, Video, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { adminApi } from '../../services/adminApi';
-import { AdminToolbar, ConfirmDialog, EmptyState, ErrorState, LoadingState, PageHeader, Toast } from '../../components/admin/AdminUi';
+import { AdminToolbar, EmptyState, ErrorState, LoadingState, PageHeader, Toast } from '../../components/admin/AdminUi';
 
 const pageSize = 10;
 const actions = {
-  APPROVE: { title: 'Approve this submission?', label: 'Approve', message: 'Content approved and published.', confirmClass: 'primary' },
-  REJECT: { title: 'Reject this submission?', label: 'Reject', message: 'Content rejected.' },
+  APPROVE: { title: 'Approve content', label: 'Confirm Approval', message: 'Content approved and published.', confirmClass: 'primary' },
+  REJECT: { title: 'Reject content', label: 'Confirm Rejection', message: 'Content rejected.' },
 };
+
+function ModerationDecisionDialog({ decision, reason, error, submitting, onReasonChange, onClose, onConfirm }) {
+  if (!decision) return null;
+  const rejecting = decision.action === 'REJECT';
+  const trimmedReason = reason.trim();
+  return <div className="admin-modal-backdrop moderation-decision-backdrop" onMouseDown={submitting ? undefined : onClose}>
+    <section className="admin-dialog moderation-decision-dialog" role="dialog" aria-modal="true" aria-labelledby="moderation-decision-title" onMouseDown={(event) => event.stopPropagation()}>
+      <p>{rejecting ? 'REJECTION CONFIRMATION' : 'APPROVAL CONFIRMATION'}</p>
+      <h2 id="moderation-decision-title">{actions[decision.action].title}</h2>
+      <span className="moderation-decision-content-title">{decision.item.title}</span>
+      <label className="moderation-reason-field" htmlFor="moderation-decision-reason">
+        <b>{rejecting ? 'Rejection reason' : 'Approval reason'}{rejecting ? ' *' : ' (optional)'}</b>
+        <textarea id="moderation-decision-reason" value={reason} disabled={submitting} onChange={(event) => onReasonChange(event.target.value)} placeholder={rejecting ? 'Explain why this content is being rejected' : 'Add a note about why this content is approved (optional)'} aria-invalid={Boolean(error)} aria-describedby={error ? 'moderation-decision-error' : undefined} />
+      </label>
+      {error && <p id="moderation-decision-error" className="moderation-decision-error" role="alert">{error}</p>}
+      <div className="moderation-decision-actions"><button type="button" className="admin-btn secondary" disabled={submitting} onClick={onClose}>Cancel</button><button type="button" className={`admin-btn ${actions[decision.action].confirmClass || 'danger'}`} disabled={submitting || (rejecting && !trimmedReason)} onClick={onConfirm}>{submitting ? 'Saving...' : actions[decision.action].label}</button></div>
+    </section>
+  </div>;
+}
 
 const formatDate = (value) => value
   ? new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value))
   : 'Date unavailable';
+
+const formatHistoryDate = (value) => value ? {
+  date: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value)),
+  time: new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(value)),
+} : { date: 'Date unavailable', time: '' };
 
 const statusLabel = (status) => {
   const s = String(status || '').toLowerCase();
@@ -276,10 +300,44 @@ function ModerationSubmissionContent({ body, recipeExpanded, onToggleRecipe, con
   </>;
 }
 
+function ModerationWorkspaceTabs({ active, onReviewQueue, onHistory }) {
+  return <nav className="moderation-workspace-tabs" aria-label="Moderation workspace">
+    <button type="button" className={active === 'queue' ? 'is-active' : ''} aria-current={active === 'queue' ? 'page' : undefined} onClick={onReviewQueue}>Review Queue</button>
+    <button type="button" className={active === 'history' ? 'is-active' : ''} aria-current={active === 'history' ? 'page' : undefined} onClick={onHistory}>History</button>
+  </nav>;
+}
+
+function ModerationHistory({ onReviewQueue }) {
+  const emptyFilters = { query: '', action: '', contentType: '', adminUsername: '', from: '', to: '' };
+  const [items, setItems] = useState([]); const [filters, setFilters] = useState(emptyFilters); const [filtersOpen, setFiltersOpen] = useState(false);
+  const [page, setPage] = useState(1); const [totalPages, setTotalPages] = useState(1); const [totalElements, setTotalElements] = useState(0); const [loading, setLoading] = useState(true); const [error, setError] = useState(false); const [selected, setSelected] = useState(null); const [timeline, setTimeline] = useState([]);
+  useEffect(() => { const controller = new AbortController(); setLoading(true); setError(false); adminApi.getModerationHistory({ ...filters, page: page - 1, size: pageSize }, controller.signal).then((data) => { setItems(data.content || []); setTotalPages(Math.max(1, data.totalPages || 1)); setTotalElements(data.totalElements ?? 0); }).catch(() => { if (!controller.signal.aborted) setError(true); }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [filters, page]);
+  useEffect(() => { if (!selected) { setTimeline([]); return undefined; } const controller = new AbortController(); adminApi.getModerationTimeline(selected.contentId, controller.signal).then(setTimeline).catch(() => setTimeline([])); return () => controller.abort(); }, [selected]);
+  const change = (key, value) => { setFilters((current) => ({ ...current, [key]: value })); setPage(1); };
+  const advanced = Boolean(filters.contentType || filters.adminUsername || filters.from || filters.to);
+  return <div className="moderation-page moderation-history-page"><PageHeader eyebrow="ADMINISTRATION / CONTENT REVIEW" title="Moderation History" text="A complete record of content review decisions" /><ModerationWorkspaceTabs active="history" onReviewQueue={onReviewQueue} onHistory={() => {}} />
+    <section className="moderation-history-workspace" aria-label="Review history"><div className="moderation-history-primary"><label className="moderation-history-search"><Search size={17} aria-hidden="true" /><input aria-label="Search moderation history" value={filters.query} onChange={(e) => change('query', e.target.value)} placeholder="Search content, author or ID" />{filters.query && <button type="button" onClick={() => change('query', '')} aria-label="Clear search"><X size={15} /></button>}</label><div className="moderation-history-toolbar-controls"><label className="moderation-decision-dropdown"><span>Decision</span><select aria-label="Decision filter" value={filters.action} onChange={(e) => change('action', e.target.value)}><option value="">All decisions</option><option value="APPROVE">Approved</option><option value="REJECT">Rejected</option></select></label><button type="button" className={filtersOpen || advanced ? 'moderation-filter-toggle is-active' : 'moderation-filter-toggle'} onClick={() => setFiltersOpen((open) => !open)} aria-expanded={filtersOpen} aria-controls="moderation-advanced-filters"><SlidersHorizontal size={15} /> More filters <ChevronDown className={filtersOpen ? 'is-open' : ''} size={14} /></button></div></div>{filtersOpen && <div id="moderation-advanced-filters" className="moderation-advanced-filters"><label>Content type<select value={filters.contentType} onChange={(e) => change('contentType', e.target.value)}><option value="">All content</option><option value="BLOG">Blog</option><option value="VIDEO">Video</option></select></label><label>Administrator<input value={filters.adminUsername} onChange={(e) => change('adminUsername', e.target.value)} placeholder="Administrator" /></label><label>From<input type="date" value={filters.from} onChange={(e) => change('from', e.target.value)} /></label><label>To<input type="date" value={filters.to} onChange={(e) => change('to', e.target.value)} /></label><button type="button" className="moderation-clear-filters" disabled={!advanced && !filters.query && !filters.action} onClick={() => { setFilters(emptyFilters); setPage(1); }}>Reset filters</button></div>}</section>
+    {loading ? <section className="admin-panel moderation-loading"><LoadingState /></section> : error ? <section className="admin-panel moderation-empty"><ErrorState onRetry={() => setFilters({ ...filters })} /></section> : items.length === 0 ? <section className="admin-panel moderation-empty"><EmptyState title={filters.query || filters.action || advanced ? 'No matching review records.' : 'No moderation history found.'} text="Try changing the search or filters." /></section> : <section className="moderation-history-list" aria-label="Audit history">{items.map((item) => { const reviewed = formatHistoryDate(item.reviewedAt); const approved = item.action === 'APPROVE'; const TypeIcon = item.type === 'VIDEO' ? Video : FileText; return <button className="moderation-history-row" type="button" key={item.id} onClick={() => setSelected(item)}><span className="moderation-history-content"><span className="moderation-history-type-icon"><TypeIcon size={16} /></span><span><b>{item.title}</b><small>{item.type === 'VIDEO' ? 'Video' : 'Blog'} <i>/</i> @{item.author} <i>/</i> #{item.contentId}</small><em>Reviewed by {item.admin}</em></span></span><span className="moderation-history-trailing"><span className={approved ? 'moderation-decision approved' : 'moderation-decision rejected'}>{approved ? <CircleCheck size={16} /> : <CircleX size={16} />}{approved ? 'Approved' : 'Rejected'}</span><time dateTime={item.reviewedAt}><b>{reviewed.date}</b><small>{reviewed.time}</small></time><ChevronRight className="moderation-history-chevron" size={17} /></span></button>; })}{totalPages > 1 && <nav className="moderation-pagination" aria-label="History pagination"><button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)} aria-label="Previous page"><ChevronLeft size={17} /></button><span>{page} / {totalPages}</span><button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)} aria-label="Next page"><ChevronRight size={17} /></button></nav>}</section>}
+    {selected && <aside className="moderation-history-drawer" role="dialog" aria-modal="true" aria-label="Moderation audit detail"><header><div><span className="moderation-detail-kicker">{selected.type} REVIEW</span><h2>{selected.title}</h2></div><button type="button" onClick={() => setSelected(null)} aria-label="Close history detail"><X size={19} /></button></header><div className="moderation-history-drawer-body"><section><h3>Decision</h3><p className={selected.action === 'APPROVE' ? 'moderation-decision approved' : 'moderation-decision rejected'}>{selected.action === 'APPROVE' ? 'Approved' : 'Rejected'}</p><p>{selected.previousStatus} to {selected.newStatus}</p></section><section><h3>Reviewed by</h3><p>{selected.admin} · {formatDate(selected.reviewedAt)}</p></section><section><h3>AI Review snapshot</h3><p>{selected.aiReason || 'No AI assessment was available when this decision was made.'}{selected.aiConfidence != null && ` Confidence: ${Math.round(selected.aiConfidence * 100)}%.`}</p></section><section><h3>Decision reason</h3><p>{selected.reason || 'No reason was recorded.'}</p></section><section><h3>Original reviewed content</h3>{selected.body ? <ModerationSubmissionContent body={selected.body} recipeExpanded={false} onToggleRecipe={() => {}} contentImages={[]} onOpenImage={() => {}} /> : <p>This historical content snapshot is unavailable.</p>}</section><section><h3>Content moderation timeline</h3>{timeline.length ? timeline.map((event) => <p key={event.id}><strong>{event.action === 'APPROVE' ? 'Approved' : 'Rejected'}</strong> by {event.admin} on {formatDate(event.reviewedAt)}{event.reason ? `: ${event.reason}` : ''}</p>) : <p>No recorded decisions are available for this content.</p>}</section></div></aside>}</div>;
+}
+
+function LegacyModerationHistory({ onReviewQueue }) {
+  const [items, setItems] = useState([]); const [filters, setFilters] = useState({ query: '', action: '', contentType: '', adminUsername: '', from: '', to: '' });
+  const [page, setPage] = useState(1); const [totalPages, setTotalPages] = useState(1); const [loading, setLoading] = useState(true); const [error, setError] = useState(false); const [selected, setSelected] = useState(null); const [timeline, setTimeline] = useState([]);
+  useEffect(() => { const controller = new AbortController(); setLoading(true); setError(false); adminApi.getModerationHistory({ ...filters, page: page - 1, size: pageSize }, controller.signal).then((data) => { setItems(data.content || []); setTotalPages(Math.max(1, data.totalPages || 1)); }).catch(() => { if (!controller.signal.aborted) setError(true); }).finally(() => { if (!controller.signal.aborted) setLoading(false); }); return () => controller.abort(); }, [filters, page]);
+  useEffect(() => { if (!selected) { setTimeline([]); return undefined; } const controller = new AbortController(); adminApi.getModerationTimeline(selected.contentId, controller.signal).then(setTimeline).catch(() => setTimeline([])); return () => controller.abort(); }, [selected]);
+  const change = (key, value) => { setFilters((current) => ({ ...current, [key]: value })); setPage(1); };
+  return <div className="moderation-page moderation-history-page"><PageHeader eyebrow="ADMINISTRATION / CONTENT REVIEW" title="Moderation History" text="A complete record of content review decisions" /><ModerationWorkspaceTabs active="history" onReviewQueue={onReviewQueue} onHistory={() => {}} />
+    <AdminToolbar className="moderation-toolbar moderation-history-filters" label="History filters"><label className="admin-search moderation-search"><Search size={17} /><input value={filters.query} onChange={(e) => change('query', e.target.value)} placeholder="Search title, ID, or author" /></label><select className="admin-filter-select" value={filters.action} onChange={(e) => change('action', e.target.value)}><option value="">All decisions</option><option value="APPROVE">Approved</option><option value="REJECT">Rejected</option></select><select className="admin-filter-select" value={filters.contentType} onChange={(e) => change('contentType', e.target.value)}><option value="">All content</option><option value="BLOG">Blogs</option><option value="VIDEO">Videos</option></select><input className="admin-filter-select" aria-label="Administrator" value={filters.adminUsername} onChange={(e) => change('adminUsername', e.target.value)} placeholder="Administrator" /><input className="admin-filter-select" aria-label="From date" type="date" value={filters.from} onChange={(e) => change('from', e.target.value)} /><input className="admin-filter-select" aria-label="To date" type="date" value={filters.to} onChange={(e) => change('to', e.target.value)} /></AdminToolbar>
+    {loading ? <section className="admin-panel moderation-loading"><LoadingState /></section> : error ? <section className="admin-panel moderation-empty"><ErrorState onRetry={() => setFilters({ ...filters })} /></section> : items.length === 0 ? <section className="admin-panel moderation-empty"><EmptyState title="No moderation history found." text="Completed approval and rejection decisions will appear here." /></section> : <section className="admin-panel moderation-history-table"><div className="moderation-history-head"><span>Content</span><span>Decision</span><span>Administrator</span><span>Reviewed at</span></div>{items.map((item) => <button className="moderation-history-row" type="button" key={item.id} onClick={() => setSelected(item)}><span><b>{item.title}</b><small>{item.type === 'VIDEO' ? 'Video' : 'Blog'} · {item.author} · #{item.contentId}</small></span><span className={item.action === 'APPROVE' ? 'moderation-decision approved' : 'moderation-decision rejected'}>{item.action === 'APPROVE' ? 'Approved' : 'Rejected'}</span><span>{item.admin}</span><time dateTime={item.reviewedAt}>{formatDate(item.reviewedAt)}</time></button>)}<nav className="moderation-pagination" aria-label="History pagination"><button type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}><ChevronLeft size={17} /></button><span>{page} / {totalPages}</span><button type="button" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}><ChevronRight size={17} /></button></nav></section>}
+    {selected && <aside className="moderation-history-drawer" role="dialog" aria-modal="true" aria-label="Moderation audit detail"><header><div><span className="moderation-detail-kicker">{selected.type} REVIEW</span><h2>{selected.title}</h2></div><button type="button" onClick={() => setSelected(null)} aria-label="Close history detail"><X size={19} /></button></header><div className="moderation-history-drawer-body"><section><h3>Decision</h3><p className={selected.action === 'APPROVE' ? 'moderation-decision approved' : 'moderation-decision rejected'}>{selected.action === 'APPROVE' ? 'Approved' : 'Rejected'}</p><p>{selected.previousStatus} to {selected.newStatus}</p></section><section><h3>Reviewed by</h3><p>{selected.admin} · {formatDate(selected.reviewedAt)}</p></section><section><h3>AI Review snapshot</h3><p>{selected.aiReason || 'No AI assessment was available when this decision was made.'}{selected.aiConfidence != null && ` Confidence: ${Math.round(selected.aiConfidence * 100)}%.`}</p></section><section><h3>Decision reason</h3><p>{selected.reason || 'No reason was recorded.'}</p></section><section><h3>Original reviewed content</h3>{selected.body ? <ModerationSubmissionContent body={selected.body} recipeExpanded={false} onToggleRecipe={() => {}} contentImages={[]} onOpenImage={() => {}} /> : <p>This historical content snapshot is unavailable.</p>}</section><section><h3>Content moderation timeline</h3>{timeline.length ? timeline.map((event) => <p key={event.id}><strong>{event.action === 'APPROVE' ? 'Approved' : 'Rejected'}</strong> by {event.admin} on {formatDate(event.reviewedAt)}{event.reason ? `: ${event.reason}` : ''}</p>) : <p>No recorded decisions are available for this content.</p>}</section></div></aside>}</div>;
+}
+
 export default function AdminModerationPage() {
   const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview') === '1';
   const requestedSelectedId = new URLSearchParams(window.location.search).get('selected');
   const [items, setItems] = useState([]);
+  const [workspace, setWorkspace] = useState('queue');
   const [selectedId, setSelectedId] = useState(null);
   const [contentType, setContentType] = useState('');
   const [query, setQuery] = useState('');
@@ -290,6 +348,8 @@ export default function AdminModerationPage() {
   const [error, setError] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [confirm, setConfirm] = useState(null);
+  const [decisionReason, setDecisionReason] = useState('');
+  const [decisionError, setDecisionError] = useState('');
   const [toast, setToast] = useState('');
   const [recipeExpanded, setRecipeExpanded] = useState(false);
   const [submittingAction, setSubmittingAction] = useState(false);
@@ -369,16 +429,22 @@ export default function AdminModerationPage() {
 
   const decide = async () => {
     if (!confirm || submittingAction) return;
+    const reason = decisionReason.trim();
+    if (confirm.action === 'REJECT' && !reason) {
+      setDecisionError('A rejection reason is required.');
+      return;
+    }
     setSubmittingAction(true);
+    setDecisionError('');
     try {
-      await adminApi.moderateContent(confirm.item.id, confirm.action);
+      await adminApi.moderateContent(confirm.item.id, confirm.action, reason);
       setToast(actions[confirm.action].message);
       setConfirm(null);
+      setDecisionReason('');
       setSelectedId(null);
       setRefreshKey((key) => key + 1);
-    } catch {
-      setConfirm(null);
-      setToast('Could not update this submission. Please try again.');
+    } catch (requestError) {
+      setDecisionError(requestError?.message || 'Could not update this submission. Please try again.');
     } finally {
       setSubmittingAction(false);
     }
@@ -393,6 +459,7 @@ export default function AdminModerationPage() {
   const navigateImage = (delta) => setLightboxIndex((current) => (current + delta + contentImages.length) % contentImages.length);
   const changeZoom = (delta) => setLightboxZoom((current) => Math.min(3, Math.max(1, Number((current + delta).toFixed(2)))));
 
+  if (workspace === 'history') return <ModerationHistory onReviewQueue={() => setWorkspace('queue')} />;
   return <div className="moderation-page">
     <PageHeader
       eyebrow="ADMINISTRATION / CONTENT REVIEW"
@@ -400,6 +467,7 @@ export default function AdminModerationPage() {
       text="Review pending blog and video submissions."
       action={<div className="moderation-count" aria-live="polite"><ShieldCheck size={18} /><strong>{totalElements}</strong><span>pending</span></div>}
     />
+    <ModerationWorkspaceTabs active="queue" onReviewQueue={() => {}} onHistory={() => setWorkspace('history')} />
     <AdminToolbar className="moderation-toolbar" label="Moderation filters">
         <label className="admin-search moderation-search" aria-label="Search submissions">
           <Search size={17} aria-hidden="true" />
@@ -466,6 +534,7 @@ export default function AdminModerationPage() {
                     <span>{selected.type === 'VIDEO' ? 'Video' : 'Blog'}</span>
                     {selected.submittedAt && <span>{formatDate(selected.submittedAt)}</span>}
                   </div>
+                  {selected.decisionReason && <p className="moderation-latest-reason"><strong>Latest decision reason:</strong> {selected.decisionReason}</p>}
 
                   <section className={`moderation-ai-review ${selected.aiReason ? (selected.aiFlagged !== false ? 'is-flagged' : 'is-passed') : 'is-empty'}`} aria-labelledby="ai-review-title">
                     <div className="moderation-section-heading">
@@ -485,8 +554,8 @@ export default function AdminModerationPage() {
 
                 </div>
                 <footer className="moderation-actions">
-                  <button type="button" className="admin-btn primary" disabled={submittingAction} onClick={() => setConfirm({ item: selected, action: 'APPROVE' })}><Check size={16} /> Approve</button>
-                  <button type="button" className="admin-btn danger" disabled={submittingAction} onClick={() => setConfirm({ item: selected, action: 'REJECT' })}><X size={16} /> Reject</button>
+                  <button type="button" className="admin-btn primary" disabled={submittingAction} onClick={() => { setDecisionReason(''); setDecisionError(''); setConfirm({ item: selected, action: 'APPROVE' }); }}><Check size={16} /> Approve</button>
+                  <button type="button" className="admin-btn danger" disabled={submittingAction} onClick={() => { setDecisionReason(''); setDecisionError(''); setConfirm({ item: selected, action: 'REJECT' }); }}><X size={16} /> Reject</button>
                 </footer>
               </article>
             </div>}
@@ -504,7 +573,7 @@ export default function AdminModerationPage() {
       onImageError={(image) => setBrokenImages((current) => new Set(current).add(image))}
     />}
 
-    <ConfirmDialog
+    {false && <ModerationDecisionDialog
       dialog={confirm ? {
         title: actions[confirm.action].title,
         text: `This will change the status of “${confirm.item.title}”.`,
@@ -513,7 +582,10 @@ export default function AdminModerationPage() {
       } : null}
       onClose={() => setConfirm(null)}
       onConfirm={decide}
-    />
+    />}
+    <ModerationDecisionDialog decision={confirm} reason={decisionReason} error={decisionError} submitting={submittingAction}
+      onReasonChange={(value) => { setDecisionReason(value); if (decisionError) setDecisionError(''); }}
+      onClose={() => { setConfirm(null); setDecisionReason(''); setDecisionError(''); }} onConfirm={decide} />
     <Toast message={toast} onDismiss={() => setToast('')} />
     {preview && <span className="moderation-preview-marker" aria-hidden="true">Preview</span>}
   </div>;
