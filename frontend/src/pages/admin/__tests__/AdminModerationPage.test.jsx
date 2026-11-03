@@ -101,12 +101,21 @@ describe('admin moderation screen', () => {
     expect(screen.queryByText('Healthy lunch ideas')).toBeNull();
   });
 
-  it('confirms rejection and sends the backend action code', async () => {
+  it('requires a rejection reason and sends the trimmed reason', async () => {
     render(<AdminModerationPage />);
     fireEvent.click(await screen.findByRole('button', { name: /Reject/ }));
-    const rejectionButtons = screen.getAllByRole('button', { name: 'Reject' });
-    fireEvent.click(rejectionButtons[rejectionButtons.length - 1]);
-    await waitFor(() => expect(adminApi.moderateContent).toHaveBeenCalledWith(1, 'REJECT'));
+    const confirm = screen.getByRole('button', { name: 'Confirm Rejection' });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Rejection reason *' }), { target: { value: '  Missing source citations  ' } });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(adminApi.moderateContent).toHaveBeenCalledWith(1, 'REJECT', 'Missing source citations'));
+  });
+
+  it('allows approval without a reason', async () => {
+    render(<AdminModerationPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /Approve/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Approval' }));
+    await waitFor(() => expect(adminApi.moderateContent).toHaveBeenCalledWith(1, 'APPROVE', ''));
   });
 
   it('renders AI moderation evaluation and confidence when available', async () => {

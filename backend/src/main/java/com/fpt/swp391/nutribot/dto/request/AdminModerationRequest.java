@@ -2,6 +2,7 @@ package com.fpt.swp391.nutribot.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.*;
 
 @Data
@@ -14,5 +15,6 @@ public class AdminModerationRequest {
              message = "Action phải là APPROVE, HIDE hoặc REJECT")
     private String action;
 
+    @Size(max = 1000, message = "Reason must not exceed 1000 characters")
     private String reason;
 }
