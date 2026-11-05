@@ -30,16 +30,6 @@ function handleEditorPaste(event) {
   document.execCommand('insertHTML', false, container.innerHTML);
   event.currentTarget.dispatchEvent(new Event('input', { bubbles: true }));
 }
-
-const FALLBACK_INGREDIENTS = [
-  'Đậu phụ (Tofu)', 'Cà chua', 'Hành tây', 'Cà rốt', 'Rau cải xanh', 'Bắp cải', 'Khoai tây',
-  'Hành lá', 'Ớt chuông', 'Gừng', 'Tỏi', 'Nấm hương', 'Nấm đùi gà', 'Nấm rơm', 'Súp lơ (Bông cải xanh)',
-  'Rau chân vịt (Bina)', 'Bí đỏ', 'Dưa leo', 'Trứng gà', 'Sữa chua Hy Lạp', 'Sữa tươi không đường',
-  'Yến mạch', 'Gạo lứt', 'Quinoa (Hạt diêm mạch)', 'Bánh mì nguyên cám', 'Hạt chia', 'Hạt óc chó',
-  'Hạnh nhân', 'Đậu đen', 'Đậu gà (Chickpeas)', 'Dầu ô-liu', 'Dầu mè', 'Mật ong', 'Chuối',
-  'Bơ (Avocado)', 'Táo', 'Ức gà', 'Cá hồi', 'Tôm sú', 'Thịt bò nạc'
-];
-
 const MEASUREMENT_UNITS = [
   { value: 'g', label: 'g (Gram)' },
   { value: 'ml', label: 'ml (Milliliter)' },
@@ -271,6 +261,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const [categoryId, setCategoryId] = useState('');
   const [categories, setCategories] = useState([]);
   const [availableIngredients, setAvailableIngredients] = useState([]);
+  const [ingredientLoadState, setIngredientLoadState] = useState('loading');
   const [ingredientRows, setIngredientRows] = useState([{ name: '', quantity: '', unit: 'g', isCustom: false, customName: '' }]);
   const [stepRows, setStepRows] = useState(['']);
   const [isCalculatingNutrition, setIsCalculatingNutrition] = useState(false);
@@ -298,23 +289,17 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const hasVideo = Boolean(videoFile || (isEditing && existingMediaUrl));
   const hasThumbnail = Boolean(file || existingThumbnailUrl);
 
-  const combinedIngredients = useMemo(() => {
+  const ingredientOptions = useMemo(() => {
     const names = new Set();
     const list = [];
     (availableIngredients || []).forEach((item) => {
-      const name = item?.name || item;
+      const name = typeof item === 'string' ? item : item?.name;
       if (name && !names.has(name.toLowerCase())) {
         names.add(name.toLowerCase());
         list.push(name);
       }
     });
-    FALLBACK_INGREDIENTS.forEach((name) => {
-      if (!names.has(name.toLowerCase())) {
-        names.add(name.toLowerCase());
-        list.push(name);
-      }
-    });
-    return list.sort((a, b) => a.localeCompare(b, 'vi'));
+    return list.sort((a, b) => a.localeCompare(b, 'en'));
   }, [availableIngredients]);
 
   function missingRequiredFields() {
@@ -465,18 +450,24 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
 
   useEffect(() => {
     const controller = new AbortController();
+    setIngredientLoadState('loading');
     getAllergyIngredients(controller.signal)
       .then((items) => {
-        if (!controller.signal.aborted && Array.isArray(items) && items.length) {
-          setAvailableIngredients(items);
-        }
+        if (controller.signal.aborted) return;
+        const ingredients = Array.isArray(items) ? items : [];
+        setAvailableIngredients(ingredients);
+        setIngredientLoadState(ingredients.length ? 'success' : 'empty');
       })
-      .catch(() => {});
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setAvailableIngredients([]);
+        setIngredientLoadState('error');
+      });
     return () => controller.abort();
   }, []);
 
   useEffect(() => {
-    if (!isEditing || !editId) return undefined;
+    if (!isEditing || !editId || ingredientLoadState === 'loading') return undefined;
     if (hasLoadedPostRef.current === `${editType}_${editId}`) return undefined;
 
     const controller = new AbortController();
@@ -501,7 +492,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
       if (!controller.signal.aborted) setError(failure.status === 404 ? 'This post is no longer available.' : 'Could not load this post for editing.');
     }).finally(() => { if (!controller.signal.aborted) setLoadingContent(false); });
     return () => controller.abort();
-  }, [editId, editType, isEditing, availableIngredients]);
+  }, [editId, editType, ingredientLoadState, isEditing, availableIngredients]);
 
   useEffect(() => {
     if (!file) { setImageUrl(''); return undefined; }
@@ -684,6 +675,16 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
                 </label>
               </div>
 
+              {ingredientLoadState === 'loading' && (
+                <p className="recipe-ingredient-load-status" role="status">Loading ingredients from the catalog...</p>
+              )}
+              {ingredientLoadState === 'empty' && (
+                <p className="recipe-ingredient-load-status" role="status">No active ingredients are available in the catalog.</p>
+              )}
+              {ingredientLoadState === 'error' && (
+                <p className="recipe-ingredient-load-status" role="alert">Unable to load ingredients. Please refresh and try again.</p>
+              )}
+
               <div className="recipe-ingredient-rows" role="group" aria-label="Ingredients list">
                 {ingredientRows.map((row, index) => (
                   <div key={index} className="recipe-ingredient-row">
@@ -692,11 +693,13 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
                         className="recipe-ingredient-select"
                         value={row.name}
                         onChange={(e) => updateIngredientRow(index, 'name', e.target.value)}
-                        disabled={busy}
+                        disabled={busy || ingredientLoadState !== 'success'}
                         aria-label={`Select ingredient ${index + 1}`}
                       >
-                        <option value="">-- Select ingredient --</option>
-                        {combinedIngredients.map((name) => (
+                        <option value="">
+                          {ingredientLoadState === 'loading' ? '-- Loading ingredients --' : '-- Select ingredient --'}
+                        </option>
+                        {ingredientOptions.map((name) => (
                           <option key={name} value={name}>{name}</option>
                         ))}
                         <option value="__custom__">➕ Other (custom name)...</option>
