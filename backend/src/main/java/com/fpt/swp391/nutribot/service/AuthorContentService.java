@@ -124,9 +124,6 @@ public class AuthorContentService {
 
         Content saved = contentRepository.save(content);
         if ("BLOG".equalsIgnoreCase(contentType) && request.getRecipe() != null) contentRecipePersistenceService.replace(saved, request.getRecipe());
-        if ("BLOG".equalsIgnoreCase(contentType) && request.getRecipe() != null) {
-            replaceRecipe(saved, request.getRecipe());
-        }
         if (consentGranted) {
             saveConsentAudit(user, saved, null, true, "CREATE");
         }
@@ -243,9 +240,6 @@ public class AuthorContentService {
 
         Content saved = contentRepository.save(content);
         if ("BLOG".equalsIgnoreCase(content.getContentType()) && request.getRecipe() != null) contentRecipePersistenceService.replace(saved, request.getRecipe());
-        if ("BLOG".equalsIgnoreCase(content.getContentType()) && request.getRecipe() != null) {
-            replaceRecipe(saved, request.getRecipe());
-        }
         return toAuthorResponse(saved);
     }
 
