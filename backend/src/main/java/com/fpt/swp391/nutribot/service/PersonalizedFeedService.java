@@ -469,6 +469,15 @@ public class PersonalizedFeedService {
 
     private String extractFeedCaption(String body) {
         if (body == null || body.isBlank()) return null;
+        try {
+            JsonNode json = objectMapper.readTree(body);
+            if (json != null && json.isObject() && json.path("story").isTextual()) {
+                String story = json.path("story").asText().trim();
+                return story.isBlank() ? null : story;
+            }
+        } catch (Exception ignored) {
+            // Community prose is the normal format; continue with prose extraction.
+        }
         Matcher boundary = RECIPE_SECTION_BOUNDARY.matcher(body);
         String caption = (boundary.find() ? body.substring(0, boundary.start()) : body).trim();
         return caption.isBlank() ? null : caption;

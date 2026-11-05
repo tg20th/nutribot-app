@@ -59,6 +59,18 @@ class AuthorContentServiceTest {
     private ContentRecipeSuggestionService contentRecipeSuggestionService;
 
     @Mock
+    private ContentRecipePersistenceService contentRecipePersistenceService;
+
+    @Mock
+    private com.fpt.swp391.nutribot.repository.ContentRecipeDetailRepository contentRecipeDetailRepository;
+
+    @Mock
+    private com.fpt.swp391.nutribot.repository.ContentRecipeIngredientRepository contentRecipeIngredientRepository;
+
+    @Mock
+    private com.fpt.swp391.nutribot.repository.ContentRecipeStepRepository contentRecipeStepRepository;
+
+    @Mock
     private RecipeConsentRevocationService recipeConsentRevocationService;
 
     @Mock
