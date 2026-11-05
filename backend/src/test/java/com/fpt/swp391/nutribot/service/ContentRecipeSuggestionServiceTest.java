@@ -84,7 +84,7 @@ class ContentRecipeSuggestionServiceTest {
                 suggestionIngredientRepository,
                 suggestionStepRepository,
                 dishRepository,
-                new ContentRecipeBodyParser(new ObjectMapper()),
+                mock(ContentRecipeBodyParser.class),
                 extractionGateway,
                 new ObjectMapper(),
                 true,
@@ -230,7 +230,7 @@ class ContentRecipeSuggestionServiceTest {
         ContentRecipeSuggestionService disabled = new ContentRecipeSuggestionService(
                 contentRepository, voteRepository, suggestionRepository,
                 suggestionIngredientRepository, suggestionStepRepository, dishRepository,
-                new ContentRecipeBodyParser(new ObjectMapper()), extractionGateway,
+                mock(ContentRecipeBodyParser.class), extractionGateway,
                 new ObjectMapper(), false, MIN_VIEWS, MIN_VOTES, auditService, selfProvider());
 
         boolean created = disabled.evaluateContent(publishedContent(88, "BLOG", MIN_VIEWS));

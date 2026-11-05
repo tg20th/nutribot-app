@@ -228,13 +228,15 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of(
+                "https://nutribot-app-mocha.vercel.app",
                 "http://localhost:*",
                 "http://127.0.0.1:*",
                 "https://*.ngrok-free.app",
                 "https://*.ngrok.io",
                 "https://*.ngrok-free.dev"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With"));
+        configuration.setAllowedHeaders(Arrays.asList(
+                "Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With", "X-Session-ID"));
         configuration.setExposedHeaders(List.of("Authorization"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);

@@ -1,6 +1,3 @@
-import { useGSAP } from '@gsap/react';
-import gsap from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import {
   AlertCircle,
   CalendarDays,
@@ -9,34 +6,32 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
-  Grid3X3,
   LoaderCircle,
   LockKeyhole,
   Mail,
-  RotateCcw,
   Save,
   UserRound,
   UtensilsCrossed,
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import AuthModal from '../components/AuthModal';
 import { useToast } from '../components/notifications/ToastProvider';
 import { changeMyPassword, deleteMyAvatar, getMyProfile, getMyRecipes, updateMyAvatar, updateMyProfile, verifyMyEmailChange } from '../services/profileApi';
-import { getPublicProfileContent } from '../services/publicProfileApi';
+import { getPublicProfile, getPublicProfileContent } from '../services/publicProfileApi';
+import { ProfileHeader, ProfileTabs } from '../components/profile/ProfilePresentation';
 import { getCurrentUserFromToken } from '../utils/auth';
 import { getTrustedAvatarUrl } from '../utils/avatar';
 import ImageWithFallback from '../components/ImageWithFallback';
 import DishDetailModal from '../components/community/DishDetailModal';
 import '../styles/profile.css';
 import '../styles/public-profile.css';
+import '../styles/profile-unified.css';
 import '../styles/public-profile-recipe-button.css';
-
-gsap.registerPlugin(ScrollTrigger, useGSAP);
 
 const EMPTY_PROFILE = {
   username: '',
@@ -52,7 +47,7 @@ const normalizeProfileText = (value, maxLength = Number.POSITIVE_INFINITY) => (
   typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
 );
 
-const profileViewState = { tab: 'info', scrollY: 0 };
+const profileViewState = { tab: 'posts', scrollY: 0 };
 
 const publishProfileUpdate = (profile) => {
   if (profile.avatarUrl) {
@@ -82,6 +77,7 @@ const toFormProfile = (profile = {}, fallbackUser = {}) => ({
   gender: normalizeGender(profile.gender),
   hasPassword: profile.hasPassword !== undefined ? Boolean(profile.hasPassword) : true,
   authProvider: profile.authProvider || 'LOCAL',
+  createdAt: profile.createdAt || null,
 });
 
 const getInitials = (profile) => {
@@ -134,10 +130,10 @@ const validatePasswordChange = (passwords, hasExistingPassword = true) => {
   return errors;
 };
 
-export default function ProfilePage() {
+export default function ProfilePage({ editing = false }) {
   const { toast } = useToast();
   const location = useLocation();
-  const pageRef = useRef(null);
+  const navigate = useNavigate();
   const avatarInputRef = useRef(null);
   const savingRef = useRef(false);
   const fallbackUser = useMemo(() => getCurrentUserFromToken() ?? { username: '', email: '' }, []);
@@ -163,7 +159,8 @@ export default function ProfilePage() {
   const [passwordVisibility, setPasswordVisibility] = useState({ currentPassword: false, newPassword: false, confirmPassword: false });
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
   const [isSavingPassword, setIsSavingPassword] = useState(false);
-  const [activeTab, setActiveTab] = useState(() => location.state?.profileTab || profileViewState.tab || 'info');
+  const [activeTab, setActiveTab] = useState(() => location.state?.profileTab || profileViewState.tab || 'posts');
+  const [publicStats, setPublicStats] = useState({});
   const [myPosts, setMyPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
   const [postsLoaded, setPostsLoaded] = useState(false);
@@ -202,6 +199,15 @@ export default function ProfilePage() {
       });
     return () => controller.abort();
   }, [fallbackUser, profileLoadAttempt]);
+
+  useEffect(() => {
+    if (!profile.username) return undefined;
+    const controller = new AbortController();
+    getPublicProfile(profile.username, controller.signal)
+      .then((publicProfile) => { if (!controller.signal.aborted) setPublicStats(publicProfile.stats ?? {}); })
+      .catch(() => { if (!controller.signal.aborted) setPublicStats({}); });
+    return () => controller.abort();
+  }, [profile.username]);
 
   useEffect(() => {
     if (activeTab !== 'posts' || postsLoaded || !profile.username) return undefined;
@@ -273,33 +279,6 @@ export default function ProfilePage() {
     if (!notice) return;
     toast[notice.type === 'error' ? 'error' : notice.type === 'info' ? 'info' : 'success'](notice.message);
   }, [notice, toast]);
-
-  useGSAP(() => {
-    const media = gsap.matchMedia();
-    media.add('(prefers-reduced-motion: no-preference)', () => {
-      gsap.from('.nb-profile-hero__copy > *', {
-        y: 22,
-        opacity: 0,
-        duration: 0.75,
-        stagger: 0.08,
-        ease: 'power3.out',
-      });
-      gsap.fromTo('.nb-profile-intro__word',
-        { opacity: 0.15 },
-        {
-          opacity: 1,
-          stagger: 0.08,
-          ease: 'none',
-          scrollTrigger: {
-            trigger: '.nb-profile-intro',
-            start: 'top 88%',
-            end: 'bottom 64%',
-            scrub: true,
-          },
-        });
-    });
-    return () => media.revert();
-  }, { scope: pageRef });
 
   const isDirty = JSON.stringify(profile) !== JSON.stringify(savedProfile) || Boolean(avatarFile) || avatarRemoved;
   // confirmedEmail stays active until the pending address is verified.
@@ -409,6 +388,7 @@ export default function ProfilePage() {
       setAvatarPreview('');
       setAvatarRemoved(false);
       publishProfileUpdate(mapped);
+      if (editing) navigate('/profile', { replace: true });
       setNotice(updated.pendingEmail
         ? { type: 'info', message: `Profile saved. Your email change is pending verification. A code was sent to ${updated.pendingEmail}.` }
         : { type: 'success', message: 'Your profile has been updated successfully.' });
@@ -497,54 +477,38 @@ export default function ProfilePage() {
     setIsPasswordDialogOpen(true);
   };
 
+  const cancelEditing = () => {
+    resetForm();
+    if (window.history.length > 1) navigate(-1);
+    else navigate('/profile', { replace: true });
+  };
+
   const profileReturnTo = `${location.pathname}${location.search}${location.hash}`;
 
   return (
-    <div className="community-page nb-profile-page" ref={pageRef}>
+    <div className={`community-page nb-profile-page${editing ? ' nb-profile-page--edit' : ''}`}>
       <CommunityTopBar query={headerQuery} onQueryChange={setHeaderQuery} activePath="/profile" />
       <div className="community-shell">
         <CommunitySideNav activePath="/profile" />
         <span className="community-sidenav-spacer" aria-hidden="true" />
 
-        <main className="nb-profile-main">
-          <section className="nb-profile-hero nb-profile-hero--compact" aria-labelledby="profile-title">
-            <div className="nb-profile-hero__copy">
-              <p>Personal profile</p>
-              <h1 id="profile-title">{profile.fullName || profile.username || 'Your profile'}</h1>
-              {profile.username && <span className="nb-profile-hero__username">@{profile.username}</span>}
-              {profile.bio && <blockquote>{profile.bio}</blockquote>}
-            </div>
-            <button
-              type="button"
-              className="nb-profile-avatar"
-              onClick={() => avatarInputRef.current?.click()}
-              aria-label={visibleAvatar ? 'Change profile photo' : 'Upload profile photo'}
-            >
-              {visibleAvatar ? <span className="nb-profile-avatar__crop"><img src={visibleAvatar} alt="Your profile preview" /></span> : <span>{getInitials(profile)}</span>}
-              <i><Camera size={14} strokeWidth={2.5} /></i>
-            </button>
-            <input ref={avatarInputRef} className="nb-profile-avatar-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarChange} tabIndex={-1} />
-          </section>
+        <main className="public-profile-page">
+          {!editing && <ProfileHeader
+            profile={{ ...profile, avatarUrl: visibleAvatar, displayName: profile.fullName, joinedAt: profile.createdAt }}
+            stats={{ ...publicStats, posts: publicStats.posts ?? myPosts.length, approvedRecipeContributions: publicStats.approvedRecipeContributions ?? myRecipes.length }}
+            isOwner
+            onOpenSettings={() => navigate('/profile/edit')}
+          />}
 
-          <div className="nb-profile-grid">
-            <nav className="public-profile-tabs nb-profile-tabs" aria-label="Profile content">
-              <button type="button" className={activeTab === 'info' ? 'is-active' : ''} onClick={() => setActiveTab('info')}>
-                <Grid3X3 size={16} /> About
-              </button>
-              <button type="button" className={activeTab === 'posts' ? 'is-active' : ''} onClick={() => setActiveTab('posts')}>
-                <Grid3X3 size={16} /> Posts
-              </button>
-              <button type="button" className={activeTab === 'recipes' ? 'is-active' : ''} onClick={() => setActiveTab('recipes')}>
-                <UtensilsCrossed size={16} /> Recipes
-              </button>
-            </nav>
+          <div className="profile-content-stack">
+            {!editing && <ProfileTabs tab={activeTab} onChange={setActiveTab} />}
 
-            {activeTab === 'info' && (
-            <form className="nb-profile-form" onSubmit={handleSubmit} noValidate>
+            {editing && (
+            <div className="nb-profile-edit-page">
+            <form className="nb-profile-form nb-profile-editor" aria-labelledby="edit-profile-title" onSubmit={handleSubmit} noValidate>
               <header>
                 <div>
-                  <p>Personal information</p>
-                  <h2>About you</h2>
+                  <h2 id="edit-profile-title">Edit profile</h2>
                   <span className="nb-profile-form-intro">A little about you and your journey with NutriBot.</span>
                 </div>
                 <span className="nb-profile-secure"><LockKeyhole size={14} /> Secure profile</span>
@@ -580,6 +544,15 @@ export default function ProfilePage() {
                 </div>
               ) : (
                 <div className="nb-profile-fields">
+                  <div className="nb-profile-avatar-editor nb-profile-field--wide">
+                    <span>Profile picture</span>
+                    <div>
+                      {visibleAvatar ? <img src={visibleAvatar} alt="Profile preview" /> : <b>{getInitials(profile)}</b>}
+                      <button type="button" onClick={() => avatarInputRef.current?.click()}><Camera size={16}/> Choose photo</button>
+                      {visibleAvatar && <button type="button" onClick={removeAvatar}>Remove</button>}
+                    </div>
+                    <input ref={avatarInputRef} className="nb-profile-avatar-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarChange} tabIndex={-1} />
+                  </div>
                   <div className="nb-profile-section-label nb-profile-field--wide">
                     <span>Basic details</span>
                   </div>
@@ -650,21 +623,15 @@ export default function ProfilePage() {
               )}
 
               <footer className="nb-profile-actions">
-                <button type="button" className="nb-profile-button nb-profile-button--secondary" onClick={resetForm} disabled={!isDirty || isSaving || isLoading || !hasLoadedProfile}><RotateCcw size={16} /> Discard changes</button>
-                <button type="submit" className="nb-profile-button nb-profile-button--primary" disabled={!isDirty || isSaving || isLoading || !hasLoadedProfile}>{isSaving ? <LoaderCircle size={17} className="nb-profile-spinner" /> : <Save size={17} />} {isSaving ? 'Saving...' : 'Save profile'}</button>
+                <button type="button" className="nb-profile-button nb-profile-button--secondary" onClick={cancelEditing} disabled={isSaving}>Cancel</button>
+                <button type="submit" className="nb-profile-button nb-profile-button--primary" disabled={!isDirty || isSaving || isLoading || !hasLoadedProfile}>{isSaving ? <LoaderCircle size={17} className="nb-profile-spinner" /> : <Save size={17} />} {isSaving ? 'Saving...' : 'Save changes'}</button>
               </footer>
             </form>
+            </div>
             )}
 
-            {activeTab === 'posts' && (
-              <section className="nb-profile-content nb-profile-posts" aria-label="Your published posts">
-                <header className="nb-profile-content-head">
-                  <div>
-                    <p>Published stories</p>
-                    <h2>Your posts</h2>
-                  </div>
-                  <Link className="nb-profile-manage-link" to="/community/my-blogs">Manage posts</Link>
-                </header>
+            {!editing && activeTab === 'posts' && (
+              <section aria-label="Your published posts">
                 {postsLoading ? (
                   <div className="nb-profile-loading" role="status">
                     <LoaderCircle size={25} className="nb-profile-spinner" />
@@ -684,25 +651,19 @@ export default function ProfilePage() {
                         state={{ returnTo: profileReturnTo, returnState: { profileTab: 'posts', profileScrollY: window.scrollY } }}
                         className="public-profile-grid-item"
                       >
-                        {post.image ? <ImageWithFallback src={post.image} alt={post.title || 'Post'} loading="lazy" /> : <span>{post.title || 'Published post'}</span>}
+                        {post.image ? <ImageWithFallback src={post.image} alt={post.title || 'Post'} loading="lazy" /> : <span>{post.title || post.caption || 'Shared post'}</span>}
                         {post.images?.length > 1 && <small aria-label="Gallery">{post.images.length}</small>}
                       </Link>
                     ))}
                   </div>
                 ) : (
-                  <p className="public-profile-empty">No published posts yet. Your public stories will appear here.</p>
+                  <p className="public-profile-empty">No public posts yet.</p>
                 )}
               </section>
             )}
 
-            {activeTab === 'recipes' && (
-              <section className="nb-profile-content nb-profile-recipes" aria-label="Your recipes">
-                <header className="nb-profile-content-head">
-                  <div>
-                    <p>Approved contributions</p>
-                    <h2>Your recipes</h2>
-                  </div>
-                </header>
+            {!editing && activeTab === 'recipes' && (
+              <section aria-label="Your recipes">
                 {recipesLoading ? (
                   <div className="nb-profile-loading" role="status">
                     <LoaderCircle size={25} className="nb-profile-spinner" />
@@ -731,7 +692,7 @@ export default function ProfilePage() {
                           <h2>{recipe.name || recipe.title}</h2>
                           {recipe.description && <p>{recipe.description}</p>}
                           <small>
-                            {(recipe.preparationTime || recipe.prepTimeMinutes || recipe.prepTime || '')}
+                            {(recipe.preparationTime || recipe.prepTime || recipe.prepTimeMinutes || '')}
                             {recipe.servings ? ` · Serves ${recipe.servings}` : ''}
                           </small>
                         </div>
@@ -739,7 +700,7 @@ export default function ProfilePage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="public-profile-empty">No recipes yet. Recipes created from your blog posts with recipe consent will appear here.</p>
+                  <p className="public-profile-empty">No approved public recipes yet.</p>
                 )}
               </section>
             )}

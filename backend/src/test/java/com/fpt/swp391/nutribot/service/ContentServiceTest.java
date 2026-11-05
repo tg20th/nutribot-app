@@ -32,14 +32,16 @@ import static org.mockito.Mockito.*;
 class ContentServiceTest {
 
     private ContentRepository contentRepository;
+    private ContentRecipePersistenceService contentRecipePersistenceService;
     private com.fpt.swp391.nutribot.repository.VoteRepository voteRepository;
     private ContentService contentService;
 
     @BeforeEach
     void setUp() {
         contentRepository = mock(ContentRepository.class);
+        contentRecipePersistenceService = mock(ContentRecipePersistenceService.class);
         voteRepository = mock(com.fpt.swp391.nutribot.repository.VoteRepository.class);
-        contentService = new ContentService(contentRepository, voteRepository);
+        contentService = new ContentService(contentRepository, contentRecipePersistenceService, voteRepository);
     }
 
     private User createActiveAuthor(int userId, String name) {

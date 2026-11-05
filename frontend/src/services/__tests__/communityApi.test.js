@@ -84,6 +84,26 @@ describe('personalized community feed API', () => {
     expect(post.nutrition.carbs).toBe(38);
   });
 
+  it('maps a relational Blog detail recipe for the community Post Details view', () => {
+    const post = normalizePost({
+      contentId: 1, contentType: 'BLOG', title: 'Phở nấm', body: 'A plain story.',
+      recipe: {
+        prepMinutes: 15, cookMinutes: 20, servings: 2, calories: 297,
+        proteinG: 12.7, carbsG: 34.1, fatG: 7.8, fiberG: 5.4, sodiumMg: 253,
+        ingredients: [{ name: 'Nấm đùi gà', quantity: '150', unit: 'g' }],
+        steps: [{ instruction: 'Ninh nước dùng.' }]
+      }
+    }, 'BLOG');
+
+    expect(post.body).toBe('A plain story.');
+    expect(post.calories).toBe(297);
+    expect(post.protein).toBe(12.7);
+    expect(post.nutrition).toMatchObject({ carbs: 34.1, fat: 7.8, fiber: 5.4, sodium: 253 });
+    expect(post.pantryItems).toEqual(['150 g Nấm đùi gà']);
+    expect(post.steps).toEqual(['Ninh nước dùng.']);
+    expect(post).toMatchObject({ servings: 2, prepTime: 15, cookTime: 20 });
+  });
+
   it('does not invent a caption or nutrition for the real Snack chay feed contract', () => {
     const snackFeedItem = {
       contentId: 125,
