@@ -79,12 +79,24 @@ const nutritionDetailLabels = [
 const numericDetailLabels = [...cookingMetaLabels, ...nutritionDetailLabels];
 
 function makeRecipePayload(details, ingredientRows = [], stepRows = []) {
+  const integerValue = (value) => {
+    if (value === '' || value == null) return null;
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed)) throw new Error('Prep time, cook time, and servings must be whole numbers.');
+    return parsed;
+  };
+  const decimalValue = (value) => {
+    if (value === '' || value == null) return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) throw new Error('Nutrition values must be valid numbers.');
+    return parsed;
+  };
   return {
-    prepMinutes: details.prepMinutes || '',
-    cookMinutes: details.cookMinutes || '',
-    servings: details.servings || '',
-    calories: details.calories || '', proteinG: details.proteinG || '', carbsG: details.carbsG || '',
-    fatG: details.fatG || '', fiberG: details.fiberG || '', sodiumMg: details.sodiumMg || '',
+    prepMinutes: integerValue(details.prepMinutes),
+    cookMinutes: integerValue(details.cookMinutes),
+    servings: integerValue(details.servings),
+    calories: decimalValue(details.calories), proteinG: decimalValue(details.proteinG), carbsG: decimalValue(details.carbsG),
+    fatG: decimalValue(details.fatG), fiberG: decimalValue(details.fiberG), sodiumMg: decimalValue(details.sodiumMg),
     ingredients: ingredientRows
       .map((row) => ({
         name: (row.isCustom ? row.customName : row.name)?.trim() || '',
