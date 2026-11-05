@@ -10,6 +10,7 @@ from app.schemas.nutrition import (
     NutritionCalculationResponse,
     NutritionFacts,
 )
+from app.prompts import UNTRUSTED_CONTENT_SYSTEM_INSTRUCTION
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,7 @@ Chỉ trả về JSON thuần túy, không có markdown formatting khác."""
             try:
                 client = self._gemini_service._get_client()
                 config = types.GenerateContentConfig(
+                    system_instruction=UNTRUSTED_CONTENT_SYSTEM_INSTRUCTION,
                     response_mime_type="application/json",
                     temperature=0.2,
                 )

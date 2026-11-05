@@ -37,6 +37,8 @@ from app.prompts import (
     VIDEO_CONTEXT_FOLLOWUP_SYSTEM_INSTRUCTION,
     VIDEO_SYSTEM_INSTRUCTION,
     SYSTEM_INSTRUCTION,
+    MODERATION_UNTRUSTED_CONTENT_SYSTEM_INSTRUCTION,
+    UNTRUSTED_CONTENT_SYSTEM_INSTRUCTION,
     build_image_prompt,
     build_video_prompt,
     build_user_prompt,
@@ -303,7 +305,12 @@ class GeminiService:
         )
         contents = [prompt_text, image_part] if image_part is not None else prompt_text
 
-        config = types.GenerateContentConfig(response_mime_type="application/json", response_schema=ModelModeration, temperature=0)
+        config = types.GenerateContentConfig(
+            system_instruction=MODERATION_UNTRUSTED_CONTENT_SYSTEM_INSTRUCTION,
+            response_mime_type="application/json",
+            response_schema=ModelModeration,
+            temperature=0,
+        )
         response = await self._generate_with_fallback(client, contents, config)
         return self._parse_moderation_response(response).model_dump()
 
@@ -390,6 +397,7 @@ class GeminiService:
 
         contents = [prompt_text, image_part]
         config = types.GenerateContentConfig(
+            system_instruction=UNTRUSTED_CONTENT_SYSTEM_INSTRUCTION,
             response_mime_type="application/json",
             response_schema=ImageRelevanceResponse,
             temperature=0.1,

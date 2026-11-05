@@ -72,7 +72,12 @@ function ArticleBody({ body }) {
   return blocks.length ? blocks : <p>This story has no content yet.</p>;
 }
 
-function parseRecipeBody(rawBody) {
+function parseRecipeBody(rawBody, structuredRecipe = null) {
+  if (structuredRecipe && typeof structuredRecipe === 'object') {
+    const ingredients = Array.isArray(structuredRecipe.ingredients) ? structuredRecipe.ingredients : [];
+    const steps = Array.isArray(structuredRecipe.steps) ? structuredRecipe.steps.map((step) => typeof step === 'string' ? step : step?.instruction).filter(Boolean) : [];
+    return { story: rawBody || '', prepMinutes: structuredRecipe.prepMinutes ?? '', cookMinutes: structuredRecipe.cookMinutes ?? '', servings: structuredRecipe.servings ?? '', nutrition: structuredRecipe, ingredients, steps };
+  }
   if (!rawBody || typeof rawBody !== 'string') return null;
   const trimmed = rawBody.trim();
   if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
@@ -165,7 +170,7 @@ export default function BlogDetailPage({ byId = false }) {
   useEffect(() => { window.scrollTo(0, 0); }, [identifier]);
 
   const openAuth = (mode) => navigate(mode === 'signup' ? '/register' : '/login');
-  const recipe = blog ? parseRecipeBody(blog.body) : null;
+  const recipe = blog ? parseRecipeBody(blog.body, blog.recipe) : null;
   return <div className="public-blog-page">
     <Header onAuth={openAuth}/>
     <main className="public-blog-detail">

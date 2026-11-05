@@ -277,26 +277,44 @@ export const normalizePost = (item = {}, fallbackType = 'BLOG') => {
   const rawType = item.type ?? item.contentType ?? fallbackType;
   const author = item.author ?? item.user ?? {};
   const parsedRecipe = parseBodyRecipeData(item.body);
+  // Blog details now receive relational recipe data from the API.  Do not require
+  // the story body to contain the former serialized JSON document.
+  const relationalRecipe = item.recipe && typeof item.recipe === 'object' ? item.recipe : null;
+  const relationalIngredients = Array.isArray(relationalRecipe?.ingredients) ? relationalRecipe.ingredients : null;
+  const relationalSteps = Array.isArray(relationalRecipe?.steps)
+    ? relationalRecipe.steps.map((step) => typeof step === 'string' ? step : step?.instruction).filter(Boolean)
+    : null;
   const cleanBody = parsedRecipe.cleanBody || extractStoryText(stripHtmlToCleanText(item.body)) || '';
   const rawCaption = extractStoryText(item.caption);
   const rawContent = typeof item.content === 'string' ? extractStoryText(item.content) : null;
   const captionSource = firstDefined(rawCaption, item.story, parsedRecipe.story, item.description, item.summary, rawContent, cleanBody);
   const cleanDescription = extractStoryText(stripHtmlToCleanText(captionSource));
   const finalStory = parsedRecipe.story || cleanDescription || cleanBody;
-  const calories = extractCalories(item, parsedRecipe);
-  const protein = extractProtein(item, parsedRecipe);
-  const nutrition = normalizeNutrition(item, parsedRecipe);
+  const calories = firstDefined(relationalRecipe?.calories, extractCalories(item, parsedRecipe));
+  const protein = firstDefined(relationalRecipe?.proteinG, extractProtein(item, parsedRecipe));
+  const nutrition = {
+    ...normalizeNutrition(item, parsedRecipe),
+    carbs: firstDefined(relationalRecipe?.carbsG, normalizeNutrition(item, parsedRecipe).carbs),
+    fat: firstDefined(relationalRecipe?.fatG, normalizeNutrition(item, parsedRecipe).fat),
+    fiber: firstDefined(relationalRecipe?.fiberG, normalizeNutrition(item, parsedRecipe).fiber),
+    sodium: firstDefined(relationalRecipe?.sodiumMg, normalizeNutrition(item, parsedRecipe).sodium),
+  };
 
   return {
     ...item,
     calories,
     protein,
     nutrition,
-    pantryItems: item.pantryItems ?? parsedRecipe.pantryItems ?? null,
-    steps: item.steps ?? parsedRecipe.steps ?? null,
-    servings: item.servings ?? parsedRecipe.servings ?? null,
-    prepTime: item.prepTime ?? parsedRecipe.prepTime ?? null,
-    cookTime: item.cookTime ?? parsedRecipe.cookTime ?? null,
+    recipe: relationalRecipe,
+    pantryItems: item.pantryItems ?? relationalIngredients?.map((ingredient) => {
+      const name = ingredient?.name ?? ingredient?.ingredientName ?? '';
+      const amount = [ingredient?.quantity, ingredient?.unit].filter(Boolean).join(' ');
+      return [amount, name].filter(Boolean).join(' ');
+    }) ?? parsedRecipe.pantryItems ?? null,
+    steps: item.steps ?? relationalSteps ?? parsedRecipe.steps ?? null,
+    servings: item.servings ?? relationalRecipe?.servings ?? parsedRecipe.servings ?? null,
+    prepTime: item.prepTime ?? relationalRecipe?.prepMinutes ?? parsedRecipe.prepTime ?? null,
+    cookTime: item.cookTime ?? relationalRecipe?.cookMinutes ?? parsedRecipe.cookTime ?? null,
     cleanBody: finalStory,
     body: finalStory || extractStoryText(item.body),
     description: cleanDescription,

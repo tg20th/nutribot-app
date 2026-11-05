@@ -1,7 +1,5 @@
 package com.fpt.swp391.nutribot.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestion;
 import com.fpt.swp391.nutribot.entity.ContentRecipeSuggestionAudit;
@@ -13,6 +11,7 @@ import com.fpt.swp391.nutribot.repository.ContentRecipeSuggestionStepRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.DishRepository;
 import com.fpt.swp391.nutribot.repository.VoteRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,7 +43,6 @@ public class ContentRecipeSuggestionService {
     private final DishRepository dishRepository;
     private final ContentRecipeBodyParser bodyParser;
     private final RecipeExtractionGatewayService extractionGateway;
-    private final ObjectMapper objectMapper;
     private final boolean enabled;
     private final int minViews;
     private final int minVotes;
@@ -60,7 +58,7 @@ public class ContentRecipeSuggestionService {
             DishRepository dishRepository,
             ContentRecipeBodyParser bodyParser,
             RecipeExtractionGatewayService extractionGateway,
-            ObjectMapper objectMapper,
+            ObjectMapper ignoredObjectMapper,
             @Value("${app.content-recipe-suggestion.enabled:true}") boolean enabled,
             @Value("${app.content-recipe-suggestion.min-views:500}") int minViews,
             @Value("${app.content-recipe-suggestion.min-votes:10}") int minVotes,
@@ -74,7 +72,6 @@ public class ContentRecipeSuggestionService {
         this.dishRepository = dishRepository;
         this.bodyParser = bodyParser;
         this.extractionGateway = extractionGateway;
-        this.objectMapper = objectMapper;
         this.enabled = enabled;
         this.minViews = minViews;
         this.minVotes = minVotes;
@@ -319,8 +316,6 @@ public class ContentRecipeSuggestionService {
             }
         }
         // Legacy in-memory view only; these fields are @Transient and never reach SQL Server.
-        suggestion.setIngredientsJson(writeJson(extraction.ingredients()));
-        suggestion.setRecipeStepsJson(recipe != null ? writeJson(recipe.steps()) : null);
         return suggestion;
     }
 
@@ -329,8 +324,8 @@ public class ContentRecipeSuggestionService {
             return null;
         }
         try {
-            return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException ex) {
+            return null;
+        } catch (RuntimeException ex) {
             log.warn("Không thể serialize dữ liệu suggestion: {}", ex.getMessage());
             return null;
         }

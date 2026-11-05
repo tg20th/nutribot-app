@@ -3,6 +3,8 @@ package com.fpt.swp391.nutribot.dto.response;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 import java.time.LocalDateTime;
+import com.fpt.swp391.nutribot.dto.ContentRecipeDto;
+import com.fpt.swp391.nutribot.dto.ContentRecipeDto;
 
 @Data
 @Builder
@@ -18,6 +20,8 @@ public class ContentDetailResponse {
 
     @JsonProperty("body")
     private String body;
+    @JsonProperty("recipe")
+    private ContentRecipeDto recipe;
 
     @JsonProperty("thumbnailUrl")
     private String thumbnailUrl;

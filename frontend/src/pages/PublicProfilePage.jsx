@@ -1,21 +1,15 @@
-import { CalendarDays, Grid3X3, UtensilsCrossed } from 'lucide-react';
+import { UtensilsCrossed } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import MemberPageLayout from '../layouts/MemberPageLayout';
 import ImageWithFallback from '../components/ImageWithFallback';
 import DishDetailModal from '../components/community/DishDetailModal';
+import { ProfileHeader, ProfileTabs } from '../components/profile/ProfilePresentation';
 import { getPublicProfile, getPublicProfileContent, getPublicProfileRecipes } from '../services/publicProfileApi';
 import '../styles/public-profile.css';
 import '../styles/public-profile-recipe-button.css';
 
-const fallbackInitial = (profile) => (profile.displayName || profile.username || 'N').charAt(0).toUpperCase();
 const profileViewCache = new Map();
-
-function ProfileAvatar({ profile, large = false }) {
-  return profile.avatarUrl
-    ? <ImageWithFallback className={large ? 'public-profile-avatar public-profile-avatar--large' : 'public-profile-avatar'} src={profile.avatarUrl} alt="" />
-    : <span className={large ? 'public-profile-avatar public-profile-avatar--large avatar-fallback' : 'public-profile-avatar avatar-fallback'} aria-hidden="true">{fallbackInitial(profile)}</span>;
-}
 
 function Skeleton() {
   return <div className="public-profile-skeleton" aria-busy="true" role="status"><span/><span/><span/></div>;
@@ -85,15 +79,8 @@ export default function PublicProfilePage() {
   if (state !== 'ready') return <MemberPageLayout activePath="/home"><main className="public-profile-page public-profile-state"><h1>{state === 'not-found' ? 'Profile not found' : 'Public profile unavailable'}</h1><p>{state === 'not-found' ? 'This profile is no longer public or does not exist.' : 'The public profile service is not available yet. Please try again later.'}</p><Link to="/home">Back to community</Link></main></MemberPageLayout>;
 
   return <MemberPageLayout activePath="/home"><main className="public-profile-page">
-    <header className="public-profile-header">
-      <ProfileAvatar profile={profile} large />
-      <div className="public-profile-intro"><div className="public-profile-name-row"><div><h1>{profile.displayName || profile.username}</h1>{profile.username && <p>@{profile.username}</p>}</div></div>
-        {profile.bio && <p className="public-profile-bio">{profile.bio}</p>}
-        <div className="public-profile-meta">{profile.joinedAt && <span><CalendarDays size={14}/> Joined {new Date(profile.joinedAt).toLocaleDateString('en', { month: 'short', year: 'numeric' })}</span>}</div>
-        <dl className="public-profile-stats">{[['posts', 'Posts'], ['approvedRecipeContributions', 'Recipes'], ['totalLikes', 'Likes']].filter(([key]) => stats[key] != null).map(([key, label]) => <div key={key}><dt>{stats[key]}</dt><dd>{label}</dd></div>)}</dl>
-      </div>
-    </header>
-    <nav className="public-profile-tabs" aria-label="Profile content"><button className={tab === 'posts' ? 'is-active' : ''} onClick={() => setTab('posts')}><Grid3X3 size={16}/> Posts</button><button className={tab === 'recipes' ? 'is-active' : ''} onClick={() => setTab('recipes')}><UtensilsCrossed size={16}/> Recipes</button></nav>
+    <ProfileHeader profile={profile} stats={stats}/>
+    <ProfileTabs tab={tab} onChange={setTab}/>
     {tab === 'posts' && <>{postsUnavailable && <p className="public-profile-empty">Public posts are not available yet.</p>}<div className="public-profile-grid">{posts.map((post) => <Link key={`${post.type}-${post.id}`} to={`/community/posts/${post.id}`} state={{ returnTo: profileReturnTo, returnState: { profileTab: tab, profileScrollY: window.scrollY } }} className="public-profile-grid-item">{post.image ? <ImageWithFallback src={post.image} alt={post.title || 'Post'} loading="lazy"/> : <span>{post.title || post.caption || 'Shared post'}</span>}{post.images?.length > 1 && <small aria-label="Gallery">{post.images.length}</small>}</Link>)}</div>{!posts.length && !postsUnavailable && <p className="public-profile-empty">No public posts yet.</p>}</>}
     {tab === 'recipes' && <div className="public-profile-recipes">{recipes.map((recipe) => <button type="button" key={recipe.dishId ?? recipe.id} onClick={() => setSelectedRecipe(recipe)} className="public-profile-recipe">{(recipe.imageUrl || recipe.image) ? <ImageWithFallback src={recipe.imageUrl || recipe.image} alt={recipe.name || recipe.title || ''} loading="lazy"/> : <span className="public-profile-recipe-fallback"><UtensilsCrossed size={20}/></span>}<div><h2>{recipe.name || recipe.title}</h2>{recipe.description && <p>{recipe.description}</p>}<small>{recipe.preparationTime || recipe.prepTime || ''}{recipe.servings ? ` · Serves ${recipe.servings}` : ''}</small></div></button>)}{!recipes.length && <p className="public-profile-empty">{recipesUnavailable ? 'Public recipes are not available yet.' : 'No approved public recipes yet.'}</p>}</div>}
   </main>{selectedRecipe && <DishDetailModal meal={selectedRecipe} onClose={() => setSelectedRecipe(null)}/>}</MemberPageLayout>;

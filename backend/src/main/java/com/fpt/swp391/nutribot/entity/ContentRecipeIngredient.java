@@ -1,0 +1,2 @@
+package com.fpt.swp391.nutribot.entity; import jakarta.persistence.*; import lombok.*;
+@Entity @Table(name="content_recipe_ingredients") @IdClass(ContentRecipeIngredientId.class) @Data @Builder @NoArgsConstructor @AllArgsConstructor public class ContentRecipeIngredient { @Id @Column(name="content_id") private Integer contentId; @Id @Column(name="sort_order") private Integer sortOrder; @Column(name="ingredient_name") private String ingredientName; private String quantity,unit; @Column(name="is_custom") private Boolean isCustom; }

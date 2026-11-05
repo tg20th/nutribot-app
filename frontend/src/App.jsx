@@ -91,6 +91,7 @@ export default function App() {
     <Route path="/community/planner" element={<MemberRoute><WeeklyMenuPage /></MemberRoute>} />
     <Route path="/weekly-planner" element={<WeeklyPlannerEntry />} />
     <Route path="/profile" element={<MemberRoute><ProfilePage /></MemberRoute>} />
+    <Route path="/profile/edit" element={<MemberRoute><ProfilePage editing /></MemberRoute>} />
     <Route path="/profile/health" element={<MemberRoute><HealthProfilePage /></MemberRoute>} />
     <Route path="/community/profile" element={<Navigate to="/profile" replace />} />
     <Route path="/community/users/:userId" element={<PublicProfilePage />} />

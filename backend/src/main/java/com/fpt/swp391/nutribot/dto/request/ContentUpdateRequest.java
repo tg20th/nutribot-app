@@ -2,6 +2,7 @@ package com.fpt.swp391.nutribot.dto.request;
 
 import jakarta.validation.constraints.Size;
 import lombok.*;
+import com.fpt.swp391.nutribot.dto.ContentRecipeDto;
 
 @Data
 @NoArgsConstructor
@@ -13,6 +14,8 @@ public class ContentUpdateRequest {
     private String title;
 
     private String body;
+    private ContentRecipeDto recipe;
+
 
     private Integer categoryId;
 

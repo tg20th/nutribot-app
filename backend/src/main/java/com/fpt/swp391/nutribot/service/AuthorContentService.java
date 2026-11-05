@@ -2,11 +2,15 @@ package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.request.ContentCreateRequest;
 import com.fpt.swp391.nutribot.dto.request.ContentUpdateRequest;
+import com.fpt.swp391.nutribot.dto.ContentRecipeDto;
 import com.fpt.swp391.nutribot.dto.response.AuthorContentResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.entity.Category;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.ContentModeration;
+import com.fpt.swp391.nutribot.entity.ContentRecipeDetail;
+import com.fpt.swp391.nutribot.entity.ContentRecipeIngredient;
+import com.fpt.swp391.nutribot.entity.ContentRecipeStep;
 import com.fpt.swp391.nutribot.entity.RecipeConsentAuditLog;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.event.ContentModerationRequestedEvent;
@@ -16,6 +20,9 @@ import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.CategoryRepository;
 import com.fpt.swp391.nutribot.repository.ContentModerationRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
+import com.fpt.swp391.nutribot.repository.ContentRecipeDetailRepository;
+import com.fpt.swp391.nutribot.repository.ContentRecipeIngredientRepository;
+import com.fpt.swp391.nutribot.repository.ContentRecipeStepRepository;
 import com.fpt.swp391.nutribot.repository.RecipeConsentAuditLogRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +49,10 @@ import java.util.regex.Pattern;
 public class AuthorContentService {
 
     private final ContentRepository contentRepository;
+    private final ContentRecipePersistenceService contentRecipePersistenceService;
+    private final ContentRecipeDetailRepository contentRecipeDetailRepository;
+    private final ContentRecipeIngredientRepository contentRecipeIngredientRepository;
+    private final ContentRecipeStepRepository contentRecipeStepRepository;
     private final UserRepository userRepository;
     private final CategoryRepository categoryRepository;
     private final CloudinaryMediaService cloudinaryMediaService;
@@ -112,6 +123,10 @@ public class AuthorContentService {
                 .build();
 
         Content saved = contentRepository.save(content);
+        if ("BLOG".equalsIgnoreCase(contentType) && request.getRecipe() != null) contentRecipePersistenceService.replace(saved, request.getRecipe());
+        if ("BLOG".equalsIgnoreCase(contentType) && request.getRecipe() != null) {
+            replaceRecipe(saved, request.getRecipe());
+        }
         if (consentGranted) {
             saveConsentAudit(user, saved, null, true, "CREATE");
         }
@@ -227,6 +242,10 @@ public class AuthorContentService {
         }
 
         Content saved = contentRepository.save(content);
+        if ("BLOG".equalsIgnoreCase(content.getContentType()) && request.getRecipe() != null) contentRecipePersistenceService.replace(saved, request.getRecipe());
+        if ("BLOG".equalsIgnoreCase(content.getContentType()) && request.getRecipe() != null) {
+            replaceRecipe(saved, request.getRecipe());
+        }
         return toAuthorResponse(saved);
     }
 
@@ -472,6 +491,8 @@ public class AuthorContentService {
                 .title(content.getTitle())
                 .slug(content.getSlug())
                 .body(content.getBody())
+                .recipe("BLOG".equalsIgnoreCase(content.getContentType()) ? contentRecipePersistenceService.read(content.getContentId()) : null)
+                .recipe(toRecipeDto(content))
                 .categoryId(content.getCategoryId())
                 .mediaUrl(content.getMediaUrl())
                 .thumbnailUrl(content.getThumbnailUrl())
@@ -490,6 +511,59 @@ public class AuthorContentService {
                 .recipeConsentTermsVersion(content.getRecipeConsentTermsVersion())
                 .build();
     }
+
+    private void replaceRecipe(Content content, ContentRecipeDto recipe) {
+        Integer contentId = content.getContentId();
+        contentRecipeIngredientRepository.deleteByContentId(contentId);
+        contentRecipeStepRepository.deleteByContentId(contentId);
+        boolean hasDetails = recipe.getPrepMinutes() != null || recipe.getCookMinutes() != null || recipe.getServings() != null
+                || recipe.getCalories() != null || recipe.getProteinG() != null || recipe.getCarbsG() != null
+                || recipe.getFatG() != null || recipe.getFiberG() != null || recipe.getSodiumMg() != null;
+        if (hasDetails) {
+            contentRecipeDetailRepository.save(ContentRecipeDetail.builder().content(content)
+                    .prepMinutes(recipe.getPrepMinutes()).cookMinutes(recipe.getCookMinutes()).servings(recipe.getServings())
+                    .calories(recipe.getCalories()).proteinG(recipe.getProteinG()).carbsG(recipe.getCarbsG())
+                    .fatG(recipe.getFatG()).fiberG(recipe.getFiberG()).sodiumMg(recipe.getSodiumMg()).build());
+        } else {
+            contentRecipeDetailRepository.deleteById(contentId);
+        }
+        if (recipe.getIngredients() != null) {
+            for (int i = 0; i < recipe.getIngredients().size(); i++) {
+                ContentRecipeDto.Ingredient source = recipe.getIngredients().get(i);
+                if (source == null || source.getName() == null || source.getName().isBlank()) continue;
+                contentRecipeIngredientRepository.save(ContentRecipeIngredient.builder().contentId(contentId).sortOrder(i + 1)
+                        .ingredientName(source.getName().trim()).quantity(blankToNull(source.getQuantity()))
+                        .unit(blankToNull(source.getUnit())).isCustom(Boolean.TRUE.equals(source.getIsCustom())).build());
+            }
+        }
+        if (recipe.getSteps() != null) {
+            for (int i = 0; i < recipe.getSteps().size(); i++) {
+                ContentRecipeDto.Step source = recipe.getSteps().get(i);
+                if (source == null || source.getInstruction() == null || source.getInstruction().isBlank()) continue;
+                contentRecipeStepRepository.save(ContentRecipeStep.builder().contentId(contentId).stepNumber(i + 1)
+                        .instruction(source.getInstruction().trim()).build());
+            }
+        }
+    }
+
+    private ContentRecipeDto toRecipeDto(Content content) {
+        if (!"BLOG".equalsIgnoreCase(content.getContentType()) || contentRecipeDetailRepository == null) return null;
+        var detail = contentRecipeDetailRepository.findById(content.getContentId()).orElse(null);
+        var ingredients = contentRecipeIngredientRepository.findByContentIdOrderBySortOrderAsc(content.getContentId()).stream()
+                .map(value -> ContentRecipeDto.Ingredient.builder().name(value.getIngredientName()).quantity(value.getQuantity())
+                        .unit(value.getUnit()).isCustom(value.getIsCustom()).build()).toList();
+        var steps = contentRecipeStepRepository.findByContentIdOrderByStepNumberAsc(content.getContentId()).stream()
+                .map(value -> ContentRecipeDto.Step.builder().instruction(value.getInstruction()).build()).toList();
+        if (detail == null && ingredients.isEmpty() && steps.isEmpty()) return null;
+        return ContentRecipeDto.builder().prepMinutes(detail == null ? null : detail.getPrepMinutes())
+                .cookMinutes(detail == null ? null : detail.getCookMinutes()).servings(detail == null ? null : detail.getServings())
+                .calories(detail == null ? null : detail.getCalories()).proteinG(detail == null ? null : detail.getProteinG())
+                .carbsG(detail == null ? null : detail.getCarbsG()).fatG(detail == null ? null : detail.getFatG())
+                .fiberG(detail == null ? null : detail.getFiberG()).sodiumMg(detail == null ? null : detail.getSodiumMg())
+                .ingredients(ingredients).steps(steps).build();
+    }
+
+    private static String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
 
     /**
      * NB-80: Chuẩn hóa phiên bản điều khoản đồng thuận từ client.

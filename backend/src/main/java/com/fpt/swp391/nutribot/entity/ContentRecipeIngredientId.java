@@ -1,0 +1,1 @@
+package com.fpt.swp391.nutribot.entity; import java.io.Serializable; import lombok.*; @Data @NoArgsConstructor @AllArgsConstructor public class ContentRecipeIngredientId implements Serializable { private Integer contentId,sortOrder; }

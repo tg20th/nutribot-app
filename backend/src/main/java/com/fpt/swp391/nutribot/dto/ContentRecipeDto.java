@@ -1,0 +1,3 @@
+package com.fpt.swp391.nutribot.dto;
+import lombok.*; import java.math.BigDecimal; import java.util.List;
+@Data @Builder @NoArgsConstructor @AllArgsConstructor public class ContentRecipeDto { private Integer prepMinutes,cookMinutes,servings; private BigDecimal calories,proteinG,carbsG,fatG,fiberG,sodiumMg; private List<Ingredient> ingredients; private List<Step> steps; @Data @Builder @NoArgsConstructor @AllArgsConstructor public static class Ingredient { private String name,quantity,unit; private Boolean isCustom; } @Data @Builder @NoArgsConstructor @AllArgsConstructor public static class Step { private String instruction; } }

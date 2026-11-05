@@ -1,0 +1,1 @@
+package com.fpt.swp391.nutribot.repository; import com.fpt.swp391.nutribot.entity.ContentRecipeDetail; import org.springframework.data.jpa.repository.JpaRepository; public interface ContentRecipeDetailRepository extends JpaRepository<ContentRecipeDetail,Integer> { }

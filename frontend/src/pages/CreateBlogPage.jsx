@@ -78,22 +78,13 @@ const nutritionDetailLabels = [
 
 const numericDetailLabels = [...cookingMetaLabels, ...nutritionDetailLabels];
 
-function makeContentBody(body, details, ingredientRows = [], stepRows = []) {
-  const cleanBody = stripHtmlToCleanText(body);
-  const structuredData = {
-    version: 1,
-    story: cleanBody || body,
+function makeRecipePayload(details, ingredientRows = [], stepRows = []) {
+  return {
     prepMinutes: details.prepMinutes || '',
     cookMinutes: details.cookMinutes || '',
     servings: details.servings || '',
-    nutrition: {
-      calories: details.calories || '',
-      proteinG: details.proteinG || '',
-      carbsG: details.carbsG || '',
-      fatG: details.fatG || '',
-      fiberG: details.fiberG || '',
-      sodiumMg: details.sodiumMg || '',
-    },
+    calories: details.calories || '', proteinG: details.proteinG || '', carbsG: details.carbsG || '',
+    fatG: details.fatG || '', fiberG: details.fiberG || '', sodiumMg: details.sodiumMg || '',
     ingredients: ingredientRows
       .map((row) => ({
         name: (row.isCustom ? row.customName : row.name)?.trim() || '',
@@ -102,13 +93,23 @@ function makeContentBody(body, details, ingredientRows = [], stepRows = []) {
         isCustom: Boolean(row.isCustom),
       }))
       .filter((item) => item.name),
-    steps: stepRows.map((item) => item.trim()).filter(Boolean),
+    steps: stepRows.map((item) => ({ instruction: item.trim() })).filter((item) => item.instruction),
   };
-  return JSON.stringify(structuredData);
 }
 
-function parseRecipeDetails(body = '', availableOptions = []) {
+function parseRecipeDetails(body = '', availableOptions = [], recipe = null) {
   const details = { ...emptyRecipeDetails };
+  if (recipe && typeof recipe === 'object') {
+    numericDetailLabels.forEach(([key]) => { details[key] = recipe[key] ?? ''; });
+    const rows = Array.isArray(recipe.ingredients) ? recipe.ingredients.map((item) => {
+      const name = item?.name || '';
+      const matched = availableOptions.find((ing) => (ing.name || ing).toLowerCase() === name.toLowerCase());
+      return matched ? { name: matched.name || matched, quantity: item.quantity || '', unit: item.unit || 'g', isCustom: false, customName: '' }
+        : { name: item?.isCustom ? '__custom__' : name, quantity: item?.quantity || '', unit: item?.unit || 'g', isCustom: item?.isCustom !== false, customName: name };
+    }) : [];
+    const steps = Array.isArray(recipe.steps) ? recipe.steps.map((item) => String(item?.instruction ?? item).trim()).filter(Boolean) : [];
+    return { body, details, ingredientRows: rows.length ? rows : [{ name: '', quantity: '', unit: 'g', isCustom: false, customName: '' }], stepRows: steps.length ? steps : [''] };
+  }
   const trimmed = (body || '').trim();
 
   // 1. Try parsing JSON format
@@ -471,7 +472,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
     getContent(editId, controller.signal).then((item) => {
       if (controller.signal.aborted) return;
       hasLoadedPostRef.current = `${editType}_${editId}`;
-      const parsed = parseRecipeDetails(item.body ?? '', availableIngredients);
+      const parsed = parseRecipeDetails(item.body ?? '', availableIngredients, item.recipe);
       setTitle(item.title ?? '');
       setBody(parsed.body);
       if (bodyRef.current) {
@@ -549,7 +550,8 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
       const thumbnailUrl = file ? await uploadBlogThumbnail(file) : existingThumbnailUrl || null;
       const payload = {
         title: trimmedTitle,
-        body: makeContentBody(bodyHtml, recipeDetails, ingredientRows, stepRows),
+        body: stripHtmlToCleanText(bodyHtml) || bodyHtml,
+        recipe: makeRecipePayload(recipeDetails, ingredientRows, stepRows),
         thumbnailUrl,
         categoryId: Number(categoryId),
         recipeConsent: recipeConsent === true,

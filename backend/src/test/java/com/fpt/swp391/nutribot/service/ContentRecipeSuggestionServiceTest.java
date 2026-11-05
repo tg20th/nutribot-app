@@ -58,6 +58,9 @@ class ContentRecipeSuggestionServiceTest {
     private RecipeExtractionGatewayService extractionGateway;
 
     @Mock
+    private ContentRecipeBodyParser bodyParser;
+
+    @Mock
     private RecipeSuggestionAuditService auditService;
 
     private ContentRecipeSuggestionService service;
@@ -84,7 +87,7 @@ class ContentRecipeSuggestionServiceTest {
                 suggestionIngredientRepository,
                 suggestionStepRepository,
                 dishRepository,
-                new ContentRecipeBodyParser(new ObjectMapper()),
+                bodyParser,
                 extractionGateway,
                 new ObjectMapper(),
                 true,
@@ -139,8 +142,8 @@ class ContentRecipeSuggestionServiceTest {
         assertEquals(1, saved.getSteps().get(0).getStepNumber());
         verify(suggestionIngredientRepository).save(any());
         verify(suggestionStepRepository, times(2)).save(any());
-        assertNotNull(saved.getIngredientsJson());
-        assertNotNull(saved.getRecipeStepsJson());
+        assertNull(saved.getIngredientsJson());
+        assertNull(saved.getRecipeStepsJson());
     }
 
     @Test
@@ -230,7 +233,7 @@ class ContentRecipeSuggestionServiceTest {
         ContentRecipeSuggestionService disabled = new ContentRecipeSuggestionService(
                 contentRepository, voteRepository, suggestionRepository,
                 suggestionIngredientRepository, suggestionStepRepository, dishRepository,
-                new ContentRecipeBodyParser(new ObjectMapper()), extractionGateway,
+                mock(ContentRecipeBodyParser.class), extractionGateway,
                 new ObjectMapper(), false, MIN_VIEWS, MIN_VOTES, auditService, selfProvider());
 
         boolean created = disabled.evaluateContent(publishedContent(88, "BLOG", MIN_VIEWS));
@@ -277,7 +280,8 @@ class ContentRecipeSuggestionServiceTest {
                 .build();
         when(voteRepository.countByContentId(100)).thenReturn((long) MIN_VOTES);
         when(suggestionRepository.existsByContentContentIdAndStatusIn(eq(100), anyCollection())).thenReturn(false);
-        when(dishRepository.findByNameIgnoreCase("Bánh xèo chay giòn rụm")).thenReturn(Optional.empty());
+        when(bodyParser.parse(content)).thenReturn(coreExtraction());
+        when(dishRepository.findByNameIgnoreCase("Bún gạo lứt rau củ")).thenReturn(Optional.empty());
 
         boolean created = service.evaluateContent(content);
 
@@ -286,12 +290,11 @@ class ContentRecipeSuggestionServiceTest {
         ArgumentCaptor<ContentRecipeSuggestion> captor = ArgumentCaptor.forClass(ContentRecipeSuggestion.class);
         verify(suggestionRepository).save(captor.capture());
         ContentRecipeSuggestion saved = captor.getValue();
-        assertEquals("Bánh xèo chay giòn rụm", saved.getDishName());
-        assertEquals(320, saved.getCalories());
-        assertEquals(0, new BigDecimal("13.5").compareTo(saved.getProteinG()));
-        assertTrue(saved.getIngredientsJson().contains("Gia vị nhà làm"));
-        assertTrue(saved.getIngredientsJson().contains("Bột gạo"));
-        assertNotNull(saved.getRecipeStepsJson());
+        assertEquals(coreExtraction().dish().name(), saved.getDishName());
+        assertEquals(418, saved.getCalories());
+        assertEquals(0, new BigDecimal("15.8").compareTo(saved.getProteinG()));
+        assertNull(saved.getIngredientsJson());
+        assertNull(saved.getRecipeStepsJson());
         assertEquals(MIN_VOTES, saved.getSourceVoteCount());
     }
 
