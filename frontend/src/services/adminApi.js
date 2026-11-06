@@ -139,6 +139,34 @@ const getModerationHistory = async (params = {}, signal) => {
   const data = unwrapData(await apiRequest(`/api/v1/admin/moderation/history?${query}`, { signal }), {});
   return { ...data, content: (data.content ?? []).map(mapModerationAudit) };
 };
+const getAllModerationHistory = async (signal) => {
+  const first = await getModerationHistory({ page: 0, size: 100 }, signal);
+  const totalPages = Math.max(Number(first.totalPages) || 1, 1);
+  const remaining = await Promise.all(Array.from(
+    { length: totalPages - 1 },
+    (_, index) => getModerationHistory({ page: index + 1, size: 100 }, signal),
+  ));
+  return [first, ...remaining].flatMap((page) => page.content ?? []);
+};
+const summarizeAdminReviewOutcomes = (audits) => {
+  const latestByContent = new Map();
+  audits.filter((audit) => audit.action === 'APPROVE' || audit.action === 'REJECT').forEach((audit) => {
+    const previous = latestByContent.get(audit.contentId);
+    const auditTime = new Date(audit.reviewedAt ?? 0).getTime();
+    const previousTime = previous ? new Date(previous.reviewedAt ?? 0).getTime() : -1;
+    if (!previous || auditTime > previousTime || (auditTime === previousTime && Number(audit.id) > Number(previous.id))) latestByContent.set(audit.contentId, audit);
+  });
+  const counts = [...latestByContent.values()].reduce((result, audit) => {
+    const key = audit.action === 'APPROVE' ? 'approved' : 'rejected';
+    result[key] += 1;
+    return result;
+  }, { approved: 0, rejected: 0 });
+  const total = counts.approved + counts.rejected;
+  return { total, counts, items: [
+    { label: 'Admin Approved', value: counts.approved, color: '#54B88A' },
+    { label: 'Admin Rejected', value: counts.rejected, color: '#EF9696' },
+  ] };
+};
 const getModerationAudit = async (auditId, signal) => mapModerationAudit(unwrapData(await apiRequest(`/api/v1/admin/moderation/history/${auditId}`, { signal }), {}));
 const getModerationTimeline = async (contentId, signal) => (unwrapData(await apiRequest(`/api/v1/admin/moderation/contents/${contentId}/timeline`, { signal }), [])).map(mapModerationAudit);
 const formatAdminDate = (value) => value ? new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
@@ -175,12 +203,13 @@ const getMemberContentCounts = async (signal) => {
   }, {});
 };
 const getDashboard = async (signal) => {
-  const [users, moderation, blogs, videos, categories] = await Promise.all([
+  const [users, moderation, blogs, videos, categories, moderationHistory] = await Promise.all([
     apiRequest(adminUserQuery({ page: 0, size: 1 }), { signal }).then((payload) => unwrapData(payload, {})),
     getModerationQueue({ page: 0, size: 5 }, signal),
     getAllPublicContent('/api/v1/blogs', signal),
     getAllPublicContent('/api/v1/videos', signal),
     getContentCategories(signal),
+    getAllModerationHistory(signal),
   ]);
   const content = [...blogs, ...videos];
   const categoryCounts = content.reduce((counts, item) => {
@@ -197,8 +226,10 @@ const getDashboard = async (signal) => {
     moderationQueue: moderation.content ?? [],
     categories: categoryData,
     content,
+    adminReviewOutcomes: summarizeAdminReviewOutcomes(moderationHistory),
   };
 };
+export { summarizeAdminReviewOutcomes };
 export const adminApi = {
   getDashboard,
   getUsers: (params, signal) => apiRequest(adminUserQuery(params), { signal }).then((payload) => mapAdminUserPage(unwrapData(payload, {}))), getMemberContentCounts, getUserById: one('/api/admin/users'), updateUserStatus: (id, value) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: value }) }).then((payload) => mapAdminUser(unwrapData(payload, {}))), lockUser: (id) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'BANNED' }) }),
