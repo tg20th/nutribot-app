@@ -35,6 +35,7 @@ import PublicProfilePage from './pages/PublicProfilePage';
 import PublicRecipeDetailPage from './pages/PublicRecipeDetailPage';
 import { NotificationProvider } from './components/notifications/NotificationProvider';
 import ErrorPage from './components/errors/ErrorPage';
+import { HelpArticlePage, HelpCenterPage, MissionPage, PrivacyPolicyPage, TermsPage } from './pages/InformationPages';
 
 
 function AuthFailureHandler() {
@@ -80,6 +81,11 @@ export default function App() {
     {import.meta.env.DEV && <Route path="/dev/nb-01-email-verification" element={<NB01EmailVerificationPreviewPage />} />}
     {import.meta.env.DEV && <Route path="/dev/nb-07-email-change-verification" element={<NB07EmailChangeVerificationPreviewPage />} />}
     <Route path="/" element={<HomePage />} />
+    <Route path="/our-mission" element={<MissionPage />} />
+    <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+    <Route path="/terms-of-service" element={<TermsPage />} />
+    <Route path="/help-center" element={<HelpCenterPage />} />
+    <Route path="/help-center/:slug" element={<HelpArticlePage />} />
     <Route path="/home" element={<MemberRoute><CommunityFeedPage /></MemberRoute>} />
     <Route path="/register" element={<RegisterOrAuthModal mode="signup" />} />
     <Route path="/login" element={<RegisterOrAuthModal mode="login" />} />
