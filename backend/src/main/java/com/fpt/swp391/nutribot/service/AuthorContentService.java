@@ -486,6 +486,7 @@ public class AuthorContentService {
 
     private AuthorContentResponse toAuthorResponse(Content content) {
         String avatar = content.getUser() != null ? content.getUser().getAvatarUrl() : null;
+        ContentModeration moderation = contentModerationRepository.findByContentId(content.getContentId()).orElse(null);
         return AuthorContentResponse.builder()
                 .contentId(content.getContentId())
                 .contentType(content.getContentType())
@@ -499,6 +500,10 @@ public class AuthorContentService {
                 .thumbnailUrl(content.getThumbnailUrl())
                 .durationSec(content.getDurationSec())
                 .status(content.getStatus())
+                .moderationReason(moderation == null ? null : moderation.getDecisionReason())
+                .moderationReviewedAt(moderation == null ? null : moderation.getReviewedAt())
+                .moderationReviewedBy(moderation == null ? null : moderation.getReviewedBy())
+                .currentStrikeCount(content.getUser() == null ? null : content.getUser().getStrikeCount())
                 .authorId(content.getUser() != null ? content.getUser().getUserId() : null)
                 .authorUsername(content.getUser() != null ? content.getUser().getUsername() : null)
                 .authorName(content.getUser() != null ? content.getUser().getFullName() : null)

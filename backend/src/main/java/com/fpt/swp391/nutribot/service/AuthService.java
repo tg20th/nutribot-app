@@ -14,6 +14,7 @@ import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Role;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
+import com.fpt.swp391.nutribot.exception.AccountBannedException;
 import com.fpt.swp391.nutribot.repository.RoleRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 
@@ -170,6 +171,7 @@ public class AuthService {
     @Transactional
     public AuthResponse handleOAuth2Login(String email, String fullName, String picture) {
         Optional<User> existingUser = userRepository.findByEmail(email);
+        log.info("OAuth2 account lookup: existingAccount={}", existingUser.isPresent());
 
         User user;
         if (existingUser.isPresent()) {
@@ -215,6 +217,10 @@ public class AuthService {
         }
 
         // Chỉ block các trạng thái không đủ điều kiện truy cập (ví dụ BANNED).
+        if (user.getStatus() == AccountStatus.BANNED) {
+            log.warn("OAuth2 account rejected because status is BANNED");
+            throw new AccountBannedException();
+        }
         if (!AccountStatus.canAccessSystem(user.getStatus())) {
             throw new BadRequestException("Tài khoản đã bị khóa hoặc suspend");
         }

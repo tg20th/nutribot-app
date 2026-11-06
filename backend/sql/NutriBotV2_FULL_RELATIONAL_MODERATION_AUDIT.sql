@@ -916,3 +916,43 @@ BEGIN
     PRINT 'NB-84: Da them index idx_crsa_suggestion';
 END
 GO
+
+-- Review and apply separately. This migration is intentionally not executed by the application.
+IF OBJECT_ID(N'dbo.user_moderation_actions', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.user_moderation_actions (
+        action_id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        user_id INT NOT NULL,
+        admin_id INT NULL,
+        action NVARCHAR(30) NOT NULL,
+        previous_status NVARCHAR(20) NULL,
+        new_status NVARCHAR(20) NOT NULL,
+        strike_delta SMALLINT NOT NULL CONSTRAINT DF_uma_strike_delta DEFAULT (0),
+        reason NVARCHAR(1000) NOT NULL,
+        created_at DATETIME2(3) NOT NULL CONSTRAINT DF_uma_created DEFAULT (SYSUTCDATETIME()),
+        CONSTRAINT FK_uma_user FOREIGN KEY (user_id) REFERENCES dbo.users(user_id),
+        CONSTRAINT FK_uma_admin FOREIGN KEY (admin_id) REFERENCES dbo.users(user_id),
+        CONSTRAINT CK_uma_action CHECK (action IN (N'WARN', N'BAN', N'UNBAN', N'REMOVE_WARNING', N'STATUS_CHANGE')),
+        CONSTRAINT CK_uma_status CHECK (new_status IN (N'ACTIVE', N'WARN', N'BANNED', N'PENDING_VERIFY')),
+        CONSTRAINT CK_uma_reason CHECK (LEN(LTRIM(RTRIM(reason))) > 0)
+    );
+    CREATE INDEX IX_uma_user_created ON dbo.user_moderation_actions(user_id, created_at DESC);
+END;
+IF COL_LENGTH(N'dbo.user_moderation_actions', N'source') IS NULL
+    ALTER TABLE dbo.user_moderation_actions ADD source NVARCHAR(20) NOT NULL CONSTRAINT DF_uma_source DEFAULT (N'MANUAL');
+IF COL_LENGTH(N'dbo.user_moderation_actions', N'additional_explanation') IS NULL
+    ALTER TABLE dbo.user_moderation_actions ADD additional_explanation NVARCHAR(1000) NULL;
+
+IF COL_LENGTH('dbo.user_moderation_actions', 'additional_explanation') IS NULL
+BEGIN
+    ALTER TABLE dbo.user_moderation_actions
+    ADD additional_explanation NVARCHAR(1000) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.user_moderation_actions', 'source') IS NULL
+BEGIN
+    ALTER TABLE dbo.user_moderation_actions
+    ADD source NVARCHAR(20) NULL;
+END;
+GO

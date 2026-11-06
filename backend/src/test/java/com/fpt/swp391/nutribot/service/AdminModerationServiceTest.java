@@ -15,6 +15,9 @@ import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.ModerationDecisionAuditRepository;
 import com.fpt.swp391.nutribot.entity.ModerationDecisionAudit;
+import com.fpt.swp391.nutribot.event.AccountSuspendedEvent;
+import com.fpt.swp391.nutribot.entity.UserModerationAction;
+import com.fpt.swp391.nutribot.repository.UserModerationActionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -61,6 +64,9 @@ class AdminModerationServiceTest {
 
     @Mock
     private ModerationDecisionAuditRepository moderationDecisionAuditRepository;
+
+    @Mock
+    private UserModerationActionRepository userModerationActionRepository;
 
     @InjectMocks
     private AdminModerationService adminModerationService;
@@ -315,11 +321,21 @@ class AdminModerationServiceTest {
         assertEquals(3, sampleAuthor.getStrikeCount());
         assertEquals(AccountStatus.BANNED, sampleAuthor.getStatus());
         verify(userRepository).save(sampleAuthor);
-        verify(userNotificationSender).sendBannedNotification(
-                eq("truong@example.com"),
-                eq("truong_author"),
-                eq("Tiếp tục đăng bài vi phạm nghiêm trọng")
-        );
+        ArgumentCaptor<Object> suspensionEventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(suspensionEventCaptor.capture());
+        assertInstanceOf(AccountSuspendedEvent.class, suspensionEventCaptor.getValue());
+        AccountSuspendedEvent suspension = (AccountSuspendedEvent) suspensionEventCaptor.getValue();
+        assertEquals(1, suspension.userId());
+        assertTrue(suspension.strikeBased());
+        assertEquals("Tiếp tục đăng bài vi phạm nghiêm trọng", suspension.reason());
+        ArgumentCaptor<UserModerationAction> historyCaptor = ArgumentCaptor.forClass(UserModerationAction.class);
+        verify(userModerationActionRepository).save(historyCaptor.capture());
+        UserModerationAction history = historyCaptor.getValue();
+        assertEquals("BAN", history.getAction());
+        assertEquals("AUTOMATIC", history.getSource());
+        assertEquals("WARN", history.getPreviousStatus());
+        assertEquals("BANNED", history.getNewStatus());
+        assertEquals("Tiếp tục đăng bài vi phạm nghiêm trọng", history.getReason());
         verify(notificationService).createForContentModerationRejected(
                 eq(1),
                 eq(10),

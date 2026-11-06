@@ -16,6 +16,7 @@ const normalizedMessages = Object.fromEntries(
 export function getLoginErrorState(error) {
   if (error?.status === 400) {
     const message = normalizeMessage(error.message);
+    if (message.includes('account has been suspended') || message.includes('account has been banned') || message.includes('đã bị khóa') || message.includes('bị khóa')) return 'ACCOUNT_BLOCKED';
     for (const [state, expectedMessage] of Object.entries(normalizedMessages)) {
       if (message === expectedMessage) return state;
     }
@@ -38,6 +39,7 @@ export function getLoginErrorMessage(state) {
 }
 
 export function getOAuthErrorState({ error, token, username, role }) {
+  if (String(error || '').trim().toUpperCase() === 'ACCOUNT_BANNED') return 'ACCOUNT_BLOCKED';
   return error || !token || !username || !role ? 'OAUTH_FAILED' : null;
 }
 

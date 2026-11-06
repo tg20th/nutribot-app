@@ -31,5 +31,8 @@ public class InteractionNotificationListener {
             return;
         }
         notificationService.notifyContentCommented(event.contentId(), event.commenterId());
+        if (event.parentId() != null) {
+            notificationService.notifyCommentReplied(event.contentId(), event.commentId(), event.parentId(), event.commenterId());
+        }
     }
 }

@@ -1,6 +1,7 @@
 package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.event.RecipeSuggestionReviewedEvent;
+import com.fpt.swp391.nutribot.event.AdminContentApprovedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -32,6 +33,16 @@ public class NotificationEventListener {
         } catch (RuntimeException ex) {
             // NB-87: Duyệt đã commit rồi, lỗi gửi thông báo không được làm hỏng request của Admin
             log.error("Không gửi được thông báo duyệt đề xuất công thức {}", event.suggestionId(), ex);
+        }
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void onAdminContentApproved(AdminContentApprovedEvent event) {
+        if (event == null) return;
+        try {
+            notificationService.createForAdminContentApproved(event.contentId());
+        } catch (RuntimeException ex) {
+            log.error("Could not create content approval notification for {}", event.contentId(), ex);
         }
     }
 }

@@ -16,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -25,17 +26,24 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class NotificationService {
 
+    private static final Pattern QUOTED_TITLE = Pattern.compile("\\\"([^\\\"]+)\\\"");
+    private static final Pattern STRIKE_COUNT = Pattern.compile("(\\d+)\\s*/\\s*3");
+
     public static final String TYPE_RECIPE_SUGGESTION_APPROVED = "RECIPE_SUGGESTION_APPROVED";
     public static final String TYPE_RECIPE_SUGGESTION_REJECTED = "RECIPE_SUGGESTION_REJECTED";
     public static final String TYPE_CONTENT_VOTED = "CONTENT_VOTED";
     public static final String TYPE_CONTENT_COMMENTED = "CONTENT_COMMENTED";
+    public static final String TYPE_CONTENT_COMMENT_REPLIED = "CONTENT_COMMENT_REPLIED";
     public static final String TYPE_CONTENT_MODERATION_REJECTED = "CONTENT_MODERATION_REJECTED";
+    public static final String TYPE_CONTENT_MODERATION_APPROVED = "CONTENT_MODERATION_APPROVED";
     public static final String REFERENCE_TYPE_CONTENT_RECIPE_SUGGESTION = "CONTENT_RECIPE_SUGGESTION";
     public static final String REFERENCE_TYPE_CONTENT = "CONTENT";
     public static final String ACTION_APPROVE = "APPROVE";
@@ -55,6 +63,8 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final ContentRepository contentRepository;
+    @Autowired
+    private com.fpt.swp391.nutribot.repository.CommentRepository commentRepository;
 
     @Transactional(readOnly = true)
     public PagedResponse<NotificationResponse> listMyNotifications(Integer userId, int page, int size) {
@@ -230,14 +240,22 @@ public class NotificationService {
             sb.append(" Tài khoản của bạn đã bị tạm khóa do nhận đủ 3 gậy vi phạm.");
         }
 
+        String englishTitle = strikeCount >= 3 ? "Account suspended" : "Content rejected";
+        StringBuilder englishMessage = new StringBuilder("Your post");
+        if (hasText(contentTitle)) englishMessage.append(" \"").append(contentTitle.trim()).append("\"");
+        englishMessage.append(" was rejected.");
+        if (hasText(reason)) englishMessage.append(" Reason: ").append(reason.trim());
+        englishMessage.append(" Account warning: ").append(strikeCount).append("/3 strikes.");
+        if (strikeCount >= 3) englishMessage.append(" Your account has been suspended after reaching 3 strikes.");
+
         Notification notification = Notification.builder()
                 .recipient(recipient)
                 .actor(null)
                 .type(TYPE_CONTENT_MODERATION_REJECTED)
                 .referenceType(REFERENCE_TYPE_CONTENT)
                 .referenceId(contentId)
-                .title(truncate(title))
-                .message(truncate(sb.toString()))
+                .title(englishTitle)
+                .message(truncate(englishMessage.toString()))
                 .actionUrl("/profile")
                 .build();
         notificationRepository.save(notification);
@@ -402,6 +420,40 @@ public class NotificationService {
         notificationRepository.save(notification);
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void notifyCommentReplied(Integer contentId, Integer commentId, Integer parentId, Integer commenterId) {
+        if (contentId == null || commentId == null || parentId == null || commenterId == null) return;
+        var parent = commentRepository.findById(parentId).orElse(null);
+        if (parent == null || parent.getUserId() == null || parent.getUserId().equals(commenterId)) return;
+        User recipient = userRepository.findById(parent.getUserId()).orElse(null);
+        User actor = userRepository.findById(commenterId).orElse(null);
+        Content content = contentRepository.findById(contentId).orElse(null);
+        if (recipient == null || actor == null) return;
+        String title = "Someone replied to your comment";
+        String message = actor.getFullName() + " replied to your comment"
+                + (content == null || content.getTitle() == null ? "." : " on \"" + content.getTitle() + "\".");
+        notificationRepository.save(Notification.builder()
+                .recipient(recipient).actor(actor).type(TYPE_CONTENT_COMMENT_REPLIED)
+                .referenceType(REFERENCE_TYPE_CONTENT).referenceId(contentId)
+                .title(title).message(message).actionUrl(buildActionUrl(contentId)).build());
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void createForAdminContentApproved(Integer contentId) {
+        if (contentId == null) return;
+        Content content = contentRepository.findById(contentId).orElse(null);
+        if (content == null || content.getUser() == null || !"published".equalsIgnoreCase(content.getStatus())) return;
+        Integer authorId = content.getUser().getUserId();
+        if (notificationRepository.existsByRecipient_UserIdAndTypeAndReferenceTypeAndReferenceId(
+                authorId, TYPE_CONTENT_MODERATION_APPROVED, REFERENCE_TYPE_CONTENT, contentId)) return;
+        String kind = "VIDEO".equalsIgnoreCase(content.getContentType()) ? "video" : "blog";
+        String title = "Content approved";
+        String message = "Your " + kind + " \"" + content.getTitle() + "\" has been approved and is now published.";
+        notificationRepository.save(Notification.builder().recipient(content.getUser()).actor(null)
+                .type(TYPE_CONTENT_MODERATION_APPROVED).referenceType(REFERENCE_TYPE_CONTENT).referenceId(contentId)
+                .title(title).message(message).actionUrl(buildActionUrl(contentId)).build());
+    }
+
     /**
      * NB-83: Lấy tác giả của content kèm khoá dòng (PESSIMISTIC_WRITE) để serialize việc
      * tạo/gộp notification cho cùng 1 bài viết, tránh race tạo trùng notification.
@@ -431,6 +483,13 @@ public class NotificationService {
         LocalDateTime updatedAt = notification.getUpdatedAt() != null
                 ? notification.getUpdatedAt()
                 : notification.getCreatedAt();
+        String displayTitle = notification.getTitle();
+        String displayMessage = notification.getMessage();
+        if (TYPE_CONTENT_MODERATION_REJECTED.equals(notification.getType())) {
+            String[] normalized = normalizeModerationNotification(notification.getTitle(), notification.getMessage());
+            displayTitle = normalized[0];
+            displayMessage = normalized[1];
+        }
         return NotificationResponse.builder()
                 .notificationId(notification.getNotificationId())
                 .type(notification.getType())
@@ -445,9 +504,41 @@ public class NotificationService {
                 .readAt(notification.getReadAt())
                 .createdAt(notification.getCreatedAt())
                 .updatedAt(updatedAt)
-                .title(notification.getTitle())
-                .message(notification.getMessage())
+                .title(displayTitle)
+                .message(displayMessage)
                 .actionUrl(notification.getActionUrl())
                 .build();
+    }
+
+    /**
+     * Converts only the known legacy moderation template. User supplied title and
+     * reason are extracted from their structured positions and are never translated.
+     */
+    private String[] normalizeModerationNotification(String title, String message) {
+        String source = (title == null ? "" : title) + " " + (message == null ? "" : message);
+        boolean legacy = source.contains("Bài viết") || source.contains("Tài khoản")
+                || source.contains("Lý do:") || source.contains("Cảnh báo")
+                || source.contains("gậy") || source.contains("bị từ chối");
+        if (!legacy) return new String[]{title, message};
+
+        Matcher titleMatcher = QUOTED_TITLE.matcher(message == null ? "" : message);
+        String contentTitle = titleMatcher.find() ? titleMatcher.group(1) : null;
+        Matcher strikeMatcher = STRIKE_COUNT.matcher(source);
+        String strikes = strikeMatcher.find() ? strikeMatcher.group(1) : null;
+        String reason = null;
+        int reasonStart = message == null ? -1 : message.indexOf("Lý do:");
+        if (reasonStart >= 0) {
+            reason = message.substring(reasonStart + "Lý do:".length()).trim();
+            int end = reason.indexOf(". Cảnh báo");
+            if (end >= 0) reason = reason.substring(0, end).trim();
+            if (reason.endsWith(".")) reason = reason.substring(0, reason.length() - 1).trim();
+        }
+        if (contentTitle == null || reason == null || strikes == null) return new String[]{title, message};
+        boolean suspended = "3".equals(strikes);
+        String displayMessage = suspended
+                ? "Your account has been suspended after reaching 3 strikes."
+                : "Your post \"" + contentTitle + "\" was rejected. Reason: " + reason
+                    + ". Account warning: " + strikes + "/3 strikes.";
+        return new String[]{suspended ? "Account suspended" : "Content rejected", displayMessage};
     }
 }

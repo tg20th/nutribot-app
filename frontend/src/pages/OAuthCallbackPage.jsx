@@ -13,12 +13,17 @@ export default function OAuthCallbackPage() {
     const role = searchParams.get('role');
     const error = searchParams.get('error');
 
-    if (getOAuthErrorState({ error, token, username, role })) {
+    const oauthErrorState = getOAuthErrorState({ error, token, username, role });
+    if (oauthErrorState) {
       localStorage.removeItem('nutribot-auth-token');
       localStorage.removeItem('nutribot-user');
       window.dispatchEvent(new Event('nutribot-auth-changed'));
-      window.dispatchEvent(new CustomEvent('nutribot-auth-failure', { detail: { state: 'OAUTH_FAILED' } }));
-      navigate('/', { replace: true });
+      if (oauthErrorState === 'ACCOUNT_BLOCKED') {
+        sessionStorage.setItem('nutribot-oauth-error-state', oauthErrorState);
+        navigate('/', { replace: true, state: { authMode: 'login', authErrorState: oauthErrorState } });
+      } else {
+        window.dispatchEvent(new CustomEvent('nutribot-auth-failure', { detail: { state: 'OAUTH_FAILED' } }));
+      }
       return;
     }
 
