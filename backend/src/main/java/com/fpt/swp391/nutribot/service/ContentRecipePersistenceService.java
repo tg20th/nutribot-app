@@ -1,5 +1,76 @@
 package com.fpt.swp391.nutribot.service;
-import com.fpt.swp391.nutribot.dto.ContentRecipeDto; import com.fpt.swp391.nutribot.entity.*; import com.fpt.swp391.nutribot.repository.*; import lombok.RequiredArgsConstructor; import org.springframework.stereotype.Service; import org.springframework.transaction.annotation.Transactional;
-@Service @RequiredArgsConstructor public class ContentRecipePersistenceService { private final ContentRecipeDetailRepository details; private final ContentRecipeIngredientRepository ingredients; private final ContentRecipeStepRepository steps;
- @Transactional public void replace(Content c, ContentRecipeDto r) { Integer id=c.getContentId(); ingredients.deleteByContentId(id); steps.deleteByContentId(id); if(r.getPrepMinutes()!=null||r.getCookMinutes()!=null||r.getServings()!=null||r.getCalories()!=null||r.getProteinG()!=null||r.getCarbsG()!=null||r.getFatG()!=null||r.getFiberG()!=null||r.getSodiumMg()!=null) details.save(ContentRecipeDetail.builder().content(c).prepMinutes(r.getPrepMinutes()).cookMinutes(r.getCookMinutes()).servings(r.getServings()).calories(r.getCalories()).proteinG(r.getProteinG()).carbsG(r.getCarbsG()).fatG(r.getFatG()).fiberG(r.getFiberG()).sodiumMg(r.getSodiumMg()).build()); else details.deleteById(id); if(r.getIngredients()!=null) for(int n=0;n<r.getIngredients().size();n++){var v=r.getIngredients().get(n);if(v!=null&&v.getName()!=null&&!v.getName().isBlank())ingredients.save(ContentRecipeIngredient.builder().contentId(id).sortOrder(n+1).ingredientName(v.getName().trim()).quantity(v.getQuantity()).unit(v.getUnit()).isCustom(Boolean.TRUE.equals(v.getIsCustom())).build());} if(r.getSteps()!=null)for(int n=0;n<r.getSteps().size();n++){var v=r.getSteps().get(n);if(v!=null&&v.getInstruction()!=null&&!v.getInstruction().isBlank())steps.save(ContentRecipeStep.builder().contentId(id).stepNumber(n+1).instruction(v.getInstruction().trim()).build());} }
- @Transactional(readOnly=true) public ContentRecipeDto read(Integer id){var d=details.findById(id).orElse(null);var i=ingredients.findByContentIdOrderBySortOrderAsc(id).stream().map(v->ContentRecipeDto.Ingredient.builder().name(v.getIngredientName()).quantity(v.getQuantity()).unit(v.getUnit()).isCustom(v.getIsCustom()).build()).toList();var s=steps.findByContentIdOrderByStepNumberAsc(id).stream().map(v->ContentRecipeDto.Step.builder().instruction(v.getInstruction()).build()).toList();if(d==null&&i.isEmpty()&&s.isEmpty())return null;return ContentRecipeDto.builder().prepMinutes(d==null?null:d.getPrepMinutes()).cookMinutes(d==null?null:d.getCookMinutes()).servings(d==null?null:d.getServings()).calories(d==null?null:d.getCalories()).proteinG(d==null?null:d.getProteinG()).carbsG(d==null?null:d.getCarbsG()).fatG(d==null?null:d.getFatG()).fiberG(d==null?null:d.getFiberG()).sodiumMg(d==null?null:d.getSodiumMg()).ingredients(i).steps(s).build();}}
+
+import com.fpt.swp391.nutribot.dto.ContentRecipeDto;
+import com.fpt.swp391.nutribot.entity.Content;
+import com.fpt.swp391.nutribot.entity.ContentRecipeDetail;
+import com.fpt.swp391.nutribot.entity.ContentRecipeIngredient;
+import com.fpt.swp391.nutribot.entity.ContentRecipeStep;
+import com.fpt.swp391.nutribot.repository.ContentRecipeDetailRepository;
+import com.fpt.swp391.nutribot.repository.ContentRecipeIngredientRepository;
+import com.fpt.swp391.nutribot.repository.ContentRecipeStepRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+
+@Service
+@RequiredArgsConstructor
+public class ContentRecipePersistenceService {
+    private final ContentRecipeDetailRepository details;
+    private final ContentRecipeIngredientRepository ingredients;
+    private final ContentRecipeStepRepository steps;
+    @PersistenceContext
+    private EntityManager entityManager;
+
+    @Transactional
+    public void replace(Content content, ContentRecipeDto recipe) {
+        Integer contentId = content.getContentId();
+        if (contentId == null) throw new IllegalStateException("Content phải được persist trước khi lưu recipe details");
+        ingredients.deleteByContentId(contentId);
+        steps.deleteByContentId(contentId);
+        boolean hasDetails = recipe.getPrepMinutes() != null || recipe.getCookMinutes() != null || recipe.getServings() != null
+                || recipe.getCalories() != null || recipe.getProteinG() != null || recipe.getCarbsG() != null
+                || recipe.getFatG() != null || recipe.getFiberG() != null || recipe.getSodiumMg() != null;
+        ContentRecipeDetail detail = details.findById(contentId).orElse(null);
+        if (hasDetails) {
+            if (detail == null) { detail = new ContentRecipeDetail(); detail.setContentId(contentId); }
+            detail.setContent(content); detail.setContentId(contentId);
+            detail.setPrepMinutes(recipe.getPrepMinutes()); detail.setCookMinutes(recipe.getCookMinutes());
+            detail.setServings(recipe.getServings()); detail.setCalories(recipe.getCalories());
+            detail.setProteinG(recipe.getProteinG()); detail.setCarbsG(recipe.getCarbsG());
+            detail.setFatG(recipe.getFatG()); detail.setFiberG(recipe.getFiberG()); detail.setSodiumMg(recipe.getSodiumMg());
+            if (!entityManager.contains(detail)) {
+                // New @MapsId entity: persist explicitly. Calling repository.save() after
+                // assigning contentId makes SimpleJpaRepository.isNew() return false.
+                entityManager.persist(detail);
+            }
+        } else if (detail != null) details.delete(detail);
+        if (recipe.getIngredients() != null) for (int n = 0; n < recipe.getIngredients().size(); n++) {
+            var value = recipe.getIngredients().get(n);
+            if (value != null && value.getName() != null && !value.getName().isBlank()) ingredients.save(ContentRecipeIngredient.builder()
+                    .contentId(contentId).sortOrder(n + 1).ingredientName(value.getName().trim()).quantity(value.getQuantity())
+                    .unit(value.getUnit()).isCustom(Boolean.TRUE.equals(value.getIsCustom())).build());
+        }
+        if (recipe.getSteps() != null) for (int n = 0; n < recipe.getSteps().size(); n++) {
+            var value = recipe.getSteps().get(n);
+            if (value != null && value.getInstruction() != null && !value.getInstruction().isBlank()) steps.save(ContentRecipeStep.builder()
+                    .contentId(contentId).stepNumber(n + 1).instruction(value.getInstruction().trim()).build());
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public ContentRecipeDto read(Integer contentId) {
+        var detail = details.findById(contentId).orElse(null);
+        var ingredientValues = ingredients.findByContentIdOrderBySortOrderAsc(contentId).stream().map(value -> ContentRecipeDto.Ingredient.builder()
+                .name(value.getIngredientName()).quantity(value.getQuantity()).unit(value.getUnit()).isCustom(value.getIsCustom()).build()).toList();
+        var stepValues = steps.findByContentIdOrderByStepNumberAsc(contentId).stream().map(value -> ContentRecipeDto.Step.builder()
+                .instruction(value.getInstruction()).build()).toList();
+        if (detail == null && ingredientValues.isEmpty() && stepValues.isEmpty()) return null;
+        return ContentRecipeDto.builder().prepMinutes(detail == null ? null : detail.getPrepMinutes()).cookMinutes(detail == null ? null : detail.getCookMinutes())
+                .servings(detail == null ? null : detail.getServings()).calories(detail == null ? null : detail.getCalories())
+                .proteinG(detail == null ? null : detail.getProteinG()).carbsG(detail == null ? null : detail.getCarbsG())
+                .fatG(detail == null ? null : detail.getFatG()).fiberG(detail == null ? null : detail.getFiberG())
+                .sodiumMg(detail == null ? null : detail.getSodiumMg()).ingredients(ingredientValues).steps(stepValues).build();
+    }
+}

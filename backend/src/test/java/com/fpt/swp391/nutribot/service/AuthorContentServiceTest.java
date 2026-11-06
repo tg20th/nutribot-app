@@ -198,6 +198,29 @@ class AuthorContentServiceTest {
 
     @Test
     @DisplayName("3. Người dùng khác sửa bài của tác giả bị chặn HTTP 403 Forbidden")
+    void bodyClipboardMarkers_areRemovedButRichTextIsPreserved() {
+        String richBody = "<!-- StartFragment --> <p><strong>Fresh</strong> greens</p> <!--ENDfragment-->";
+        assertEquals(" <p><strong>Fresh</strong> greens</p> ", AuthorContentService.normalizeBody(richBody));
+
+        ContentCreateRequest createRequest = ContentCreateRequest.builder().title("Rich blog").body(richBody).build();
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> {
+            Content content = invocation.getArgument(0);
+            content.setContentId(101);
+            return content;
+        });
+        authorContentService.createContent("truong_author", "BLOG", createRequest);
+        verify(contentRepository).save(argThat(content -> content.getBody().equals(" <p><strong>Fresh</strong> greens</p> ")));
+
+        ContentUpdateRequest updateRequest = ContentUpdateRequest.builder().body(richBody).build();
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        authorContentService.updateContent("truong_author", 100, updateRequest);
+        assertEquals(" <p><strong>Fresh</strong> greens</p> ", sampleContent.getBody());
+    }
+
+    @Test
+    @DisplayName("3. Non-owner cannot update author's content")
     void updateContent_nonOwner_throwsForbidden() {
         ContentUpdateRequest request = ContentUpdateRequest.builder()
                 .title("Tiêu Đề Bị Sửa Trộm")

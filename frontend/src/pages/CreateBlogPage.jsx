@@ -22,7 +22,9 @@ function handleEditorPaste(event) {
   const html = event.clipboardData.getData('text/html');
   const text = event.clipboardData.getData('text/plain');
   const container = document.createElement('div');
-  container.innerHTML = html || text.replace(/[&<>]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[character])).replace(/\r?\n/g, '<br>');
+  container.innerHTML = (html || text.replace(/[&<>]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[character])).replace(/\r?\n/g, '<br>'))
+    .replace(/<!--\s*StartFragment\s*-->/gi, '')
+    .replace(/<!--\s*EndFragment\s*-->/gi, '');
   container.querySelectorAll('*').forEach((element) => {
     element.style.removeProperty('font-family');
     element.removeAttribute('face');
@@ -553,7 +555,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
       const thumbnailUrl = file ? await uploadBlogThumbnail(file) : existingThumbnailUrl || null;
       const payload = {
         title: trimmedTitle,
-        body: stripHtmlToCleanText(bodyHtml) || bodyHtml,
+        body: bodyHtml.replace(/<!--\s*StartFragment\s*-->/gi, '').replace(/<!--\s*EndFragment\s*-->/gi, ''),
         recipe: makeRecipePayload(recipeDetails, ingredientRows, stepRows),
         thumbnailUrl,
         categoryId: Number(categoryId),

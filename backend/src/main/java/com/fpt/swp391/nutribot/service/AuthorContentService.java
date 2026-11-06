@@ -111,7 +111,7 @@ public class AuthorContentService {
                 .categoryId(request.getCategoryId())
                 .title(request.getTitle())
                 .slug(generateSlug(request.getTitle()))
-                .body(request.getBody())
+                .body(normalizeBody(request.getBody()))
                 .mediaUrl(request.getMediaUrl())
                 .thumbnailUrl(request.getThumbnailUrl())
                 .durationSec(request.getDurationSec())
@@ -187,7 +187,7 @@ public class AuthorContentService {
             content.setSlug(generateSlug(request.getTitle()));
         }
         if (request.getBody() != null) {
-            content.setBody(request.getBody());
+            content.setBody(normalizeBody(request.getBody()));
         }
         if (request.getMediaUrl() != null) {
             content.setMediaUrl(request.getMediaUrl());
@@ -325,6 +325,13 @@ public class AuthorContentService {
                     contentRecipeSuggestionService.getMinViews(),
                     contentRecipeSuggestionService.getMinVotes()));
         }
+    }
+
+    /** Remove browser clipboard fragment wrappers without touching valid HTML. */
+    static String normalizeBody(String body) {
+        if (body == null) return null;
+        return body.replaceAll("(?i)<!--\\s*StartFragment\\s*-->", "")
+                .replaceAll("(?i)<!--\\s*EndFragment\\s*-->", "");
     }
 
     private void saveOrUpdateModeration(Integer contentId, ContentModerationGatewayService.ModerationResult moderation, boolean isApproved) {

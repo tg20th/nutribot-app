@@ -316,6 +316,8 @@ public class ContentRecipeSuggestionService {
             }
         }
         // Legacy in-memory view only; these fields are @Transient and never reach SQL Server.
+        suggestion.setIngredientsJson(writeJson(extraction.ingredients()));
+        suggestion.setRecipeStepsJson(recipe != null ? writeJson(recipe.steps()) : null);
         return suggestion;
     }
 
