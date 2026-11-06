@@ -1,0 +1,37 @@
+export const helpCategories = [
+  { id: 'account', name: 'Account & Profile', icon: 'UserRound' },
+  { id: 'planner', name: 'Meal Planner', icon: 'CalendarDays' },
+  { id: 'assistant', name: 'AI Assistant', icon: 'Sparkles' },
+  { id: 'recipes', name: 'Recipes & Blogs', icon: 'BookOpen' },
+  { id: 'community', name: 'Community', icon: 'UsersRound' },
+  { id: 'troubleshooting', name: 'Troubleshooting', icon: 'Wrench' },
+];
+
+const steps = (...items) => items;
+export const helpArticles = [
+  { slug: 'complete-healthy-profile', category: 'account', title: 'How to complete your Healthy Profile', description: 'Add the details NutriBot uses to tailor your experience.', steps: steps('Sign in and open Profile from the account menu.', 'Choose the Healthy Profile section.', 'Add your height, weight, dietary preferences and allergies, then save your changes.') },
+  { slug: 'update-dietary-preferences-allergies', category: 'account', title: 'How to update dietary preferences and allergies', description: 'Keep your recommendations aligned with what works for you.', steps: steps('Open Profile, then select Healthy Profile.', 'Update your dietary preference or allergy selections.', 'Save the form. Your updated information is used by supported personalization features.') },
+  { slug: 'create-meal-plan-manually', category: 'planner', title: 'How to create a meal plan manually', description: 'Build a weekly menu from the planner using available dishes.', steps: steps('Open Weekly Meal Planner from the community navigation.', 'Choose the day and meal slot you want to edit.', 'Add a dish to the slot and review your week before saving.') },
+  { slug: 'generate-weekly-meal-plan-ai', category: 'planner', title: 'How to generate a weekly meal plan with AI', description: 'Use the AI planner to get a seven-day suggestion.', steps: steps('Open the Weekly Planner and choose the AI meal-planning option.', 'Provide the requested profile and ingredient information.', 'Select Generate, review the preview, then save it to your planner when it suits you.') },
+  { slug: 'ai-meal-generation-unavailable', category: 'planner', title: 'Why AI meal generation may be unavailable', description: 'Understand the most common reasons generation cannot complete.', steps: steps('Check that required profile information is available.', 'Review the message shown by the planner and try again after correcting missing input.', 'If the AI service is temporarily unavailable, use the manual planner and try later.') },
+  { slug: 'use-ai-nutrition-assistant', category: 'assistant', title: 'How to use the AI Nutrition Assistant', description: 'Ask NutriBot questions about plant-based food and nutrition.', steps: steps('Open the NutriBot assistant from the floating chat button.', 'Type a clear question and send it.', 'Review the response as general information and ask a follow-up when you need clarification.') },
+  { slug: 'submit-ingredient-image', category: 'assistant', title: 'How to submit an ingredient image', description: 'Use image input when the assistant supports visual ingredient analysis.', steps: steps('Open the AI Assistant.', 'Choose the image option and select an ingredient image.', 'Wait for processing to finish, then review the assistant response.') },
+  { slug: 'use-supported-cooking-video', category: 'assistant', title: 'How to use a supported cooking video', description: 'Share a supported cooking video with the AI Assistant.', steps: steps('Open the AI Assistant and choose video input.', 'Submit a supported cooking video URL or file when the control is available.', 'Wait for processing and review the returned cooking or nutrition guidance.') },
+  { slug: 'create-blog-or-recipe', category: 'recipes', title: 'How to create a blog or recipe', description: 'Share a post with the NutriBot community.', steps: steps('Sign in and open My Blogs from the community area.', 'Choose Create post and complete the title, body, category and media fields shown in the form.', 'Submit the post and track its status from My Blogs.') },
+  { slug: 'content-submission-moderation', category: 'recipes', title: 'How content submission and moderation work', description: 'What happens after you submit a blog or video.', steps: steps('Submit your content through the relevant creation form.', 'The content is processed and reviewed by the platform moderation flow.', 'Only content that is published is shown in public content areas; check My Blogs for the current status.') },
+  { slug: 'interact-with-community-posts', category: 'community', title: 'How to interact with community posts', description: 'Read, react to and discuss posts from the community.', steps: steps('Open Community from the main navigation.', 'Select a post to view its details.', 'Use the available vote and comment controls to participate.') },
+  { slug: 'comments-and-notifications', category: 'community', title: 'How comments and notifications work', description: 'Follow conversations and see activity related to your content.', steps: steps('Open a community post and use the comment field to join the discussion.', 'Replies and interactions are shown in the post conversation.', 'Open Notifications from the signed-in community interface to review supported activity updates.') },
+  { slug: 'common-meal-generation-problems', category: 'troubleshooting', title: 'Common meal generation problems', description: 'Simple checks when a meal plan does not generate.', steps: steps('Confirm the required fields and profile information are complete.', 'Try a shorter, clearer ingredient list and submit again.', 'If the service still fails, use the manual planner while the AI service recovers.') },
+  { slug: 'common-ai-processing-problems', category: 'troubleshooting', title: 'Common AI Assistant processing problems', description: 'What to check when image, video or chat processing fails.', steps: steps('Check your connection and make sure the input is supported.', 'Wait for the current request to finish before sending another one.', 'If the error persists, retry later and use text input where possible.') },
+];
+
+export const helpFaqs = [
+  ['Is a complete Healthy Profile required?', 'Not for every area of NutriBot. Some personalized recommendations and meal-planning flows need profile information to produce a useful result.'],
+  ['Can users create meal plans manually?', 'Yes. The Weekly Meal Planner supports adding dishes to meal slots without relying on AI generation.'],
+  ['Why might AI meal generation fail?', 'Required inputs may be missing, the request may not be supported, or the AI service may be temporarily unavailable.'],
+  ['Can users edit their weekly meal plan?', 'The planner supports managing meal slots and dishes where those controls are available to the signed-in user.'],
+  ['Why might submitted content not appear publicly?', 'Submitted content can remain unpublished while it is being processed or reviewed by the moderation flow.'],
+  ['Can the AI Assistant process images and videos?', 'The assistant includes image and supported video processing flows, subject to input validation and service availability.'],
+  ['Does NutriBot provide medical advice?', 'No. AI responses are informational and are not a substitute for advice from a qualified medical professional.'],
+  ['How do community notifications work?', 'Supported comments and interactions can create activity notifications that signed-in users can review in the notification interface.'],
+];

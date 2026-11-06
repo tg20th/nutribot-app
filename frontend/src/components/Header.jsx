@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { HOME_SECTION_IDS, navigateToHomeSection } from '../utils/homeSectionNavigation';
 gsap.registerPlugin(ScrollTrigger);
 
-const links = [{ label: 'Home', target: 'home' }, { label: 'Explore', target: 'explore' }, { label: 'Recipes', target: 'recipes' }, { label: 'Videos', target: 'videos' }, { label: 'Community', target: 'community' }];
+const links = [{ label: 'Home', target: 'home' }, { label: 'Explore', target: 'explore' }, { label: 'Recipes', target: 'recipes' }, { label: 'Videos', target: 'videos' }, { label: 'Community', target: HOME_SECTION_IDS.community }];
 
 export default function Header({ onAuth }) {
   const navigate = useNavigate();
@@ -96,11 +97,7 @@ export default function Header({ onAuth }) {
 
         <nav ref={nav} className={open ? 'nav-links open' : 'nav-links'}>
           {links.map(({ label, target }) =>
-            label === 'Community'
-              ? <Link ref={(node) => { linkRefs.current[label] = node; }} key={label} to="/community" className={active === label ? 'active' : ''}>{label}</Link>
-              : isLandingPage
-                ? <a ref={(node) => { linkRefs.current[label] = node; }} key={label} onClick={() => navigateSection(label)} className={active === label ? 'active' : ''} href={`#${target}`}>{label}</a>
-                : <Link ref={(node) => { linkRefs.current[label] = node; }} key={label} to={`/#${target}`} className={active === label ? 'active' : ''}>{label}</Link>
+            <a ref={(node) => { linkRefs.current[label] = node; }} key={label} onClick={(event) => { event.preventDefault(); navigateSection(label); if (target === 'home' || target === 'explore' || target === 'recipes' || target === 'videos' || target === HOME_SECTION_IDS.community) navigateToHomeSection(navigate, target); }} className={active === label ? 'active' : ''} href={`/#${target}`}>{label}</a>
           )}
           <span ref={indicator} className="nav-indicator" aria-hidden="true"/>
         </nav>
