@@ -34,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.net.URLEncoder;
 import java.time.Instant;
 import java.util.Arrays;
@@ -53,6 +54,7 @@ public class SecurityConfig {
     private final GuestRateLimitFilter guestRateLimitFilter;
     private final String frontendBaseUrl;
 
+    @Autowired
     public SecurityConfig(@Lazy JwtAuthenticationFilter jwtAuthenticationFilter,
                           @Lazy AuthService authService,
                           TokenBlacklistService tokenBlacklistService,
