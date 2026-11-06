@@ -101,14 +101,28 @@ describe('admin moderation screen', () => {
     expect(screen.queryByText('Healthy lunch ideas')).toBeNull();
   });
 
-  it('requires a rejection reason and sends the trimmed reason', async () => {
+  it('requires a selected rejection reason and sends the mapped text', async () => {
     render(<AdminModerationPage />);
     fireEvent.click(await screen.findByRole('button', { name: /Reject/ }));
-    const confirm = screen.getByRole('button', { name: 'Confirm Rejection' });
+    const confirm = screen.getByRole('button', { name: 'Reject content' });
     expect(confirm).toBeDisabled();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Rejection reason *' }), { target: { value: '  Missing source citations  ' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Reason for rejection *' }), { target: { value: 'MISLEADING_INFORMATION' } });
     fireEvent.click(confirm);
-    await waitFor(() => expect(adminApi.moderateContent).toHaveBeenCalledWith(1, 'REJECT', 'Missing source citations'));
+    await waitFor(() => expect(adminApi.moderateContent).toHaveBeenCalledWith(1, 'REJECT', 'Misleading or inaccurate information'));
+  });
+
+  it('shows the custom reason only for Other reason and trims it on submit', async () => {
+    render(<AdminModerationPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /Reject/ }));
+    const select = screen.getByRole('combobox', { name: 'Reason for rejection *' });
+    expect(screen.queryByRole('textbox', { name: 'Custom reason *' })).toBeNull();
+    fireEvent.change(select, { target: { value: 'OTHER' } });
+    const customReason = screen.getByRole('textbox', { name: /Custom reason \*/ });
+    const confirm = screen.getByRole('button', { name: 'Reject content' });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(customReason, { target: { value: '  Needs a clearer source  ' } });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(adminApi.moderateContent).toHaveBeenCalledWith(1, 'REJECT', 'Needs a clearer source'));
   });
 
   it('allows approval without a reason', async () => {

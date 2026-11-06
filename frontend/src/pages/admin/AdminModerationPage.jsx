@@ -8,22 +8,35 @@ const actions = {
   APPROVE: { title: 'Approve content', label: 'Confirm Approval', message: 'Content approved and published.', confirmClass: 'primary' },
   REJECT: { title: 'Reject content', label: 'Confirm Rejection', message: 'Content rejected.' },
 };
+const rejectionReasons = [
+  ['INAPPROPRIATE_CONTENT', 'Inappropriate or offensive content'],
+  ['MISLEADING_INFORMATION', 'Misleading or inaccurate information'],
+  ['SPAM', 'Spam or promotional content'],
+  ['COPYRIGHT_CONCERN', 'Copyright or ownership concerns'],
+  ['LOW_QUALITY_CONTENT', 'Incomplete or low-quality content'],
+  ['COMMUNITY_GUIDELINES_VIOLATION', 'Content violates community guidelines'],
+  ['OTHER', 'Other reason'],
+];
+const rejectionReasonText = Object.fromEntries(rejectionReasons);
+const rejectionReasonMaxLength = 1000;
 
-function ModerationDecisionDialog({ decision, reason, error, submitting, onReasonChange, onClose, onConfirm }) {
+function ModerationDecisionDialog({ decision, reason, rejectionReasonCode, error, submitting, onReasonChange, onRejectionReasonCodeChange, onClose, onConfirm }) {
   if (!decision) return null;
   const rejecting = decision.action === 'REJECT';
   const trimmedReason = reason.trim();
+  const validRejectReason = rejectionReasonCode && (rejectionReasonCode !== 'OTHER' || trimmedReason.length > 0);
   return <div className="admin-modal-backdrop moderation-decision-backdrop" onMouseDown={submitting ? undefined : onClose}>
     <section className="admin-dialog moderation-decision-dialog" role="dialog" aria-modal="true" aria-labelledby="moderation-decision-title" onMouseDown={(event) => event.stopPropagation()}>
       <p>{rejecting ? 'REJECTION CONFIRMATION' : 'APPROVAL CONFIRMATION'}</p>
       <h2 id="moderation-decision-title">{actions[decision.action].title}</h2>
+      {rejecting && <span className="moderation-decision-description">Select a reason for rejecting this submission. The author will be notified of your decision.</span>}
       <span className="moderation-decision-content-title">{decision.item.title}</span>
-      <label className="moderation-reason-field" htmlFor="moderation-decision-reason">
-        <b>{rejecting ? 'Rejection reason' : 'Approval reason'}{rejecting ? ' *' : ' (optional)'}</b>
-        <textarea id="moderation-decision-reason" value={reason} disabled={submitting} onChange={(event) => onReasonChange(event.target.value)} placeholder={rejecting ? 'Explain why this content is being rejected' : 'Add a note about why this content is approved (optional)'} aria-invalid={Boolean(error)} aria-describedby={error ? 'moderation-decision-error' : undefined} />
-      </label>
+      {rejecting ? <>
+        <label className="moderation-reason-field" htmlFor="moderation-rejection-reason-code"><b>Reason for rejection *</b><select id="moderation-rejection-reason-code" value={rejectionReasonCode} disabled={submitting} onChange={(event) => onRejectionReasonCodeChange(event.target.value)}><option value="">Select a rejection reason</option>{rejectionReasons.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
+        {rejectionReasonCode === 'OTHER' && <label className="moderation-reason-field" htmlFor="moderation-decision-reason"><b>Custom reason *</b><textarea id="moderation-decision-reason" maxLength={rejectionReasonMaxLength} value={reason} disabled={submitting} onChange={(event) => onReasonChange(event.target.value)} placeholder="Explain why this content cannot be approved..." aria-invalid={Boolean(error)} aria-describedby={error ? 'moderation-decision-error' : undefined} /><small className="moderation-reason-count">{reason.length}/{rejectionReasonMaxLength}</small></label>}
+      </> : <label className="moderation-reason-field" htmlFor="moderation-decision-reason"><b>Approval reason (optional)</b><textarea id="moderation-decision-reason" value={reason} disabled={submitting} onChange={(event) => onReasonChange(event.target.value)} placeholder="Add a note about why this content is approved (optional)" aria-invalid={Boolean(error)} aria-describedby={error ? 'moderation-decision-error' : undefined} /></label>}
       {error && <p id="moderation-decision-error" className="moderation-decision-error" role="alert">{error}</p>}
-      <div className="moderation-decision-actions"><button type="button" className="admin-btn secondary" disabled={submitting} onClick={onClose}>Cancel</button><button type="button" className={`admin-btn ${actions[decision.action].confirmClass || 'danger'}`} disabled={submitting || (rejecting && !trimmedReason)} onClick={onConfirm}>{submitting ? 'Saving...' : actions[decision.action].label}</button></div>
+      <div className="moderation-decision-actions"><button type="button" className="admin-btn secondary" disabled={submitting} onClick={onClose}>Cancel</button><button type="button" className={`admin-btn ${actions[decision.action].confirmClass || 'danger'}`} disabled={submitting || (rejecting && !validRejectReason)} onClick={onConfirm}>{submitting ? 'Saving...' : rejecting ? 'Reject content' : actions[decision.action].label}</button></div>
     </section>
   </div>;
 }
@@ -349,6 +362,7 @@ export default function AdminModerationPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [confirm, setConfirm] = useState(null);
   const [decisionReason, setDecisionReason] = useState('');
+  const [rejectionReasonCode, setRejectionReasonCode] = useState('');
   const [decisionError, setDecisionError] = useState('');
   const [toast, setToast] = useState('');
   const [recipeExpanded, setRecipeExpanded] = useState(false);
@@ -430,17 +444,19 @@ export default function AdminModerationPage() {
   const decide = async () => {
     if (!confirm || submittingAction) return;
     const reason = decisionReason.trim();
-    if (confirm.action === 'REJECT' && !reason) {
+    if (confirm.action === 'REJECT' && (!rejectionReasonCode || (rejectionReasonCode === 'OTHER' && !reason))) {
       setDecisionError('A rejection reason is required.');
       return;
     }
+    const submittedReason = confirm.action === 'REJECT' ? (rejectionReasonCode === 'OTHER' ? reason : rejectionReasonText[rejectionReasonCode]) : reason;
     setSubmittingAction(true);
     setDecisionError('');
     try {
-      await adminApi.moderateContent(confirm.item.id, confirm.action, reason);
+      await adminApi.moderateContent(confirm.item.id, confirm.action, submittedReason);
       setToast(actions[confirm.action].message);
       setConfirm(null);
       setDecisionReason('');
+      setRejectionReasonCode('');
       setSelectedId(null);
       setRefreshKey((key) => key + 1);
     } catch (requestError) {
@@ -554,8 +570,8 @@ export default function AdminModerationPage() {
 
                 </div>
                 <footer className="moderation-actions">
-                  <button type="button" className="admin-btn primary" disabled={submittingAction} onClick={() => { setDecisionReason(''); setDecisionError(''); setConfirm({ item: selected, action: 'APPROVE' }); }}><Check size={16} /> Approve</button>
-                  <button type="button" className="admin-btn danger" disabled={submittingAction} onClick={() => { setDecisionReason(''); setDecisionError(''); setConfirm({ item: selected, action: 'REJECT' }); }}><X size={16} /> Reject</button>
+                  <button type="button" className="admin-btn primary" disabled={submittingAction} onClick={() => { setDecisionReason(''); setRejectionReasonCode(''); setDecisionError(''); setConfirm({ item: selected, action: 'APPROVE' }); }}><Check size={16} /> Approve</button>
+                  <button type="button" className="admin-btn danger" disabled={submittingAction} onClick={() => { setDecisionReason(''); setRejectionReasonCode(''); setDecisionError(''); setConfirm({ item: selected, action: 'REJECT' }); }}><X size={16} /> Reject</button>
                 </footer>
               </article>
             </div>}
@@ -583,9 +599,10 @@ export default function AdminModerationPage() {
       onClose={() => setConfirm(null)}
       onConfirm={decide}
     />}
-    <ModerationDecisionDialog decision={confirm} reason={decisionReason} error={decisionError} submitting={submittingAction}
+    <ModerationDecisionDialog decision={confirm} reason={decisionReason} rejectionReasonCode={rejectionReasonCode} error={decisionError} submitting={submittingAction}
       onReasonChange={(value) => { setDecisionReason(value); if (decisionError) setDecisionError(''); }}
-      onClose={() => { setConfirm(null); setDecisionReason(''); setDecisionError(''); }} onConfirm={decide} />
+      onRejectionReasonCodeChange={(value) => { setRejectionReasonCode(value); if (value !== 'OTHER') setDecisionReason(''); if (decisionError) setDecisionError(''); }}
+      onClose={() => { setConfirm(null); setDecisionReason(''); setRejectionReasonCode(''); setDecisionError(''); }} onConfirm={decide} />
     <Toast message={toast} onDismiss={() => setToast('')} />
     {preview && <span className="moderation-preview-marker" aria-hidden="true">Preview</span>}
   </div>;

@@ -11,6 +11,9 @@ export default function HomePage({ onAuthenticate }) {
   const blogData = null; const videoData = null;
   const [video, setVideo] = useState(null); const [authMode, setAuthMode] = useState(location.state?.authMode || (location.state?.authRequired ? 'login' : null)); const [remoteContent, setRemoteContent] = useState({ blogs: [], videos: [], featured: null, topics: [], loading: true, error: '' });
   useEffect(() => {
+    if (!authMode && window.sessionStorage.getItem('nutribot-oauth-error-state')) setAuthMode('login');
+  }, [authMode]);
+  useEffect(() => {
     if (blogData || videoData) return undefined;
     const controller = new AbortController();
     Promise.allSettled([getBlogs(controller.signal), getVideos(controller.signal), getTopics(controller.signal)]).then(([blogsResult, videosResult, topicsResult]) => {

@@ -26,6 +26,10 @@ public class EmailService {
             @Value("${spring.mail.enabled:false}") boolean enabled
     ) {
         this.emailEnabled = enabled;
+        log.info("SMTP configuration: enabled={}, host={}, port={}, usernamePresent={}, passwordPresent={}", enabled, host, port, username != null && !username.isBlank(), password != null && !password.isBlank());
+        if (enabled && (username == null || username.isBlank() || password == null || password.isBlank())) {
+            log.error("SMTP is enabled but MAIL_USERNAME or MAIL_PASSWORD is missing");
+        }
         if (enabled) {
             JavaMailSenderImpl sender = new JavaMailSenderImpl();
             sender.setHost(host);
@@ -100,5 +104,25 @@ public class EmailService {
         message.setText(body);
         mailSender.send(message);
         log.info("Email sent to {}", to);
+    }
+
+    public void sendEmailWithReplyTo(String to, String subject, String body, String replyTo) {
+        if (!emailEnabled || mailSender == null) {
+            log.warn("Suspension email not attempted: SMTP is disabled or JavaMailSender is unavailable");
+            return;
+        }
+        log.info("Suspension email SMTP attempt started: recipientPresent={}, replyToPresent={}", to != null && !to.isBlank(), replyTo != null && !replyTo.isBlank());
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(to);
+            message.setSubject(subject);
+            message.setText(body);
+            if (replyTo != null && !replyTo.isBlank()) message.setReplyTo(replyTo);
+            mailSender.send(message);
+            log.info("Suspension email SMTP transport accepted the message");
+        } catch (Exception ex) {
+            log.error("Suspension email SMTP delivery failed: {}", ex.getMessage(), ex);
+            throw new IllegalStateException("Suspension email delivery failed", ex);
+        }
     }
 }

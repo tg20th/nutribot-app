@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { Play, UsersRound } from 'lucide-react';
+import { Play, ShieldAlert, UsersRound } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import RestaurantRecommendations from '../components/community/RestaurantRecommendations';
@@ -68,6 +68,7 @@ export default function CommunityContentDetailPage() {
   const relatedContentReturnState = location.state?.relatedContentReturnState;
   const isMyContentSource = location.state?.source === 'my-content';
   const sourceContentType = location.state?.contentType;
+  const isRejectedNotification = location.state?.source === 'my-content' && location.state?.moderationNotification?.type === 'CONTENT_MODERATION_REJECTED';
   const searchReturnState = location.state?.restoreSearch ? { restoreSearch: true } : undefined;
   const isMyContentReturn = returnTo === '/community/my-blogs';
   const isSearchReturn = returnTo.startsWith('/community/search');
@@ -132,6 +133,8 @@ export default function CommunityContentDetailPage() {
     : story;
   const publicationDate = formatPublicationDate(post.createdAt);
   const nutrition = post.nutrition ?? { carbs: '—', fat: '—', fiber: '—', sodium: '—' };
+  const isRejectedOwnerView = isMyContentSource && String(post.status).toLowerCase() === 'rejected';
+  const rejectionReason = post.moderationReason || location.state?.moderationNotification?.message || 'The rejection reason is unavailable.';
 
   const returnState = location.state?.returnState
     ?? relatedContentReturnState
@@ -156,7 +159,7 @@ export default function CommunityContentDetailPage() {
       <main className="content-detail-main">
         <section className="detail-hero detail-reveal">
 
-          <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1>{story && <div className="detail-hero-story"><div className="detail-story-divider" aria-hidden="true"/>{storyParagraphs(storyPreview).map((paragraph, index) => <p key={index}>{paragraph}</p>)}{isLongStory && <button type="button" className="detail-story-toggle" onClick={() => setStoryExpanded((expanded) => !expanded)}>{storyExpanded ? 'Show less' : 'Read more'}</button>}</div>}<div className="detail-author"><UserProfileLink userId={post.authorId} aria-label={`Open ${post.author || 'author'} profile`}>{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}</UserProfileLink><div><UserProfileLink userId={post.authorId}><b>{post.author}</b></UserProfileLink><small>{[post.username, publicationDate].filter(Boolean).join(' · ')}</small></div></div></div>
+          <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span>{isRejectedOwnerView && <aside className="detail-moderation-notice" role="status"><div className="detail-moderation-notice__heading"><ShieldAlert size={18} aria-hidden="true"/><strong>This post was rejected</strong></div><p className="detail-moderation-notice__description">This post does not meet NutriBot&apos;s community guidelines.</p><p className="detail-moderation-notice__reason"><b>Reason</b><span>{rejectionReason}</span></p></aside>}<h1>{post.title}</h1>{story && <div className="detail-hero-story"><div className="detail-story-divider" aria-hidden="true"/>{storyParagraphs(storyPreview).map((paragraph, index) => <p key={index}>{paragraph}</p>)}{isLongStory && <button type="button" className="detail-story-toggle" onClick={() => setStoryExpanded((expanded) => !expanded)}>{storyExpanded ? 'Show less' : 'Read more'}</button>}</div>}<div className="detail-author"><UserProfileLink userId={post.authorId} aria-label={`Open ${post.author || 'author'} profile`}>{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}</UserProfileLink><div><UserProfileLink userId={post.authorId}><b>{post.author}</b></UserProfileLink><small>{[post.username, publicationDate].filter(Boolean).join(' · ')}</small></div></div></div>
           <div className="detail-media">
             {post.type === 'video' && post.videoUrl && videoStarted
               ? <video controls autoPlay playsInline preload="metadata" src={post.videoUrl} poster={image || undefined} aria-label={post.title}/>
@@ -172,10 +175,10 @@ export default function CommunityContentDetailPage() {
           <article className="detail-method"><div className="detail-section-head"><span>Make it yours</span><h2>Method</h2><small>{post.prepTime} prep · {post.cookTime} cook</small></div><ol>{(post.steps ?? []).map((step, index) => <li key={step}><b>{index + 1}</b><p>{step}</p></li>)}</ol></article>
         </section>
         <div className="detail-related-divider" aria-hidden="true"/>
-        <RelatedContentSection contentId={post.id} contentType={post.type}/>
-        <RestaurantRecommendations dishName={post.title}/>
-        <section className="detail-actions detail-reveal"><VoteButton contentId={post.id}/></section>
-        <section className="detail-comments detail-reveal"><CommentSection contentId={post.id} showEmptyState={false}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><Link to="/home">Open the feed</Link></div></section>
+        {!isRejectedOwnerView && <RelatedContentSection contentId={post.id} contentType={post.type}/>} 
+        {!isRejectedOwnerView && <RestaurantRecommendations dishName={post.title}/>} 
+        {!isRejectedOwnerView && <><section className="detail-actions detail-reveal"><VoteButton contentId={post.id}/></section>
+        <section className="detail-comments detail-reveal"><CommentSection contentId={post.id} showEmptyState={false}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><Link to="/home">Open the feed</Link></div></section></>}
       </main>
     </div>
     <ChatbotWidget/>
