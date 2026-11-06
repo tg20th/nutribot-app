@@ -7,5 +7,6 @@ import './styles/public-profile.css';
 import { ToastProvider } from './components/notifications/ToastProvider';
 import ToastViewport from './components/notifications/ToastViewport';
 import './styles/notifications.css';
+import ErrorBoundary from './components/errors/ErrorBoundary';
 
-createRoot(document.getElementById('root')).render(<StrictMode><BrowserRouter><ToastProvider><App/><ToastViewport/></ToastProvider></BrowserRouter></StrictMode>);
+createRoot(document.getElementById('root')).render(<StrictMode><BrowserRouter><ErrorBoundary><ToastProvider><App/><ToastViewport/></ToastProvider></ErrorBoundary></BrowserRouter></StrictMode>);

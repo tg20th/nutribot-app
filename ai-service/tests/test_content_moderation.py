@@ -1,6 +1,12 @@
 import asyncio
+from types import SimpleNamespace
+
+import pytest
+from pydantic import ValidationError
+
 from app.schemas.moderation import ModerationRequest
 from app.services.content_moderation_service import ContentModerationService
+from app.services.gemini_service import GeminiService
 class FakeGemini:
  model_name="configured-test-model"
  def __init__(self,result=None,error=False): self.result=result; self.error=error
@@ -27,3 +33,46 @@ def test_thumbnail_multimodal_categories():
  assert res.decision == "REJECT" and "SENSITIVE_IMAGE" in res.categories
  res_meat = run(ContentModerationService(FakeGemini({"decision":"REJECT","reason":"Ảnh chứa thịt trong bài ăn chay","confidence":0.95,"categories":["NON_VEGETARIAN_IMAGE"]})), req)
  assert res_meat.decision == "REJECT" and "NON_VEGETARIAN_IMAGE" in res_meat.categories
+
+
+def moderation_payload():
+ return {"decision":"APPROVE","reason":"safe vegetarian content","confidence":0.95,"categories":["SAFE"]}
+
+
+@pytest.mark.parametrize("response", [
+ SimpleNamespace(parsed=moderation_payload()),
+ SimpleNamespace(parsed='{"decision":"APPROVE","reason":"safe vegetarian content","confidence":0.95,"categories":["SAFE"]}'),
+ SimpleNamespace(text='{"decision":"APPROVE","reason":"safe vegetarian content","confidence":0.95,"categories":["SAFE"]}'),
+])
+def test_moderation_parser_accepts_dict_and_json_response_formats(response):
+ parsed = GeminiService._parse_moderation_response(response)
+ assert parsed.decision == "APPROVE"
+ assert parsed.categories == ["SAFE"]
+
+
+def test_moderation_parser_accepts_model_instance():
+ from app.schemas.moderation import ModelModeration
+
+ parsed = GeminiService._parse_moderation_response(SimpleNamespace(
+  parsed=ModelModeration(**moderation_payload())
+ ))
+ assert parsed.reason == "safe vegetarian content"
+
+
+@pytest.mark.parametrize("response", [
+ SimpleNamespace(parsed={"decision":"APPROVE","reason":"","confidence":0.95,"categories":["SAFE"]}),
+ SimpleNamespace(parsed='{"decision":"APPROVE","reason":"safe","confidence":0.95,"categories":["UNKNOWN"]}'),
+ SimpleNamespace(text='not-json'),
+])
+def test_moderation_parser_rejects_invalid_schema_or_json(response):
+ with pytest.raises((ValidationError, ValueError)):
+  GeminiService._parse_moderation_response(response)
+
+
+def test_provider_failure_is_safe_and_logged(caplog):
+ service = ContentModerationService(FakeGemini(error=True))
+ with caplog.at_level("WARNING"):
+  result = run(service)
+ assert result.decision == "NEEDS_REVIEW"
+ assert "Content moderation failed" in caplog.text
+ assert "TimeoutError" in caplog.text

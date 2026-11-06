@@ -45,6 +45,9 @@ public class ContentModeration {
     @Column(name = "admin_note", columnDefinition = "NVARCHAR(MAX)")
     private String adminNote;
 
+    @Column(name = "decision_reason", length = 1000)
+    private String decisionReason;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

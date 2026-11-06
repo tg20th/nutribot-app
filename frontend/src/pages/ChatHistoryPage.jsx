@@ -1,4 +1,4 @@
-import { BotMessageSquare, ChevronLeft, Clock3, Loader2, MessageCircle, RefreshCw } from 'lucide-react';
+import { BotMessageSquare, Clock3, Loader2, MessageCircle, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ChatbotWidget from '../components/chatbot/ChatbotWidget';
@@ -99,7 +99,6 @@ export default function ChatHistoryPage() {
       <span className="community-sidenav-spacer" aria-hidden="true" />
       <main className="chat-history-main">
         <header className="chat-history-hero">
-          <button type="button" className="chat-history-back" onClick={() => navigate('/home')} aria-label="Back to home"><ChevronLeft size={17} /> Back</button>
           <span>NutriBot</span>
           <h1>Chat History</h1>
           <p>Review your previous conversations with NutriBot.</p>

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, MessageCircle, MoreHorizontal, Play } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MessageCircle, Play } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageWithFallback from '../ImageWithFallback';
@@ -61,7 +61,6 @@ export default function CommunityPostCard({ post: sourcePost, interactionApi = {
         </span>
       )}
       <div><b>{post.author}</b><small>{[post.username, post.createdAt].filter(Boolean).join(' · ')}</small></div>
-      <button className="community-icon-btn" aria-label="Post options" onClick={(event) => event.stopPropagation()}><MoreHorizontal size={18}/></button>
     </header>
 
     {post.title && <button className="community-post-title" type="button" onClick={(event) => { event.stopPropagation(); openPost(); }}><h3>{post.title}</h3></button>}

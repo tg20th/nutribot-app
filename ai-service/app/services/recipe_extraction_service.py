@@ -5,6 +5,7 @@ from typing import Any
 from google.genai import types
 
 from app.exceptions import AIServiceError, AIProviderUnavailableError
+from app.prompts import UNTRUSTED_CONTENT_SYSTEM_INSTRUCTION
 from app.schemas.recipe_extraction import (
     ModelRecipeExtraction,
     RecipeExtractionData,
@@ -30,6 +31,7 @@ class RecipeExtractionService:
         try:
             client = gemini._get_client()
             config = types.GenerateContentConfig(
+                system_instruction=UNTRUSTED_CONTENT_SYSTEM_INSTRUCTION,
                 response_mime_type="application/json",
                 response_schema=ModelRecipeExtraction,
                 temperature=0.2,

@@ -1,7 +1,7 @@
 import { Flag, LockKeyhole, UnlockKeyhole } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { adminApi } from '../../services/adminApi';
-import { ConfirmDialog, EmptyState, ErrorState, LoadingState, PageHeader, Pagination, SearchBox, StatusBadge, Toast } from '../../components/admin/AdminUi';
+import { AdminToolbar, ConfirmDialog, EmptyState, ErrorState, LoadingState, PageHeader, Pagination, SearchBox, StatusBadge, Toast } from '../../components/admin/AdminUi';
 
 const size = 10;
 const previewMembers = [
@@ -106,14 +106,12 @@ export default function UserManagementPage() {
   };
 
   return <>
-    <div className="members-admin-hero">
-      <PageHeader title="Members" text="Review registered members and manage account access." />
-    </div>
-    <div className="admin-toolbar members-admin-toolbar">
+    <PageHeader title="Members" text="Review registered members and manage account access." />
+    <AdminToolbar className="members-admin-toolbar" label="Member filters">
       <SearchBox value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search name, email, or username..." />
-      <select className="members-status-filter" aria-label="Filter members by status" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="WARN">Warn</option><option value="BANNED">Banned</option></select>
+      <select className="admin-filter-select members-status-filter" aria-label="Filter members by status" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">All statuses</option><option value="ACTIVE">Active</option><option value="WARN">Warn</option><option value="BANNED">Banned</option></select>
       <Toast message={toast?.message} variant={toast?.variant} className="members-admin-toast" onDismiss={() => setToast(null)} />
-    </div>
+    </AdminToolbar>
     <section className="admin-panel table-panel members-table-panel">
       {error ? <ErrorState onRetry={reload} /> : loading ? <LoadingState /> : items.length ? <table className="admin-table members-admin-table"><colgroup><col className="member-column" /><col className="content-column" /><col className="violations-column" /><col className="status-column" /><col className="role-column" /><col className="joined-column" /><col className="actions-column" /></colgroup><thead><tr><th>Member</th><th>Content</th><th>Violations</th><th>Status</th><th>Role</th><th>Joined</th><th aria-label="Actions" /></tr></thead><tbody>{items.map((user) => {
         const locked = user.status === 'BANNED';

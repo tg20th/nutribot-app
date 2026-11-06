@@ -20,7 +20,7 @@ it('opens the full post from Comments with a footer composer and restores focus 
   const trigger = screen.getByRole('button', { name: 'Comments' });
   trigger.focus();
   fireEvent.click(trigger);
-  const modal = screen.getByRole('dialog', { name: "Lan's post" });
+  const modal = screen.getByRole('dialog', { name: 'Post details' });
   expect(await within(modal).findByText('Full article content')).toBeInTheDocument();
   const composer = within(modal).getByRole('textbox');
   expect(composer.closest('footer')).not.toBeNull();

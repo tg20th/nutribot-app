@@ -79,6 +79,16 @@ describe('admin recipe suggestion review (NB-87)', () => {
     vi.clearAllMocks();
   });
 
+  it('opens on Pending and lets Admin toggle chronological order', async () => {
+    render(<AdminContentRecipeSuggestionsPage />);
+
+    await waitFor(() => expect(contentRecipeSuggestionsApi.list).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'PENDING' }), expect.any(AbortSignal),
+    ));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sort by oldest first' }));
+    expect(screen.getByRole('button', { name: 'Sort by newest first' })).toBeTruthy();
+  });
+
   it('blocks approval and lists validation issues for an invalid suggestion', async () => {
     render(<AdminContentRecipeSuggestionsPage />);
 
@@ -87,6 +97,71 @@ describe('admin recipe suggestion review (NB-87)', () => {
     expect(screen.getByText('ingredients[0].quantity')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Approve suggestion' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Reject' }).disabled).toBe(false);
+  });
+
+  it('does not render placeholder serving badges when values are missing', async () => {
+    const missingServing = suggestion({
+      dish: { ...suggestion().dish, servingSize: null, servingUnit: null },
+      recipe: { ...suggestion().recipe, servings: null },
+    });
+    contentRecipeSuggestionsApi.list.mockResolvedValue({ content: [missingServing], totalElements: 1, totalPages: 1 });
+    contentRecipeSuggestionsApi.getById.mockResolvedValue(missingServing);
+
+    render(<AdminContentRecipeSuggestionsPage />);
+
+    expect((await screen.findByLabelText('Serving information')).textContent).not.toContain('Missing');
+  });
+
+  it('does not show the legacy serving warning in pre-approval checks', async () => {
+    const withServingWarning = suggestion({ validation: {
+      valid: true,
+      canApprove: true,
+      issues: [{ field: 'dish.serving', code: 'DISH_SERVING_REQUIRED', severity: 'WARNING', message: 'Serving information is missing.' }],
+    } });
+    contentRecipeSuggestionsApi.list.mockResolvedValue({ content: [withServingWarning], totalElements: 1, totalPages: 1 });
+    contentRecipeSuggestionsApi.getById.mockResolvedValue(withServingWarning);
+
+    render(<AdminContentRecipeSuggestionsPage />);
+
+    expect(await screen.findByText('Data validation passed.')).toBeTruthy();
+    expect(screen.queryByText('Serving information is missing.')).toBeNull();
+  });
+
+  it('groups identical ingredient mapping errors into one warning with a count', async () => {
+    const unresolved = suggestion({ validation: {
+      valid: false,
+      canApprove: false,
+      issues: [
+        { field: 'ingredients[0]', code: 'INGREDIENT_MAPPING_REQUIRED', severity: 'ERROR', message: 'Select an existing catalog ingredient.' },
+        { field: 'ingredients[3]', code: 'INGREDIENT_MAPPING_REQUIRED', severity: 'ERROR', message: 'Select an existing catalog ingredient.' },
+      ],
+    } });
+    contentRecipeSuggestionsApi.list.mockResolvedValue({ content: [unresolved], totalElements: 1, totalPages: 1 });
+    contentRecipeSuggestionsApi.getById.mockResolvedValue(unresolved);
+
+    render(<AdminContentRecipeSuggestionsPage />);
+
+    expect(await screen.findByText('ingredients (2)')).toBeTruthy();
+    expect(screen.getByText('Select an existing catalog ingredient.')).toBeTruthy();
+    expect(screen.queryByText('ingredients[0]')).toBeNull();
+    expect(screen.queryByText('ingredients[3]')).toBeNull();
+  });
+
+  it('requires ingredient mapping before opening the approval confirmation', async () => {
+    const unresolved = suggestion({ validation: {
+      valid: false,
+      canApprove: false,
+      issues: [{ field: 'ingredients[0]', code: 'INGREDIENT_MAPPING_REQUIRED', severity: 'ERROR', message: 'Select an existing catalog ingredient.' }],
+      ingredientResolutions: [{ proposalIndex: 0, proposedName: 'Bún gạo lứt', status: 'UNRESOLVED' }],
+    } });
+    contentRecipeSuggestionsApi.list.mockResolvedValue({ content: [unresolved], totalElements: 1, totalPages: 1 });
+    contentRecipeSuggestionsApi.getById.mockResolvedValue(unresolved);
+
+    render(<AdminContentRecipeSuggestionsPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve suggestion' }));
+    expect(screen.queryByRole('heading', { name: 'Approve this suggestion?' })).toBeNull();
+    expect(contentRecipeSuggestionsApi.review).not.toHaveBeenCalled();
   });
 
   it('blocks approval when the author has not consented', async () => {
@@ -193,14 +268,27 @@ describe('admin recipe suggestion review (NB-87)', () => {
       issues: [{ field: 'ingredients[0]', code: 'INGREDIENT_MAPPING_REQUIRED', severity: 'ERROR', message: 'Select an existing catalog ingredient.' }],
       ingredientResolutions: [{ proposalIndex: 0, proposedName: 'Bún gạo lứt', status: 'UNRESOLVED' }],
     } });
-    getAllergyIngredients.mockResolvedValue([{ ingredientId: 12, name: 'Bún gạo' }]);
+    getAllergyIngredients.mockResolvedValue([
+      { ingredientId: 12, name: 'Bún gạo' },
+      { ingredientId: 13, name: 'Bún tươi' },
+      { ingredientId: 14, name: 'Bún bò' },
+      { ingredientId: 15, name: 'Bún riêu' },
+      { ingredientId: 16, name: 'Bún mắm' },
+      { ingredientId: 17, name: 'Bún chả' },
+      { ingredientId: 18, name: 'Bún cá' },
+      { ingredientId: 19, name: 'Bún thang' },
+      { ingredientId: 20, name: 'Bún đậu' },
+    ]);
     contentRecipeSuggestionsApi.list.mockResolvedValue({ content: [unresolved], totalElements: 1, totalPages: 1 });
     contentRecipeSuggestionsApi.getById.mockResolvedValue(unresolved);
     contentRecipeSuggestionsApi.review.mockResolvedValue({ ...unresolved, status: 'APPROVED' });
 
     render(<AdminContentRecipeSuggestionsPage />);
 
-    fireEvent.change(await screen.findByRole('combobox', { name: 'Catalog match for Bún gạo lứt' }), { target: { value: 'Bún gạo' } });
+    const matcher = await screen.findByRole('combobox', { name: 'Catalog match for Bún gạo lứt' });
+    fireEvent.focus(matcher);
+    expect(await screen.findByRole('option', { name: 'Bún đậu' })).toBeTruthy();
+    fireEvent.change(matcher, { target: { value: 'Bún gạo' } });
     fireEvent.click(await screen.findByRole('option', { name: 'Bún gạo' }));
     fireEvent.click(screen.getByRole('button', { name: 'Approve suggestion' }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Approve' }));
@@ -224,14 +312,14 @@ describe('admin recipe suggestion review (NB-87)', () => {
 
     render(<AdminContentRecipeSuggestionsPage />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Create ingredient' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add ingredient' }));
     fireEvent.change(screen.getByRole('combobox', { name: 'Ingredient category' }), { target: { value: '4' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create and select' }));
 
     await waitFor(() => expect(adminIngredientApi.createIngredient).toHaveBeenCalledWith(expect.objectContaining({
       name: 'Bột mè đen', slug: 'bot-me-den', categoryId: '4',
     })));
-    expect(await screen.findByRole('combobox', { name: 'Catalog match for Bột mè đen' })).toHaveValue('Bột mè đen');
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Catalog match for Bột mè đen' })).toHaveValue('Bột mè đen'));
 
     fireEvent.click(screen.getByRole('button', { name: 'Approve suggestion' }));
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Approve' }));

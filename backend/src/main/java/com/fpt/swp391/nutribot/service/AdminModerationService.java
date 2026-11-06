@@ -1,193 +1,112 @@
 package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.request.AdminModerationRequest;
-import com.fpt.swp391.nutribot.dto.response.AdminContentResponse;
-import com.fpt.swp391.nutribot.dto.response.PagedResponse;
-import com.fpt.swp391.nutribot.entity.AccountStatus;
-import com.fpt.swp391.nutribot.entity.Content;
-import com.fpt.swp391.nutribot.entity.ContentModeration;
-import com.fpt.swp391.nutribot.entity.User;
+import com.fpt.swp391.nutribot.dto.response.*;
+import com.fpt.swp391.nutribot.entity.*;
 import com.fpt.swp391.nutribot.event.ContentPublishedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
-import com.fpt.swp391.nutribot.repository.ContentModerationRepository;
-import com.fpt.swp391.nutribot.repository.ContentRepository;
-import com.fpt.swp391.nutribot.repository.UserRepository;
+import com.fpt.swp391.nutribot.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
+import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
+import java.time.*;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-@Slf4j
-@Service
-@RequiredArgsConstructor
+@Slf4j @Service @RequiredArgsConstructor
 public class AdminModerationService {
-
     private final ContentRepository contentRepository;
     private final ContentModerationRepository contentModerationRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final UserRepository userRepository;
     private final UserNotificationSender userNotificationSender;
     private final NotificationService notificationService;
+    private final ModerationDecisionAuditRepository moderationDecisionAuditRepository;
 
     @Transactional(readOnly = true)
     public PagedResponse<AdminContentResponse> getPendingContents(String contentType, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        List<String> pendingStatuses = List.of("under_review", "pending");
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.asc("createdAt"), Sort.Order.asc("contentId")));
+        List<String> statuses = List.of("under_review", "pending");
+        Page<Content> results = contentType != null && !contentType.isBlank() ? contentRepository.findByStatusInAndContentType(statuses, contentType, pageable) : contentRepository.findByStatusIn(statuses, pageable);
+        Map<Integer, ContentModeration> moderationByContent = contentModerationRepository.findByContentIdIn(results.getContent().stream().map(Content::getContentId).toList()).stream().collect(Collectors.toMap(ContentModeration::getContentId, Function.identity(), (a, b) -> a));
+        return PagedResponse.of(results.map(content -> toResponse(content, moderationByContent.get(content.getContentId()))));
+    }
 
-        Page<Content> pendingPage;
-        if (contentType != null && !contentType.isBlank()) {
-            pendingPage = contentRepository.findByStatusInAndContentType(pendingStatuses, contentType, pageable);
-        } else {
-            pendingPage = contentRepository.findByStatusIn(pendingStatuses, pageable);
+    @Transactional
+    public AdminContentResponse moderateContent(Integer contentId, AdminModerationRequest request, String adminUsername) {
+        Content content = contentRepository.findByIdForUpdate(contentId).or(() -> contentRepository.findById(contentId)).orElseThrow(() -> new NotFoundException("Content not found: " + contentId));
+        String action = request.getAction().toUpperCase(Locale.ROOT);
+        boolean decision = "APPROVE".equals(action) || "REJECT".equals(action);
+        if (!decision && !"HIDE".equals(action)) throw new BadRequestException("Invalid moderation action");
+        if (decision && !List.of("under_review", "pending").contains(content.getStatus())) throw new BadRequestException("Content is no longer awaiting review");
+        String reason = blank(request.getReason());
+        if ("REJECT".equals(action) && reason == null) throw new BadRequestException("A rejection reason is required");
+        if (reason != null && reason.length() > 1000) throw new BadRequestException("Reason must not exceed 1000 characters");
+        User admin = decision ? resolveAdmin(adminUsername) : null;
+        String previous = content.getStatus();
+        ContentModeration moderation = contentModerationRepository.findByContentId(contentId)
+                .orElseGet(() -> ContentModeration.builder().contentId(contentId).status("pending").build());
+        if ("APPROVE".equals(action)) content.setStatus("published");
+        else if ("REJECT".equals(action)) { content.setStatus("rejected"); reject(content, request.getReason()); }
+        else content.setStatus("archived");
+        Content saved = contentRepository.save(content);
+        if (decision) {
+            moderation.setStatus("APPROVE".equals(action) ? "approved" : "rejected");
+            moderation.setReviewedBy(admin.getUserId());
+            moderation.setReviewedAt(LocalDateTime.now());
+            moderation.setAdminNote(reason);
+            moderation.setDecisionReason(reason);
+            moderation = contentModerationRepository.save(moderation);
+        } else if ("HIDE".equals(action)) {
+            moderation.setStatus("rejected");
+            moderation.setReviewedAt(LocalDateTime.now());
+            moderation = contentModerationRepository.save(moderation);
         }
-
-        List<Integer> contentIds = pendingPage.getContent().stream()
-                .map(Content::getContentId)
-                .toList();
-
-        Map<Integer, ContentModeration> moderationMap = contentModerationRepository.findByContentIdIn(contentIds)
-                .stream()
-                .collect(Collectors.toMap(
-                        ContentModeration::getContentId,
-                        Function.identity(),
-                        (existing, replacement) -> existing
-                ));
-
-        return PagedResponse.of(pendingPage.map(c -> toResponse(c, moderationMap.get(c.getContentId()))));
+        if (decision) moderationDecisionAuditRepository.save(snapshot(content, moderation, admin, action, previous, reason));
+        if ("APPROVE".equals(action)) eventPublisher.publishEvent(new ContentPublishedEvent(contentId));
+        return toResponse(saved, moderation);
     }
 
     @Transactional
     public AdminContentResponse moderateContent(Integer contentId, AdminModerationRequest request) {
-        Content content = contentRepository.findById(contentId)
-                .orElseThrow(() -> new NotFoundException("Không tìm thấy nội dung với ID: " + contentId));
-
-        String action = request.getAction().toUpperCase();
-        switch (action) {
-            case "APPROVE" -> content.setStatus("published");
-            case "HIDE" -> content.setStatus("archived");
-            case "REJECT" -> {
-                content.setStatus("rejected");
-                handleRejectionStrikeAndWarning(content, request.getReason());
-            }
-            default -> throw new BadRequestException("Action không hợp lệ: " + action);
-        }
-
-        Content saved = contentRepository.save(content);
-
-        contentModerationRepository.findByContentId(contentId).ifPresent(cm -> {
-            switch (action) {
-                case "APPROVE" -> cm.setStatus("approved");
-                case "HIDE", "REJECT" -> cm.setStatus("rejected");
-            }
-            if (request.getReason() != null && !request.getReason().isBlank()) {
-                cm.setAdminNote(request.getReason().trim());
-            }
-            cm.setReviewedAt(LocalDateTime.now());
-            contentModerationRepository.save(cm);
-        });
-
-        ContentModeration cm = contentModerationRepository.findByContentId(contentId).orElse(null);
-
-        // NB-60: sau khi duyệt published, phát sự kiện để đánh giá tạo recipe suggestion bất đồng bộ
-        if ("APPROVE".equals(action)) {
-            eventPublisher.publishEvent(new ContentPublishedEvent(contentId));
-        }
-
-        return toResponse(saved, cm);
+        return moderateContent(contentId, request, null);
     }
 
-    private void handleRejectionStrikeAndWarning(Content content, String rawReason) {
-        User author = content.getUser();
-        if (author == null || isUserAdmin(author)) {
-            return;
-        }
-
-        int currentStrikes = author.getStrikeCount() != null ? author.getStrikeCount() : 0;
-        int newStrikes = currentStrikes + 1;
-        author.setStrikeCount(newStrikes);
-
-        if (newStrikes >= 3) {
-            author.setStatus(AccountStatus.BANNED);
-            log.warn("User [{}] (ID: {}) đã nhận đủ 3 gậy vi phạm và bị tự động BANNED.", author.getUsername(), author.getUserId());
-        } else if (author.getStatus() == AccountStatus.ACTIVE) {
-            author.setStatus(AccountStatus.WARN);
-            log.info("User [{}] (ID: {}) nhận gậy vi phạm thứ {}/3 (Status: WARN).", author.getUsername(), author.getUserId(), newStrikes);
-        }
-
-        userRepository.save(author);
-
-        String violationReason = (rawReason != null && !rawReason.isBlank())
-                ? rawReason.trim()
-                : "Nội dung vi phạm tiêu chuẩn cộng đồng";
-
-        if (author.getEmail() != null && !author.getEmail().isBlank()) {
-            try {
-                if (newStrikes >= 3) {
-                    userNotificationSender.sendBannedNotification(author.getEmail(), author.getUsername(), violationReason);
-                } else {
-                    userNotificationSender.sendWarningNotification(author.getEmail(), author.getUsername(), newStrikes, violationReason);
-                }
-            } catch (Exception e) {
-                log.error("Không thể gửi email cảnh báo vi phạm tới [{}]: {}", author.getEmail(), e.getMessage());
-            }
-        }
-
-        try {
-            notificationService.createForContentModerationRejected(
-                    author.getUserId(),
-                    content.getContentId(),
-                    content.getTitle(),
-                    newStrikes,
-                    violationReason
-            );
-        } catch (Exception e) {
-            log.error("Không thể tạo thông báo in-app vi phạm cho user [{}]: {}", author.getUserId(), e.getMessage());
-        }
+    private User resolveAdmin(String principalName) {
+        if (principalName == null || principalName.isBlank()) throw new BadRequestException("Authenticated administrator is required");
+        User admin = userRepository.findByNormalizedUsernameOrEmail(principalName)
+                .orElseThrow(() -> new NotFoundException("Authenticated administrator was not found"));
+        if (!isAdmin(admin)) throw new BadRequestException("Authenticated user is not an administrator");
+        return admin;
     }
 
-    private boolean isUserAdmin(User user) {
-        if (user.getRole() == null || user.getRole().getRoleName() == null) {
-            return false;
-        }
-        String r = user.getRole().getRoleName().trim().toUpperCase();
-        return r.equals("ADMIN") || r.equals("ROLE_ADMIN");
+    @Transactional(readOnly = true)
+    public PagedResponse<ModerationAuditResponse> getHistory(String query, String action, String contentType, String admin, LocalDate from, LocalDate to, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.min(Math.max(1, size), 100), Sort.by(Sort.Order.desc("decidedAt"), Sort.Order.desc("auditId")));
+        return PagedResponse.of(moderationDecisionAuditRepository.search(blank(query), blank(action), blank(contentType), blank(admin), from == null ? null : from.atStartOfDay(), to == null ? null : to.plusDays(1).atStartOfDay(), pageable).map(this::auditResponse));
     }
+    @Transactional(readOnly = true) public ModerationAuditResponse getHistoryDetail(Long id) { return auditResponse(moderationDecisionAuditRepository.findById(id).orElseThrow(() -> new NotFoundException("Moderation audit not found"))); }
+    @Transactional(readOnly = true) public List<ModerationAuditResponse> getTimeline(Integer contentId) { return moderationDecisionAuditRepository.findByContentIdOrderByDecidedAtAscAuditIdAsc(contentId).stream().map(this::auditResponse).toList(); }
 
-    private AdminContentResponse toResponse(Content content) {
-        ContentModeration cm = contentModerationRepository.findByContentId(content.getContentId()).orElse(null);
-        return toResponse(content, cm);
+    private ModerationDecisionAudit snapshot(Content c, ContentModeration m, User admin, String action, String previous, String reason) {
+        return ModerationDecisionAudit.builder().contentId(c.getContentId()).contentType(c.getContentType()).contentTitle(c.getTitle()).authorId(c.getUser() == null ? null : c.getUser().getUserId()).authorUsername(c.getUser() == null ? null : c.getUser().getUsername()).previousStatus(previous).newStatus(c.getStatus()).action(action).adminId(admin.getUserId()).adminUsername(admin.getUsername()).adminReason(blank(reason)).aiFlagged(m == null ? null : m.getAiFlagged()).aiReason(m == null ? null : m.getAiReason()).aiConfidence(m == null ? null : m.getAiConfidence()).contentBodySnapshot(c.getBody()).thumbnailUrlSnapshot(c.getThumbnailUrl()).mediaUrlSnapshot(c.getMediaUrl()).build();
     }
+    private ModerationAuditResponse auditResponse(ModerationDecisionAudit a) { return ModerationAuditResponse.builder().auditId(a.getAuditId()).contentId(a.getContentId()).contentType(a.getContentType()).contentTitle(a.getContentTitle()).authorUsername(a.getAuthorUsername()).action(a.getAction()).previousStatus(a.getPreviousStatus()).newStatus(a.getNewStatus()).adminId(a.getAdminId()).adminUsername(a.getAdminUsername()).adminReason(a.getAdminReason()).decidedAt(a.getDecidedAt()).aiFlagged(a.getAiFlagged()).aiReason(a.getAiReason()).aiConfidence(a.getAiConfidence() == null ? null : a.getAiConfidence().doubleValue()).contentBodySnapshot(a.getContentBodySnapshot()).thumbnailUrlSnapshot(a.getThumbnailUrlSnapshot()).mediaUrlSnapshot(a.getMediaUrlSnapshot()).build(); }
+    private String blank(String value) { return value == null || value.isBlank() ? null : value.trim(); }
 
-    private AdminContentResponse toResponse(Content content, ContentModeration moderation) {
-        return AdminContentResponse.builder()
-                .contentId(content.getContentId())
-                .contentType(content.getContentType())
-                .title(content.getTitle())
-                .slug(content.getSlug())
-                .status(content.getStatus())
-                .body(content.getBody())
-                .thumbnailUrl(content.getThumbnailUrl())
-                .mediaUrl(content.getMediaUrl())
-                .authorUsername(content.getUser() != null ? content.getUser().getUsername() : null)
-                .authorEmail(content.getUser() != null ? content.getUser().getEmail() : null)
-                .viewCount(content.getViewCount())
-                .createdAt(content.getCreatedAt())
-                .updatedAt(content.getUpdatedAt())
-                .aiFlagged(moderation != null ? moderation.getAiFlagged() : null)
-                .aiReason(moderation != null ? moderation.getAiReason() : null)
-                .aiConfidence(moderation != null && moderation.getAiConfidence() != null ? moderation.getAiConfidence().doubleValue() : null)
-                .build();
+    private void reject(Content content, String reason) {
+        User author = content.getUser(); if (author == null || isAdmin(author)) return;
+        int strikes = (author.getStrikeCount() == null ? 0 : author.getStrikeCount()) + 1; author.setStrikeCount(strikes);
+        if (strikes >= 3) author.setStatus(AccountStatus.BANNED); else if (author.getStatus() == AccountStatus.ACTIVE) author.setStatus(AccountStatus.WARN);
+        userRepository.save(author); String detail = blank(reason) == null ? "Content violates community standards" : reason.trim();
+        try { if (author.getEmail() != null && !author.getEmail().isBlank()) { if (strikes >= 3) userNotificationSender.sendBannedNotification(author.getEmail(), author.getUsername(), detail); else userNotificationSender.sendWarningNotification(author.getEmail(), author.getUsername(), strikes, detail); } } catch (Exception e) { log.error("Could not send moderation email", e); }
+        try { notificationService.createForContentModerationRejected(author.getUserId(), content.getContentId(), content.getTitle(), strikes, detail); } catch (Exception e) { log.error("Could not create moderation notification", e); }
     }
+    private boolean isAdmin(User user) { return user.getRole() != null && user.getRole().getRoleName() != null && (user.getRole().getRoleName().equalsIgnoreCase("ADMIN") || user.getRole().getRoleName().equalsIgnoreCase("ROLE_ADMIN")); }
+    private AdminContentResponse toResponse(Content c, ContentModeration m) { return AdminContentResponse.builder().contentId(c.getContentId()).contentType(c.getContentType()).title(c.getTitle()).slug(c.getSlug()).status(c.getStatus()).body(c.getBody()).thumbnailUrl(c.getThumbnailUrl()).mediaUrl(c.getMediaUrl()).authorUsername(c.getUser() == null ? null : c.getUser().getUsername()).authorEmail(c.getUser() == null ? null : c.getUser().getEmail()).viewCount(c.getViewCount()).createdAt(c.getCreatedAt()).updatedAt(c.getUpdatedAt()).aiFlagged(m == null ? null : m.getAiFlagged()).aiReason(m == null ? null : m.getAiReason()).aiConfidence(m == null || m.getAiConfidence() == null ? null : m.getAiConfidence().doubleValue()).decisionReason(m == null ? null : m.getDecisionReason()).build(); }
 }

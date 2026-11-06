@@ -2,6 +2,7 @@ package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.response.NotificationResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
+import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.Notification;
 import com.fpt.swp391.nutribot.entity.User;
@@ -268,5 +269,26 @@ class NotificationListTest {
         assertNull(saved.getReadAt(), "Thong bao gom vote phai duoc danh dau chua doc lai");
         assertTrue(saved.getUpdatedAt().isAfter(saved.getCreatedAt()),
                 "updatedAt phai moi hon createdAt de thong bao len dau danh sach");
+    }
+
+    @Test
+    @DisplayName("WARN recipient -> vẫn nhận được notification tương tác")
+    void warnRecipient_ReceivesInteractionNotification() {
+        User author = user(1, "warn-author");
+        author.setStatus(AccountStatus.WARN);
+        User voter = user(2, "voter");
+        when(contentRepository.findByIdForUpdate(10)).thenReturn(Optional.of(content(10, author, "BLOG", "Bài viết WARN")));
+        when(userRepository.findById(1)).thenReturn(Optional.of(author));
+        when(userRepository.findById(2)).thenReturn(Optional.of(voter));
+        when(notificationRepository.findLatestForGrouping(
+                eq(1), eq(NotificationService.TYPE_CONTENT_VOTED), eq(NotificationService.REFERENCE_TYPE_CONTENT),
+                eq(10), any(Pageable.class))).thenReturn(List.of());
+
+        notificationService.notifyContentVoted(10, 2);
+
+        ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
+        verify(notificationRepository).save(captor.capture());
+        assertSame(author, captor.getValue().getRecipient());
+        assertEquals(AccountStatus.WARN, captor.getValue().getRecipient().getStatus());
     }
 }

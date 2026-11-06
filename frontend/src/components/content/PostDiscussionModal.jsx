@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CalendarDays, Eye, MessageCircle, Play, Timer, X } from 'lucide-react';
+import { Eye, MessageCircle, Play, Timer, X } from 'lucide-react';
 import { getPost } from '../../services/communityApi';
+import { getMyProfile } from '../../services/profileApi';
 import { extractStoryText } from '../../utils/content';
+import { getProfileAvatarUrl } from '../../utils/avatar';
 import CommentSection from './CommentSection';
 import VoteButton from './VoteButton';
 import '../../styles/post-discussion-modal.css';
@@ -14,6 +16,7 @@ export default function PostDiscussionModal({ post, onClose, focusComments = fal
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const [commentCount, setCommentCount] = useState(Number(post.comments) || 0);
+  const [resolvedCurrentUser, setResolvedCurrentUser] = useState(currentUser || {});
   const displayedPost = fullPost ?? post;
   const media = (displayedPost.images?.length ? displayedPost.images : [displayedPost.image]).filter(Boolean);
   const isVideo = displayedPost.type === 'video';
@@ -24,6 +27,27 @@ export default function PostDiscussionModal({ post, onClose, focusComments = fal
   const durationLabel = displayedPost.durationSec
     ? `${Math.floor(displayedPost.durationSec / 60)}:${String(displayedPost.durationSec % 60).padStart(2, '0')}`
     : '';
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const handleProfileUpdate = (event) => {
+      const profile = event.detail || {};
+      setResolvedCurrentUser({ ...profile, avatarUrl: getProfileAvatarUrl(profile) });
+    };
+    setResolvedCurrentUser(currentUser || {});
+    window.addEventListener('nutribot-profile-updated', handleProfileUpdate);
+    getMyProfile(controller.signal).then((profile) => {
+      if (!controller.signal.aborted) {
+        setResolvedCurrentUser({ ...profile, avatarUrl: getProfileAvatarUrl(profile) });
+      }
+    }).catch(() => {
+      // The feed profile remains available as a safe fallback if refresh fails.
+    });
+    return () => {
+      controller.abort();
+      window.removeEventListener('nutribot-profile-updated', handleProfileUpdate);
+    };
+  }, [currentUser]);
 
   useEffect(() => {
     const opener = document.activeElement;
@@ -63,26 +87,20 @@ export default function PostDiscussionModal({ post, onClose, focusComments = fal
     onCommentCountChange?.(normalizedCount);
   };
 
-  return createPortal(<dialog ref={dialog} className="post-discussion-modal" aria-labelledby="post-discussion-title"
+  return createPortal(<dialog ref={dialog} className="post-discussion-modal" aria-labelledby="post-discussion-label"
     onCancel={(event) => { event.preventDefault(); onClose(); }}
     onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <div className="post-discussion-panel">
-      <header className="post-discussion-header"><h2 id="post-discussion-title">{post.author || 'Member'}&apos;s post</h2>
+      <header className="post-discussion-header"><div className="post-discussion-header-label" id="post-discussion-label">Post details</div>
         <button type="button" onClick={onClose} aria-label="Close post"><X size={24}/></button></header>
       <div className="post-discussion-body-grid">
         <aside className="post-discussion-detail" aria-label="Post detail">
           <div className="post-discussion-detail-copy">
-            <span className="post-discussion-kind">{isVideo ? 'Cooking video' : 'Blog story'}</span>
-            <h3>{displayedPost.title}</h3>
             <div className="post-discussion-meta-row">
               <div className="post-discussion-author">{displayedPost.avatar ? <img src={displayedPost.avatar} alt=""/> : <span>{(displayedPost.author || 'N').charAt(0)}</span>}
-                <div><strong>{displayedPost.author || 'NutriBot community'}</strong><small>{displayedPost.username || 'Published content'}</small></div></div>
-              <div className="post-discussion-facts" aria-label="Post information">
-                {createdLabel && <span><CalendarDays size={15}/>{createdLabel}</span>}
-                {durationLabel && <span><Timer size={15}/>{durationLabel}</span>}
-                <span><Eye size={15}/>{Number(displayedPost.viewCount ?? 0).toLocaleString('en-US')} views</span>
-              </div>
+                <div><strong>{displayedPost.author || 'NutriBot community'}</strong><small>{displayedPost.username || 'Published content'}{createdLabel && <><span aria-hidden="true"> · </span><time dateTime={displayedPost.createdAt}>{createdLabel}</time></>}</small></div></div>
             </div>
+            <h3>{displayedPost.title}</h3>
             <article className="post-discussion-story">
               <p className="post-discussion-body">{extractStoryText(displayedPost.body || displayedPost.description) || 'No detail content has been added yet.'}</p>
               {!fullPost && !error && <p role="status">Loading full post...</p>}
@@ -97,8 +115,8 @@ export default function PostDiscussionModal({ post, onClose, focusComments = fal
           </div>
         </aside>
         <div className="post-discussion-scroll">
-          <div className="post-discussion-vote"><VoteButton compact contentId={post.id} loadVote={interactionApi.loadVote} submitVote={interactionApi.submitVote}/><button type="button" className="post-discussion-comment-action" onClick={() => composerTarget?.querySelector('textarea')?.focus({ preventScroll: true })} aria-label="Write a comment"><MessageCircle size={18} strokeWidth={1.5}/><span>{commentCount}</span></button></div>
-          {composerTarget && <CommentSection contentId={post.id} composerTarget={composerTarget} currentUser={currentUser} showFilter onCommentCountChange={syncCommentCount} loadComments={interactionApi.loadComments} submitComment={interactionApi.submitComment}/>}
+          <div className="post-discussion-vote"><div className="post-discussion-vote-actions"><VoteButton compact contentId={post.id} loadVote={interactionApi.loadVote} submitVote={interactionApi.submitVote}/><button type="button" className="post-discussion-comment-action" onClick={() => composerTarget?.querySelector('textarea')?.focus({ preventScroll: true })} aria-label="Write a comment"><MessageCircle size={18} strokeWidth={1.5}/><span>{commentCount}</span></button></div><div className="post-discussion-view-count"><Eye size={16}/><span>{Number(displayedPost.viewCount ?? 0).toLocaleString('en-US')} views</span>{durationLabel && <><span aria-hidden="true"> · </span><Timer size={15}/><span>{durationLabel}</span></>}</div></div>
+          {composerTarget && <CommentSection contentId={post.id} composerTarget={composerTarget} currentUser={resolvedCurrentUser} heading="Conversations" showFilter onCommentCountChange={syncCommentCount} loadComments={interactionApi.loadComments} submitComment={interactionApi.submitComment}/>}
         </div>
       </div>
       <footer className="post-discussion-composer" ref={setComposerTarget}/>

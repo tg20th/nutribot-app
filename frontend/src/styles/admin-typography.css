@@ -1,0 +1,20 @@
+/* Keep Admin typography aligned with the User interface without leaking into User pages. */
+.admin-shell {
+  font-family: var(--nutribot-user-font);
+}
+
+.admin-shell :is(button, input, select, textarea, th, td) {
+  font-family: var(--nutribot-user-font) !important;
+}
+
+.admin-shell :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--nutribot-brand-font) !important;
+}
+
+.admin-shell :is(.admin-brand, .admin-top-brand) {
+  font-family: var(--nutribot-brand-font) !important;
+}
+
+.admin-shell :is(.admin-brand small, .admin-top-brand small) {
+  font-family: 'Outfit', Arial, sans-serif !important;
+}

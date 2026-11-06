@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { ArrowLeft, Play, UsersRound } from 'lucide-react';
+import { Play, UsersRound } from 'lucide-react';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import CommunitySideNav from '../components/community/CommunitySideNav';
 import RestaurantRecommendations from '../components/community/RestaurantRecommendations';
@@ -154,7 +154,6 @@ export default function CommunityContentDetailPage() {
       <CommunitySideNav activePath={isSearchReturn ? '/community/search' : '/home'}/>
       <span className="community-sidenav-spacer" aria-hidden="true"/>
       <main className="content-detail-main">
-        <Link className="detail-back detail-reveal" to={returnTo} state={returnState}><ArrowLeft size={16}/>{isMyContentReturn ? 'Back to my content' : isSearchReturn ? 'Back to search results' : isProfileReturn ? 'Back to profile' : isRelatedDetailReturn ? 'Back to content' : 'Back to home'}</Link>
         <section className="detail-hero detail-reveal">
 
           <div className="detail-hero-copy"><span>{post.type === 'video' ? 'WATCH & COOK' : 'RECIPE JOURNAL'}</span><h1>{post.title}</h1>{story && <div className="detail-hero-story"><div className="detail-story-divider" aria-hidden="true"/>{storyParagraphs(storyPreview).map((paragraph, index) => <p key={index}>{paragraph}</p>)}{isLongStory && <button type="button" className="detail-story-toggle" onClick={() => setStoryExpanded((expanded) => !expanded)}>{storyExpanded ? 'Show less' : 'Read more'}</button>}</div>}<div className="detail-author"><UserProfileLink userId={post.authorId} aria-label={`Open ${post.author || 'author'} profile`}>{post.avatar ? <img src={post.avatar} alt=""/> : <span className="avatar-fallback" aria-hidden="true">{(post.author || 'N').charAt(0).toUpperCase()}</span>}</UserProfileLink><div><UserProfileLink userId={post.authorId}><b>{post.author}</b></UserProfileLink><small>{[post.username, publicationDate].filter(Boolean).join(' · ')}</small></div></div></div>
@@ -176,7 +175,7 @@ export default function CommunityContentDetailPage() {
         <RelatedContentSection contentId={post.id} contentType={post.type}/>
         <RestaurantRecommendations dishName={post.title}/>
         <section className="detail-actions detail-reveal"><VoteButton contentId={post.id}/></section>
-        <section className="detail-comments detail-reveal"><CommentSection contentId={post.id}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><Link to="/home">Open the feed</Link></div></section>
+        <section className="detail-comments detail-reveal"><CommentSection contentId={post.id} showEmptyState={false}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><Link to="/home">Open the feed</Link></div></section>
       </main>
     </div>
     <ChatbotWidget/>

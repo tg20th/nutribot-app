@@ -2,6 +2,7 @@ package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.request.ContentCreateRequest;
 import com.fpt.swp391.nutribot.dto.request.ContentUpdateRequest;
+import com.fpt.swp391.nutribot.dto.ContentRecipeDto;
 import com.fpt.swp391.nutribot.dto.response.AuthorContentResponse;
 import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Category;
@@ -22,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.Optional;
 
@@ -57,6 +59,18 @@ class AuthorContentServiceTest {
 
     @Mock
     private ContentRecipeSuggestionService contentRecipeSuggestionService;
+
+    @Mock
+    private ContentRecipePersistenceService contentRecipePersistenceService;
+
+    @Mock
+    private com.fpt.swp391.nutribot.repository.ContentRecipeDetailRepository contentRecipeDetailRepository;
+
+    @Mock
+    private com.fpt.swp391.nutribot.repository.ContentRecipeIngredientRepository contentRecipeIngredientRepository;
+
+    @Mock
+    private com.fpt.swp391.nutribot.repository.ContentRecipeStepRepository contentRecipeStepRepository;
 
     @Mock
     private RecipeConsentRevocationService recipeConsentRevocationService;
@@ -111,6 +125,18 @@ class AuthorContentServiceTest {
     // ==================== 1. OWNERSHIP & IDOR PROTECTION (BL-005) ====================
 
     @Test
+    void createRequest_acceptsDecimalNutritionAndEmptyOptionalRecipeValues() throws Exception {
+        String json = "{\"title\":\"Salad\",\"recipe\":{\"prepMinutes\":\"12\",\"cookMinutes\":\"12\",\"servings\":\"\",\"calories\":\"76\",\"proteinG\":\"5.4\",\"carbsG\":\"14.8\"}}";
+
+        ContentCreateRequest request = new ObjectMapper().readValue(json, ContentCreateRequest.class);
+
+        assertEquals(12, request.getRecipe().getPrepMinutes());
+        assertNull(request.getRecipe().getServings());
+        assertEquals(new java.math.BigDecimal("5.4"), request.getRecipe().getProteinG());
+        assertEquals(new java.math.BigDecimal("14.8"), request.getRecipe().getCarbsG());
+    }
+
+    @Test
     @DisplayName("1. Tạo bài viết gán tác giả từ principal và luôn khởi tạo trạng thái DRAFT")
     void createContent_success_setsDraftAndUserFromPrincipal() {
         ContentCreateRequest request = ContentCreateRequest.builder()
@@ -118,6 +144,12 @@ class AuthorContentServiceTest {
                 .body("Chi tiết chế độ ăn sạch...")
                 .categoryId(10)
                 .thumbnailUrl("https://res.cloudinary.com/test-cloud/thumb.jpg")
+                .recipe(ContentRecipeDto.builder()
+                        .prepMinutes(12)
+                        .calories(new java.math.BigDecimal("76.0"))
+                        .proteinG(new java.math.BigDecimal("5.4"))
+                        .carbsG(new java.math.BigDecimal("14.8"))
+                        .build())
                 .build();
 
         when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
@@ -141,6 +173,7 @@ class AuthorContentServiceTest {
         assertEquals(authorUser.getUserId(), saved.getUser().getUserId());
         assertEquals("draft", saved.getStatus());
         assertEquals(0, saved.getViewCount());
+        verify(contentRecipePersistenceService, times(1)).replace(saved, request.getRecipe());
     }
 
     @Test
@@ -165,6 +198,29 @@ class AuthorContentServiceTest {
 
     @Test
     @DisplayName("3. Người dùng khác sửa bài của tác giả bị chặn HTTP 403 Forbidden")
+    void bodyClipboardMarkers_areRemovedButRichTextIsPreserved() {
+        String richBody = "<!-- StartFragment --> <p><strong>Fresh</strong> greens</p> <!--ENDfragment-->";
+        assertEquals(" <p><strong>Fresh</strong> greens</p> ", AuthorContentService.normalizeBody(richBody));
+
+        ContentCreateRequest createRequest = ContentCreateRequest.builder().title("Rich blog").body(richBody).build();
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> {
+            Content content = invocation.getArgument(0);
+            content.setContentId(101);
+            return content;
+        });
+        authorContentService.createContent("truong_author", "BLOG", createRequest);
+        verify(contentRepository).save(argThat(content -> content.getBody().equals(" <p><strong>Fresh</strong> greens</p> ")));
+
+        ContentUpdateRequest updateRequest = ContentUpdateRequest.builder().body(richBody).build();
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        authorContentService.updateContent("truong_author", 100, updateRequest);
+        assertEquals(" <p><strong>Fresh</strong> greens</p> ", sampleContent.getBody());
+    }
+
+    @Test
+    @DisplayName("3. Non-owner cannot update author's content")
     void updateContent_nonOwner_throwsForbidden() {
         ContentUpdateRequest request = ContentUpdateRequest.builder()
                 .title("Tiêu Đề Bị Sửa Trộm")

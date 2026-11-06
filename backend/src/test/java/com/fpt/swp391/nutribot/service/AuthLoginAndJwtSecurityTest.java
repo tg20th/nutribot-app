@@ -134,7 +134,7 @@ class AuthLoginAndJwtSecurityTest {
         }
 
         @Test
-        @DisplayName("getRoleNameByUsername chỉ trả về role cho user ACTIVE, tự động thu hồi quyền của user BANNED")
+        @DisplayName("getRoleNameByUsername giữ quyền cho ACTIVE/WARN và thu hồi quyền của BANNED")
         void getRoleNameByUsername_filtersOutNonActiveUsers() {
             // Khi user đang ACTIVE
             when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(activeUser));
@@ -142,10 +142,29 @@ class AuthLoginAndJwtSecurityTest {
             assertTrue(activeRole.isPresent());
             assertEquals("ROLE_USER", activeRole.get());
 
+            activeUser.setStatus(AccountStatus.WARN);
+            Optional<String> warnedRole = authService.getRoleNameByUsername("testuser");
+            assertTrue(warnedRole.isPresent(), "User WARN vẫn phải được xác thực ở request tiếp theo");
+            assertEquals("ROLE_USER", warnedRole.get());
+
             // Khi user bị Admin đổi sang BANNED ở DB sau khi đã có token
             activeUser.setStatus(AccountStatus.BANNED);
             Optional<String> bannedRole = authService.getRoleNameByUsername("testuser");
             assertTrue(bannedRole.isEmpty(), "User BANNED phải bị thu hồi quyền ngay lập tức trong filter");
+        }
+
+        @Test
+        @DisplayName("Tài khoản WARN được cấp JWT như tài khoản ACTIVE")
+        void warnedUser_isAllowedLogin() {
+            activeUser.setStatus(AccountStatus.WARN);
+            when(userRepository.findByNormalizedUsernameOrEmail("testuser")).thenReturn(Optional.of(activeUser));
+            when(passwordEncoder.matches("ValidPassword@123", activeUser.getPasswordHash())).thenReturn(true);
+            when(jwtTokenProvider.generateToken("testuser", "ROLE_USER")).thenReturn("warned.jwt.token");
+
+            AuthResponse response = authService.login(new LoginRequest("testuser", "ValidPassword@123"));
+
+            assertEquals("warned.jwt.token", response.getToken());
+            verify(jwtTokenProvider).generateToken("testuser", "ROLE_USER");
         }
     }
 

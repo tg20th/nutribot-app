@@ -20,11 +20,13 @@ import java.util.List;
 public class ContentService {
 
     private final ContentRepository contentRepository;
+    private final ContentRecipePersistenceService contentRecipePersistenceService;
     private final com.fpt.swp391.nutribot.repository.VoteRepository voteRepository;
 
     private static final String BLOG_TYPE = "BLOG";
     private static final String VIDEO_TYPE = "VIDEO";
     private static final String PUBLISHED_STATUS = "published";
+
 
     @Transactional(readOnly = true)
     public List<CommunityHighlightResponse> getCommunityHighlights(int limit) {
@@ -208,6 +210,8 @@ public class ContentService {
                 .contentId(content.getContentId())
                 .title(content.getTitle())
                 .body(content.getBody())
+                .recipe(contentRecipePersistenceService.read(content.getContentId()))
+                .recipe(contentRecipePersistenceService.read(content.getContentId()))
                 .thumbnailUrl(content.getThumbnailUrl())
                 .categoryId(content.getCategoryId())
                 .authorId(content.getUser() != null ? content.getUser().getUserId() : null)
@@ -221,6 +225,7 @@ public class ContentService {
                 .createdAt(content.getCreatedAt())
                 .build();
     }
+
 
     private VideoListResponse toVideoListResponse(Content content) {
         String avatar = content.getUser() != null ? content.getUser().getAvatarUrl() : null;

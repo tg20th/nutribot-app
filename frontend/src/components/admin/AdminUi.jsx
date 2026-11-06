@@ -2,7 +2,8 @@ import { Search, X, ChevronLeft, ChevronRight, Inbox, AlertCircle } from 'lucide
 import { useEffect } from 'react';
 import { useToast } from '../notifications/ToastProvider';
 export function StatusBadge({ status }) { return <span className={`status-badge status-${String(status).toLowerCase().replace(/\s/g, '-')}`}>{status}</span>; }
-export function PageHeader({ eyebrow = 'ADMINISTRATION', title, text, action }) { return <header className="admin-page-header"><div><p>{eyebrow}</p><h1>{title}</h1>{text && <span>{text}</span>}</div>{action}</header>; }
+export function PageHeader({ eyebrow = 'ADMINISTRATION', title, titleId, text, action }) { return <header className="admin-page-header"><div><p>{eyebrow}</p><h1 id={titleId}>{title}</h1>{text && <span>{text}</span>}</div>{action}</header>; }
+export function AdminToolbar({ children, className = '', label }) { return <div className={`admin-toolbar admin-toolbar--standard ${className}`.trim()} role={label ? 'group' : undefined} aria-label={label}>{children}</div>; }
 export function SearchBox({ value, onChange, placeholder = 'Search...' }) { return <label className="admin-search"><Search size={17}/><input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}/>{value && <button type="button" aria-label="Clear search" onClick={() => onChange('')}><X size={15}/></button>}</label>; }
 export function EmptyState({ title = 'Nothing to display.', text }) { return <div className="admin-empty"><Inbox size={28}/><h3>{title}</h3>{text && <p>{text}</p>}</div>; }
 export function ErrorState({ onRetry, message = 'We could not load this page.' }) { return <div className="admin-empty"><AlertCircle size={28}/><h3>We could not load this page.</h3><p>{message}</p><button className="admin-btn secondary" onClick={onRetry}>Try again</button></div>; }

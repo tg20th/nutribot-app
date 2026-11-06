@@ -33,6 +33,8 @@ import ChatHistoryPage from './pages/ChatHistoryPage';
 import RestaurantMapPage from './pages/RestaurantMapPage';
 import PublicProfilePage from './pages/PublicProfilePage';
 import PublicRecipeDetailPage from './pages/PublicRecipeDetailPage';
+import { NotificationProvider } from './components/notifications/NotificationProvider';
+import ErrorPage from './components/errors/ErrorPage';
 
 
 function AuthFailureHandler() {
@@ -72,7 +74,7 @@ function WeeklyPlannerEntry() {
 }
 
 export default function App() {
-  return <><AuthFailureHandler /><Routes>
+  return <NotificationProvider><AuthFailureHandler /><Routes>
     {import.meta.env.DEV && <Route path="/review/nb-26" element={<NB26ReviewPage />} />}
     {import.meta.env.DEV && <Route path="/dev/nb-07-email-change-verification" element={<NB07EmailChangeVerificationPreviewPage />} />}
     {import.meta.env.DEV && <Route path="/dev/nb-01-email-verification" element={<NB01EmailVerificationPreviewPage />} />}
@@ -89,6 +91,7 @@ export default function App() {
     <Route path="/community/planner" element={<MemberRoute><WeeklyMenuPage /></MemberRoute>} />
     <Route path="/weekly-planner" element={<WeeklyPlannerEntry />} />
     <Route path="/profile" element={<MemberRoute><ProfilePage /></MemberRoute>} />
+    <Route path="/profile/edit" element={<MemberRoute><ProfilePage editing /></MemberRoute>} />
     <Route path="/profile/health" element={<MemberRoute><HealthProfilePage /></MemberRoute>} />
     <Route path="/community/profile" element={<Navigate to="/profile" replace />} />
     <Route path="/community/users/:userId" element={<PublicProfilePage />} />
@@ -119,6 +122,6 @@ export default function App() {
     <Route path="/restaurants" element={<MemberRoute><RestaurantMapPage /></MemberRoute>} />
     <Route path="/restaurants/map" element={<MemberRoute><RestaurantMapPage /></MemberRoute>} />
     {import.meta.env.DEV && <Route path="/dev/nb-56" element={<RestaurantRecommendationsPreviewPage />} />}
-    <Route path="*" element={<HomePage />} />
-  </Routes></>;
+    <Route path="*" element={<ErrorPage status={404} />} />
+  </Routes></NotificationProvider>;
 }

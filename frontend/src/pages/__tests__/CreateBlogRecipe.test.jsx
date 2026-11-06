@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import CreateBlogPage from '../CreateBlogPage';
+import CreateVideoPage from '../CreateVideoPage';
 
 vi.mock('../../services/authorBlogApi', () => ({
   calculateRecipeNutrition: vi.fn().mockResolvedValue({
@@ -23,7 +24,10 @@ vi.mock('../../services/authorBlogApi', () => ({
 }));
 
 vi.mock('../../services/profileApi', () => ({
-  getAllergyIngredients: vi.fn().mockResolvedValue(['Đậu phụ', 'Cà rốt']),
+  getAllergyIngredients: vi.fn().mockResolvedValue([
+    { ingredientId: 1, name: 'Broccoli' },
+    { ingredientId: 2, name: 'Rolled oats' },
+  ]),
 }));
 
 vi.mock('../../components/community/CommunityTopBar', () => ({
@@ -60,6 +64,63 @@ describe('CreateBlogPage Recipe Details & Steps UI', () => {
     // Ingredients section in English
     expect(screen.getAllByText(/Ingredients/i).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /Add ingredient/i })).toBeInTheDocument();
+  });
+
+  it('uses only active ingredients returned by the API for the blog selector', async () => {
+    const { getAllergyIngredients } = await import('../../services/profileApi');
+
+    render(
+      <MemoryRouter>
+        <CreateBlogPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('option', { name: 'Broccoli' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Rolled oats' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Đậu phụ \(Tofu\)/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Ức gà/i })).not.toBeInTheDocument();
+    expect(getAllergyIngredients).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows an empty-catalog state without adding hardcoded ingredients', async () => {
+    const { getAllergyIngredients } = await import('../../services/profileApi');
+    getAllergyIngredients.mockResolvedValueOnce([]);
+
+    render(
+      <MemoryRouter>
+        <CreateBlogPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('No active ingredients are available in the catalog.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Select ingredient 1')).toBeDisabled();
+    expect(screen.queryByRole('option', { name: /Đậu phụ \(Tofu\)/i })).not.toBeInTheDocument();
+  });
+
+  it('shows an API error instead of a fallback ingredient list', async () => {
+    const { getAllergyIngredients } = await import('../../services/profileApi');
+    getAllergyIngredients.mockRejectedValueOnce(new Error('Network error'));
+
+    render(
+      <MemoryRouter>
+        <CreateBlogPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load ingredients. Please refresh and try again.');
+    expect(screen.getByLabelText('Select ingredient 1')).toBeDisabled();
+    expect(screen.queryByRole('option', { name: /Đậu phụ \(Tofu\)/i })).not.toBeInTheDocument();
+  });
+
+  it('uses the same API-only ingredient selector for the video creation flow', async () => {
+    render(
+      <MemoryRouter>
+        <CreateVideoPage />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('option', { name: 'Broccoli' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Ức gà/i })).not.toBeInTheDocument();
   });
 
   it('renders separate groups for Time & Servings and AI Nutrition facts', async () => {

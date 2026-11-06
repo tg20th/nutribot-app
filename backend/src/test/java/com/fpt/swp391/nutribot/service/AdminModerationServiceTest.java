@@ -13,16 +13,21 @@ import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.ContentModerationRepository;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
+import com.fpt.swp391.nutribot.repository.ModerationDecisionAuditRepository;
+import com.fpt.swp391.nutribot.entity.ModerationDecisionAudit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -54,12 +59,16 @@ class AdminModerationServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private ModerationDecisionAuditRepository moderationDecisionAuditRepository;
+
     @InjectMocks
     private AdminModerationService adminModerationService;
 
     private User sampleAuthor;
     private Content underReviewContent;
     private ContentModeration sampleModeration;
+    private User sampleAdmin;
 
     @BeforeEach
     void setUp() {
@@ -90,6 +99,11 @@ class AdminModerationServiceTest {
                 .aiConfidence(new BigDecimal("0.8500"))
                 .status("pending")
                 .build();
+        sampleAdmin = User.builder().userId(99).username("moderator").role(Role.builder().roleName("ADMIN").build()).build();
+    }
+
+    private void authenticateAdministrator() {
+        when(userRepository.findByNormalizedUsernameOrEmail("moderator")).thenReturn(Optional.of(sampleAdmin));
     }
 
     @Test
@@ -131,23 +145,127 @@ class AdminModerationServiceTest {
     }
 
     @Test
+    @DisplayName("Hàng đợi kiểm duyệt sắp xếp bài đăng trước lên trước (FIFO)")
+    void getPendingContents_sortsByOldestSubmissionFirst() {
+        when(contentRepository.findByStatusIn(eq(List.of("under_review", "pending")), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(underReviewContent)));
+        when(contentModerationRepository.findByContentIdIn(eq(List.of(10))))
+                .thenReturn(List.of(sampleModeration));
+
+        adminModerationService.getPendingContents(null, 0, 10);
+
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+        verify(contentRepository).findByStatusIn(eq(List.of("under_review", "pending")), pageableCaptor.capture());
+        Sort sort = pageableCaptor.getValue().getSort();
+        assertNotNull(sort.getOrderFor("createdAt"));
+        assertEquals(Sort.Direction.ASC, sort.getOrderFor("createdAt").getDirection());
+        assertNotNull(sort.getOrderFor("contentId"));
+        assertEquals(Sort.Direction.ASC, sort.getOrderFor("contentId").getDirection());
+    }
+
+    @Test
     @DisplayName("Admin duyệt bài (APPROVE) -> chuyển sang published")
     void moderateContent_approve() {
+        authenticateAdministrator();
         when(contentRepository.findById(10)).thenReturn(Optional.of(underReviewContent));
         when(contentRepository.save(any(Content.class))).thenAnswer(i -> i.getArgument(0));
 
         AdminModerationRequest request = new AdminModerationRequest();
         request.setAction("APPROVE");
 
-        AdminContentResponse response = adminModerationService.moderateContent(10, request);
+        AdminContentResponse response = adminModerationService.moderateContent(10, request, "moderator");
 
         assertEquals("published", response.getStatus());
         assertEquals("published", underReviewContent.getStatus());
+        ArgumentCaptor<ModerationDecisionAudit> audit = ArgumentCaptor.forClass(ModerationDecisionAudit.class);
+        verify(moderationDecisionAuditRepository).save(audit.capture());
+        assertEquals("APPROVE", audit.getValue().getAction());
+        assertNull(audit.getValue().getAdminReason());
+    }
+
+    @Test
+    @DisplayName("Admin duyệt kèm lý do lưu latest decision và audit snapshot")
+    void moderateContent_approveWithReason_persistsReasonAndAudit() {
+        authenticateAdministrator();
+        when(contentRepository.findById(10)).thenReturn(Optional.of(underReviewContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(i -> i.getArgument(0));
+        when(contentModerationRepository.findByContentId(10)).thenReturn(Optional.of(sampleModeration));
+        when(contentModerationRepository.save(any(ContentModeration.class))).thenAnswer(i -> i.getArgument(0));
+        AdminModerationRequest request = new AdminModerationRequest("APPROVE", "  Meets editorial policy  ");
+
+        adminModerationService.moderateContent(10, request, "moderator");
+
+        assertEquals("Meets editorial policy", sampleModeration.getDecisionReason());
+        assertEquals(99, sampleModeration.getReviewedBy());
+        ArgumentCaptor<ModerationDecisionAudit> audit = ArgumentCaptor.forClass(ModerationDecisionAudit.class);
+        verify(moderationDecisionAuditRepository).save(audit.capture());
+        assertEquals("Meets editorial policy", audit.getValue().getAdminReason());
+        assertEquals("under_review", audit.getValue().getPreviousStatus());
+        assertEquals("published", audit.getValue().getNewStatus());
+    }
+
+    @Test
+    @DisplayName("Hai quyết định trên cùng nội dung lưu hai audit event riêng biệt")
+    void moderateContent_multipleDecisions_preservesAuditHistory() {
+        authenticateAdministrator();
+        when(contentRepository.findById(10)).thenReturn(Optional.of(underReviewContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(i -> i.getArgument(0));
+        when(contentModerationRepository.findByContentId(10)).thenReturn(Optional.of(sampleModeration));
+        when(contentModerationRepository.save(any(ContentModeration.class))).thenAnswer(i -> i.getArgument(0));
+
+        adminModerationService.moderateContent(10, new AdminModerationRequest("APPROVE", "Approved after review"), "moderator");
+        underReviewContent.setStatus("pending");
+        sampleModeration.setStatus("pending");
+        adminModerationService.moderateContent(10, new AdminModerationRequest("REJECT", "New evidence requires rejection"), "moderator");
+
+        ArgumentCaptor<ModerationDecisionAudit> audits = ArgumentCaptor.forClass(ModerationDecisionAudit.class);
+        verify(moderationDecisionAuditRepository, times(2)).save(audits.capture());
+        assertEquals("APPROVE", audits.getAllValues().get(0).getAction());
+        assertEquals("REJECT", audits.getAllValues().get(1).getAction());
+        assertEquals("pending", audits.getAllValues().get(1).getPreviousStatus());
+        assertEquals("rejected", audits.getAllValues().get(1).getNewStatus());
+    }
+
+    @Test
+    @DisplayName("Lỗi ghi audit được lan truyền từ phương thức giao dịch")
+    void moderateContent_auditFailurePropagatesToTransactionalBoundary() throws NoSuchMethodException {
+        authenticateAdministrator();
+        when(contentRepository.findById(10)).thenReturn(Optional.of(underReviewContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(i -> i.getArgument(0));
+        when(moderationDecisionAuditRepository.save(any(ModerationDecisionAudit.class))).thenThrow(new IllegalStateException("audit persistence failed"));
+
+        assertTrue(AdminModerationService.class
+                .getMethod("moderateContent", Integer.class, AdminModerationRequest.class, String.class)
+                .isAnnotationPresent(Transactional.class));
+        assertThrows(IllegalStateException.class, () -> adminModerationService.moderateContent(10, new AdminModerationRequest("APPROVE", null), "moderator"));
+    }
+
+    @Test
+    @DisplayName("Từ chối thiếu hoặc chỉ có khoảng trắng bị chặn trước khi ghi dữ liệu")
+    void moderateContent_rejectWithoutMeaningfulReason_isRejected() {
+        when(contentRepository.findById(10)).thenReturn(Optional.of(underReviewContent));
+        for (String reason : List.of("", "   ")) {
+            AdminModerationRequest request = new AdminModerationRequest("REJECT", reason);
+            assertThrows(BadRequestException.class, () -> adminModerationService.moderateContent(10, request, "moderator"));
+        }
+        verify(contentRepository, never()).save(any());
+        verifyNoInteractions(moderationDecisionAuditRepository);
+    }
+
+    @Test
+    @DisplayName("Danh tính không phải quản trị viên không thể quyết định kiểm duyệt")
+    void moderateContent_nonAdminPrincipal_isRejected() {
+        when(contentRepository.findById(10)).thenReturn(Optional.of(underReviewContent));
+        User ordinaryUser = User.builder().userId(7).username("member").role(Role.builder().roleName("USER").build()).build();
+        when(userRepository.findByNormalizedUsernameOrEmail("member")).thenReturn(Optional.of(ordinaryUser));
+        assertThrows(BadRequestException.class, () -> adminModerationService.moderateContent(10, new AdminModerationRequest("APPROVE", null), "member"));
+        verifyNoInteractions(moderationDecisionAuditRepository);
     }
 
     @Test
     @DisplayName("Admin từ chối bài (REJECT) lần đầu -> tăng strikeCount lên 1, chuyển trạng thái sang WARN, gửi cảnh báo")
     void moderateContent_reject() {
+        authenticateAdministrator();
         when(contentRepository.findById(10)).thenReturn(Optional.of(underReviewContent));
         when(contentRepository.save(any(Content.class))).thenAnswer(i -> i.getArgument(0));
 
@@ -155,7 +273,7 @@ class AdminModerationServiceTest {
         request.setAction("REJECT");
         request.setReason("Nội dung spam quảng cáo");
 
-        AdminContentResponse response = adminModerationService.moderateContent(10, request);
+        AdminContentResponse response = adminModerationService.moderateContent(10, request, "moderator");
 
         assertEquals("rejected", response.getStatus());
         assertEquals("rejected", underReviewContent.getStatus());
@@ -180,6 +298,7 @@ class AdminModerationServiceTest {
     @Test
     @DisplayName("Admin từ chối bài (REJECT) khi đã có 2 gậy -> đạt 3 gậy, tự động khóa tài khoản BANNED và gửi email ban")
     void moderateContent_reject_thirdStrike_bansUser() {
+        authenticateAdministrator();
         sampleAuthor.setStrikeCount(2);
         sampleAuthor.setStatus(AccountStatus.WARN);
 
@@ -190,7 +309,7 @@ class AdminModerationServiceTest {
         request.setAction("REJECT");
         request.setReason("Tiếp tục đăng bài vi phạm nghiêm trọng");
 
-        AdminContentResponse response = adminModerationService.moderateContent(10, request);
+        AdminContentResponse response = adminModerationService.moderateContent(10, request, "moderator");
 
         assertEquals("rejected", response.getStatus());
         assertEquals(3, sampleAuthor.getStrikeCount());
@@ -213,6 +332,7 @@ class AdminModerationServiceTest {
     @Test
     @DisplayName("Admin từ chối bài nhưng tác giả là ROLE_ADMIN -> không phạt gậy")
     void moderateContent_reject_adminAuthor_doesNotIncrementStrike() {
+        authenticateAdministrator();
         Role adminRole = Role.builder().roleId(1).roleName("ADMIN").build();
         sampleAuthor.setRole(adminRole);
 
@@ -221,8 +341,9 @@ class AdminModerationServiceTest {
 
         AdminModerationRequest request = new AdminModerationRequest();
         request.setAction("REJECT");
+        request.setReason("Content does not meet publication policy");
 
-        adminModerationService.moderateContent(10, request);
+        adminModerationService.moderateContent(10, request, "moderator");
 
         assertEquals(0, sampleAuthor.getStrikeCount());
         verify(userRepository, never()).save(any());
@@ -238,7 +359,7 @@ class AdminModerationServiceTest {
         AdminModerationRequest request = new AdminModerationRequest();
         request.setAction("HIDE");
 
-        AdminContentResponse response = adminModerationService.moderateContent(10, request);
+        AdminContentResponse response = adminModerationService.moderateContent(10, request, "moderator");
 
         assertEquals("archived", response.getStatus());
         assertEquals("archived", underReviewContent.getStatus());
@@ -252,7 +373,7 @@ class AdminModerationServiceTest {
         AdminModerationRequest request = new AdminModerationRequest();
         request.setAction("INVALID_ACTION");
 
-        assertThrows(BadRequestException.class, () -> adminModerationService.moderateContent(10, request));
+        assertThrows(BadRequestException.class, () -> adminModerationService.moderateContent(10, request, "moderator"));
     }
 
     @Test
@@ -263,6 +384,6 @@ class AdminModerationServiceTest {
         AdminModerationRequest request = new AdminModerationRequest();
         request.setAction("APPROVE");
 
-        assertThrows(NotFoundException.class, () -> adminModerationService.moderateContent(999, request));
+        assertThrows(NotFoundException.class, () -> adminModerationService.moderateContent(999, request, "moderator"));
     }
 }

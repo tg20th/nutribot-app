@@ -12,6 +12,7 @@ export default function Header({ onAuth }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const isLandingPage = pathname === '/';
+  const isSearchPage = pathname === '/search';
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState('');
   const [active, setActive] = useState('Home');
@@ -87,7 +88,7 @@ export default function Header({ onAuth }) {
   };
 
   return (
-    <header ref={header} className="site-header">
+    <header ref={header} className={`site-header${isSearchPage ? ' site-header--search-page' : ''}`}>
       <div className="nav-wrap">
         {isLandingPage
           ? <a className="brand" href="#home" onClick={() => navigateSection('Home')} aria-label="NutriBot home"><span>Nutri</span>Bot<small>Good Food. Brighter You.</small></a>
@@ -104,18 +105,10 @@ export default function Header({ onAuth }) {
           <span ref={indicator} className="nav-indicator" aria-hidden="true"/>
         </nav>
 
-        <form className="nav-search" onSubmit={submit}>
-          <button type="submit" className="nav-search-submit" aria-label="Search content">
-            <Search size={17}/>
-          </button>
-          <input
-            ref={searchInputRef}
-            aria-label="Search content"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="Search recipes, articles..."
-          />
-        </form>
+        {!isSearchPage && <form className="nav-search" onSubmit={submit}>
+          <button type="submit" className="nav-search-submit" aria-label="Search content"><Search size={17}/></button>
+          <input ref={searchInputRef} aria-label="Search content" value={value} onChange={(e) => setValue(e.target.value)} placeholder="Search recipes, articles..." />
+        </form>}
 
         <div className="account-actions">
           <button className="nav-login" onClick={() => onAuth('login')}>Log in</button>

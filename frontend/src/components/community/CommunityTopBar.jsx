@@ -28,6 +28,8 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const activeLocation = activePath ?? pathname;
+  const searchRoute = userDashboardNav.find(({ label }) => label === 'Search')?.to;
+  const isSearchPage = pathname === searchRoute;
   const currentUser = getCurrentUserFromToken();
   const username = currentUser?.username || 'NutriBot Member';
   const [profileAvatar, setProfileAvatar] = useState(() => 
@@ -128,7 +130,7 @@ export default function CommunityTopBar({ query, onQueryChange, hideSearch = fal
         <Menu size={22}/>
       </button>
       <Link to="/home" className="community-brand" aria-label="NutriBot member home"><span>Nutri</span>Bot<small>Good Food. Brighter You.</small></Link>
-      {!hideSearch && (
+      {!hideSearch && !isSearchPage && (
         <form className="community-search community-search-form" onSubmit={handleSearchSubmit}>
           <input
             ref={searchInputRef}

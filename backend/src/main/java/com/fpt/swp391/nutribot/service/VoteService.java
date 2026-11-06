@@ -1,8 +1,14 @@
 package com.fpt.swp391.nutribot.service;
 
+import java.util.Optional;
+
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.fpt.swp391.nutribot.dto.response.VoteResponse;
 import com.fpt.swp391.nutribot.entity.AccountStatus;
-import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.entity.Vote;
 import com.fpt.swp391.nutribot.event.ContentVotedEvent;
@@ -13,14 +19,9 @@ import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.VoteRepository;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.Optional;
 
 @Slf4j
 @Service
@@ -42,7 +43,7 @@ public class VoteService {
                 .or(() -> userRepository.findByUsername(username))
                 .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
 
-        if (user.getStatus() != AccountStatus.ACTIVE) {
+        if (!AccountStatus.canAccessSystem(user.getStatus())) {
             throw new ForbiddenException("Tài khoản chưa được kích hoạt hoặc đã bị khóa");
         }
 
@@ -94,7 +95,7 @@ public class VoteService {
         boolean isVoted = false;
         if (username != null) {
             User user = userRepository.findByUsername(username).orElse(null);
-            if (user != null && user.getStatus() == AccountStatus.ACTIVE) {
+            if (user != null && AccountStatus.canAccessSystem(user.getStatus())) {
                 isVoted = voteRepository.existsByUserIdAndContentId(user.getUserId(), contentId);
             }
         }

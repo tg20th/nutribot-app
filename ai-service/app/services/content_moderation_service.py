@@ -1,6 +1,17 @@
 """Hybrid NB-64 classifier. It has no DB writes or lifecycle side effects."""
+import logging
+import re
+
 from app.schemas.moderation import ModerationRequest, ModerationResponse, ModelModeration
+
+logger = logging.getLogger(__name__)
 POLICY_VERSION="1.0"; AUTO_APPROVE=.90; AUTO_REJECT=.90
+
+
+def _safe_exception_detail(exc: Exception) -> str:
+ message = str(exc).replace("\n", " ")
+ message = re.sub(r"AIza[0-9A-Za-z_-]+", "<redacted>", message)
+ return message[:240]
 class ContentModerationService:
  def __init__(self, gemini): self.gemini=gemini
  def _text(self,r): return " ".join(filter(None,[r.title,r.description,r.body,r.category," ".join(r.tags)])).casefold()
@@ -21,7 +32,9 @@ class ContentModerationService:
   try:
    result=await self.gemini.moderate_content(r)
    return self._final(ModelModeration.model_validate(result))
-  except Exception:return ModerationResponse(decision="NEEDS_REVIEW",reason="Moderation model unavailable or invalid",confidence=0,categories=["AMBIGUOUS"],model=getattr(self.gemini,"model_name","unknown"),policy_version=POLICY_VERSION)
+  except Exception as exc:
+   logger.warning("Content moderation failed error_type=%s detail=%s", type(exc).__name__, _safe_exception_detail(exc))
+   return ModerationResponse(decision="NEEDS_REVIEW",reason="Moderation model unavailable or invalid",confidence=0,categories=["AMBIGUOUS"],model=getattr(self.gemini,"model_name","unknown"),policy_version=POLICY_VERSION)
  def _final(self,m):
   allowed=m.decision=="APPROVE" and m.confidence>=AUTO_APPROVE or m.decision=="REJECT" and m.confidence>=AUTO_REJECT and any(c not in {"AMBIGUOUS"} for c in m.categories)
   return ModerationResponse(**m.model_dump(exclude={"decision"}),decision=m.decision if allowed else "NEEDS_REVIEW",model=getattr(self.gemini,"model_name","gemini"),policy_version=POLICY_VERSION)

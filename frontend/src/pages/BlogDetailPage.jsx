@@ -1,6 +1,6 @@
 import { Fragment, createElement, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, BookOpen, CalendarDays, Clock3, Eye, ImageOff, ListOrdered, Sparkles, UsersRound, UtensilsCrossed } from 'lucide-react';
+import { ArrowRight, BookOpen, CalendarDays, Clock3, Eye, ImageOff, ListOrdered, Sparkles, UsersRound, UtensilsCrossed } from 'lucide-react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { getPublishedBlog } from '../services/publicBlogApi';
@@ -72,7 +72,12 @@ function ArticleBody({ body }) {
   return blocks.length ? blocks : <p>This story has no content yet.</p>;
 }
 
-function parseRecipeBody(rawBody) {
+function parseRecipeBody(rawBody, structuredRecipe = null) {
+  if (structuredRecipe && typeof structuredRecipe === 'object') {
+    const ingredients = Array.isArray(structuredRecipe.ingredients) ? structuredRecipe.ingredients : [];
+    const steps = Array.isArray(structuredRecipe.steps) ? structuredRecipe.steps.map((step) => typeof step === 'string' ? step : step?.instruction).filter(Boolean) : [];
+    return { story: rawBody || '', prepMinutes: structuredRecipe.prepMinutes ?? '', cookMinutes: structuredRecipe.cookMinutes ?? '', servings: structuredRecipe.servings ?? '', nutrition: structuredRecipe, ingredients, steps };
+  }
   if (!rawBody || typeof rawBody !== 'string') return null;
   const trimmed = rawBody.trim();
   if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return null;
@@ -165,11 +170,10 @@ export default function BlogDetailPage({ byId = false }) {
   useEffect(() => { window.scrollTo(0, 0); }, [identifier]);
 
   const openAuth = (mode) => navigate(mode === 'signup' ? '/register' : '/login');
-  const recipe = blog ? parseRecipeBody(blog.body) : null;
+  const recipe = blog ? parseRecipeBody(blog.body, blog.recipe) : null;
   return <div className="public-blog-page">
     <Header onAuth={openAuth}/>
     <main className="public-blog-detail">
-      <nav className="public-blog-detail-nav" aria-label="Breadcrumb"><Link to="/"><ArrowLeft size={16}/> Home</Link></nav>
       {!blog && !error && <p className="public-blog-message" role="status">Loading story...</p>}
       {error && <div className="public-blog-message public-blog-message-error" role="alert"><BookOpen size={32}/><h1>Story unavailable</h1><p>{error}</p><button type="button" onClick={() => { setError(''); setBlog(null); setRetry((value) => value + 1); }}>Try again</button><Link to="/">Return home</Link></div>}
       {blog && <article>
@@ -182,7 +186,7 @@ export default function BlogDetailPage({ byId = false }) {
         {recipe
           ? <RecipeDetail recipe={recipe}/>
           : <div className="public-blog-detail-layout"><aside className="public-blog-detail-aside"><span>NutriBot journal</span><p>A little more to read, a little more to share.</p></aside><div className="public-blog-article"><ArticleBody body={extractStoryText(blog.body) || blog.description}/></div></div>}
-        <footer className="public-blog-detail-footer"><Link to="/"><ArrowLeft size={17}/> Back to home</Link><Link to="/#community">Explore more <ArrowRight size={17}/></Link></footer>
+        <footer className="public-blog-detail-footer"><Link to="/#community">Explore more <ArrowRight size={17}/></Link></footer>
       </article>}
     </main>
     <Footer onAuth={openAuth}/>

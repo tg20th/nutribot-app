@@ -1,0 +1,2 @@
+package com.fpt.swp391.nutribot.entity; import jakarta.persistence.*; import lombok.*;
+@Entity @Table(name="content_recipe_steps") @IdClass(ContentRecipeStepId.class) @Data @Builder @NoArgsConstructor @AllArgsConstructor public class ContentRecipeStep { @Id @Column(name="content_id") private Integer contentId; @Id @Column(name="step_number") private Integer stepNumber; @Column(columnDefinition="NVARCHAR(MAX)") private String instruction; }
