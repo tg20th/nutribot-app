@@ -1,4 +1,5 @@
 import { AlertCircle, CheckCircle2, Info, LoaderCircle, TriangleAlert, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { useToast } from './ToastProvider';
 
 const icons = { success: CheckCircle2, error: AlertCircle, warning: TriangleAlert, info: Info, loading: LoaderCircle };
@@ -6,7 +7,7 @@ const labels = { success: 'Success', error: 'Something went wrong', warning: 'Pl
 
 export default function ToastViewport() {
   const { toasts, toast } = useToast();
-  return <div className="toast-viewport" aria-label="Notifications">
+  const viewport = <div className="toast-viewport" aria-label="Notifications">
     {toasts.map((item) => {
       const Icon = icons[item.type] || Info;
       const critical = item.type === 'error';
@@ -20,4 +21,6 @@ export default function ToastViewport() {
       </div>;
     })}
   </div>;
+
+  return typeof document === 'undefined' ? viewport : createPortal(viewport, document.body);
 }

@@ -26,6 +26,11 @@
 .moderation-pagination button{display:grid;place-items:center;width:32px;height:30px;border-radius:6px;background:#f4f5ef;color:#315c2b}
 .moderation-pagination button:disabled{cursor:default;opacity:.4}
 .moderation-pagination span{color:#6e6a63;font-size:11px}
+.moderation-pagination{justify-content:flex-end;gap:6px;padding:10px 18px;overflow-x:auto}
+.moderation-pagination button{display:inline-flex;align-items:center;justify-content:center;width:auto;min-width:32px;height:30px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:#315c2b;line-height:1}
+.moderation-pagination button:hover:not(:disabled){background:#eaf2df}
+.moderation-pagination button:focus-visible{outline:2px solid #315c2b;outline-offset:2px}
+@media(max-width:600px){.moderation-pagination{justify-content:flex-end;padding-inline:12px}}
 .moderation-detail{display:flex;flex-direction:column;min-height:620px}
 .moderation-detail-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 18px;border-bottom:1px solid #e8e8df}
 .moderation-detail-header>div{display:flex;align-items:center;gap:10px;min-width:0}

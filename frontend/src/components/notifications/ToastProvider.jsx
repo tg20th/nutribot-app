@@ -1,7 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 const ToastContext = createContext(null);
-const DURATIONS = { success: 4000, info: 5000, warning: 6000 };
+export const TOAST_DURATIONS = {
+  success: 3000,
+  info: 4000,
+  warning: 5000,
+  error: 6000,
+  loading: 30000,
+};
 const fallbackToast = {
   success: () => undefined,
   error: () => undefined,
@@ -18,53 +24,136 @@ function makeId() {
 
 export function ToastProvider({ children }) {
   const [items, setItems] = useState([]);
+  const itemsRef = useRef([]);
   const timers = useRef(new Map());
   const exitTimers = useRef(new Map());
+  const mounted = useRef(true);
+  const generations = useRef(new Map());
+  const dismissRef = useRef(() => undefined);
 
-  const dismiss = useCallback((id) => {
-    window.clearTimeout(timers.current.get(id));
+  const clearTimer = useCallback((id) => {
+    const timer = timers.current.get(id);
+    if (timer) window.clearTimeout(timer);
     timers.current.delete(id);
-    setItems((current) => {
-      if (!current.some((item) => item.id === id)) return current;
-      return current.map((item) => item.id === id ? { ...item, exiting: true } : item);
-    });
-    window.clearTimeout(exitTimers.current.get(id));
-    exitTimers.current.set(id, window.setTimeout(() => {
-      setItems((current) => current.filter((item) => item.id !== id));
-      exitTimers.current.delete(id);
-    }, 240));
   }, []);
 
+  const clearExitTimer = useCallback((id) => {
+    const timer = exitTimers.current.get(id);
+    if (timer) window.clearTimeout(timer);
+    exitTimers.current.delete(id);
+  }, []);
+
+  const scheduleDismiss = useCallback((id, type) => {
+    clearTimer(id);
+    const duration = TOAST_DURATIONS[type];
+    if (!duration) return;
+    const generation = (generations.current.get(id) || 0) + 1;
+    generations.current.set(id, generation);
+    timers.current.set(id, window.setTimeout(() => {
+      if (!mounted.current || generations.current.get(id) !== generation) return;
+      timers.current.delete(id);
+      dismissRef.current(id);
+    }, duration));
+  }, [clearTimer]);
+
+  const dismiss = useCallback((id) => {
+    clearTimer(id);
+    generations.current.delete(id);
+    if (!mounted.current) return;
+    if (exitTimers.current.has(id)) return;
+
+    const currentItem = itemsRef.current.find((item) => item.id === id);
+    if (!currentItem) return;
+    setItems((current) => {
+      const item = current.find((entry) => entry.id === id);
+      if (!item) return current;
+      if (item.exiting) return current;
+      const next = current.map((entry) => entry.id === id ? { ...entry, exiting: true } : entry);
+      itemsRef.current = next;
+      return next;
+    });
+
+    const exitTimer = window.setTimeout(() => {
+      if (!mounted.current) return;
+      setItems((current) => {
+        const next = current.filter((item) => item.id !== id);
+        itemsRef.current = next;
+        return next;
+      });
+      exitTimers.current.delete(id);
+    }, 240);
+    exitTimers.current.set(id, exitTimer);
+  }, [clearExitTimer, clearTimer]);
+
+  dismissRef.current = dismiss;
+
   const update = useCallback((id, options = {}) => {
+    clearTimer(id);
+    clearExitTimer(id);
+    if (!mounted.current) return id;
     setItems((current) => {
       if (!current.some((item) => item.id === id)) return current;
-      return current.map((item) => item.id === id ? { ...item, ...options, exiting: false } : item);
+      const next = current.map((item) => item.id === id ? { ...item, ...options, exiting: false } : item);
+      itemsRef.current = next;
+      return next;
     });
-    if (options.type === 'loading') {
-      window.clearTimeout(timers.current.get(id));
-      timers.current.delete(id);
-    }
-    if (options.type && DURATIONS[options.type]) {
-      window.clearTimeout(timers.current.get(id));
-      timers.current.set(id, window.setTimeout(() => dismiss(id), DURATIONS[options.type]));
-    }
+    if (options.type) scheduleDismiss(id, options.type);
     return id;
-  }, [dismiss]);
+  }, [clearExitTimer, clearTimer, scheduleDismiss]);
 
   const push = useCallback((type, message, options = {}) => {
     const id = options.id || makeId();
+    const duplicate = !options.id && itemsRef.current.find((item) => item.message === message && item.type === type);
+    if (duplicate) return duplicate.id;
+    const duplicateIds = [];
     setItems((current) => {
+      current.forEach((item) => {
+        if (item.message === message && item.type === type && item.id !== id) duplicateIds.push(item.id);
+      });
       const existing = options.id && current.some((item) => item.id === options.id);
-      if (existing) return current.map((item) => item.id === id ? { ...item, type, message, ...options, exiting: false } : item);
-      return [...current.filter((item) => item.message !== message || item.type !== type), { id, type, message, ...options, exiting: false }].slice(-4);
+      if (existing) {
+        const next = current.map((item) => item.id === id ? { ...item, type, message, ...options, exiting: false } : item);
+        itemsRef.current = next;
+        return next;
+      }
+      const next = [...current.filter((item) => item.message !== message || item.type !== type), { id, type, message, ...options, exiting: false }];
+      const removed = next.slice(0, Math.max(0, next.length - 4));
+      removed.forEach((item) => duplicateIds.push(item.id));
+      const visible = next.slice(-4);
+      itemsRef.current = visible;
+      return visible;
     });
-    if (DURATIONS[type]) timers.current.set(id, window.setTimeout(() => dismiss(id), DURATIONS[type]));
+    [...new Set(duplicateIds)].forEach((removedId) => {
+      clearTimer(removedId);
+      clearExitTimer(removedId);
+      generations.current.delete(removedId);
+    });
+    clearExitTimer(id);
+    scheduleDismiss(id, type);
     return id;
-  }, [dismiss]);
+  }, [clearExitTimer, clearTimer, scheduleDismiss]);
 
-  useEffect(() => () => {
-    timers.current.forEach((timer) => window.clearTimeout(timer));
-    exitTimers.current.forEach((timer) => window.clearTimeout(timer));
+  useEffect(() => {
+    // React StrictMode intentionally runs effect cleanup/setup once in development.
+    // Re-arm the provider so timers and manual dismissals are not treated as
+    // updates after an unmount that was only part of that probe.
+    mounted.current = true;
+
+    return () => {
+    mounted.current = false;
+    // StrictMode immediately performs setup again after this cleanup. Defer
+    // destructive timer cleanup by one microtask so that probe cleanup does
+    // not cancel live timers; a real unmount still clears everything before
+    // the next task can observe the provider.
+    queueMicrotask(() => {
+      if (mounted.current) return;
+      timers.current.forEach((timer) => window.clearTimeout(timer));
+      exitTimers.current.forEach((timer) => window.clearTimeout(timer));
+      timers.current.clear();
+      exitTimers.current.clear();
+      generations.current.clear();
+    });
+    };
   }, []);
 
   const toast = useMemo(() => ({
