@@ -33,6 +33,16 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
 
     boolean existsBySlug(String slug);
 
+    boolean existsByContentTypeAndTitleIgnoreCase(String contentType, String title);
+
+    boolean existsByContentTypeAndTitleIgnoreCaseAndContentIdNot(String contentType, String title, Integer contentId);
+
+    Optional<Content> findFirstByContentTypeAndContentHash(String contentType, String contentHash);
+
+    Optional<Content> findFirstByContentTypeAndContentHashAndContentIdNot(String contentType, String contentHash, Integer contentId);
+
+    List<Content> findByContentTypeAndStatusAndContentIdNot(String contentType, String status, Integer contentId);
+
     Optional<Content> findByContentIdAndContentType(Integer contentId, String contentType);
 
     @Query("SELECT c FROM Content c WHERE c.contentId = :contentId AND c.contentType = :contentType")

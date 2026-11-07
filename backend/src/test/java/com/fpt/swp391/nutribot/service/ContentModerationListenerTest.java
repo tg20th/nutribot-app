@@ -31,6 +31,9 @@ class ContentModerationListenerTest {
     private ContentRepository contentRepository;
 
     @Mock
+    private ContentSimilarityDetector contentSimilarityDetector;
+
+    @Mock
     private ContentModerationGatewayService contentModerationGatewayService;
 
     @Mock
@@ -50,11 +53,14 @@ class ContentModerationListenerTest {
     void setUp() {
         listener = new ContentModerationListener(
                 contentRepository,
+                contentSimilarityDetector,
                 contentModerationGatewayService,
                 contentModerationRepository,
                 categoryRepository,
                 applicationEventPublisher
         );
+        org.mockito.Mockito.lenient().when(contentSimilarityDetector.detect(any()))
+                .thenReturn(ContentSimilarityDetector.SimilarityResult.clean());
 
         User author = User.builder()
                 .userId(1)
@@ -157,5 +163,33 @@ class ContentModerationListenerTest {
 
         assertEquals("under_review", sampleContent.getStatus());
         verify(contentRepository, atLeastOnce()).save(any(Content.class));
+    }
+
+    @Test
+    @DisplayName("NB-97: Phát hiện gần trùng (>= 80%) -> gắn cờ SUSPECTED_DUPLICATE, chuyển under_review và không gọi AI")
+    void handleModerationRequested_suspectedDuplicate_setsUnderReviewAndFlag() {
+        Content original = Content.builder().contentId(10).title("Bài gốc").build();
+        ContentSimilarityDetector.SimilarityResult duplicateResult = ContentSimilarityDetector.SimilarityResult.builder()
+                .suspected(true)
+                .similarityScore(0.85)
+                .matchedContent(original)
+                .matchedContentId(10)
+                .matchedTitle("Bài gốc")
+                .build();
+
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentSimilarityDetector.detect(sampleContent)).thenReturn(duplicateResult);
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ContentModerationRequestedEvent event = new ContentModerationRequestedEvent(100, "BLOG", 1);
+        listener.handleModerationRequested(event);
+
+        assertEquals("under_review", sampleContent.getStatus());
+        assertEquals("SUSPECTED_DUPLICATE", sampleContent.getModerationFlag());
+        assertEquals(0.85, sampleContent.getSimilarityScore());
+        assertEquals(10, sampleContent.getMatchedContentId());
+        // Không gọi sang AI Gateway để tiết kiệm token
+        verify(contentModerationGatewayService, never()).moderateContent(
+                any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 }

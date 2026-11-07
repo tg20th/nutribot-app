@@ -269,3 +269,13 @@
   - *Phạm vi:* Chuẩn hóa và đối chiếu ingredients, xác thực mapping/quantity/unit/category, persist recipe_ingredients theo ID đã xác nhận; không tự import nguyên liệu.
   - *Tương thích:* Giữ NB-86/NB-87, Health Profile/Meal Planner và allergy theo ingredient ID; không suy diễn thuộc tính dietary/allergen không lưu trong DB.
   - *Dependency:* NB-86, NB-87, NB-90.
+
+## NB-97 (Chống trùng lặp bài đăng & So sánh trực diện trong Admin Moderation)
+- [ ] **[BE/FE] Chống trùng lặp bài đăng & So sánh trực diện trong Admin Moderation**
+  - *Phạm vi:*
+    1. Chặn tạo/sửa bài đăng trùng tiêu đề (không phân biệt hoa/thường) hoặc sao chép 100% nội dung (SHA-256 hash) với HTTP 409 Conflict.
+    2. Thuật toán 3-Gram Shingling & Jaccard similarity bất đồng bộ phát hiện gần trùng >= 80%, gắn cờ SUSPECTED_DUPLICATE và lưu id bài gốc.
+    3. UI Admin Moderation hiển thị cảnh báo gần trùng và Modal Side-by-side Diff 2 cột so sánh trực diện highlight câu văn trùng lặp.
+  - *Tương thích:* Tương thích hoàn toàn API Blogs/Videos, Admin Moderation queue, SQLite/SQL Server schema.
+  - *File cần tạo/cập nhật:* `NutriBotV2_FULL_RELATIONAL_MODERATION_AUDIT.sql`, `add_content_duplicate_detection.sql`, `Content.java`, `ContentRepository.java`, `ContentTextNormalizer.java`, `ContentSimilarityDetector.java`, `AuthorContentService.java`, `ContentModerationListener.java`, `AdminModerationService.java`, `AdminModerationPage.jsx`, `ContentDiffModal.jsx`, các unit tests FE & BE.
+  - *Dependency:* NB-19, NB-38, NB-37, NB-64.

@@ -120,5 +120,42 @@ public class AdminModerationService {
         try { notificationService.createForContentModerationRejected(author.getUserId(), content.getContentId(), content.getTitle(), strikes, detail); } catch (Exception e) { log.error("Could not create moderation notification", e); }
     }
     private boolean isAdmin(User user) { return user.getRole() != null && user.getRole().getRoleName() != null && (user.getRole().getRoleName().equalsIgnoreCase("ADMIN") || user.getRole().getRoleName().equalsIgnoreCase("ROLE_ADMIN")); }
-    private AdminContentResponse toResponse(Content c, ContentModeration m) { return AdminContentResponse.builder().contentId(c.getContentId()).contentType(c.getContentType()).title(c.getTitle()).slug(c.getSlug()).status(c.getStatus()).body(c.getBody()).thumbnailUrl(c.getThumbnailUrl()).mediaUrl(c.getMediaUrl()).authorUsername(c.getUser() == null ? null : c.getUser().getUsername()).authorEmail(c.getUser() == null ? null : c.getUser().getEmail()).viewCount(c.getViewCount()).createdAt(c.getCreatedAt()).updatedAt(c.getUpdatedAt()).aiFlagged(m == null ? null : m.getAiFlagged()).aiReason(m == null ? null : m.getAiReason()).aiConfidence(m == null || m.getAiConfidence() == null ? null : m.getAiConfidence().doubleValue()).decisionReason(m == null ? null : m.getDecisionReason()).build(); }
+    private AdminContentResponse toResponse(Content c, ContentModeration m) {
+        Content matched = (c.getMatchedContentId() != null)
+                ? contentRepository.findById(c.getMatchedContentId()).orElse(null)
+                : null;
+        String matchedAuthor = null;
+        if (matched != null && matched.getUser() != null) {
+            matchedAuthor = (matched.getUser().getFullName() != null && !matched.getUser().getFullName().isBlank())
+                    ? matched.getUser().getFullName()
+                    : matched.getUser().getUsername();
+        }
+
+        return AdminContentResponse.builder()
+                .contentId(c.getContentId())
+                .contentType(c.getContentType())
+                .title(c.getTitle())
+                .slug(c.getSlug())
+                .status(c.getStatus())
+                .body(c.getBody())
+                .thumbnailUrl(c.getThumbnailUrl())
+                .mediaUrl(c.getMediaUrl())
+                .authorUsername(c.getUser() == null ? null : c.getUser().getUsername())
+                .authorEmail(c.getUser() == null ? null : c.getUser().getEmail())
+                .viewCount(c.getViewCount())
+                .createdAt(c.getCreatedAt())
+                .updatedAt(c.getUpdatedAt())
+                .aiFlagged(m == null ? null : m.getAiFlagged())
+                .aiReason(m == null ? null : m.getAiReason())
+                .aiConfidence(m == null || m.getAiConfidence() == null ? null : m.getAiConfidence().doubleValue())
+                .decisionReason(m == null ? null : m.getDecisionReason())
+                .moderationFlag(c.getModerationFlag())
+                .similarityScore(c.getSimilarityScore())
+                .matchedContentId(c.getMatchedContentId())
+                .matchedTitle(matched == null ? null : matched.getTitle())
+                .matchedAuthor(matchedAuthor)
+                .matchedBody(matched == null ? null : matched.getBody())
+                .matchedPublishedAt(matched == null ? null : matched.getCreatedAt())
+                .build();
+    }
 }
