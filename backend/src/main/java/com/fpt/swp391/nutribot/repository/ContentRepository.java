@@ -35,13 +35,28 @@ public interface ContentRepository extends JpaRepository<Content, Integer> {
 
     boolean existsByContentTypeAndTitleIgnoreCase(String contentType, String title);
 
-    boolean existsByContentTypeAndTitleIgnoreCaseAndContentIdNot(String contentType, String title, Integer contentId);
+    @Query("SELECT CASE WHEN COUNT(c) > 0 THEN true ELSE false END FROM Content c " +
+           "WHERE c.contentType = :contentType AND LOWER(TRIM(c.title)) = LOWER(TRIM(:title)) AND c.contentId <> :contentId")
+    boolean existsByContentTypeAndTitleIgnoreCaseAndContentIdNot(
+            @Param("contentType") String contentType,
+            @Param("title") String title,
+            @Param("contentId") Integer contentId);
 
     Optional<Content> findFirstByContentTypeAndContentHash(String contentType, String contentHash);
 
-    Optional<Content> findFirstByContentTypeAndContentHashAndContentIdNot(String contentType, String contentHash, Integer contentId);
+    @Query("SELECT c FROM Content c " +
+           "WHERE c.contentType = :contentType AND c.contentHash = :contentHash AND c.contentId <> :contentId")
+    Optional<Content> findFirstByContentTypeAndContentHashAndContentIdNot(
+            @Param("contentType") String contentType,
+            @Param("contentHash") String contentHash,
+            @Param("contentId") Integer contentId);
 
-    List<Content> findByContentTypeAndStatusAndContentIdNot(String contentType, String status, Integer contentId);
+    @Query("SELECT c FROM Content c " +
+           "WHERE c.contentType = :contentType AND c.status = :status AND c.contentId <> :contentId")
+    List<Content> findByContentTypeAndStatusAndContentIdNot(
+            @Param("contentType") String contentType,
+            @Param("status") String status,
+            @Param("contentId") Integer contentId);
 
     Optional<Content> findByContentIdAndContentType(Integer contentId, String contentType);
 

@@ -199,19 +199,27 @@ public class AuthorContentService {
 
         if (request.getTitle() != null && !request.getTitle().isBlank()) {
             String normalizedTitle = ContentTextNormalizer.normalizeTitle(request.getTitle());
-            if (contentRepository.existsByContentTypeAndTitleIgnoreCaseAndContentIdNot(
-                    content.getContentType(), normalizedTitle, contentId)) {
-                throw new ConflictException("Tiêu đề bài viết này đã tồn tại trong hệ thống. Vui lòng chọn tiêu đề khác.");
+            String currentNormalizedTitle = ContentTextNormalizer.normalizeTitle(content.getTitle());
+            // NB-97: Chỉ kiểm tra trùng và cập nhật slug nếu tác giả thực sự thay đổi tiêu đề
+            if (!normalizedTitle.equalsIgnoreCase(currentNormalizedTitle)) {
+                if (contentRepository.existsByContentTypeAndTitleIgnoreCaseAndContentIdNot(
+                        content.getContentType(), normalizedTitle, contentId)) {
+                    throw new ConflictException("Tiêu đề bài viết này đã tồn tại trong hệ thống. Vui lòng chọn tiêu đề khác.");
+                }
+                content.setTitle(normalizedTitle);
+                content.setSlug(generateSlug(normalizedTitle));
             }
-            content.setTitle(normalizedTitle);
-            content.setSlug(generateSlug(normalizedTitle));
         }
         if (request.getBody() != null) {
             String normalizedBody = normalizeBody(request.getBody());
             String newHash = ContentTextNormalizer.computeContentHash(normalizedBody);
-            if (!newHash.isBlank() && contentRepository.findFirstByContentTypeAndContentHashAndContentIdNot(
-                    content.getContentType(), newHash, contentId).isPresent()) {
-                throw new ConflictException("Nội dung bài viết trùng lặp hoàn toàn với một bài đăng đã có trong hệ thống.");
+            String currentHash = content.getContentHash();
+            // NB-97: Chỉ kiểm tra trùng băm nội dung nếu nội dung bài viết thực sự thay đổi
+            if (!newHash.isBlank() && !newHash.equals(currentHash)) {
+                if (contentRepository.findFirstByContentTypeAndContentHashAndContentIdNot(
+                        content.getContentType(), newHash, contentId).isPresent()) {
+                    throw new ConflictException("Nội dung bài viết trùng lặp hoàn toàn với một bài đăng đã có trong hệ thống.");
+                }
             }
             content.setBody(normalizedBody);
             content.setContentHash(newHash.isBlank() ? null : newHash);
