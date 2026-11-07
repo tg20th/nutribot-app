@@ -66,7 +66,7 @@ public class Content {
     @Column(name = "moderation_flag", length = 50)
     private String moderationFlag;
 
-    @Column(name = "similarity_score", precision = 5, scale = 2)
+    @Column(name = "similarity_score")
     private Double similarityScore;
 
     @Column(name = "matched_content_id")
