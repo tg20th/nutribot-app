@@ -1,10 +1,11 @@
 import { CircleCheck, CircleX, Pencil, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { AdminToolbar, ConfirmDialog, EmptyState, LoadingState, PageHeader, SearchBox, Toast } from '../../components/admin/AdminUi';
+import { AdminToolbar, ConfirmDialog, EmptyState, LoadingState, PageHeader, Pagination, SearchBox, Toast } from '../../components/admin/AdminUi';
 import { adminApi } from '../../services/adminApi';
 import { adminIngredientApi } from '../../services/adminIngredientApi';
 
 const empty = { name: '', type: '', description: '' };
+const pageSize = 10;
 
 const getIngredientCounts = async (categories, signal) => {
   const foodCategories = categories.filter((category) => category.type === 'FOOD_TYPE');
@@ -25,6 +26,7 @@ export default function CategoryManagementPage() {
   const [confirm, setConfirm] = useState(null);
   const [toast, setToast] = useState('');
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
 
   const load = async (signal) => {
     setLoading(true);
@@ -56,6 +58,10 @@ export default function CategoryManagementPage() {
     load(controller.signal);
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, type]);
 
   const save = async (event) => {
     event.preventDefault();
@@ -101,6 +107,12 @@ export default function CategoryManagementPage() {
     && (!normalizedQuery || [item.name, item.description]
       .some((value) => String(value ?? '').toLowerCase().includes(normalizedQuery)))
   ));
+  const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const visibleItems = list.slice((safePage - 1) * pageSize, safePage * pageSize);
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
   const selectedCounts = type === 'RECIPE_TYPE' ? contentCounts : ingredientCounts;
   const countLabel = type === 'RECIPE_TYPE' ? 'Published content' : type === 'FOOD_TYPE' ? 'Ingredients' : 'Count';
   const countForCategory = (item) => (item.type === 'RECIPE_TYPE' ? contentCounts : ingredientCounts);
@@ -119,7 +131,8 @@ export default function CategoryManagementPage() {
     </AdminToolbar>
 
     <section className="admin-panel table-panel category-table-panel">
-      {loading ? <LoadingState /> : list.length ? <table className="admin-table category-admin-table">
+      {loading ? <LoadingState /> : list.length ? <>
+        <table className="admin-table category-admin-table">
         <thead><tr>
           <th className="category-id-column">No.</th>
           <th>Category name</th>
@@ -127,8 +140,8 @@ export default function CategoryManagementPage() {
           <th className="category-content-count"><span className="category-count-value">{countLabel}</span></th>
           <th aria-label="Actions" />
         </tr></thead>
-        <tbody>{list.map((item, index) => <tr key={item.id}>
-          <td className="category-id-column">{index + 1}</td>
+        <tbody>{visibleItems.map((item, index) => <tr key={item.id}>
+          <td className="category-id-column">{(safePage - 1) * pageSize + index + 1}</td>
           <td><b>{item.name}</b></td>
           <td>{item.description}</td>
           <td className="category-content-count" title={(type === 'ALL' ? countForCategory(item) : selectedCounts) === null ? `${countLabel} count is unavailable.` : undefined}>
@@ -149,7 +162,9 @@ export default function CategoryManagementPage() {
             ><CircleX size={20} /></button>}
           </td>
         </tr>)}</tbody>
-      </table> : <EmptyState title="No categories found." text="Try a different search term or category type." />}
+        </table>
+        <Pagination page={safePage} total={totalPages} onPage={setPage} />
+      </> : <EmptyState title="No categories found." text="Try a different search term or category type." />}
     </section>
 
     {form && <div className="admin-modal-backdrop" onMouseDown={() => setForm(null)}>
