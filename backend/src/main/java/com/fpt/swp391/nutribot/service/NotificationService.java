@@ -50,9 +50,9 @@ public class NotificationService {
     public static final String ACTION_REJECT = "REJECT";
 
     /** NB-84: Tieu de gan cho thong bao ket qua duyet cong thuc. */
-    public static final String TITLE_SUGGESTION_APPROVED = "Công thức đã được thêm vào NutriBot";
-    public static final String TITLE_SUGGESTION_REJECTED = "Đề xuất công thức chưa được duyệt";
-    public static final String TITLE_SUGGESTION_CLOSED = "Đề xuất công thức đã được đóng";
+    public static final String TITLE_SUGGESTION_APPROVED = "Recipe added to NutriBot";
+    public static final String TITLE_SUGGESTION_REJECTED = "Recipe suggestion not approved";
+    public static final String TITLE_SUGGESTION_CLOSED = "Recipe suggestion closed";
 
     /** NB-84: Do dai toi da cho noi dung thong bao (khop cot NVARCHAR(1000)). */
     private static final int MAX_MESSAGE_LENGTH = 1000;
@@ -106,7 +106,7 @@ public class NotificationService {
     @Transactional
     public void markAsRead(Integer userId, Integer notificationId) {
         Notification notification = notificationRepository.findByNotificationIdAndRecipient_UserId(notificationId, userId)
-                .orElseThrow(() -> new NotFoundException("Không tìm thấy thông báo"));
+                .orElseThrow(() -> new NotFoundException("Notification not found"));
         if (notification.getReadAt() == null) {
             notification.setReadAt(LocalDateTime.now());
             notificationRepository.save(notification);
@@ -224,22 +224,6 @@ public class NotificationService {
             return;
         }
 
-        String title = strikeCount >= 3
-                ? "Tài khoản của bạn đã bị khóa do vi phạm nhiều lần"
-                : "Bài viết của bạn đã bị từ chối do vi phạm quy chuẩn";
-
-        StringBuilder sb = new StringBuilder();
-        if (hasText(contentTitle)) {
-            sb.append("Bài viết \"").append(contentTitle.trim()).append("\" của bạn đã bị từ chối.");
-        } else {
-            sb.append("Bài viết của bạn đã bị từ chối.");
-        }
-        sb.append(" Lý do: ").append(hasText(reason) ? reason.trim() : "Vi phạm tiêu chuẩn cộng đồng").append(".");
-        sb.append(" Cảnh báo vi phạm: ").append(strikeCount).append("/3 gậy.");
-        if (strikeCount >= 3) {
-            sb.append(" Tài khoản của bạn đã bị tạm khóa do nhận đủ 3 gậy vi phạm.");
-        }
-
         String englishTitle = strikeCount >= 3 ? "Account suspended" : "Content rejected";
         StringBuilder englishMessage = new StringBuilder("Your post");
         if (hasText(contentTitle)) englishMessage.append(" \"").append(contentTitle.trim()).append("\"");
@@ -267,15 +251,15 @@ public class NotificationService {
     private String buildApprovedMessage(String dishName, String contentTitle) {
         StringBuilder message = new StringBuilder();
         if (hasText(dishName)) {
-            message.append("Công thức \"").append(dishName).append("\"");
+            message.append("Recipe \"").append(dishName).append("\"");
         }
         if (hasText(contentTitle)) {
-            message.append(message.length() > 0 ? " từ bài viết \"" : "Bài viết \"").append(contentTitle).append("\"");
+            message.append(message.length() > 0 ? " from post \"" : "Post \"").append(contentTitle).append("\"");
         }
         if (message.length() == 0) {
-            message.append("Công thức từ bài viết của bạn");
+            message.append("Your recipe");
         }
-        message.append(" của bạn đã được duyệt và thêm vào hệ thống. Bạn có thể tìm món này trong danh mục món ăn.");
+        message.append(" was approved and added to NutriBot. You can find it in the dishes catalog.");
         return truncate(message.toString());
     }
 
@@ -285,17 +269,17 @@ public class NotificationService {
     private String buildRejectedMessage(String dishName, String contentTitle, String rejectionReason) {
         StringBuilder message = new StringBuilder();
         if (hasText(dishName)) {
-            message.append("Công thức \"").append(dishName).append("\"");
+            message.append("Recipe \"").append(dishName).append("\"");
         }
         if (hasText(contentTitle)) {
-            message.append(message.length() > 0 ? " từ bài viết \"" : "Bài viết \"").append(contentTitle).append("\"");
+            message.append(message.length() > 0 ? " from post \"" : "Post \"").append(contentTitle).append("\"");
         }
         if (message.length() == 0) {
-            message.append("Công thức từ bài viết của bạn");
+            message.append("Your recipe");
         }
-        message.append(" của bạn chưa được duyệt.");
+        message.append(" was not approved.");
         if (hasText(rejectionReason)) {
-            message.append(" Lý do: ").append(rejectionReason.trim());
+            message.append(" Reason: ").append(rejectionReason.trim());
         }
         return truncate(message.toString());
     }
@@ -306,17 +290,17 @@ public class NotificationService {
     private String buildClosedMessage(String dishName, String contentTitle, String reason) {
         StringBuilder message = new StringBuilder();
         if (hasText(dishName)) {
-            message.append("Công thức \"").append(dishName).append("\"");
+            message.append("Recipe \"").append(dishName).append("\"");
         }
         if (hasText(contentTitle)) {
-            message.append(message.length() > 0 ? " từ bài viết \"" : "Bài viết \"").append(contentTitle).append("\"");
+            message.append(message.length() > 0 ? " from post \"" : "Post \"").append(contentTitle).append("\"");
         }
         if (message.length() == 0) {
-            message.append("Đề xuất công thức của bạn");
+            message.append("Your recipe suggestion");
         }
-        message.append(" đã được đóng và không được duyệt.");
+        message.append(" was closed.");
         if (hasText(reason)) {
-            message.append(" Lý do: ").append(reason.trim());
+            message.append(" Reason: ").append(reason.trim());
         }
         return truncate(message.toString());
     }
@@ -489,6 +473,11 @@ public class NotificationService {
             String[] normalized = normalizeModerationNotification(notification.getTitle(), notification.getMessage());
             displayTitle = normalized[0];
             displayMessage = normalized[1];
+        } else if (TYPE_RECIPE_SUGGESTION_APPROVED.equals(notification.getType())
+                || TYPE_RECIPE_SUGGESTION_REJECTED.equals(notification.getType())) {
+            String[] normalized = normalizeRecipeSuggestionNotification(notification.getTitle(), notification.getMessage());
+            displayTitle = normalized[0];
+            displayMessage = normalized[1];
         }
         return NotificationResponse.builder()
                 .notificationId(notification.getNotificationId())
@@ -508,6 +497,62 @@ public class NotificationService {
                 .message(displayMessage)
                 .actionUrl(notification.getActionUrl())
                 .build();
+    }
+
+    /**
+     * Converts legacy Vietnamese recipe suggestion notifications into English.
+     */
+    private String[] normalizeRecipeSuggestionNotification(String title, String message) {
+        String displayTitle = title;
+        if (displayTitle != null) {
+            if (displayTitle.contains("Công thức đã được thêm")) {
+                displayTitle = TITLE_SUGGESTION_APPROVED;
+            } else if (displayTitle.contains("chưa được duyệt")) {
+                displayTitle = TITLE_SUGGESTION_REJECTED;
+            } else if (displayTitle.contains("đã được đóng")) {
+                displayTitle = TITLE_SUGGESTION_CLOSED;
+            }
+        }
+
+        if (message == null || message.isBlank()) {
+            return new String[]{displayTitle, message};
+        }
+
+        if (message.contains("đã được duyệt và thêm vào hệ thống")) {
+            Matcher m = QUOTED_TITLE.matcher(message);
+            String dishName = m.find() ? m.group(1) : null;
+            String contentTitle = m.find() ? m.group(1) : null;
+            return new String[]{displayTitle, buildApprovedMessage(dishName, contentTitle)};
+        }
+
+        if (message.contains("chưa được duyệt")) {
+            Matcher m = QUOTED_TITLE.matcher(message);
+            String dishName = m.find() ? m.group(1) : null;
+            String contentTitle = m.find() ? m.group(1) : null;
+            String reason = null;
+            int reasonIdx = message.indexOf("Lý do:");
+            if (reasonIdx >= 0) {
+                reason = message.substring(reasonIdx + "Lý do:".length()).trim();
+            }
+            return new String[]{displayTitle, buildRejectedMessage(dishName, contentTitle, reason)};
+        }
+
+        if (message.contains("đã được đóng và không được duyệt") || message.contains("đã được đóng")) {
+            Matcher m = QUOTED_TITLE.matcher(message);
+            String dishName = m.find() ? m.group(1) : null;
+            String contentTitle = m.find() ? m.group(1) : null;
+            String reason = null;
+            int reasonIdx = message.indexOf("Lý do:");
+            if (reasonIdx >= 0) {
+                reason = message.substring(reasonIdx + "Lý do:".length()).trim();
+                if ("Tác giả đã gỡ đồng thuận dùng công thức cho bài viết này".equals(reason)) {
+                    reason = RecipeConsentRevocationService.REASON_CONSENT_REVOKED;
+                }
+            }
+            return new String[]{displayTitle, buildClosedMessage(dishName, contentTitle, reason)};
+        }
+
+        return new String[]{displayTitle, message};
     }
 
     /**

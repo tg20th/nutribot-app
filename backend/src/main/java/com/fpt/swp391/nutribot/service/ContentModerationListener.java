@@ -82,7 +82,7 @@ public class ContentModerationListener {
                     contentId, Math.round(similarityResult.getSimilarityScore() * 100),
                     similarityResult.getMatchedContentId(), similarityResult.getMatchedTitle());
 
-            String duplicateReason = String.format("Nghi ngờ gần trùng (độ tương đồng %d%%) với bài viết gốc #%d: \"%s\"",
+            String duplicateReason = String.format("Suspected duplicate (%d%% similarity) with original post #%d: \"%s\"",
                     Math.round(similarityResult.getSimilarityScore() * 100),
                     similarityResult.getMatchedContentId(),
                     similarityResult.getMatchedTitle());

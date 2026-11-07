@@ -29,7 +29,7 @@ public class RecipeConsentRevocationService {
     public static final String STATUS_PENDING = "PENDING";
     public static final String STATUS_REJECTED = "REJECTED";
     public static final String REASON_CONSENT_REVOKED =
-            "Tác giả đã gỡ đồng thuận dùng công thức cho bài viết này";
+            "Author revoked recipe consent for this content";
 
     private final ContentRecipeSuggestionRepository suggestionRepository;
     private final RecipeSuggestionAuditService auditService;
