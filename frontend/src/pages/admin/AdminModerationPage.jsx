@@ -1,7 +1,8 @@
-import { Bot, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleCheck, CircleX, FileText, ListOrdered, Maximize2, Search, ShieldCheck, SlidersHorizontal, Sparkles, UtensilsCrossed, Video, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { AlertTriangle, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleCheck, CircleX, FileText, ListOrdered, Maximize2, Search, ShieldCheck, SlidersHorizontal, Sparkles, UtensilsCrossed, Video, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { adminApi } from '../../services/adminApi';
 import { AdminToolbar, EmptyState, ErrorState, LoadingState, PageHeader, Toast } from '../../components/admin/AdminUi';
+import ContentDiffModal from '../../components/admin/ContentDiffModal';
 
 const pageSize = 10;
 const actions = {
@@ -371,6 +372,7 @@ export default function AdminModerationPage() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxZoom, setLightboxZoom] = useState(1);
   const [brokenImages, setBrokenImages] = useState(() => new Set());
+  const [diffModalOpen, setDiffModalOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -552,6 +554,82 @@ export default function AdminModerationPage() {
                   </div>
                   {selected.decisionReason && <p className="moderation-latest-reason"><strong>Latest decision reason:</strong> {selected.decisionReason}</p>}
 
+                  {Boolean(selected.moderationFlag === 'SUSPECTED_DUPLICATE' || selected.matchedContentId) && (
+                    <section
+                      className="moderation-duplicate-card"
+                      style={{
+                        backgroundColor: '#fffbeb',
+                        border: '1px solid #fde68a',
+                        borderRadius: '12px',
+                        padding: '1rem 1.25rem',
+                        marginBottom: '1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '1rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+                        <div
+                          style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '8px',
+                            backgroundColor: '#fef3c7',
+                            color: '#d97706',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <AlertTriangle size={20} />
+                        </div>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <strong style={{ fontSize: '0.9375rem', color: '#92400e' }}>
+                              Cảnh báo nội dung gần trùng lặp
+                            </strong>
+                            <span
+                              style={{
+                                backgroundColor: '#fee2e2',
+                                color: '#b91c1c',
+                                padding: '2px 8px',
+                                borderRadius: '9999px',
+                                fontSize: '0.75rem',
+                                fontWeight: '700',
+                              }}
+                            >
+                              {selected.similarityScore ? Math.round(selected.similarityScore * 100) : 80}% Tương đồng
+                            </span>
+                          </div>
+                          <p style={{ margin: '0.25rem 0 0', fontSize: '0.8125rem', color: '#b45309' }}>
+                            Nghi ngờ sao chép từ bài viết gốc: <strong>"{selected.matchedTitle || `Bài #${selected.matchedContentId}`}"</strong>
+                            {selected.matchedAuthor ? ` của tác giả ${selected.matchedAuthor}` : ''}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setDiffModalOpen(true)}
+                        className="admin-btn secondary"
+                        style={{
+                          whiteSpace: 'nowrap',
+                          backgroundColor: '#f59e0b',
+                          color: '#ffffff',
+                          border: 'none',
+                          fontWeight: '600',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🔍 So sánh trực diện
+                      </button>
+                    </section>
+                  )}
+
                   <section className={`moderation-ai-review ${selected.aiReason ? (selected.aiFlagged !== false ? 'is-flagged' : 'is-passed') : 'is-empty'}`} aria-labelledby="ai-review-title">
                     <div className="moderation-section-heading">
                       <div className="moderation-ai-heading"><Bot size={16} /><h3 id="ai-review-title">AI Review</h3></div>
@@ -604,6 +682,26 @@ export default function AdminModerationPage() {
       onRejectionReasonCodeChange={(value) => { setRejectionReasonCode(value); if (value !== 'OTHER') setDecisionReason(''); if (decisionError) setDecisionError(''); }}
       onClose={() => { setConfirm(null); setDecisionReason(''); setRejectionReasonCode(''); setDecisionError(''); }} onConfirm={decide} />
     <Toast message={toast} onDismiss={() => setToast('')} />
+    <ContentDiffModal
+      isOpen={diffModalOpen}
+      onClose={() => setDiffModalOpen(false)}
+      currentPost={selected}
+      submitting={submittingAction}
+      onApprove={(item) => {
+        setDiffModalOpen(false);
+        setDecisionReason('');
+        setRejectionReasonCode('');
+        setDecisionError('');
+        setConfirm({ item, action: 'APPROVE' });
+      }}
+      onReject={(item, defaultReason) => {
+        setDiffModalOpen(false);
+        setDecisionReason(defaultReason || 'Trùng lặp nội dung');
+        setRejectionReasonCode('OTHER');
+        setDecisionError('');
+        setConfirm({ item, action: 'REJECT' });
+      }}
+    />
     {preview && <span className="moderation-preview-marker" aria-hidden="true">Preview</span>}
   </div>;
 }

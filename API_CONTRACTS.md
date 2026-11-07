@@ -1018,4 +1018,48 @@ Hệ thống tạo đề xuất công thức  ──► status = PENDING   (+ gh
 - `GET /api/v1/admin/content-recipe-suggestions/{suggestionId}` includes `validation.ingredientResolutions`, each with `proposalIndex`, `proposedName`, nullable `ingredientId`/`ingredientName`, and `status` (`MATCHED`, `ADMIN_SELECTED`, `UNRESOLVED`, `AMBIGUOUS`, `INVALID_CATEGORY`, or `DUPLICATED`). Unknown, ambiguous, or invalid mappings block approval with HTTP 422.
 - An Admin can resolve those proposals with `PUT /api/v1/admin/content-recipe-suggestions/{suggestionId}/review`, adding `ingredientMappings: [{ "proposalIndex": 0, "ingredientId": 12 }]`. The backend verifies that each selected ID exists, is active, has an active category of type `INGREDIENT`, and is not reused for another proposal.
 - Approving persists the selected catalog ID and the proposal's validated `quantity`, `unit`, and `notes` in `recipe_ingredients`. Unknown ingredients must first be created separately through NB-90. Existing user-specific allergy mappings continue to use ingredient IDs; this workflow does not infer global allergy or dietary attributes.
+
+## 15. Content Duplicate Detection & Side-by-Side Diff (NB-97)
+
+### 15.1. Chặn trùng lặp đồng bộ (Sync Fast-Check)
+- **APIs:** `POST /api/v1/author/blogs`, `POST /api/v1/author/videos`, `PUT /api/v1/author/blogs/{id}`, `PUT /api/v1/author/videos/{id}`.
+- **Tiêu đề (Title):** Không phân biệt hoa/thường, chuẩn hóa khoảng trắng thừa. Nếu tiêu đề đã tồn tại trong cùng `contentType` (trừ chính bài đang sửa) $\rightarrow$ trả về `409 Conflict`:
+  ```json
+  {
+    "success": false,
+    "message": "Tiêu đề bài viết này đã tồn tại trong hệ thống. Vui lòng chọn tiêu đề khác.",
+    "data": null
+  }
+  ```
+- **Nội dung sao chép 100% (Content Hash):** Bóc tách văn bản thuần, loại bỏ thẻ HTML và dấu câu, tính mã băm SHA-256 lưu tại `contents.content_hash`. Nếu mã băm đã tồn tại $\rightarrow$ trả về `409 Conflict`:
+  ```json
+  {
+    "success": false,
+    "message": "Nội dung bài viết trùng lặp hoàn toàn với một bài đăng đã có trong hệ thống.",
+    "data": null
+  }
+  ```
+
+### 15.2. Phát hiện gần trùng lặp bất đồng bộ (Async Similarity Detection)
+- Khi nộp bài (`submitContent`), sự kiện `ContentModerationRequestedEvent` được phát ra chạy nền.
+- Thuật toán N-Gram (1-gram và 2-gram) Shingling & Jaccard tính toán độ tương đồng giữa bài nộp mới và các bài `published` cùng `contentType`.
+- Nếu độ tương đồng $\ge 0.80$ (80%):
+  - Gắn nhãn `moderation_flag = 'SUSPECTED_DUPLICATE'`.
+  - Lưu `similarity_score` và `matched_content_id` của bài gốc.
+  - Chuyển trạng thái sang `under_review` và bỏ qua gọi LLM để tiết kiệm token.
+- Nếu $< 0.80$: Gắn `moderation_flag = 'CLEAN'` và chuyển tiếp sang luồng kiểm duyệt nội dung AI chuẩn.
+
+### 15.3. Hàng đợi kiểm duyệt và So sánh trực diện (Admin Moderation UI)
+- `GET /api/v1/admin/moderation` trả thêm trong mỗi item:
+  - `moderationFlag`: `SUSPECTED_DUPLICATE` | `CLEAN` | null.
+  - `similarityScore`: điểm số từ 0.00 đến 1.00.
+  - `matchedContentId`, `matchedTitle`, `matchedAuthor`, `matchedBody`, `matchedPublishedAt`.
+- UI Admin hiển thị:
+  - Badge cảnh báo màu hổ phách: `⚠️ Gần trùng (85%)` trên hàng đợi.
+  - Banner cảnh báo chi tiết kèm nút `[🔍 So sánh trực diện]`.
+  - Hộp thoại Modal **ContentDiffModal** 2 cột:
+    - Cột 1: Bài viết gốc đã xuất bản (Original Post).
+    - Cột 2: Bài viết mới đang nộp duyệt (New Submission).
+    - Tự động tô màu vàng các câu văn bị trùng lặp.
+    - Cung cấp nút thao tác nhanh `[Từ chối vì sao chép]` và `[Bỏ qua & Duyệt bài]`.
 - Validation rejects missing/invalid quantities, blank or overlong units, notes longer than 200 characters, invalid category mappings, and multiple proposals resolving to one catalog ID. Existing NB-86 vegetarian checks use the resolved catalog names where available and still block `UNKNOWN` or non-vegetarian verdicts.

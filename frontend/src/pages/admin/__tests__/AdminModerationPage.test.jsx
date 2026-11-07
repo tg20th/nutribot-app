@@ -178,8 +178,10 @@ describe('admin moderation screen', () => {
     });
 
     render(<AdminModerationPage />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Open cover image' }));
-    expect(screen.getByRole('dialog', { name: 'Image inspection' })).toBeInTheDocument();
+    const coverBtn = await screen.findByRole('button', { name: 'Open cover image' });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Healthy lunch ideas/i })).toHaveAttribute('aria-pressed', 'true'));
+    fireEvent.click(coverBtn);
+    expect(await screen.findByRole('dialog', { name: 'Image inspection' })).toBeInTheDocument();
     expect(screen.getByText('1 / 2')).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'ArrowRight' });
     expect(screen.getByAltText('Submitted content image 2 of 2')).toBeInTheDocument();
@@ -229,7 +231,9 @@ describe('admin moderation screen', () => {
     expect(screen.getByText('20 min total')).toBeInTheDocument();
     expect(screen.getByText('2 servings')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Expand recipe overview' }));
-    expect(screen.getByText('Prep 15 min · Cook 5 min')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Prep 15 min · Cook 5 min')).toBeInTheDocument();
+    });
     expect(screen.getByText('Preparation steps')).toBeInTheDocument();
 
     // Check nutrition facts
@@ -248,5 +252,53 @@ describe('admin moderation screen', () => {
 
     // Crucial: ensure raw JSON string is NOT shown
     expect(screen.queryByText(recipeBody)).toBeNull();
+  });
+
+  it('renders duplicate warning banner and opens side-by-side diff modal for suspected duplicates (NB-97)', async () => {
+    adminApi.getModerationQueue.mockResolvedValueOnce({
+      content: [
+        {
+          id: 88,
+          type: 'BLOG',
+          title: 'Cách làm phở nấm chay siêu ngon',
+          author: 'newbie_cook',
+          submittedAt: '2026-11-07T08:00:00Z',
+          body: 'Nấu nước dùng ngọt từ củ cải và mía lau. Thêm nấm hương thơm lừng.',
+          status: 'pending',
+          moderationFlag: 'SUSPECTED_DUPLICATE',
+          similarityScore: 0.87,
+          matchedContentId: 12,
+          matchedTitle: 'Bí quyết phở nấm chay truyền thống',
+          matchedAuthor: 'chef_truong',
+          matchedPublishedAt: '2026-10-15T10:00:00Z',
+          matchedBody: 'Nấu nước dùng ngọt từ củ cải và mía lau. Thêm nấm hương thơm lừng.',
+        },
+      ],
+      totalElements: 1,
+      totalPages: 1,
+    });
+
+    render(<AdminModerationPage />);
+
+    // Kiểm tra hiển thị banner cảnh báo gần trùng lặp
+    expect(await screen.findByText('Cảnh báo nội dung gần trùng lặp')).toBeInTheDocument();
+    expect(screen.getByText('87% Tương đồng')).toBeInTheDocument();
+    expect(screen.getByText(/Bí quyết phở nấm chay truyền thống/)).toBeInTheDocument();
+
+    // Bấm nút mở Modal So sánh trực diện
+    const diffButton = screen.getByRole('button', { name: /So sánh trực diện/i });
+    expect(diffButton).toBeInTheDocument();
+    fireEvent.click(diffButton);
+
+    // Modal hiển thị hai cột đối chiếu
+    expect(await screen.findByRole('dialog', { name: /So sánh trực diện bài viết nghi ngờ sao chép/i })).toBeInTheDocument();
+    expect(screen.getByText('BÀI GỐC ĐÃ XUẤT BẢN (#12)')).toBeInTheDocument();
+    expect(screen.getByText('BÀI MỚI NỘP DUYỆT (#88)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Từ chối vì sao chép/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Bỏ qua & Duyệt bài/i })).toBeInTheDocument();
+
+    // Bấm Đóng modal
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng cửa sổ' }));
+    expect(screen.queryByRole('dialog', { name: /So sánh trực diện bài viết nghi ngờ sao chép/i })).toBeNull();
   });
 });

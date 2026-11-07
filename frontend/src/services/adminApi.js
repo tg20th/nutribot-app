@@ -87,6 +87,13 @@ const mapModerationItem = (item) => ({
   aiConfidence: item.aiConfidence,
   mediaUrl: item.mediaUrl ?? null,
   decisionReason: item.decisionReason ?? null,
+  moderationFlag: item.moderationFlag ?? null,
+  similarityScore: item.similarityScore ?? null,
+  matchedContentId: item.matchedContentId ?? null,
+  matchedTitle: item.matchedTitle ?? null,
+  matchedAuthor: item.matchedAuthor ?? null,
+  matchedBody: item.matchedBody ?? null,
+  matchedPublishedAt: item.matchedPublishedAt ?? null,
 });
 const moderationPreviewItems = [
   { contentId: 201, contentType: 'BLOG', title: 'A colorful bowl for busy mornings', slug: 'colorful-bowl-mornings', status: 'pending', authorUsername: 'minhanh', authorEmail: 'minhanh@example.com', createdAt: '2026-09-26T08:30:00', viewCount: 0, body: 'Fresh fruit, yogurt, and oats make a bright start to the day.', thumbnailUrl: moderationBowl, aiFlagged: true, aiReason: 'Nội dung và hình ảnh an toàn, được kiểm duyệt tự động', aiConfidence: 0.95 },

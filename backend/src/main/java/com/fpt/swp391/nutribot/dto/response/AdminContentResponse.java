@@ -26,4 +26,11 @@ public class AdminContentResponse {
     private String aiReason;
     private Double aiConfidence;
     private String decisionReason;
+    private String moderationFlag;
+    private Double similarityScore;
+    private Integer matchedContentId;
+    private String matchedTitle;
+    private String matchedAuthor;
+    private String matchedBody;
+    private LocalDateTime matchedPublishedAt;
 }

@@ -1,4 +1,4 @@
-﻿-- WARNING: FULL REBUILD SCRIPT. DROPS NutriBotV2 AND ALL ITS DATA.
+-- WARNING: FULL REBUILD SCRIPT. DROPS NutriBotV2 AND ALL ITS DATA.
 -- Run ONLY on a disposable/new environment after backup.
 -- Chatbot tables and contents media structure preserved from original.
 -- This is a fresh-install schema, NOT a migration for existing data.
@@ -288,12 +288,17 @@ CREATE TABLE contents (
     recipe_consent              BIT NULL,          -- Đồng thuận dùng công thức (NB-80)
     recipe_consent_at           DATETIME2(3) NULL,
     recipe_consent_terms_version NVARCHAR(20) NULL,
+    content_hash                VARCHAR(64) NULL,  -- Mã băm SHA-256 chống trùng lặp 100% (NB-97)
+    moderation_flag             NVARCHAR(50) NULL, -- SUSPECTED_DUPLICATE, CLEAN,... (NB-97)
+    similarity_score            DECIMAL(5,2) NULL, -- Điểm tương đồng 0.00 -> 1.00 (NB-97)
+    matched_content_id          INT NULL,          -- ID bài viết gốc bị nghi ngờ sao chép (NB-97)
     view_count      INT NOT NULL CONSTRAINT DF_contents_view_count DEFAULT (0),
     created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_contents_created_at DEFAULT (SYSUTCDATETIME()),
     updated_at      DATETIME2(3) NOT NULL CONSTRAINT DF_contents_updated_at DEFAULT (SYSUTCDATETIME()),
     CONSTRAINT UQ_contents_slug UNIQUE (slug),
     CONSTRAINT FK_contents_users FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION,
     CONSTRAINT FK_contents_categories FOREIGN KEY (category_id) REFERENCES categories(category_id),
+    CONSTRAINT FK_contents_matched_content FOREIGN KEY (matched_content_id) REFERENCES contents(content_id) ON DELETE NO ACTION,
     CONSTRAINT CK_contents_type CHECK (content_type IN (N'BLOG', N'VIDEO')),
     CONSTRAINT CK_contents_status CHECK (status IN (N'draft', N'ai_processing', N'under_review', N'published', N'flagged', N'rejected', N'archived')),
     CONSTRAINT CK_contents_view_count CHECK (view_count >= 0),
@@ -765,6 +770,8 @@ CREATE NONCLUSTERED INDEX IX_contents_user_id           ON contents(user_id);
 CREATE NONCLUSTERED INDEX IX_contents_status            ON contents(status) INCLUDE (title, content_type, created_at);
 CREATE NONCLUSTERED INDEX IX_contents_type_status       ON contents(content_type, status);
 CREATE NONCLUSTERED INDEX IX_contents_category_id       ON contents(category_id);
+CREATE NONCLUSTERED INDEX IX_contents_content_hash      ON contents(content_hash);
+CREATE NONCLUSTERED INDEX IX_contents_type_title        ON contents(content_type, title);
 
 CREATE NONCLUSTERED INDEX IX_comments_content_id        ON comments(content_id);
 CREATE NONCLUSTERED INDEX IX_comments_parent_id         ON comments(parent_id);

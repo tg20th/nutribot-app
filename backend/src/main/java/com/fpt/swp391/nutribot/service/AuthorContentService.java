@@ -15,6 +15,7 @@ import com.fpt.swp391.nutribot.entity.RecipeConsentAuditLog;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.event.ContentModerationRequestedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
+import com.fpt.swp391.nutribot.exception.ConflictException;
 import com.fpt.swp391.nutribot.exception.ForbiddenException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.CategoryRepository;
@@ -104,14 +105,28 @@ public class AuthorContentService {
 
         validateVideoFields(contentType, request.getMediaUrl(), request.getDurationSec());
 
+        // NB-97: 1. Kiểm tra tiêu đề trùng lặp (không phân biệt hoa thường, bỏ khoảng trắng thừa)
+        String normalizedTitle = ContentTextNormalizer.normalizeTitle(request.getTitle());
+        if (contentRepository.existsByContentTypeAndTitleIgnoreCase(contentType, normalizedTitle)) {
+            throw new ConflictException("Tiêu đề bài viết này đã tồn tại trong hệ thống. Vui lòng chọn tiêu đề khác.");
+        }
+
+        // NB-97: 2. Tính mã băm nội dung và kiểm tra sao chép nguyên văn 100%
+        String normalizedBody = normalizeBody(request.getBody());
+        String contentHash = ContentTextNormalizer.computeContentHash(normalizedBody);
+        if (!contentHash.isBlank() && contentRepository.findFirstByContentTypeAndContentHash(contentType, contentHash).isPresent()) {
+            throw new ConflictException("Nội dung bài viết trùng lặp hoàn toàn với một bài đăng đã có trong hệ thống.");
+        }
+
         boolean consentGranted = Boolean.TRUE.equals(request.getRecipeConsent());
         Content content = Content.builder()
                 .user(user)
                 .contentType(contentType)
                 .categoryId(request.getCategoryId())
-                .title(request.getTitle())
-                .slug(generateSlug(request.getTitle()))
-                .body(normalizeBody(request.getBody()))
+                .title(normalizedTitle)
+                .slug(generateSlug(normalizedTitle))
+                .body(normalizedBody)
+                .contentHash(contentHash.isBlank() ? null : contentHash)
                 .mediaUrl(request.getMediaUrl())
                 .thumbnailUrl(request.getThumbnailUrl())
                 .durationSec(request.getDurationSec())
@@ -183,11 +198,31 @@ public class AuthorContentService {
         }
 
         if (request.getTitle() != null && !request.getTitle().isBlank()) {
-            content.setTitle(request.getTitle());
-            content.setSlug(generateSlug(request.getTitle()));
+            String normalizedTitle = ContentTextNormalizer.normalizeTitle(request.getTitle());
+            String currentNormalizedTitle = ContentTextNormalizer.normalizeTitle(content.getTitle());
+            // NB-97: Chỉ kiểm tra trùng và cập nhật slug nếu tác giả thực sự thay đổi tiêu đề
+            if (!normalizedTitle.equalsIgnoreCase(currentNormalizedTitle)) {
+                if (contentRepository.existsByContentTypeAndTitleIgnoreCaseAndContentIdNot(
+                        content.getContentType(), normalizedTitle, contentId)) {
+                    throw new ConflictException("Tiêu đề bài viết này đã tồn tại trong hệ thống. Vui lòng chọn tiêu đề khác.");
+                }
+                content.setTitle(normalizedTitle);
+                content.setSlug(generateSlug(normalizedTitle));
+            }
         }
         if (request.getBody() != null) {
-            content.setBody(normalizeBody(request.getBody()));
+            String normalizedBody = normalizeBody(request.getBody());
+            String newHash = ContentTextNormalizer.computeContentHash(normalizedBody);
+            String currentHash = content.getContentHash();
+            // NB-97: Chỉ kiểm tra trùng băm nội dung nếu nội dung bài viết thực sự thay đổi
+            if (!newHash.isBlank() && !newHash.equals(currentHash)) {
+                if (contentRepository.findFirstByContentTypeAndContentHashAndContentIdNot(
+                        content.getContentType(), newHash, contentId).isPresent()) {
+                    throw new ConflictException("Nội dung bài viết trùng lặp hoàn toàn với một bài đăng đã có trong hệ thống.");
+                }
+            }
+            content.setBody(normalizedBody);
+            content.setContentHash(newHash.isBlank() ? null : newHash);
         }
         if (request.getMediaUrl() != null) {
             content.setMediaUrl(request.getMediaUrl());

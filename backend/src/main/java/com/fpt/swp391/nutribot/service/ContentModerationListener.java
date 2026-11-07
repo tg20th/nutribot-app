@@ -39,6 +39,7 @@ import java.util.Optional;
 public class ContentModerationListener {
 
     private final ContentRepository contentRepository;
+    private final ContentSimilarityDetector contentSimilarityDetector;
     private final ContentModerationGatewayService contentModerationGatewayService;
     private final ContentModerationRepository contentModerationRepository;
     private final CategoryRepository categoryRepository;
@@ -67,6 +68,33 @@ public class ContentModerationListener {
         }
 
         Content content = contentOpt.get();
+
+        // NB-97: Kiểm tra độ tương đồng nội dung với các bài viết đã xuất bản
+        ContentSimilarityDetector.SimilarityResult similarityResult = contentSimilarityDetector.detect(content);
+        if (similarityResult.isSuspected()) {
+            content.setModerationFlag(ContentSimilarityDetector.FLAG_SUSPECTED_DUPLICATE);
+            content.setSimilarityScore(similarityResult.getSimilarityScore());
+            content.setMatchedContentId(similarityResult.getMatchedContentId());
+            content.setStatus(AuthorContentService.STATUS_UNDER_REVIEW);
+            contentRepository.save(content);
+
+            log.warn("Content {} nghi ngờ gần trùng ({}%) với bài viết {}: '{}'. Chuyển under_review cho Admin đối chiếu.",
+                    contentId, Math.round(similarityResult.getSimilarityScore() * 100),
+                    similarityResult.getMatchedContentId(), similarityResult.getMatchedTitle());
+
+            String duplicateReason = String.format("Suspected duplicate (%d%% similarity) with original post #%d: \"%s\"",
+                    Math.round(similarityResult.getSimilarityScore() * 100),
+                    similarityResult.getMatchedContentId(),
+                    similarityResult.getMatchedTitle());
+
+            saveOrUpdateModeration(contentId, new ContentModerationGatewayService.ModerationResult(
+                    "NEEDS_REVIEW", duplicateReason, similarityResult.getSimilarityScore(), java.util.List.of("DUPLICATE_CONTENT")), false);
+            return;
+        } else {
+            content.setModerationFlag(ContentSimilarityDetector.FLAG_CLEAN);
+            content.setSimilarityScore(similarityResult.getSimilarityScore());
+        }
+
         ContentModerationGatewayService.ModerationResult moderation;
         try {
             moderation = contentModerationGatewayService.moderateContent(

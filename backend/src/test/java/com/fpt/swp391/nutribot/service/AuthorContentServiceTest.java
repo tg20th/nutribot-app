@@ -9,6 +9,7 @@ import com.fpt.swp391.nutribot.entity.Category;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
+import com.fpt.swp391.nutribot.exception.ConflictException;
 import com.fpt.swp391.nutribot.exception.ForbiddenException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.CategoryRepository;
@@ -741,5 +742,125 @@ class AuthorContentServiceTest {
         assertNotNull(response.getRecipeConsentMessage());
         assertTrue(response.getRecipeConsentMessage().contains("no dish will be suggested"));
         verify(contentRecipeSuggestionService, never()).isConsentEligibleNow(any());
+    }
+
+    // ==================== NB-97: DUPLICATE TITLE & CONTENT HASH (FAST-CHECK) ====================
+
+    @Test
+    @DisplayName("NB-97.1: Tạo bài viết có tiêu đề đã tồn tại -> ném ConflictException")
+    void createContent_duplicateTitle_throwsConflictException() {
+        ContentCreateRequest request = ContentCreateRequest.builder()
+                .title("Hướng Dẫn Ăn Sạch")
+                .body("Chi tiết chế độ ăn sạch...")
+                .categoryId(10)
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(categoryRepository.findById(10)).thenReturn(Optional.of(validCategory));
+        when(contentRepository.existsByContentTypeAndTitleIgnoreCase("BLOG", "Hướng Dẫn Ăn Sạch")).thenReturn(true);
+
+        assertThrows(ConflictException.class, () ->
+                authorContentService.createContent("truong_author", "BLOG", request));
+    }
+
+    @Test
+    @DisplayName("NB-97.2: Tạo bài viết có nội dung sao chép 100% (trùng SHA-256 hash) -> ném ConflictException")
+    void createContent_duplicateContentHash_throwsConflictException() {
+        String body = "<p>Nội dung bài viết sao chép y nguyên...</p>";
+        String hash = ContentTextNormalizer.computeContentHash(body);
+
+        ContentCreateRequest request = ContentCreateRequest.builder()
+                .title("Tiêu Đề Khác Nhau Hoàn Toàn")
+                .body(body)
+                .categoryId(10)
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(categoryRepository.findById(10)).thenReturn(Optional.of(validCategory));
+        when(contentRepository.existsByContentTypeAndTitleIgnoreCase(eq("BLOG"), anyString())).thenReturn(false);
+        when(contentRepository.findFirstByContentTypeAndContentHash("BLOG", hash))
+                .thenReturn(Optional.of(sampleContent));
+
+        assertThrows(ConflictException.class, () ->
+                authorContentService.createContent("truong_author", "BLOG", request));
+    }
+
+    @Test
+    @DisplayName("NB-97.3: Cập nhật bài viết đổi sang tiêu đề đã tồn tại ở bài khác -> ném ConflictException")
+    void updateContent_duplicateTitle_throwsConflictException() {
+        ContentUpdateRequest request = ContentUpdateRequest.builder()
+                .title("Tiêu Đề Trùng Lặp")
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.existsByContentTypeAndTitleIgnoreCaseAndContentIdNot("BLOG", "Tiêu Đề Trùng Lặp", 100))
+                .thenReturn(true);
+
+        assertThrows(ConflictException.class, () ->
+                authorContentService.updateContent("truong_author", 100, "BLOG", request));
+    }
+
+    @Test
+    @DisplayName("NB-97.4: Cập nhật bài viết giữ nguyên tiêu đề của chính nó -> giữ nguyên slug và không query check trùng")
+    void updateContent_sameTitle_preservesSlugAndSkipsDuplicateQuery() {
+        ContentUpdateRequest request = ContentUpdateRequest.builder()
+                .title("7 Ngày Ăn Chay Thanh Lọc")
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AuthorContentResponse response = authorContentService.updateContent("truong_author", 100, "BLOG", request);
+        assertNotNull(response);
+        assertEquals("7 Ngày Ăn Chay Thanh Lọc", response.getTitle());
+        assertEquals("7-ngay-an-chay-thanh-loc-12345", response.getSlug());
+        verify(contentRepository, never()).existsByContentTypeAndTitleIgnoreCaseAndContentIdNot(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("NB-97.5: Cập nhật bài viết giữ nguyên nội dung (hash không đổi) -> không query check trùng hash")
+    void updateContent_sameBody_skipsHashDuplicateQuery() {
+        String existingBody = "<p>Nội dung hiện tại không đổi</p>";
+        sampleContent.setBody(existingBody);
+        sampleContent.setContentHash(ContentTextNormalizer.computeContentHash(existingBody));
+
+        ContentUpdateRequest request = ContentUpdateRequest.builder()
+                .body(existingBody)
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AuthorContentResponse response = authorContentService.updateContent("truong_author", 100, "BLOG", request);
+        assertNotNull(response);
+        verify(contentRepository, never()).findFirstByContentTypeAndContentHashAndContentIdNot(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("NB-97.6: Cập nhật bài viết đổi nội dung sang nội dung trùng 100% bài khác -> ném ConflictException")
+    void updateContent_differentBody_duplicateHash_throwsConflictException() {
+        String existingBody = "<p>Nội dung ban đầu</p>";
+        sampleContent.setBody(existingBody);
+        sampleContent.setContentHash(ContentTextNormalizer.computeContentHash(existingBody));
+
+        String newBody = "<p>Nội dung sao chép hoàn toàn bài khác</p>";
+        String newHash = ContentTextNormalizer.computeContentHash(newBody);
+
+        ContentUpdateRequest request = ContentUpdateRequest.builder()
+                .body(newBody)
+                .build();
+
+        Content otherExistingContent = Content.builder().contentId(200).build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(100)).thenReturn(Optional.of(sampleContent));
+        when(contentRepository.findFirstByContentTypeAndContentHashAndContentIdNot("BLOG", newHash, 100))
+                .thenReturn(Optional.of(otherExistingContent));
+
+        assertThrows(ConflictException.class, () ->
+                authorContentService.updateContent("truong_author", 100, "BLOG", request));
     }
 }
