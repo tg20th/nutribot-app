@@ -100,4 +100,57 @@ class ContentSimilarityDetectorTest {
         assertThat(result.isSuspected()).isFalse();
         assertThat(result.getMatchedContentId()).isNull();
     }
+
+    @Test
+    @DisplayName("Anti-Dilution: Phát hiện sao chép đoạn dài dù cố tình chèn spam từ ngữ ở đuôi để pha loãng Jaccard")
+    void detect_dilutedCopy_caughtByLongestMatchingBlock() {
+        String originalBody = "<p>Gỏi cuốn chay ngũ sắc là lựa chọn mình rất thích trong những ngày muốn ăn nhẹ. "
+                + "Những lớp rau củ nhiều màu được cuốn gọn trong bánh tráng tạo cảm giác tươi mát và dễ ăn. "
+                + "Khi làm tại nhà, mình chuẩn bị rau xà lách, cà rốt, dưa leo, bắp cải tím và đậu hũ, sau đó cuốn vừa tay "
+                + "để các nguyên liệu không bị rơi ra. Một chén nước chấm phù hợp sẽ giúp món cuốn thêm tròn vị. "
+                + "Thành phần có thể thay đổi tùy khẩu vị.</p>";
+
+        String dilutedCopyBody = "<p>Gỏi cuốn chay ngũ sắc là lựa chọn mình rất thích trong những ngày muốn ăn nhẹ. "
+                + "Những lớp rau củ nhiều màu được cuốn gọn trong bánh tráng tạo cảm giác tươi mát và dễ ăn. "
+                + "Khi làm tại nhà, mình chuẩn bị rau xà lách, cà rốt, dưa leo, bắp cải tím và đậu hũ. "
+                + "Rất ngon và rất đáng để thử, hay thử đi các bạn ơi, thử đi thử đi thử đi thử đi thử đi thử đi thử đi,"
+                + "hâhahaahahahhhaha ahahahahahahahaha ahahahahahaha</p>";
+
+        Content original = Content.builder()
+                .contentId(10)
+                .contentType("BLOG")
+                .title("Gỏi cuốn chay ngũ sắc thanh đạm")
+                .body(originalBody)
+                .status("published")
+                .build();
+
+        Content copyCandidate = Content.builder()
+                .contentId(99)
+                .contentType("BLOG")
+                .title("Gỏi cuốn chay thanh mát")
+                .body(dilutedCopyBody)
+                .status("under_review")
+                .build();
+
+        when(contentRepository.findByContentTypeAndStatusAndContentIdNot(eq("BLOG"), eq("published"), eq(99)))
+                .thenReturn(List.of(original));
+
+        ContentSimilarityDetector.SimilarityResult result = detector.detect(copyCandidate);
+
+        assertThat(result.isSuspected()).isTrue();
+        assertThat(result.getMatchedContentId()).isEqualTo(10);
+        assertThat(result.getMatchedTitle()).isEqualTo("Gỏi cuốn chay ngũ sắc thanh đạm");
+        assertThat(result.getLongestMatchingBlock()).isGreaterThanOrEqualTo(25);
+        assertThat(result.getSimilarityScore()).isGreaterThanOrEqualTo(0.80);
+    }
+
+    @Test
+    @DisplayName("Tìm số lượng từ liên tiếp trùng khớp chính xác")
+    void findLongestContiguousMatchingWords_calculatesAccurately() {
+        String textA = "Một hai ba bốn năm sáu bảy tám";
+        String textB = "Khác biệt nhưng có một hai ba bốn năm ở giữa câu";
+
+        int match = ContentSimilarityDetector.findLongestContiguousMatchingWords(textA, textB);
+        assertThat(match).isEqualTo(5); // "một hai ba bốn năm"
+    }
 }
