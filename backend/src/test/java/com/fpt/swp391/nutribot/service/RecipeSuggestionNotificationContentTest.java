@@ -56,7 +56,7 @@ class RecipeSuggestionNotificationContentTest {
         assertEquals(NotificationService.TYPE_RECIPE_SUGGESTION_APPROVED, notification.getType());
         assertEquals(NotificationService.TITLE_SUGGESTION_APPROVED, notification.getTitle());
         assertTrue(notification.getMessage().contains("Phở nấm thuần chay"));
-        assertTrue(notification.getMessage().contains("đã được duyệt và thêm vào hệ thống"));
+        assertTrue(notification.getMessage().contains("was approved and added to NutriBot"));
         assertEquals("/community/posts/82", notification.getActionUrl());
     }
 
@@ -76,7 +76,7 @@ class RecipeSuggestionNotificationContentTest {
         assertEquals(NotificationService.TYPE_RECIPE_SUGGESTION_REJECTED, notification.getType());
         assertEquals(NotificationService.TITLE_SUGGESTION_REJECTED, notification.getTitle());
         assertTrue(notification.getMessage().contains("Trùng món đã có trong hệ thống"));
-        assertTrue(notification.getMessage().contains("chưa được duyệt"));
+        assertTrue(notification.getMessage().contains("was not approved"));
         assertEquals("/community/posts/82", notification.getActionUrl());
     }
 
@@ -119,7 +119,7 @@ class RecipeSuggestionNotificationContentTest {
         assertEquals(NotificationService.TYPE_RECIPE_SUGGESTION_REJECTED, notification.getType());
         assertEquals(NotificationService.TITLE_SUGGESTION_CLOSED, notification.getTitle());
         assertTrue(notification.getMessage().contains("Phở nấm thuần chay"));
-        assertTrue(notification.getMessage().contains("đã được đóng"));
+        assertTrue(notification.getMessage().contains("was closed"));
         assertTrue(notification.getMessage().contains(RecipeConsentRevocationService.REASON_CONSENT_REVOKED));
         assertEquals("/community/posts/82", notification.getActionUrl());
     }

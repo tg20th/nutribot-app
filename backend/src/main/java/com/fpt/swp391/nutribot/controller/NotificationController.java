@@ -29,33 +29,33 @@ public class NotificationController {
             Authentication authentication) {
         Integer userId = getUserId(authentication);
         PagedResponse<NotificationResponse> result = notificationService.listMyNotifications(userId, page, size);
-        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách thông báo thành công", result));
+        return ResponseEntity.ok(ApiResponse.success("Notifications retrieved successfully", result));
     }
 
     @GetMapping("/unread-count")
     public ResponseEntity<ApiResponse<Long>> unreadCount(Authentication authentication) {
         Integer userId = getUserId(authentication);
         long count = notificationService.getUnreadCount(userId);
-        return ResponseEntity.ok(ApiResponse.success("Lấy số thông báo chưa đọc thành công", count));
+        return ResponseEntity.ok(ApiResponse.success("Unread notification count retrieved successfully", count));
     }
 
     @PatchMapping("/{notificationId}/read")
     public ResponseEntity<ApiResponse<Void>> markRead(@PathVariable Integer notificationId, Authentication authentication) {
         Integer userId = getUserId(authentication);
         notificationService.markAsRead(userId, notificationId);
-        return ResponseEntity.ok(ApiResponse.success("Đánh dấu đã đọc thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("Notification marked as read successfully", null));
     }
 
     @PatchMapping("/read-all")
     public ResponseEntity<ApiResponse<Void>> markAllRead(Authentication authentication) {
         Integer userId = getUserId(authentication);
         notificationService.markAllAsRead(userId);
-        return ResponseEntity.ok(ApiResponse.success("Đánh dấu tất cả đã đọc thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("All notifications marked as read successfully", null));
     }
 
     private Integer getUserId(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
-            throw new NotFoundException("Không tìm thấy thông tin người dùng");
+            throw new NotFoundException("User information not found");
         }
         String username = authentication.getName();
         User user = userRepository.findByUsernameIgnoreCase(username).orElse(null);
@@ -63,10 +63,10 @@ public class NotificationController {
             user = userRepository.findByEmailIgnoreCase(username).orElse(null);
         }
         if (user == null) {
-            throw new NotFoundException("Không tìm thấy thông tin người dùng");
+            throw new NotFoundException("User information not found");
         }
         if (!AccountStatus.canAccessSystem(user.getStatus())) {
-            throw new ForbiddenException("Tài khoản không đủ điều kiện sử dụng thông báo");
+            throw new ForbiddenException("Account is not eligible to access notifications");
         }
         return user.getUserId();
     }

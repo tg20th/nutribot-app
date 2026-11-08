@@ -8,6 +8,7 @@ import {
   markNotificationAsRead
 } from '../../services/notificationsApi';
 import { useNotificationUnreadCount } from './NotificationProvider';
+import NutriBotSystemAvatar from './NutriBotSystemAvatar';
 
 const PAGE_SIZE = 10;
 
@@ -50,11 +51,17 @@ const notificationDateGroup = (value) => {
 const typeDetails = {
   CONTENT_VOTED: { Icon: Heart, className: 'is-voted' },
   CONTENT_COMMENTED: { Icon: MessageCircle, className: 'is-commented' },
+  CONTENT_COMMENT_REPLIED: { Icon: MessageCircle, className: 'is-commented' },
+  CONTENT_MODERATION_REJECTED: { Icon: CircleAlert, className: 'is-rejected' },
+  CONTENT_MODERATION_APPROVED: { Icon: Check, className: 'is-approved' },
   RECIPE_SUGGESTION_APPROVED: { Icon: Check, className: 'is-approved' },
   RECIPE_SUGGESTION_REJECTED: { Icon: Info, className: 'is-rejected' }
 };
 
 function notificationCopy(notification) {
+  if (['CONTENT_MODERATION_REJECTED', 'CONTENT_MODERATION_APPROVED', 'RECIPE_SUGGESTION_APPROVED', 'RECIPE_SUGGESTION_REJECTED', 'CONTENT_COMMENT_REPLIED'].includes(notification.type)) {
+    return notification.message || 'You have a new notification.';
+  }
   const actor = notification.actorFullName || 'Someone';
   const title = notification.contentTitle ? ` ${notification.contentTitle}` : '';
   switch (notification.type) {
@@ -68,6 +75,8 @@ function notificationCopy(notification) {
 
 function NotificationAvatar({ notification }) {
   const [failed, setFailed] = useState(false);
+  if (notification.type === 'CONTENT_MODERATION_REJECTED') return <NutriBotSystemAvatar moderation/>;
+  if (notification.type === 'CONTENT_MODERATION_APPROVED') return <NutriBotSystemAvatar approved/>;
   const name = notification.actorFullName || 'NutriBot Member';
   if (!notification.actorAvatarUrl || failed) return <span className="notification-avatar notification-avatar--fallback" aria-hidden="true">{buildInitials(name)}</span>;
   return <img className="notification-avatar" src={notification.actorAvatarUrl} alt="" onError={() => setFailed(true)} referrerPolicy="no-referrer" />;
@@ -84,10 +93,10 @@ function NotificationItem({ notification, onSelect, marking }) {
   >
     <span className="notification-item__avatar-wrap">
       <NotificationAvatar notification={notification}/>
-      <span className={`notification-item__interaction-icon ${details.className}`} aria-hidden="true"><Icon size={15}/></span>
+      {!['CONTENT_MODERATION_REJECTED', 'CONTENT_MODERATION_APPROVED'].includes(notification.type) && <span className={`notification-item__interaction-icon ${details.className}`} aria-hidden="true"><Icon size={15}/></span>}
     </span>
     <span className="notification-item__body">
-      <span className="notification-item__message">{notificationCopy(notification)}</span>
+      <span className="notification-item__message">{notification.title ? <strong className={`notification-item__title${notification.type === 'CONTENT_MODERATION_REJECTED' ? ' is-rejected' : ''}`}>{notification.title}</strong> : null}{notificationCopy(notification)}</span>
       <span className="notification-item__meta"><time dateTime={notification.updatedAt || notification.createdAt}>{formatRelativeTime(notification.updatedAt || notification.createdAt)}</time></span>
     </span>
     {!notification.read && <i className="notification-item__unread-dot" aria-label="Unread"/>}
@@ -206,7 +215,10 @@ export default function NotificationCenter() {
       }
     }
     if (notification.referenceId && notification.referenceType === 'CONTENT' && ['BLOG', 'VIDEO'].includes(String(notification.contentType).toUpperCase())) {
-      navigate(`/community/posts/${notification.referenceId}`, { state: { contentType: String(notification.contentType).toLowerCase(), returnTo: pathname } });
+      const contentType = String(notification.contentType).toLowerCase();
+      navigate(`/community/posts/${notification.referenceId}`, { state: notification.type === 'CONTENT_MODERATION_REJECTED'
+        ? { contentType, source: 'my-content', returnTo: pathname, moderationNotification: notification }
+        : { contentType, returnTo: pathname } });
     }
   };
 

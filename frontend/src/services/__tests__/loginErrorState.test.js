@@ -20,6 +20,7 @@ describe('getLoginErrorState', () => {
 
   it('centralizes OAuth and expired-session failure states', () => {
     expect(getOAuthErrorState({ error: 'access_denied' })).toBe('OAUTH_FAILED');
+    expect(getOAuthErrorState({ error: 'ACCOUNT_BANNED' })).toBe('ACCOUNT_BLOCKED');
     expect(getOAuthErrorState({ token: 'token', username: 'lan', role: 'ROLE_USER' })).toBeNull();
     expect(getApiAuthFailureState(401, true)).toBe('SESSION_EXPIRED');
     expect(getApiAuthFailureState(403, true)).toBeNull();

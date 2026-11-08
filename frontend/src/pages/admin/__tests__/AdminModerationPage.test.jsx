@@ -101,14 +101,28 @@ describe('admin moderation screen', () => {
     expect(screen.queryByText('Healthy lunch ideas')).toBeNull();
   });
 
-  it('requires a rejection reason and sends the trimmed reason', async () => {
+  it('requires a selected rejection reason and sends the mapped text', async () => {
     render(<AdminModerationPage />);
     fireEvent.click(await screen.findByRole('button', { name: /Reject/ }));
-    const confirm = screen.getByRole('button', { name: 'Confirm Rejection' });
+    const confirm = screen.getByRole('button', { name: 'Reject content' });
     expect(confirm).toBeDisabled();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Rejection reason *' }), { target: { value: '  Missing source citations  ' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Reason for rejection *' }), { target: { value: 'MISLEADING_INFORMATION' } });
     fireEvent.click(confirm);
-    await waitFor(() => expect(adminApi.moderateContent).toHaveBeenCalledWith(1, 'REJECT', 'Missing source citations'));
+    await waitFor(() => expect(adminApi.moderateContent).toHaveBeenCalledWith(1, 'REJECT', 'Misleading or inaccurate information'));
+  });
+
+  it('shows the custom reason only for Other reason and trims it on submit', async () => {
+    render(<AdminModerationPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /Reject/ }));
+    const select = screen.getByRole('combobox', { name: 'Reason for rejection *' });
+    expect(screen.queryByRole('textbox', { name: 'Custom reason *' })).toBeNull();
+    fireEvent.change(select, { target: { value: 'OTHER' } });
+    const customReason = screen.getByRole('textbox', { name: /Custom reason \*/ });
+    const confirm = screen.getByRole('button', { name: 'Reject content' });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(customReason, { target: { value: '  Needs a clearer source  ' } });
+    fireEvent.click(confirm);
+    await waitFor(() => expect(adminApi.moderateContent).toHaveBeenCalledWith(1, 'REJECT', 'Needs a clearer source'));
   });
 
   it('allows approval without a reason', async () => {
@@ -121,7 +135,7 @@ describe('admin moderation screen', () => {
   it('renders AI moderation evaluation and confidence when available', async () => {
     render(<AdminModerationPage />);
     expect(await screen.findByRole('heading', { name: 'AI Review' })).toBeTruthy();
-    expect(screen.getByText(/Confidence: 91%/)).toBeTruthy();
+    expect(document.querySelector('.moderation-ai-confidence')?.textContent).toBe('Confidence: 91%');
   });
 
   it('renders a YouTube player for a VIDEO submission instead of its thumbnail', async () => {
@@ -164,8 +178,10 @@ describe('admin moderation screen', () => {
     });
 
     render(<AdminModerationPage />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Open cover image' }));
-    expect(screen.getByRole('dialog', { name: 'Image inspection' })).toBeInTheDocument();
+    const coverBtn = await screen.findByRole('button', { name: 'Open cover image' });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Healthy lunch ideas/i })).toHaveAttribute('aria-pressed', 'true'));
+    fireEvent.click(coverBtn);
+    expect(await screen.findByRole('dialog', { name: 'Image inspection' })).toBeInTheDocument();
     expect(screen.getByText('1 / 2')).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'ArrowRight' });
     expect(screen.getByAltText('Submitted content image 2 of 2')).toBeInTheDocument();
@@ -215,7 +231,9 @@ describe('admin moderation screen', () => {
     expect(screen.getByText('20 min total')).toBeInTheDocument();
     expect(screen.getByText('2 servings')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Expand recipe overview' }));
-    expect(screen.getByText('Prep 15 min · Cook 5 min')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Prep 15 min · Cook 5 min')).toBeInTheDocument();
+    });
     expect(screen.getByText('Preparation steps')).toBeInTheDocument();
 
     // Check nutrition facts
@@ -234,5 +252,78 @@ describe('admin moderation screen', () => {
 
     // Crucial: ensure raw JSON string is NOT shown
     expect(screen.queryByText(recipeBody)).toBeNull();
+  });
+
+  it('renders relational recipe submissions from content.body as the story', async () => {
+    const recipePost = {
+      id: 4,
+      type: 'BLOG',
+      title: 'Relational recipe submission',
+      status: 'pending',
+      author: 'recipe_author',
+      submittedAt: '2026-10-09T08:30:00',
+      body: 'First story paragraph.\n\nSecond story paragraph.',
+      recipe: {
+        prepMinutes: 10,
+        ingredients: [{ name: 'Oats', quantity: '50', unit: 'g' }],
+        steps: [{ instruction: 'Mix the ingredients.' }],
+      },
+    };
+
+    adminApi.getModerationQueue.mockResolvedValueOnce({ content: [recipePost], totalElements: 1, totalPages: 1 });
+    render(<AdminModerationPage />);
+
+    expect(await screen.findByText(/First story paragraph\./)).toBeInTheDocument();
+    expect(screen.getByText(/Second story paragraph\./)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Recipe overview' })).toBeInTheDocument();
+    expect(screen.queryByText('No story is available for this recipe submission.')).toBeNull();
+  });
+
+  it('renders the consolidated AI review and opens the comparison modal for suspected duplicates (NB-97)', async () => {
+    adminApi.getModerationQueue.mockResolvedValueOnce({
+      content: [
+        {
+          id: 88,
+          type: 'BLOG',
+          title: 'Cách làm phở nấm chay siêu ngon',
+          author: 'newbie_cook',
+          submittedAt: '2026-11-07T08:00:00Z',
+          body: 'Nấu nước dùng ngọt từ củ cải và mía lau. Thêm nấm hương thơm lừng.',
+          status: 'pending',
+          moderationFlag: 'SUSPECTED_DUPLICATE',
+          similarityScore: 0.87,
+          matchedContentId: 12,
+          matchedTitle: 'Bí quyết phở nấm chay truyền thống',
+          matchedAuthor: 'chef_truong',
+          matchedPublishedAt: '2026-10-15T10:00:00Z',
+          matchedBody: 'Nấu nước dùng ngọt từ củ cải và mía lau. Thêm nấm hương thơm lừng.',
+        },
+      ],
+      totalElements: 1,
+      totalPages: 1,
+    });
+
+    render(<AdminModerationPage />);
+
+    expect(await screen.findByRole('heading', { name: 'AI Review' })).toBeInTheDocument();
+    expect(screen.getByText(/87% similarity/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Bí quyết phở nấm chay truyền thống/).length).toBeGreaterThan(0);
+
+    // Bấm nút mở Modal So sánh trực diện
+    const diffButton = screen.getByRole('button', { name: /Compare/i });
+    expect(diffButton).toBeInTheDocument();
+    fireEvent.click(diffButton);
+
+    // Modal hiển thị hai cột đối chiếu
+    expect(await screen.findByRole('dialog', { name: 'Content comparison' })).toBeInTheDocument();
+    expect(screen.getByText('ORIGINAL ARTICLE')).toBeInTheDocument();
+    expect(screen.getByText('FLAGGED FOR POSSIBLE PLAGIARISM')).toBeInTheDocument();
+    expect(document.querySelectorAll('.content-diff-sentence.is-match').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /Reject for Plagiarism/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Override & Approve/i })).toBeInTheDocument();
+
+    // Bấm Đóng modal
+    fireEvent.click(screen.getByRole('button', { name: 'Close comparison' }));
+    expect(screen.queryByRole('dialog', { name: 'Side-by-Side Comparison' })).toBeNull();
   });
 });

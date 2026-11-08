@@ -8,6 +8,7 @@ import { calculateRecipeNutrition, createMyBlog, createMyVideo, getBlogCategorie
 import { getAllergyIngredients } from '../services/profileApi';
 import { stripHtmlToCleanText } from '../services/communityApi';
 import { apiRequest } from '../services/apiClient';
+import { htmlToPlainText } from '../utils/content';
 import '../styles/my-blogs.css';
 import '../styles/create-blog.css';
 
@@ -286,8 +287,8 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
 
   const isVideo = isEditing ? editType === CONTENT_TYPES.VIDEO : contentType === CONTENT_TYPES.VIDEO;
   const trimmedTitle = title.trim();
-  const bodyHtml = body.trim();
-  const trimmedBody = body.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
+  const plainBody = htmlToPlainText(body);
+  const trimmedBody = plainBody.trim();
   const hasVideo = Boolean(videoFile || (isEditing && existingMediaUrl));
   const hasThumbnail = Boolean(file || existingThumbnailUrl);
 
@@ -555,7 +556,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
       const thumbnailUrl = file ? await uploadBlogThumbnail(file) : existingThumbnailUrl || null;
       const payload = {
         title: trimmedTitle,
-        body: bodyHtml.replace(/<!--\s*StartFragment\s*-->/gi, '').replace(/<!--\s*EndFragment\s*-->/gi, ''),
+        body: plainBody,
         recipe: makeRecipePayload(recipeDetails, ingredientRows, stepRows),
         thumbnailUrl,
         categoryId: Number(categoryId),

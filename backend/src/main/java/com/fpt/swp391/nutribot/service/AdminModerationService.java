@@ -4,6 +4,8 @@ import com.fpt.swp391.nutribot.dto.request.AdminModerationRequest;
 import com.fpt.swp391.nutribot.dto.response.*;
 import com.fpt.swp391.nutribot.entity.*;
 import com.fpt.swp391.nutribot.event.ContentPublishedEvent;
+import com.fpt.swp391.nutribot.event.AdminContentApprovedEvent;
+import com.fpt.swp391.nutribot.event.AccountSuspendedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.*;
@@ -27,6 +29,8 @@ public class AdminModerationService {
     private final UserNotificationSender userNotificationSender;
     private final NotificationService notificationService;
     private final ModerationDecisionAuditRepository moderationDecisionAuditRepository;
+    private final UserModerationActionRepository userModerationActionRepository;
+    private final ContentRecipePersistenceService contentRecipePersistenceService;
 
     @Transactional(readOnly = true)
     public PagedResponse<AdminContentResponse> getPendingContents(String contentType, int page, int size) {
@@ -68,7 +72,10 @@ public class AdminModerationService {
             moderation = contentModerationRepository.save(moderation);
         }
         if (decision) moderationDecisionAuditRepository.save(snapshot(content, moderation, admin, action, previous, reason));
-        if ("APPROVE".equals(action)) eventPublisher.publishEvent(new ContentPublishedEvent(contentId));
+        if ("APPROVE".equals(action)) {
+            eventPublisher.publishEvent(new ContentPublishedEvent(contentId));
+            eventPublisher.publishEvent(new AdminContentApprovedEvent(contentId));
+        }
         return toResponse(saved, moderation);
     }
 
@@ -102,11 +109,55 @@ public class AdminModerationService {
     private void reject(Content content, String reason) {
         User author = content.getUser(); if (author == null || isAdmin(author)) return;
         int strikes = (author.getStrikeCount() == null ? 0 : author.getStrikeCount()) + 1; author.setStrikeCount(strikes);
+        boolean becameBanned = author.getStatus() != AccountStatus.BANNED && strikes >= 3;
         if (strikes >= 3) author.setStatus(AccountStatus.BANNED); else if (author.getStatus() == AccountStatus.ACTIVE) author.setStatus(AccountStatus.WARN);
         userRepository.save(author); String detail = blank(reason) == null ? "Content violates community standards" : reason.trim();
-        try { if (author.getEmail() != null && !author.getEmail().isBlank()) { if (strikes >= 3) userNotificationSender.sendBannedNotification(author.getEmail(), author.getUsername(), detail); else userNotificationSender.sendWarningNotification(author.getEmail(), author.getUsername(), strikes, detail); } } catch (Exception e) { log.error("Could not send moderation email", e); }
+        try { if (author.getEmail() != null && !author.getEmail().isBlank() && strikes < 3) userNotificationSender.sendWarningNotification(author.getEmail(), author.getUsername(), strikes, detail); } catch (Exception e) { log.error("Could not send moderation email", e); }
+        if (becameBanned) {
+            if (userModerationActionRepository != null) userModerationActionRepository.save(UserModerationAction.builder().userId(author.getUserId()).action("BAN").source("AUTOMATIC").previousStatus(AccountStatus.WARN.name()).newStatus(AccountStatus.BANNED.name()).reason(detail).additionalExplanation(detail).strikeDelta((short) 1).build());
+            eventPublisher.publishEvent(new AccountSuspendedEvent(author.getUserId(), true, detail));
+            log.info("Account suspension event published: userId={}, type=STRIKE", author.getUserId());
+        }
         try { notificationService.createForContentModerationRejected(author.getUserId(), content.getContentId(), content.getTitle(), strikes, detail); } catch (Exception e) { log.error("Could not create moderation notification", e); }
     }
     private boolean isAdmin(User user) { return user.getRole() != null && user.getRole().getRoleName() != null && (user.getRole().getRoleName().equalsIgnoreCase("ADMIN") || user.getRole().getRoleName().equalsIgnoreCase("ROLE_ADMIN")); }
-    private AdminContentResponse toResponse(Content c, ContentModeration m) { return AdminContentResponse.builder().contentId(c.getContentId()).contentType(c.getContentType()).title(c.getTitle()).slug(c.getSlug()).status(c.getStatus()).body(c.getBody()).thumbnailUrl(c.getThumbnailUrl()).mediaUrl(c.getMediaUrl()).authorUsername(c.getUser() == null ? null : c.getUser().getUsername()).authorEmail(c.getUser() == null ? null : c.getUser().getEmail()).viewCount(c.getViewCount()).createdAt(c.getCreatedAt()).updatedAt(c.getUpdatedAt()).aiFlagged(m == null ? null : m.getAiFlagged()).aiReason(m == null ? null : m.getAiReason()).aiConfidence(m == null || m.getAiConfidence() == null ? null : m.getAiConfidence().doubleValue()).decisionReason(m == null ? null : m.getDecisionReason()).build(); }
+    private AdminContentResponse toResponse(Content c, ContentModeration m) {
+        Content matched = (c.getMatchedContentId() != null)
+                ? contentRepository.findById(c.getMatchedContentId()).orElse(null)
+                : null;
+        String matchedAuthor = null;
+        if (matched != null && matched.getUser() != null) {
+            matchedAuthor = (matched.getUser().getFullName() != null && !matched.getUser().getFullName().isBlank())
+                    ? matched.getUser().getFullName()
+                    : matched.getUser().getUsername();
+        }
+
+        return AdminContentResponse.builder()
+                .contentId(c.getContentId())
+                .contentType(c.getContentType())
+                .title(c.getTitle())
+                .slug(c.getSlug())
+                .status(c.getStatus())
+                .body(c.getBody())
+                .thumbnailUrl(c.getThumbnailUrl())
+                .mediaUrl(c.getMediaUrl())
+                .authorUsername(c.getUser() == null ? null : c.getUser().getUsername())
+                .authorEmail(c.getUser() == null ? null : c.getUser().getEmail())
+                .viewCount(c.getViewCount())
+                .createdAt(c.getCreatedAt())
+                .updatedAt(c.getUpdatedAt())
+                .aiFlagged(m == null ? null : m.getAiFlagged())
+                .aiReason(m == null ? null : m.getAiReason())
+                .aiConfidence(m == null || m.getAiConfidence() == null ? null : m.getAiConfidence().doubleValue())
+                .decisionReason(m == null ? null : m.getDecisionReason())
+                .moderationFlag(c.getModerationFlag())
+                .similarityScore(c.getSimilarityScore())
+                .matchedContentId(c.getMatchedContentId())
+                .matchedTitle(matched == null ? null : matched.getTitle())
+                .matchedAuthor(matchedAuthor)
+                .matchedBody(matched == null ? null : matched.getBody())
+                .matchedPublishedAt(matched == null ? null : matched.getCreatedAt())
+                .recipe(contentRecipePersistenceService.read(c.getContentId()))
+                .build();
+    }
 }

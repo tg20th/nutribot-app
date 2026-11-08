@@ -6,9 +6,12 @@ import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.entity.AccountStatus;
 import com.fpt.swp391.nutribot.entity.Role;
 import com.fpt.swp391.nutribot.entity.User;
+import com.fpt.swp391.nutribot.entity.UserModerationAction;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.UserRepository;
+import com.fpt.swp391.nutribot.repository.UserModerationActionRepository;
+import com.fpt.swp391.nutribot.repository.ModerationDecisionAuditRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -36,6 +40,15 @@ class AdminUserServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private UserModerationActionRepository userModerationActionRepository;
+
+    @Mock
+    private ModerationDecisionAuditRepository moderationDecisionAuditRepository;
 
     @InjectMocks
     private AdminUserService adminUserService;
@@ -109,6 +122,18 @@ class AdminUserServiceTest {
         assertThat(response.getStatus()).isEqualTo("BANNED");
         verify(userRepository).save(normalUser);
         assertThat(normalUser.getStatus()).isEqualTo(AccountStatus.BANNED);
+        ArgumentCaptor<UserModerationAction> historyCaptor = ArgumentCaptor.forClass(UserModerationAction.class);
+        verify(userModerationActionRepository).save(historyCaptor.capture());
+        UserModerationAction history = historyCaptor.getValue();
+        assertThat(history.getAction()).isEqualTo("BAN");
+        assertThat(history.getSource()).isEqualTo("MANUAL");
+        assertThat(history.getPreviousStatus()).isEqualTo("ACTIVE");
+        assertThat(history.getNewStatus()).isEqualTo("BANNED");
+        assertThat(history.getReason()).isEqualTo("Nghi ngờ gian lận đăng bài");
+        ArgumentCaptor<Object> suspensionEventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(suspensionEventCaptor.capture());
+        assertThat(suspensionEventCaptor.getValue()).isInstanceOf(com.fpt.swp391.nutribot.event.AccountSuspendedEvent.class);
+        assertThat(((com.fpt.swp391.nutribot.event.AccountSuspendedEvent) suspensionEventCaptor.getValue()).strikeBased()).isFalse();
     }
 
     @Test
@@ -128,6 +153,15 @@ class AdminUserServiceTest {
 
         assertThat(response.getStatus()).isEqualTo("ACTIVE");
         assertThat(normalUser.getStrikeCount()).isEqualTo(0);
+        ArgumentCaptor<UserModerationAction> historyCaptor = ArgumentCaptor.forClass(UserModerationAction.class);
+        verify(userModerationActionRepository).save(historyCaptor.capture());
+        UserModerationAction history = historyCaptor.getValue();
+        assertThat(history.getAction()).isEqualTo("UNBAN");
+        assertThat(history.getSource()).isEqualTo("MANUAL");
+        assertThat(history.getPreviousStatus()).isEqualTo("BANNED");
+        assertThat(history.getNewStatus()).isEqualTo("ACTIVE");
+        assertThat(history.getReason()).isEqualTo("Đã khiếu nại thành công");
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

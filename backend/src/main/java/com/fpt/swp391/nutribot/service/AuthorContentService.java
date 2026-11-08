@@ -15,6 +15,7 @@ import com.fpt.swp391.nutribot.entity.RecipeConsentAuditLog;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.event.ContentModerationRequestedEvent;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
+import com.fpt.swp391.nutribot.exception.ConflictException;
 import com.fpt.swp391.nutribot.exception.ForbiddenException;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.CategoryRepository;
@@ -39,8 +40,11 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.Normalizer;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Slf4j
@@ -104,14 +108,28 @@ public class AuthorContentService {
 
         validateVideoFields(contentType, request.getMediaUrl(), request.getDurationSec());
 
+        // NB-97: 1. Kiểm tra tiêu đề trùng lặp (không phân biệt hoa thường, bỏ khoảng trắng thừa)
+        String normalizedTitle = ContentTextNormalizer.normalizeTitle(request.getTitle());
+        if (contentRepository.existsByContentTypeAndTitleIgnoreCase(contentType, normalizedTitle)) {
+            throw new ConflictException("Tiêu đề bài viết này đã tồn tại trong hệ thống. Vui lòng chọn tiêu đề khác.");
+        }
+
+        // NB-97: 2. Tính mã băm nội dung và kiểm tra sao chép nguyên văn 100%
+        String normalizedBody = normalizeBody(request.getBody());
+        String contentHash = ContentTextNormalizer.computeContentHash(normalizedBody);
+        if (!contentHash.isBlank() && contentRepository.findFirstByContentTypeAndContentHash(contentType, contentHash).isPresent()) {
+            throw new ConflictException("Nội dung bài viết trùng lặp hoàn toàn với một bài đăng đã có trong hệ thống.");
+        }
+
         boolean consentGranted = Boolean.TRUE.equals(request.getRecipeConsent());
         Content content = Content.builder()
                 .user(user)
                 .contentType(contentType)
                 .categoryId(request.getCategoryId())
-                .title(request.getTitle())
-                .slug(generateSlug(request.getTitle()))
-                .body(normalizeBody(request.getBody()))
+                .title(normalizedTitle)
+                .slug(generateSlug(normalizedTitle))
+                .body(normalizedBody)
+                .contentHash(contentHash.isBlank() ? null : contentHash)
                 .mediaUrl(request.getMediaUrl())
                 .thumbnailUrl(request.getThumbnailUrl())
                 .durationSec(request.getDurationSec())
@@ -183,11 +201,31 @@ public class AuthorContentService {
         }
 
         if (request.getTitle() != null && !request.getTitle().isBlank()) {
-            content.setTitle(request.getTitle());
-            content.setSlug(generateSlug(request.getTitle()));
+            String normalizedTitle = ContentTextNormalizer.normalizeTitle(request.getTitle());
+            String currentNormalizedTitle = ContentTextNormalizer.normalizeTitle(content.getTitle());
+            // NB-97: Chỉ kiểm tra trùng và cập nhật slug nếu tác giả thực sự thay đổi tiêu đề
+            if (!normalizedTitle.equalsIgnoreCase(currentNormalizedTitle)) {
+                if (contentRepository.existsByContentTypeAndTitleIgnoreCaseAndContentIdNot(
+                        content.getContentType(), normalizedTitle, contentId)) {
+                    throw new ConflictException("Tiêu đề bài viết này đã tồn tại trong hệ thống. Vui lòng chọn tiêu đề khác.");
+                }
+                content.setTitle(normalizedTitle);
+                content.setSlug(generateSlug(normalizedTitle));
+            }
         }
         if (request.getBody() != null) {
-            content.setBody(normalizeBody(request.getBody()));
+            String normalizedBody = normalizeBody(request.getBody());
+            String newHash = ContentTextNormalizer.computeContentHash(normalizedBody);
+            String currentHash = content.getContentHash();
+            // NB-97: Chỉ kiểm tra trùng băm nội dung nếu nội dung bài viết thực sự thay đổi
+            if (!newHash.isBlank() && !newHash.equals(currentHash)) {
+                if (contentRepository.findFirstByContentTypeAndContentHashAndContentIdNot(
+                        content.getContentType(), newHash, contentId).isPresent()) {
+                    throw new ConflictException("Nội dung bài viết trùng lặp hoàn toàn với một bài đăng đã có trong hệ thống.");
+                }
+            }
+            content.setBody(normalizedBody);
+            content.setContentHash(newHash.isBlank() ? null : newHash);
         }
         if (request.getMediaUrl() != null) {
             content.setMediaUrl(request.getMediaUrl());
@@ -327,11 +365,62 @@ public class AuthorContentService {
         }
     }
 
-    /** Remove browser clipboard fragment wrappers without touching valid HTML. */
+    /** Convert incoming rich-text/HTML body content to readable plain text. */
     static String normalizeBody(String body) {
         if (body == null) return null;
-        return body.replaceAll("(?i)<!--\\s*StartFragment\\s*-->", "")
-                .replaceAll("(?i)<!--\\s*EndFragment\\s*-->", "");
+        String text = body.replaceAll("(?is)<!--.*?-->", "")
+                .replaceAll("(?i)<br\\s*/?>", "\n")
+                .replaceAll("(?i)</(?:p|div|h[1-6]|li|blockquote|tr)\\s*>", "\n")
+                .replaceAll("(?i)<(?:p|div|h[1-6]|li|blockquote|tr)(?:\\s[^>]*)?>", "")
+                .replaceAll("(?s)<[^>]*>", "");
+        text = decodeHtmlEntities(text)
+                .replace('\u00A0', ' ')
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .replaceAll("(?m)[ \\t]+$", "")
+                .replaceAll("\n{3,}", "\n\n");
+        return text.trim();
+    }
+
+    private static String decodeHtmlEntities(String value) {
+        Map<String, String> entities = new HashMap<>();
+        entities.put("amp", "&");
+        entities.put("lt", "<");
+        entities.put("gt", ">");
+        entities.put("quot", "\"");
+        entities.put("apos", "'");
+        entities.put("nbsp", " ");
+        entities.put("hellip", "…");
+        entities.put("ndash", "–");
+        entities.put("mdash", "—");
+        entities.put("rsquo", "’");
+        entities.put("lsquo", "‘");
+        entities.put("rdquo", "”");
+        entities.put("ldquo", "“");
+        entities.put("copy", "©");
+        entities.put("reg", "®");
+        entities.put("trade", "™");
+        Pattern entityPattern = Pattern.compile("&(#x[0-9a-fA-F]+|#[0-9]+|[A-Za-z][A-Za-z0-9]+);?");
+        var matcher = entityPattern.matcher(value);
+        StringBuffer decoded = new StringBuffer();
+        while (matcher.find()) {
+            String token = matcher.group(1);
+            String replacement = null;
+            try {
+                if (token.startsWith("#x") || token.startsWith("#X")) {
+                    replacement = new String(Character.toChars(Integer.parseInt(token.substring(2), 16)));
+                } else if (token.startsWith("#")) {
+                    replacement = new String(Character.toChars(Integer.parseInt(token.substring(1))));
+                } else {
+                    replacement = entities.get(token.toLowerCase());
+                }
+            } catch (IllegalArgumentException ignored) {
+                // Preserve malformed or out-of-range entities as entered.
+            }
+            matcher.appendReplacement(decoded, Matcher.quoteReplacement(replacement == null ? matcher.group() : replacement));
+        }
+        matcher.appendTail(decoded);
+        return decoded.toString();
     }
 
     private void saveOrUpdateModeration(Integer contentId, ContentModerationGatewayService.ModerationResult moderation, boolean isApproved) {
@@ -486,6 +575,7 @@ public class AuthorContentService {
 
     private AuthorContentResponse toAuthorResponse(Content content) {
         String avatar = content.getUser() != null ? content.getUser().getAvatarUrl() : null;
+        ContentModeration moderation = contentModerationRepository.findByContentId(content.getContentId()).orElse(null);
         return AuthorContentResponse.builder()
                 .contentId(content.getContentId())
                 .contentType(content.getContentType())
@@ -499,6 +589,10 @@ public class AuthorContentService {
                 .thumbnailUrl(content.getThumbnailUrl())
                 .durationSec(content.getDurationSec())
                 .status(content.getStatus())
+                .moderationReason(moderation == null ? null : moderation.getDecisionReason())
+                .moderationReviewedAt(moderation == null ? null : moderation.getReviewedAt())
+                .moderationReviewedBy(moderation == null ? null : moderation.getReviewedBy())
+                .currentStrikeCount(content.getUser() == null ? null : content.getUser().getStrikeCount())
                 .authorId(content.getUser() != null ? content.getUser().getUserId() : null)
                 .authorUsername(content.getUser() != null ? content.getUser().getUsername() : null)
                 .authorName(content.getUser() != null ? content.getUser().getFullName() : null)

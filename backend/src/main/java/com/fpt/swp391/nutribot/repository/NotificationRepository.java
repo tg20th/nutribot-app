@@ -39,6 +39,9 @@ public interface NotificationRepository extends JpaRepository<Notification, Inte
             @Param("referenceId") Integer referenceId,
             Pageable pageable);
 
+    boolean existsByRecipient_UserIdAndTypeAndReferenceTypeAndReferenceId(
+            Integer recipientId, String type, String referenceType, Integer referenceId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Transactional
     @Query("update Notification n set n.readAt = :readAt where n.recipient.userId = :recipientId and n.readAt is null")

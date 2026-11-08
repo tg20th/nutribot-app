@@ -91,6 +91,7 @@ export default function WeeklyMealPlannerPage() {
   const [pendingMealRemoval, setPendingMealRemoval] = useState(null);
   const [showGrocery, setShowGrocery] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [showGeneratingBanner, setShowGeneratingBanner] = useState(false);
   const [aiPreview, setAiPreview] = useState(null);
   const [showAiPreview, setShowAiPreview] = useState(false);
   const [previewReplaceTarget, setPreviewReplaceTarget] = useState(null);
@@ -208,6 +209,16 @@ export default function WeeklyMealPlannerPage() {
   useEffect(() => {
     if (dishError) toast.error('The dish catalog is unavailable, so a dish cannot be added yet.');
   }, [dishError, toast]);
+
+  useEffect(() => {
+    if (!generatingPlan) {
+      setShowGeneratingBanner(false);
+      return undefined;
+    }
+    setShowGeneratingBanner(true);
+    const timer = window.setTimeout(() => setShowGeneratingBanner(false), 30000);
+    return () => window.clearTimeout(timer);
+  }, [generatingPlan]);
 
   useGSAP(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
@@ -710,7 +721,7 @@ export default function WeeklyMealPlannerPage() {
             </div>
           </header>
 
-          {generatingPlan && !showRegenerateConfirm && <div className="planner-toast is-saving" role="status" aria-live="polite"><Loader2 size={15} className="is-spinning"/><span>Generating your AI meal plan...</span></div>}
+          {showGeneratingBanner && !showRegenerateConfirm && <div className="planner-toast is-saving" role="status" aria-live="polite"><Loader2 size={15} className="is-spinning"/><span>Generating your AI meal plan...</span></div>}
           {false && <><div className="planner-content-heading">
             <div><span>Your menu</span><h2>Meals with room to move.</h2></div>
             <p>{['Add,', 'swap,', 'and shape this week your way.'].map((word) => <span className="planner-scrub-word" key={word}>{word} </span>)}</p>

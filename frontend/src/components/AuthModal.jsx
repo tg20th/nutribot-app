@@ -5,6 +5,7 @@ import { loginAccount, registerAccount, resendRegistrationOtp, verifyRegistratio
 import { getLoginErrorMessage, getLoginErrorState } from '../services/loginErrorState';
 import { useToast } from './notifications/ToastProvider';
 import EmailVerificationStep from './auth/EmailVerificationStep';
+import AccountSuspendedView from './auth/AccountSuspendedView';
 import '../styles/auth-popup.css';
 
 const emptyForm = { name: '', username: '', email: '', password: '', confirmPassword: '' };
@@ -76,12 +77,18 @@ function validateLogin(form) {
   return errors;
 }
 
-export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthenticated, verification = {}, backdropClassName = '' }) {
+export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthenticated, verification = {}, backdropClassName = '', initialLoginErrorState = null }) {
   const { toast } = useToast();
   const [form, setForm] = useState(emptyForm);
   const [touched, setTouched] = useState({});
   const [error, setError] = useState('');
-  const [loginErrorState, setLoginErrorState] = useState(null);
+  const [loginErrorState, setLoginErrorState] = useState(() => {
+    if (initialLoginErrorState) return initialLoginErrorState;
+    if (typeof window === 'undefined') return null;
+    const state = window.sessionStorage.getItem('nutribot-oauth-error-state');
+    if (state) window.sessionStorage.removeItem('nutribot-oauth-error-state');
+    return state;
+  });
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -211,6 +218,10 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
       setVerificationState(otpErrorState(requestError));
     }
   };
+
+  if (!isSignup && loginErrorState === 'ACCOUNT_BLOCKED') {
+    return <div className={`modal-backdrop auth-backdrop ${backdropClassName}`.trim()} role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><AccountSuspendedView onClose={() => { setLoginErrorState(null); setError(''); }}/></div>;
+  }
   const resendOtp = async () => {
     if (!isEmail(email)) {
       setVerificationState('error');

@@ -1,29 +1,45 @@
-import { Bot, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleCheck, CircleX, FileText, ListOrdered, Maximize2, Search, ShieldCheck, SlidersHorizontal, Sparkles, UtensilsCrossed, Video, X, ZoomIn, ZoomOut } from 'lucide-react';
+import { AlertTriangle, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, CircleCheck, CircleX, FileText, ListOrdered, Maximize2, Search, ShieldCheck, SlidersHorizontal, Sparkles, UtensilsCrossed, Video, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { adminApi } from '../../services/adminApi';
 import { AdminToolbar, EmptyState, ErrorState, LoadingState, PageHeader, Toast } from '../../components/admin/AdminUi';
+import ContentDiffModal from '../../components/admin/ContentDiffModal';
+import { extractStoryText } from '../../utils/content';
 
 const pageSize = 10;
 const actions = {
   APPROVE: { title: 'Approve content', label: 'Confirm Approval', message: 'Content approved and published.', confirmClass: 'primary' },
   REJECT: { title: 'Reject content', label: 'Confirm Rejection', message: 'Content rejected.' },
 };
+const rejectionReasons = [
+  ['INAPPROPRIATE_CONTENT', 'Inappropriate or offensive content'],
+  ['MISLEADING_INFORMATION', 'Misleading or inaccurate information'],
+  ['SPAM', 'Spam or promotional content'],
+  ['COPYRIGHT_CONCERN', 'Copyright or ownership concerns'],
+  ['LOW_QUALITY_CONTENT', 'Incomplete or low-quality content'],
+  ['COMMUNITY_GUIDELINES_VIOLATION', 'Content violates community guidelines'],
+  ['OTHER', 'Other reason'],
+];
+const rejectionReasonText = Object.fromEntries(rejectionReasons);
+const rejectionReasonMaxLength = 1000;
 
-function ModerationDecisionDialog({ decision, reason, error, submitting, onReasonChange, onClose, onConfirm }) {
+function ModerationDecisionDialog({ decision, reason, rejectionReasonCode, error, submitting, onReasonChange, onRejectionReasonCodeChange, onClose, onConfirm }) {
   if (!decision) return null;
   const rejecting = decision.action === 'REJECT';
   const trimmedReason = reason.trim();
+  const validRejectReason = rejectionReasonCode && (rejectionReasonCode !== 'OTHER' || trimmedReason.length > 0);
   return <div className="admin-modal-backdrop moderation-decision-backdrop" onMouseDown={submitting ? undefined : onClose}>
     <section className="admin-dialog moderation-decision-dialog" role="dialog" aria-modal="true" aria-labelledby="moderation-decision-title" onMouseDown={(event) => event.stopPropagation()}>
+      <button type="button" className="moderation-decision-close" aria-label="Close confirmation" title="Close" disabled={submitting} onClick={onClose}><X size={17} aria-hidden="true" /></button>
       <p>{rejecting ? 'REJECTION CONFIRMATION' : 'APPROVAL CONFIRMATION'}</p>
       <h2 id="moderation-decision-title">{actions[decision.action].title}</h2>
+      {rejecting && <span className="moderation-decision-description">Select a reason for rejecting this submission. The author will be notified of your decision.</span>}
       <span className="moderation-decision-content-title">{decision.item.title}</span>
-      <label className="moderation-reason-field" htmlFor="moderation-decision-reason">
-        <b>{rejecting ? 'Rejection reason' : 'Approval reason'}{rejecting ? ' *' : ' (optional)'}</b>
-        <textarea id="moderation-decision-reason" value={reason} disabled={submitting} onChange={(event) => onReasonChange(event.target.value)} placeholder={rejecting ? 'Explain why this content is being rejected' : 'Add a note about why this content is approved (optional)'} aria-invalid={Boolean(error)} aria-describedby={error ? 'moderation-decision-error' : undefined} />
-      </label>
+      {rejecting ? <>
+        <label className="moderation-reason-field" htmlFor="moderation-rejection-reason-code"><b>Reason for rejection *</b><select id="moderation-rejection-reason-code" value={rejectionReasonCode} disabled={submitting} onChange={(event) => onRejectionReasonCodeChange(event.target.value)}><option value="">Select a rejection reason</option>{rejectionReasons.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
+        {rejectionReasonCode === 'OTHER' && <label className="moderation-reason-field" htmlFor="moderation-decision-reason"><b>Custom reason *</b><textarea id="moderation-decision-reason" maxLength={rejectionReasonMaxLength} value={reason} disabled={submitting} onChange={(event) => onReasonChange(event.target.value)} placeholder="Explain why this content cannot be approved..." aria-invalid={Boolean(error)} aria-describedby={error ? 'moderation-decision-error' : undefined} /><small className="moderation-reason-count">{reason.length}/{rejectionReasonMaxLength}</small></label>}
+      </> : <label className="moderation-reason-field" htmlFor="moderation-decision-reason"><b>Approval reason (optional)</b><textarea id="moderation-decision-reason" value={reason} disabled={submitting} onChange={(event) => onReasonChange(event.target.value)} placeholder="Add a note about why this content is approved (optional)" aria-invalid={Boolean(error)} aria-describedby={error ? 'moderation-decision-error' : undefined} /></label>}
       {error && <p id="moderation-decision-error" className="moderation-decision-error" role="alert">{error}</p>}
-      <div className="moderation-decision-actions"><button type="button" className="admin-btn secondary" disabled={submitting} onClick={onClose}>Cancel</button><button type="button" className={`admin-btn ${actions[decision.action].confirmClass || 'danger'}`} disabled={submitting || (rejecting && !trimmedReason)} onClick={onConfirm}>{submitting ? 'Saving...' : actions[decision.action].label}</button></div>
+      <div className="moderation-decision-actions"><button type="button" className="admin-btn secondary" disabled={submitting} onClick={onClose}>Cancel</button><button type="button" className={`admin-btn ${actions[decision.action].confirmClass || 'danger'}`} disabled={submitting || (rejecting && !validRejectReason)} onClick={onConfirm}>{submitting ? 'Saving...' : rejecting ? 'Reject content' : actions[decision.action].label}</button></div>
     </section>
   </div>;
 }
@@ -75,6 +91,25 @@ function parseRecipeBody(rawBody) {
 const validMinutes = (value) => {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
+};
+
+function normalizeRecipeData(recipe) {
+  if (!recipe || typeof recipe !== 'object') return null;
+  const nutrition = recipe.nutrition || recipe.details || {};
+  const ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
+  const steps = Array.isArray(recipe.steps) ? recipe.steps : [];
+  const hasRecipeData = recipe.story || ingredients.length || steps.length
+    || Object.values(nutrition).some((value) => value != null && value !== '')
+    || recipe.prepMinutes != null || recipe.cookMinutes != null || recipe.servings != null;
+  return hasRecipeData ? {
+    story: recipe.story || recipe.description || '',
+    prepMinutes: recipe.prepMinutes ?? recipe.prepTimeMin ?? nutrition.prepMinutes ?? '',
+    cookMinutes: recipe.cookMinutes ?? recipe.cookTimeMin ?? nutrition.cookMinutes ?? '',
+    servings: recipe.servings ?? nutrition.servings ?? '',
+    nutrition,
+    ingredients,
+    steps,
+  } : null;
 };
 
 const ingredientParts = (ingredient) => {
@@ -200,7 +235,8 @@ function RecipeOverview({ recipe, expanded, onToggle }) {
   const total = prep != null && cook != null ? prep + cook : null;
   const time = total != null ? `${total} min total` : [prep != null && `Prep ${prep} min`, cook != null && `Cook ${cook} min`].filter(Boolean).join(' · ');
   const nutrition = recipe.nutrition || {};
-  const hasOverview = time || recipe.servings || nutrition.calories != null || recipe.ingredients.length || recipe.steps.length;
+  const hasNutrition = Object.values(nutrition).some((value) => value != null && value !== '');
+  const hasOverview = time || recipe.servings || hasNutrition || recipe.ingredients.length || recipe.steps.length;
 
   if (!hasOverview) return null;
 
@@ -279,13 +315,14 @@ function FullRecipeDetails({ recipe }) {
   );
 }
 
-function ModerationSubmissionContent({ body, recipeExpanded, onToggleRecipe, contentImages, onOpenImage }) {
-  const recipe = parseRecipeBody(body);
+function ModerationSubmissionContent({ body, recipeData, recipeExpanded, onToggleRecipe, contentImages, onOpenImage }) {
+  const recipe = normalizeRecipeData(recipeData) || parseRecipeBody(body);
+  const plainBody = extractStoryText(body);
 
   if (!recipe) {
     return <section className="moderation-story-section" aria-labelledby="story-title">
       <div className="moderation-section-heading"><h3 id="story-title">The story</h3></div>
-      {body ? <p className="moderation-plain-content">{body}</p> : <p className="moderation-no-body">No additional content details are available for this submission.</p>}
+      {plainBody ? <p className="moderation-plain-content">{plainBody}</p> : <p className="moderation-no-body">No additional content details are available for this submission.</p>}
       <ContentImageGallery images={contentImages} onOpen={onOpenImage} />
     </section>;
   }
@@ -293,11 +330,48 @@ function ModerationSubmissionContent({ body, recipeExpanded, onToggleRecipe, con
   return <>
     <section className="moderation-story-section" aria-labelledby="story-title">
       <div className="moderation-section-heading"><h3 id="story-title">The story</h3></div>
-      {recipe.story ? <p className="moderation-plain-content">{recipe.story}</p> : <p className="moderation-no-body">No story is available for this recipe submission.</p>}
+      {plainBody ? <p className="moderation-plain-content">{plainBody}</p> : <p className="moderation-no-body">No story is available for this recipe submission.</p>}
       <ContentImageGallery images={contentImages} onOpen={onOpenImage} />
     </section>
     <RecipeOverview recipe={recipe} expanded={recipeExpanded} onToggle={onToggleRecipe} />
   </>;
+}
+
+function renderPolicyAssessment(text) {
+  if (!text) return 'No AI evaluation is available for this submission.';
+  const evidenceMarker = text.search(/(?:hình ảnh|ảnh|image)[^,.!?]*\b(?:hiển thị|display(?:s|ed)?)\s+/i);
+  const violationMarker = text.search(/vi phạm chính sách|violat(?:es|ing)\s+(?:the\s+)?policy/i);
+  if (evidenceMarker < 0 || violationMarker <= evidenceMarker) return text;
+  const evidenceMatch = text.slice(evidenceMarker).match(/(?:hiển thị|display(?:s|ed)?)\s+/i);
+  const evidenceStart = evidenceMarker + (evidenceMatch?.[0].length || 0);
+  const evidenceEnd = text.lastIndexOf(',', violationMarker);
+  const policyEndMatch = text.slice(violationMarker).match(/[.!?](?:\s|$)/);
+  const policyEnd = policyEndMatch ? violationMarker + policyEndMatch.index + 1 : text.length;
+  if (evidenceEnd <= evidenceStart || policyEnd <= violationMarker) return text;
+  return <>{text.slice(0, evidenceStart)}<strong className="moderation-assessment-highlight">{text.slice(evidenceStart, evidenceEnd).trim()}</strong>{text.slice(evidenceEnd, violationMarker)}<strong className="moderation-assessment-highlight">{text.slice(violationMarker, policyEnd).trim()}</strong>{text.slice(policyEnd)}</>;
+}
+
+function ModerationAssessment({ submission, onCompare }) {
+  const hasMatch = Boolean(submission.matchedContentId || submission.matchedTitle || submission.matchedAuthor);
+  const hasSimilarity = submission.similarityScore != null && Number.isFinite(Number(submission.similarityScore));
+  const similarityPercent = hasSimilarity ? Math.round(Number(submission.similarityScore) * 100) : null;
+  const isFormattedDuplicate = hasMatch && submission.matchedTitle && submission.matchedAuthor && hasSimilarity;
+  return <section className={`moderation-ai-review ${submission.aiReason || hasMatch ? (submission.aiFlagged !== false ? 'is-flagged' : 'is-passed') : 'is-empty'}`} aria-labelledby="ai-review-title">
+    <div className="moderation-section-heading">
+      <div className="moderation-ai-heading"><Bot size={16} aria-hidden="true" /><h3 id="ai-review-title">AI Review</h3></div>
+      <div className="moderation-ai-metrics">
+        {submission.aiConfidence != null && <span className="moderation-ai-confidence">Confidence: <strong>{Math.round(submission.aiConfidence * 100)}%</strong></span>}
+      </div>
+    </div>
+    <div className="moderation-assessment-row">
+      <p className="moderation-assessment-text">
+        {isFormattedDuplicate ? <>
+          Suspected duplication of <strong className="moderation-assessment-highlight">“{submission.matchedTitle}”</strong> by <strong className="moderation-assessment-highlight">{submission.matchedAuthor}</strong> with <strong className="moderation-assessment-highlight">{similarityPercent}% similarity</strong>.
+        </> : renderPolicyAssessment(submission.aiReason)}
+      </p>
+      {hasMatch && <button type="button" className="moderation-compare-action" onClick={onCompare}><Search size={15} aria-hidden="true" /> Compare</button>}
+    </div>
+  </section>;
 }
 
 function ModerationWorkspaceTabs({ active, onReviewQueue, onHistory }) {
@@ -349,6 +423,7 @@ export default function AdminModerationPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [confirm, setConfirm] = useState(null);
   const [decisionReason, setDecisionReason] = useState('');
+  const [rejectionReasonCode, setRejectionReasonCode] = useState('');
   const [decisionError, setDecisionError] = useState('');
   const [toast, setToast] = useState('');
   const [recipeExpanded, setRecipeExpanded] = useState(false);
@@ -357,6 +432,7 @@ export default function AdminModerationPage() {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxZoom, setLightboxZoom] = useState(1);
   const [brokenImages, setBrokenImages] = useState(() => new Set());
+  const [diffModalOpen, setDiffModalOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -430,17 +506,20 @@ export default function AdminModerationPage() {
   const decide = async () => {
     if (!confirm || submittingAction) return;
     const reason = decisionReason.trim();
-    if (confirm.action === 'REJECT' && !reason) {
+    if (confirm.action === 'REJECT' && (!rejectionReasonCode || (rejectionReasonCode === 'OTHER' && !reason))) {
       setDecisionError('A rejection reason is required.');
       return;
     }
+    const submittedReason = confirm.action === 'REJECT' ? (rejectionReasonCode === 'OTHER' ? reason : rejectionReasonText[rejectionReasonCode]) : reason;
     setSubmittingAction(true);
     setDecisionError('');
     try {
-      await adminApi.moderateContent(confirm.item.id, confirm.action, reason);
+      await adminApi.moderateContent(confirm.item.id, confirm.action, submittedReason);
       setToast(actions[confirm.action].message);
       setConfirm(null);
+      setDiffModalOpen(false);
       setDecisionReason('');
+      setRejectionReasonCode('');
       setSelectedId(null);
       setRefreshKey((key) => key + 1);
     } catch (requestError) {
@@ -536,16 +615,87 @@ export default function AdminModerationPage() {
                   </div>
                   {selected.decisionReason && <p className="moderation-latest-reason"><strong>Latest decision reason:</strong> {selected.decisionReason}</p>}
 
-                  <section className={`moderation-ai-review ${selected.aiReason ? (selected.aiFlagged !== false ? 'is-flagged' : 'is-passed') : 'is-empty'}`} aria-labelledby="ai-review-title">
-                    <div className="moderation-section-heading">
-                      <div className="moderation-ai-heading"><Bot size={16} /><h3 id="ai-review-title">AI Review</h3></div>
-                      {selected.aiConfidence != null && <span className="moderation-ai-confidence">Confidence: {Math.round(selected.aiConfidence * 100)}%</span>}
-                    </div>
-                    {selected.aiReason ? <p>{selected.aiReason}</p> : <p>No AI evaluation is available for this submission.</p>}
-                  </section>
+                  {false && Boolean(selected.moderationFlag === 'SUSPECTED_DUPLICATE' || selected.matchedContentId) && (
+                    <section
+                      className="moderation-duplicate-card"
+                      style={{
+                        backgroundColor: '#fffbeb',
+                        border: '1px solid #fde68a',
+                        borderRadius: '12px',
+                        padding: '1rem 1.25rem',
+                        marginBottom: '1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '1rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+                        <div
+                          style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '8px',
+                            backgroundColor: '#fef3c7',
+                            color: '#d97706',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <AlertTriangle size={20} />
+                        </div>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <strong style={{ fontSize: '0.9375rem', color: '#92400e' }}>
+                              Cảnh báo nội dung gần trùng lặp
+                            </strong>
+                            <span
+                              style={{
+                                backgroundColor: '#fee2e2',
+                                color: '#b91c1c',
+                                padding: '2px 8px',
+                                borderRadius: '9999px',
+                                fontSize: '0.75rem',
+                                fontWeight: '700',
+                              }}
+                            >
+                              {selected.similarityScore ? Math.round(selected.similarityScore * 100) : 80}% Tương đồng
+                            </span>
+                          </div>
+                          <p style={{ margin: '0.25rem 0 0', fontSize: '0.8125rem', color: '#b45309' }}>
+                            Nghi ngờ sao chép từ bài viết gốc: <strong>"{selected.matchedTitle || `Bài #${selected.matchedContentId}`}"</strong>
+                            {selected.matchedAuthor ? ` của tác giả ${selected.matchedAuthor}` : ''}
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setDiffModalOpen(true)}
+                        className="admin-btn secondary"
+                        style={{
+                          whiteSpace: 'nowrap',
+                          backgroundColor: '#f59e0b',
+                          color: '#ffffff',
+                          border: 'none',
+                          fontWeight: '600',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🔍 So sánh trực diện
+                      </button>
+                    </section>
+                  )}
+
+                  <ModerationAssessment submission={selected} onCompare={() => setDiffModalOpen(true)} />
 
                   <ModerationSubmissionContent
                     body={selected.body}
+                    recipeData={selected.recipe}
                     recipeExpanded={recipeExpanded}
                     onToggleRecipe={() => setRecipeExpanded((expanded) => !expanded)}
                     contentImages={selected.thumbnailUrl ? contentImages.slice(1) : contentImages}
@@ -554,8 +704,8 @@ export default function AdminModerationPage() {
 
                 </div>
                 <footer className="moderation-actions">
-                  <button type="button" className="admin-btn primary" disabled={submittingAction} onClick={() => { setDecisionReason(''); setDecisionError(''); setConfirm({ item: selected, action: 'APPROVE' }); }}><Check size={16} /> Approve</button>
-                  <button type="button" className="admin-btn danger" disabled={submittingAction} onClick={() => { setDecisionReason(''); setDecisionError(''); setConfirm({ item: selected, action: 'REJECT' }); }}><X size={16} /> Reject</button>
+                  <button type="button" className="admin-btn primary" disabled={submittingAction} onClick={() => { setDecisionReason(''); setRejectionReasonCode(''); setDecisionError(''); setConfirm({ item: selected, action: 'APPROVE' }); }}><Check size={16} /> Approve</button>
+                  <button type="button" className="admin-btn danger" disabled={submittingAction} onClick={() => { setDecisionReason(''); setRejectionReasonCode(''); setDecisionError(''); setConfirm({ item: selected, action: 'REJECT' }); }}><X size={16} /> Reject</button>
                 </footer>
               </article>
             </div>}
@@ -583,10 +733,29 @@ export default function AdminModerationPage() {
       onClose={() => setConfirm(null)}
       onConfirm={decide}
     />}
-    <ModerationDecisionDialog decision={confirm} reason={decisionReason} error={decisionError} submitting={submittingAction}
+    <ModerationDecisionDialog decision={confirm} reason={decisionReason} rejectionReasonCode={rejectionReasonCode} error={decisionError} submitting={submittingAction}
       onReasonChange={(value) => { setDecisionReason(value); if (decisionError) setDecisionError(''); }}
-      onClose={() => { setConfirm(null); setDecisionReason(''); setDecisionError(''); }} onConfirm={decide} />
+      onRejectionReasonCodeChange={(value) => { setRejectionReasonCode(value); if (value !== 'OTHER') setDecisionReason(''); if (decisionError) setDecisionError(''); }}
+      onClose={() => { setConfirm(null); setDecisionReason(''); setRejectionReasonCode(''); setDecisionError(''); }} onConfirm={decide} />
     <Toast message={toast} onDismiss={() => setToast('')} />
+    <ContentDiffModal
+      isOpen={diffModalOpen}
+      onClose={() => setDiffModalOpen(false)}
+      currentPost={selected}
+      submitting={submittingAction}
+      onApprove={(item) => {
+        setDecisionReason('');
+        setRejectionReasonCode('');
+        setDecisionError('');
+        setConfirm({ item, action: 'APPROVE' });
+      }}
+      onReject={(item, defaultReason) => {
+        setDecisionReason(defaultReason || 'Trùng lặp nội dung');
+        setRejectionReasonCode('OTHER');
+        setDecisionError('');
+        setConfirm({ item, action: 'REJECT' });
+      }}
+    />
     {preview && <span className="moderation-preview-marker" aria-hidden="true">Preview</span>}
   </div>;
 }

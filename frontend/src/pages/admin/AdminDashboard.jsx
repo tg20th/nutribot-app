@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle2, Clock3 } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { adminApi } from '../../services/adminApi';
 import { adminIngredientApi } from '../../services/adminIngredientApi';
 import { ErrorState, LoadingState, PageHeader } from '../../components/admin/AdminUi';
@@ -8,12 +8,13 @@ import ErrorPage from '../../components/errors/ErrorPage';
 import '../../styles/admin-dashboard.css';
 
 const trendPeriods = {
-  week: { days: 7, buckets: 7, label: 'Last 7 days' },
-  month: { days: 30, buckets: 10, label: 'Last 30 days' },
-  quarter: { days: 90, buckets: 10, label: 'Last 90 days' },
+  week: { days: 7, label: 'Last 7 days' },
+  month: { days: 30, label: 'Last 30 days' },
+  quarter: { days: 90, label: 'Last 90 days' },
 };
 
-const chartColors = ['#315c2b', '#487548', '#5f8e62', '#779e70', '#8a9f5a', '#a5b86b', '#4b7d78', '#6b978d', '#8cae9a', '#6b7f54', '#9aab7c', '#b3c49a'];
+const CATEGORY_CHART_COLORS = ['#54B88A', '#9AD6AC', '#83BCE6', '#F5B48C', '#B7A5E2', '#EF9696', '#E7C75C', '#929EE0', '#E6A4C7', '#E9A36B'];
+const OTHERS_COLOR = '#D8DEDA';
 const numberFormat = new Intl.NumberFormat('en-US');
 
 const buildContentTrend = (content, periodKey) => {
@@ -21,10 +22,9 @@ const buildContentTrend = (content, periodKey) => {
   const now = new Date();
   const start = new Date(now);
   start.setDate(now.getDate() - period.days + 1);
-  const bucketSize = Math.max(1, Math.ceil(period.days / period.buckets));
-  const buckets = Array.from({ length: period.buckets }, (_, index) => {
+  const buckets = Array.from({ length: period.days }, (_, index) => {
     const bucketStart = new Date(start);
-    bucketStart.setDate(start.getDate() + index * bucketSize);
+    bucketStart.setDate(start.getDate() + index);
     return {
       label: bucketStart.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
       start: bucketStart,
@@ -35,7 +35,7 @@ const buildContentTrend = (content, periodKey) => {
   content.forEach((item) => {
     const publishedAt = new Date(item.publishedAt ?? item.createdAt ?? item.updatedAt);
     if (Number.isNaN(publishedAt.getTime()) || publishedAt < start || publishedAt > now) return;
-    const index = Math.min(period.buckets - 1, Math.floor((publishedAt - start) / 86400000 / bucketSize));
+    const index = Math.min(period.days - 1, Math.floor((publishedAt - start) / 86400000));
     buckets[index].value += 1;
   });
   return buckets;
@@ -65,36 +65,29 @@ const categoryColorKey = (category) => String(category.id ?? `label:${category.l
 
 const categoryHash = (key) => [...key].reduce((hash, character) => ((hash * 31) + character.charCodeAt(0)) >>> 0, 7);
 
-const generatedBotanicalColor = (key, attempt = 0) => {
-  const hue = 88 + ((categoryHash(`${key}:${attempt}`) * 137.508) % 185);
-  const saturation = 32 + (categoryHash(`${key}:saturation`) % 14);
-  const lightness = 36 + (categoryHash(`${key}:lightness`) % 18);
-  return `hsl(${hue.toFixed(1)} ${saturation}% ${lightness}%)`;
-};
-
 const buildCategoryColors = (categories) => {
   const colorMap = {};
-  const usedColors = new Set();
-  [...categories].sort((left, right) => categoryColorKey(left).localeCompare(categoryColorKey(right))).forEach((category) => {
+  categories.forEach((category) => {
     const key = categoryColorKey(category);
-    const paletteStart = categoryHash(key) % chartColors.length;
-    let color = null;
-    for (let offset = 0; offset < chartColors.length; offset += 1) {
-      const candidate = chartColors[(paletteStart + offset) % chartColors.length];
-      if (!usedColors.has(candidate)) {
-        color = candidate;
-        break;
-      }
-    }
-    let attempt = 0;
-    while (!color || usedColors.has(color)) {
-      color = generatedBotanicalColor(key, attempt);
-      attempt += 1;
-    }
-    colorMap[key] = color;
-    usedColors.add(color);
+    colorMap[key] = category.isUncategorized ? OTHERS_COLOR : CATEGORY_CHART_COLORS[categoryHash(key) % CATEGORY_CHART_COLORS.length];
   });
   return colorMap;
+};
+
+const buildDisplayCategorySlices = (categories, limit = 10) => {
+  const ranked = categories.filter((category) => category.countValid && category.value > 0);
+  const top = ranked.slice(0, limit).map((category, index) => ({ ...category, chartColor: CATEGORY_CHART_COLORS[index] }));
+  const remaining = ranked.slice(limit);
+  if (!remaining.length) return { slices: top, others: null, remaining: [] };
+  const others = {
+    id: '__others__',
+    label: 'Others',
+    value: remaining.reduce((sum, category) => sum + category.value, 0),
+    countValid: true,
+    isOthers: true,
+    chartColor: OTHERS_COLOR,
+  };
+  return { slices: [...top, others], others, remaining };
 };
 
 const donutBackground = (slices, colors) => {
@@ -103,13 +96,28 @@ const donutBackground = (slices, colors) => {
   let offset = 0;
   return `conic-gradient(${slices.map((slice, index) => {
     const next = offset + (slice.value / total) * 100;
-    const segment = `${colors[categoryColorKey(slice)] ?? chartColors[index % chartColors.length]} ${offset}% ${next}%`;
+    const color = slice.chartColor ?? colors[categoryColorKey(slice)] ?? (slice.isUncategorized ? OTHERS_COLOR : CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length]);
+    const separator = next < 100 ? Math.min(0.35, (next - offset) / 4) : 0;
+    const segment = `${color} ${offset}% ${Math.max(offset, next - separator)}%, #fff ${Math.max(offset, next - separator)}% ${next}%`;
     offset = next;
     return segment;
   }).join(', ')})`;
 };
 
-export { buildCategorySlices, buildCategoryColors, categoryColorKey, donutBackground };
+const donutSlicePath = (startPercent, endPercent, innerRadius = 28, outerRadius = 50) => {
+  const point = (percent, radius) => {
+    const angle = (percent / 100) * Math.PI * 2 - Math.PI / 2;
+    return [50 + radius * Math.cos(angle), 50 + radius * Math.sin(angle)];
+  };
+  const startOuter = point(startPercent, outerRadius);
+  const endOuter = point(endPercent, outerRadius);
+  const endInner = point(endPercent, innerRadius);
+  const startInner = point(startPercent, innerRadius);
+  const largeArc = endPercent - startPercent > 50 ? 1 : 0;
+  return `M ${startOuter.join(' ')} A ${outerRadius} ${outerRadius} 0 ${largeArc} 1 ${endOuter.join(' ')} L ${endInner.join(' ')} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${startInner.join(' ')} Z`;
+};
+
+export { CATEGORY_CHART_COLORS, OTHERS_COLOR, buildCategorySlices, buildDisplayCategorySlices, buildCategoryColors, categoryColorKey, donutBackground, buildContentTrend };
 
 const Metric = ({ label, value, to, description }) => {
   const content = (
@@ -126,6 +134,10 @@ export default function AdminDashboard() {
   const [dashboard, setDashboard] = useState(null);
   const [ingredientTotal, setIngredientTotal] = useState(0);
   const [trendPeriod, setTrendPeriod] = useState('month');
+  const [hoveredTrendIndex, setHoveredTrendIndex] = useState(null);
+  const [othersOpen, setOthersOpen] = useState(false);
+  const [othersQuery, setOthersQuery] = useState('');
+  const [othersSort, setOthersSort] = useState('count');
   const [error, setError] = useState(null);
   const [retryKey, setRetryKey] = useState(0);
 
@@ -146,23 +158,32 @@ export default function AdminDashboard() {
   const trend = useMemo(() => buildContentTrend(dashboard?.content ?? [], trendPeriod), [dashboard, trendPeriod]);
   const allCategories = useMemo(() => buildCategorySlices(dashboard?.categories ?? []), [dashboard]);
   const chartCategories = useMemo(() => allCategories.filter((category) => category.countValid && category.value > 0), [allCategories]);
-  const categoryColors = useMemo(() => buildCategoryColors(chartCategories), [chartCategories]);
-  const hasCategorizedContent = chartCategories.some((category) => !category.isUncategorized);
+  const categoryDisplay = useMemo(() => buildDisplayCategorySlices(chartCategories), [chartCategories]);
+  const displaySlices = categoryDisplay.slices;
+  const categoryColors = useMemo(() => buildCategoryColors(displaySlices), [displaySlices]);
+  const hasCategorizedContent = displaySlices.some((category) => !category.isUncategorized);
   const uncategorizedContent = allCategories.find((category) => category.isUncategorized)?.value ?? 0;
-  const categoryLegend = <div className="dashboard-legend">{allCategories.map((category) => <div className={`dashboard-legend__item${category.value === 0 || !category.countValid ? ' is-zero' : ''}`} key={category.id ?? category.label}><i style={{ background: category.countValid && category.value > 0 ? categoryColors[categoryColorKey(category)] : 'var(--border)' }} /><span>{category.label}</span><strong>{category.countValid ? numberFormat.format(category.value) : '—'}</strong></div>)}</div>;
+  const categoryTotal = displaySlices.reduce((sum, category) => sum + category.value, 0);
+  const filteredOthers = useMemo(() => {
+    const query = othersQuery.trim().toLowerCase();
+    return [...(categoryDisplay.remaining ?? [])].filter((category) => category.label.toLowerCase().includes(query)).sort((left, right) => othersSort === 'name' ? left.label.localeCompare(right.label) : right.value - left.value || left.label.localeCompare(right.label));
+  }, [categoryDisplay.remaining, othersQuery, othersSort]);
+  const categoryLegend = <div className="dashboard-legend">{displaySlices.map((category) => { const percent = categoryTotal ? (category.value / categoryTotal) * 100 : 0; const clickable = category.isOthers; return <div className={`dashboard-legend__item${clickable ? ' dashboard-legend__item--interactive' : ''}`} key={category.id ?? category.label} onClick={clickable ? () => setOthersOpen(true) : undefined} onKeyDown={clickable ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setOthersOpen(true); } } : undefined} role={clickable ? 'button' : undefined} tabIndex={clickable ? 0 : undefined}><i style={{ background: category.chartColor }} /><span>{category.label}</span><strong>{numberFormat.format(category.value)} <small>{percent.toFixed(1)}%</small></strong></div>; })}</div>;
   const trendMax = Math.max(1, ...trend.map((bucket) => bucket.value));
-  const workflowIndicators = [
-    { label: 'Published content', description: 'Live blogs and videos', value: Number(dashboard?.metrics?.publishedContent ?? 0), color: 'var(--primary)', Icon: CheckCircle2 },
-    { label: 'Pending moderation', description: 'Awaiting review', value: Number(dashboard?.metrics?.pendingModeration ?? 0), color: '#9aaf83', Icon: Clock3 },
-  ];
-  const workflowMax = Math.max(1, ...workflowIndicators.map((indicator) => indicator.value));
+  const adminReviewOutcomes = dashboard?.adminReviewOutcomes ?? null;
+  const reviewTotal = adminReviewOutcomes?.total ?? 0;
+  const reviewDonutBackground = adminReviewOutcomes?.total ? `conic-gradient(#54B88A 0 ${(adminReviewOutcomes.counts.approved / reviewTotal) * 100}%, #EF9696 ${(adminReviewOutcomes.counts.approved / reviewTotal) * 100}% 100%)` : 'var(--sage)';
   const growthAxisWidth = 44;
-  const growthPlotWidth = growthAxisWidth + trend.length * 72;
+  const growthPlotWidth = growthAxisWidth + Math.max(trend.length - 1, 1) * 72;
   const growthChartHeight = 390;
   const growthPlotTop = 30;
   const growthBaseline = 340;
   const growthHeight = growthBaseline - growthPlotTop;
   const growthMidpoint = growthPlotTop + growthHeight / 2;
+  const trendPoints = trend.map((bucket, index) => ({ ...bucket, x: growthAxisWidth + (trend.length === 1 ? 36 : index * 72), y: growthBaseline - ((bucket.value / trendMax) * growthHeight) }));
+  const publishedPath = trendPoints.map((point) => `${point.x},${point.y}`).join(' ');
+  const hoveredPoint = hoveredTrendIndex == null ? null : trendPoints[hoveredTrendIndex];
+  const hoveredDate = hoveredPoint?.start.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
 
   if (error?.status === 503) return <ErrorPage status={503} onRetry={() => { setDashboard(null); setError(null); setRetryKey((key) => key + 1); }}/>;
   if (error) return <ErrorState message={error.message || 'Unable to load dashboard data.'} />;
@@ -194,40 +215,29 @@ export default function AdminDashboard() {
 
       <section className="dashboard-panel dashboard-panel--growth" aria-labelledby="growth-title">
         <div className="dashboard-panel__heading">
-          <div><p className="dashboard-panel__eyebrow">PUBLISHING ACTIVITY</p><h2 id="growth-title">Platform growth</h2></div>
+          <div><p className="dashboard-panel__eyebrow">PUBLISHING ACTIVITY</p><h2 id="growth-title">Publishing Activity</h2></div>
           <span className="dashboard-panel__note">Published content · selected range</span>
         </div>
-        <div className="dashboard-growth-chart" role="img" aria-label={`Published content over the last ${trendPeriods[trendPeriod].label}`}>
+        <div className="dashboard-growth-chart" role="img" aria-label={`Published posts over the last ${trendPeriods[trendPeriod].label}`}>
           <svg className="dashboard-growth-svg" viewBox={`0 0 ${growthPlotWidth} ${growthChartHeight}`} preserveAspectRatio="none" aria-hidden="true">
               <line className="dashboard-growth-svg__gridline" x1={growthAxisWidth} x2={growthPlotWidth} y1={growthPlotTop} y2={growthPlotTop} />
               <line className="dashboard-growth-svg__gridline" x1={growthAxisWidth} x2={growthPlotWidth} y1={growthMidpoint} y2={growthMidpoint} />
               <line className="dashboard-growth-svg__baseline" x1={growthAxisWidth} x2={growthPlotWidth} y1={growthBaseline} y2={growthBaseline} />
-              {trend.map((bucket, index) => {
-                const barHeight = (bucket.value / trendMax) * growthHeight;
-                const x = growthAxisWidth + index * 72 + 16;
-                const y = growthBaseline - barHeight;
-                return (
-                  <g key={`${bucket.label}-${bucket.start.toISOString()}`}>
-                    <title>{`${bucket.label}: ${bucket.value} published content`}</title>
-                    <rect className="dashboard-growth-svg__bar" x={x} y={barHeight ? y : growthBaseline} width="40" height={barHeight} rx="2" />
-                  </g>
-                );
-              })}
+              <polyline className="dashboard-growth-svg__line" points={publishedPath}><title>Published posts</title></polyline>
+              {trendPoints.map((point, index) => <g key={`${point.label}-${point.start.toISOString()}`} onMouseEnter={() => setHoveredTrendIndex(index)} onMouseLeave={() => setHoveredTrendIndex(null)} onFocus={() => setHoveredTrendIndex(index)} onBlur={() => setHoveredTrendIndex(null)} onClick={() => setHoveredTrendIndex(index)}>
+                <circle className="dashboard-growth-svg__hit-area" cx={point.x} cy={point.y} r="16" tabIndex="0" role="button" aria-label={`${point.label}: ${point.value} published posts`} />
+                <circle className={`dashboard-growth-svg__marker${hoveredTrendIndex === index ? ' is-active' : ''}`} cx={point.x} cy={point.y} r={hoveredTrendIndex === index ? 5 : 3} />
+              </g>)}
           </svg>
+          {hoveredPoint && <div className="dashboard-growth-tooltip" style={{ left: `${Math.min(Math.max((hoveredPoint.x / growthPlotWidth) * 100, 12), 88)}%`, top: `${Math.max(25, (hoveredPoint.y / growthChartHeight) * 100 - 5)}%` }} role="status">
+            <div className="dashboard-growth-tooltip__date">{hoveredDate}</div>
+            <div className="dashboard-growth-tooltip__row"><span><i aria-hidden="true" />Published posts</span><strong>{hoveredPoint.value}</strong></div>
+          </div>}
           <div className="dashboard-growth-text-layer" aria-hidden="true">
             <span className="dashboard-growth-text dashboard-growth-text--axis" style={{ left: `${((growthAxisWidth - 8) / growthPlotWidth) * 100}%`, top: `${(growthPlotTop / growthChartHeight) * 100}%` }}>{trendMax}</span>
             <span className="dashboard-growth-text dashboard-growth-text--axis" style={{ left: `${((growthAxisWidth - 8) / growthPlotWidth) * 100}%`, top: `${(growthMidpoint / growthChartHeight) * 100}%` }}>{Math.ceil(trendMax / 2)}</span>
             <span className="dashboard-growth-text dashboard-growth-text--axis" style={{ left: `${((growthAxisWidth - 8) / growthPlotWidth) * 100}%`, top: `${(growthBaseline / growthChartHeight) * 100}%` }}>0</span>
-            {trend.map((bucket, index) => {
-              const barHeight = (bucket.value / trendMax) * growthHeight;
-              const x = growthAxisWidth + index * 72 + 36;
-              const y = growthBaseline - barHeight;
-              return <span className="dashboard-growth-text dashboard-growth-text--value" key={`${bucket.label}-value`} style={{ left: `${(x / growthPlotWidth) * 100}%`, top: `${(Math.max(16, y - 9) / growthChartHeight) * 100}%` }}>{bucket.value}</span>;
-            })}
-            {trend.map((bucket, index) => {
-              const x = growthAxisWidth + index * 72 + 36;
-              return <span className="dashboard-growth-text dashboard-growth-text--date" key={`${bucket.label}-date`} style={{ left: `${(x / growthPlotWidth) * 100}%`, top: `${(375 / growthChartHeight) * 100}%` }}>{bucket.label}</span>;
-            })}
+            {trendPoints.filter((_, index) => trend.length <= 10 || index % Math.ceil(trend.length / 10) === 0).map((point) => <span className="dashboard-growth-text dashboard-growth-text--date" key={`${point.label}-date`} style={{ left: `${(point.x / growthPlotWidth) * 100}%`, top: `${(375 / growthChartHeight) * 100}%` }}>{point.label}</span>)}
           </div>
         </div>
       </section>
@@ -238,18 +248,18 @@ export default function AdminDashboard() {
             <div><p className="dashboard-panel__eyebrow">CONTENT MIX</p><h2 id="distribution-title">Content distribution</h2></div>
             <span className="dashboard-panel__note">Published content by recipe category</span>
           </div>
-          {hasCategorizedContent ? <div className="dashboard-distribution"><div className="dashboard-donut" style={{ background: donutBackground(chartCategories, categoryColors) }} aria-label="Content distribution chart"><span>{numberFormat.format(chartCategories.reduce((sum, category) => sum + category.value, 0))}</span></div>{categoryLegend}</div> : <div className="dashboard-empty"><p>No categorized published content is available yet.</p>{uncategorizedContent > 0 && <p>{numberFormat.format(uncategorizedContent)} published item{uncategorizedContent === 1 ? '' : 's'} have no category.</p>}{categoryLegend}</div>}
+          {hasCategorizedContent ? <div className="dashboard-distribution"><div className="dashboard-donut" style={{ background: donutBackground(displaySlices, categoryColors) }} aria-label="Content distribution chart"><svg className="dashboard-donut-hit-target" viewBox="0 0 100 100" aria-hidden="true">{displaySlices.reduce((segments, category) => { const start = segments.offset; const end = start + (category.value / categoryTotal) * 100; segments.items.push(<path key={category.id ?? category.label} d={donutSlicePath(start, end)} onClick={category.isOthers ? () => setOthersOpen(true) : undefined} />); segments.offset = end; return segments; }, { offset: 0, items: [] }).items}</svg><span>{numberFormat.format(dashboard.metrics.publishedContent ?? 0)}</span></div>{categoryLegend}</div> : <div className="dashboard-empty"><p>No categorized published content is available yet.</p>{uncategorizedContent > 0 && <p>{numberFormat.format(uncategorizedContent)} published item{uncategorizedContent === 1 ? '' : 's'} have no category.</p>}{categoryLegend}</div>}
         </section>
 
         <section className="dashboard-panel dashboard-panel--status" aria-labelledby="status-title">
           <div className="dashboard-panel__heading">
-            <div><p className="dashboard-panel__eyebrow">WORKFLOW</p><h2 id="status-title">Review status</h2></div>
-            <span className="dashboard-panel__note">Separate operational totals</span>
+            <div><p className="dashboard-panel__eyebrow">WORKFLOW</p><h2 id="status-title">Admin Review Outcomes</h2></div>
+            <span className="dashboard-panel__note">Approval and rejection rates from admin decisions</span>
           </div>
-          <div className="dashboard-status-scale">Relative scale: 0 to {numberFormat.format(workflowMax)}</div>
-          <div className="dashboard-status-list">{workflowIndicators.map(({ Icon, ...indicator }) => <div className="dashboard-status" key={indicator.label}><div className="dashboard-status__label"><div className="dashboard-status__identity"><Icon size={17} strokeWidth={1.8} aria-hidden="true" /><span><b>{indicator.label}</b><small>{indicator.description}</small></span></div><strong>{numberFormat.format(indicator.value)}</strong></div><div className="dashboard-status__track"><i style={{ width: `${(indicator.value / workflowMax) * 100}%`, background: indicator.color }} /></div></div>)}</div>
+          {adminReviewOutcomes?.total ? <div className="dashboard-review-performance"><div className="dashboard-review-donut" style={{ background: reviewDonutBackground }} role="img" aria-label={`${reviewTotal} admin review decisions`}><span>{numberFormat.format(reviewTotal)}<small>Decisions</small></span></div><div className="dashboard-review-legend">{adminReviewOutcomes.items.map((item) => <div key={item.label}><div><i style={{ background: item.color }} /><span>{item.label.replace('Admin ', '')}</span></div><strong>{((item.value / reviewTotal) * 100).toFixed(1)}% <small>· {numberFormat.format(item.value)}</small></strong></div>)}</div><p className="dashboard-review-note">ⓘ Based on recorded administrator approval and rejection decisions. AI-approved publications are excluded.</p></div> : <div className="dashboard-empty"><p>No admin review decisions are available for analysis.</p><small>Only recorded administrator APPROVE and REJECT decisions are included.</small><p className="dashboard-review-note">ⓘ Based on recorded administrator approval and rejection decisions. AI-approved publications are excluded.</p></div>}
         </section>
       </div>
+      {othersOpen && categoryDisplay.others && <div className="dashboard-others-backdrop" role="presentation" onMouseDown={() => setOthersOpen(false)}><section className="dashboard-others-dialog" role="dialog" aria-modal="true" aria-labelledby="others-dialog-title" onMouseDown={(event) => event.stopPropagation()}><div className="dashboard-others-dialog__header"><div><p className="dashboard-panel__eyebrow">CONTENT MIX</p><h2 id="others-dialog-title">Other categories</h2><span>{numberFormat.format(categoryDisplay.others.value)} category usages · {categoryDisplay.remaining.length} categories</span></div><button type="button" onClick={() => setOthersOpen(false)} aria-label="Close other categories"><X size={18}/></button></div><div className="dashboard-others-controls"><label><Search size={15}/><input value={othersQuery} onChange={(event) => setOthersQuery(event.target.value)} placeholder="Search categories" aria-label="Search other categories"/></label><select value={othersSort} onChange={(event) => setOthersSort(event.target.value)} aria-label="Sort other categories"><option value="count">Highest count</option><option value="name">Category name</option></select></div><div className="dashboard-others-list">{filteredOthers.map((category) => <div key={category.id ?? category.label}><span>{category.label}</span><strong>{numberFormat.format(category.value)} <small>{((category.value / categoryDisplay.others.value) * 100).toFixed(1)}%</small></strong></div>)}{!filteredOthers.length && <p>No categories match this search.</p>}</div></section></div>}
     </main>
   );
 }

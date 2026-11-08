@@ -44,6 +44,15 @@ public class AuthorContentResponse {
     @JsonProperty("status")
     private String status;
 
+    @JsonProperty("moderationReason")
+    private String moderationReason;
+    @JsonProperty("moderationReviewedAt")
+    private LocalDateTime moderationReviewedAt;
+    @JsonProperty("moderationReviewedBy")
+    private Integer moderationReviewedBy;
+    @JsonProperty("currentStrikeCount")
+    private Integer currentStrikeCount;
+
     @JsonProperty("authorId")
     private Integer authorId;
 

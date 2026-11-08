@@ -81,12 +81,20 @@ const mapModerationItem = (item) => ({
   updatedAt: item.updatedAt,
   viewCount: item.viewCount ?? 0,
   body: item.body,
+  recipe: item.recipe ?? null,
   thumbnailUrl: item.thumbnailUrl,
   aiFlagged: item.aiFlagged,
   aiReason: item.aiReason,
   aiConfidence: item.aiConfidence,
   mediaUrl: item.mediaUrl ?? null,
   decisionReason: item.decisionReason ?? null,
+  moderationFlag: item.moderationFlag ?? null,
+  similarityScore: item.similarityScore ?? null,
+  matchedContentId: item.matchedContentId ?? null,
+  matchedTitle: item.matchedTitle ?? null,
+  matchedAuthor: item.matchedAuthor ?? null,
+  matchedBody: item.matchedBody ?? null,
+  matchedPublishedAt: item.matchedPublishedAt ?? null,
 });
 const moderationPreviewItems = [
   { contentId: 201, contentType: 'BLOG', title: 'A colorful bowl for busy mornings', slug: 'colorful-bowl-mornings', status: 'pending', authorUsername: 'minhanh', authorEmail: 'minhanh@example.com', createdAt: '2026-09-26T08:30:00', viewCount: 0, body: 'Fresh fruit, yogurt, and oats make a bright start to the day.', thumbnailUrl: moderationBowl, aiFlagged: true, aiReason: 'Nội dung và hình ảnh an toàn, được kiểm duyệt tự động', aiConfidence: 0.95 },
@@ -139,12 +147,45 @@ const getModerationHistory = async (params = {}, signal) => {
   const data = unwrapData(await apiRequest(`/api/v1/admin/moderation/history?${query}`, { signal }), {});
   return { ...data, content: (data.content ?? []).map(mapModerationAudit) };
 };
+const getAllModerationHistory = async (signal) => {
+  const first = await getModerationHistory({ page: 0, size: 100 }, signal);
+  const totalPages = Math.max(Number(first.totalPages) || 1, 1);
+  const remaining = await Promise.all(Array.from(
+    { length: totalPages - 1 },
+    (_, index) => getModerationHistory({ page: index + 1, size: 100 }, signal),
+  ));
+  return [first, ...remaining].flatMap((page) => page.content ?? []);
+};
+const summarizeAdminReviewOutcomes = (audits) => {
+  const latestByContent = new Map();
+  audits.filter((audit) => audit.action === 'APPROVE' || audit.action === 'REJECT').forEach((audit) => {
+    const previous = latestByContent.get(audit.contentId);
+    const auditTime = new Date(audit.reviewedAt ?? 0).getTime();
+    const previousTime = previous ? new Date(previous.reviewedAt ?? 0).getTime() : -1;
+    if (!previous || auditTime > previousTime || (auditTime === previousTime && Number(audit.id) > Number(previous.id))) latestByContent.set(audit.contentId, audit);
+  });
+  const counts = [...latestByContent.values()].reduce((result, audit) => {
+    const key = audit.action === 'APPROVE' ? 'approved' : 'rejected';
+    result[key] += 1;
+    return result;
+  }, { approved: 0, rejected: 0 });
+  const total = counts.approved + counts.rejected;
+  return { total, counts, items: [
+    { label: 'Admin Approved', value: counts.approved, color: '#54B88A' },
+    { label: 'Admin Rejected', value: counts.rejected, color: '#EF9696' },
+  ] };
+};
 const getModerationAudit = async (auditId, signal) => mapModerationAudit(unwrapData(await apiRequest(`/api/v1/admin/moderation/history/${auditId}`, { signal }), {}));
 const getModerationTimeline = async (contentId, signal) => (unwrapData(await apiRequest(`/api/v1/admin/moderation/contents/${contentId}/timeline`, { signal }), [])).map(mapModerationAudit);
 const formatAdminDate = (value) => value ? new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
 const mapViolationReason = (reason) => typeof reason === 'string' ? reason : { contentId: reason?.contentId ?? null, contentTitle: reason?.contentTitle ?? null, reason: reason?.reason ?? reason?.message ?? reason?.adminNote ?? 'Lý do đang chờ API quản lý thành viên đồng bộ.', reviewedAt: reason?.reviewedAt ?? null };
 const mapAdminUser = (user) => { const violations = user.violationReasons ?? user.violations ?? []; return { id: user.userId, username: user.username, email: user.email, name: user.fullName || user.username, avatarUrl: user.avatarUrl ?? null, role: user.roleName, status: user.status, joinedAt: formatAdminDate(user.createdAt), updatedAt: formatAdminDate(user.updatedAt), strikeCount: user.strikeCount ?? 0, violationReasons: (Array.isArray(violations) ? violations : [violations]).filter(Boolean).map(mapViolationReason) }; };
 const mapAdminUserPage = (page) => ({ ...page, content: (page.content ?? []).map(mapAdminUser) });
+const getUserViolationHistory = async (userId, params = {}, signal) => {
+  const query = new URLSearchParams({ page: String(params.page ?? 0), size: String(params.size ?? 10) });
+  const data = unwrapData(await apiRequest(`/api/v1/admin/users/${encodeURIComponent(userId)}/violations?${query}`, { signal }), {});
+  return { ...data, content: (data.content ?? []).map(mapModerationAudit) };
+};
 const adminUserQuery = ({ keyword = '', status = '', page = 0, size = 10 } = {}) => {
   const params = new URLSearchParams({ page: String(page), size: String(size) });
   if (keyword.trim()) params.set('keyword', keyword.trim());
@@ -175,12 +216,13 @@ const getMemberContentCounts = async (signal) => {
   }, {});
 };
 const getDashboard = async (signal) => {
-  const [users, moderation, blogs, videos, categories] = await Promise.all([
+  const [users, moderation, blogs, videos, categories, moderationHistory] = await Promise.all([
     apiRequest(adminUserQuery({ page: 0, size: 1 }), { signal }).then((payload) => unwrapData(payload, {})),
     getModerationQueue({ page: 0, size: 5 }, signal),
     getAllPublicContent('/api/v1/blogs', signal),
     getAllPublicContent('/api/v1/videos', signal),
     getContentCategories(signal),
+    getAllModerationHistory(signal),
   ]);
   const content = [...blogs, ...videos];
   const categoryCounts = content.reduce((counts, item) => {
@@ -197,11 +239,15 @@ const getDashboard = async (signal) => {
     moderationQueue: moderation.content ?? [],
     categories: categoryData,
     content,
+    adminReviewOutcomes: summarizeAdminReviewOutcomes(moderationHistory),
   };
 };
+export { summarizeAdminReviewOutcomes };
 export const adminApi = {
   getDashboard,
-  getUsers: (params, signal) => apiRequest(adminUserQuery(params), { signal }).then((payload) => mapAdminUserPage(unwrapData(payload, {}))), getMemberContentCounts, getUserById: one('/api/admin/users'), updateUserStatus: (id, value) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: value }) }).then((payload) => mapAdminUser(unwrapData(payload, {}))), lockUser: (id) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'BANNED' }) }),
+  getUserViolationHistory,
+  getUserStatusHistory: (userId, params = {}, signal) => apiRequest(`/api/v1/admin/users/${userId}/status-history?page=${params.page ?? 0}&size=${params.size ?? 20}${params.action ? `&action=${encodeURIComponent(params.action)}` : ''}`, { signal }).then((payload) => unwrapData(payload, { content: [], totalElements: 0, totalPages: 0 })),
+  getUsers: (params, signal) => apiRequest(adminUserQuery(params), { signal }).then((payload) => mapAdminUserPage(unwrapData(payload, {}))), getMemberContentCounts, getUserById: one('/api/admin/users'), updateUserStatus: (id, value, reason = '') => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: value, ...(value === 'BANNED' ? { reason } : {}) }) }).then((payload) => mapAdminUser(unwrapData(payload, {}))), lockUser: (id) => apiRequest(`/api/v1/admin/users/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: 'BANNED' }) }),
   getModerationQueue, moderateContent, getModerationHistory, getModerationAudit, getModerationTimeline,
   getCategories, getCategoryContentCounts, createCategory, updateCategory, deleteCategory,
   getBlogs: list('/api/admin/blogs'), getBlogById: one('/api/admin/blogs'), hideBlog: (id) => status('/api/admin/blogs')(id, 'Hidden'), deleteBlog: (id) => apiRequest(`/api/admin/blogs/${id}`, { method: 'DELETE' }),

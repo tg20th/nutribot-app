@@ -16,6 +16,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -25,26 +26,33 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class NotificationService {
 
+    private static final Pattern QUOTED_TITLE = Pattern.compile("\\\"([^\\\"]+)\\\"");
+    private static final Pattern STRIKE_COUNT = Pattern.compile("(\\d+)\\s*/\\s*3");
+
     public static final String TYPE_RECIPE_SUGGESTION_APPROVED = "RECIPE_SUGGESTION_APPROVED";
     public static final String TYPE_RECIPE_SUGGESTION_REJECTED = "RECIPE_SUGGESTION_REJECTED";
     public static final String TYPE_CONTENT_VOTED = "CONTENT_VOTED";
     public static final String TYPE_CONTENT_COMMENTED = "CONTENT_COMMENTED";
+    public static final String TYPE_CONTENT_COMMENT_REPLIED = "CONTENT_COMMENT_REPLIED";
     public static final String TYPE_CONTENT_MODERATION_REJECTED = "CONTENT_MODERATION_REJECTED";
+    public static final String TYPE_CONTENT_MODERATION_APPROVED = "CONTENT_MODERATION_APPROVED";
     public static final String REFERENCE_TYPE_CONTENT_RECIPE_SUGGESTION = "CONTENT_RECIPE_SUGGESTION";
     public static final String REFERENCE_TYPE_CONTENT = "CONTENT";
     public static final String ACTION_APPROVE = "APPROVE";
     public static final String ACTION_REJECT = "REJECT";
 
     /** NB-84: Tieu de gan cho thong bao ket qua duyet cong thuc. */
-    public static final String TITLE_SUGGESTION_APPROVED = "Công thức đã được thêm vào NutriBot";
-    public static final String TITLE_SUGGESTION_REJECTED = "Đề xuất công thức chưa được duyệt";
-    public static final String TITLE_SUGGESTION_CLOSED = "Đề xuất công thức đã được đóng";
+    public static final String TITLE_SUGGESTION_APPROVED = "Recipe added to NutriBot";
+    public static final String TITLE_SUGGESTION_REJECTED = "Recipe suggestion not approved";
+    public static final String TITLE_SUGGESTION_CLOSED = "Recipe suggestion closed";
 
     /** NB-84: Do dai toi da cho noi dung thong bao (khop cot NVARCHAR(1000)). */
     private static final int MAX_MESSAGE_LENGTH = 1000;
@@ -55,6 +63,8 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final ContentRepository contentRepository;
+    @Autowired
+    private com.fpt.swp391.nutribot.repository.CommentRepository commentRepository;
 
     @Transactional(readOnly = true)
     public PagedResponse<NotificationResponse> listMyNotifications(Integer userId, int page, int size) {
@@ -96,7 +106,7 @@ public class NotificationService {
     @Transactional
     public void markAsRead(Integer userId, Integer notificationId) {
         Notification notification = notificationRepository.findByNotificationIdAndRecipient_UserId(notificationId, userId)
-                .orElseThrow(() -> new NotFoundException("Không tìm thấy thông báo"));
+                .orElseThrow(() -> new NotFoundException("Notification not found"));
         if (notification.getReadAt() == null) {
             notification.setReadAt(LocalDateTime.now());
             notificationRepository.save(notification);
@@ -214,21 +224,13 @@ public class NotificationService {
             return;
         }
 
-        String title = strikeCount >= 3
-                ? "Tài khoản của bạn đã bị khóa do vi phạm nhiều lần"
-                : "Bài viết của bạn đã bị từ chối do vi phạm quy chuẩn";
-
-        StringBuilder sb = new StringBuilder();
-        if (hasText(contentTitle)) {
-            sb.append("Bài viết \"").append(contentTitle.trim()).append("\" của bạn đã bị từ chối.");
-        } else {
-            sb.append("Bài viết của bạn đã bị từ chối.");
-        }
-        sb.append(" Lý do: ").append(hasText(reason) ? reason.trim() : "Vi phạm tiêu chuẩn cộng đồng").append(".");
-        sb.append(" Cảnh báo vi phạm: ").append(strikeCount).append("/3 gậy.");
-        if (strikeCount >= 3) {
-            sb.append(" Tài khoản của bạn đã bị tạm khóa do nhận đủ 3 gậy vi phạm.");
-        }
+        String englishTitle = strikeCount >= 3 ? "Account suspended" : "Content rejected";
+        StringBuilder englishMessage = new StringBuilder("Your post");
+        if (hasText(contentTitle)) englishMessage.append(" \"").append(contentTitle.trim()).append("\"");
+        englishMessage.append(" was rejected.");
+        if (hasText(reason)) englishMessage.append(" Reason: ").append(reason.trim());
+        englishMessage.append(" Account warning: ").append(strikeCount).append("/3 strikes.");
+        if (strikeCount >= 3) englishMessage.append(" Your account has been suspended after reaching 3 strikes.");
 
         Notification notification = Notification.builder()
                 .recipient(recipient)
@@ -236,8 +238,8 @@ public class NotificationService {
                 .type(TYPE_CONTENT_MODERATION_REJECTED)
                 .referenceType(REFERENCE_TYPE_CONTENT)
                 .referenceId(contentId)
-                .title(truncate(title))
-                .message(truncate(sb.toString()))
+                .title(englishTitle)
+                .message(truncate(englishMessage.toString()))
                 .actionUrl("/profile")
                 .build();
         notificationRepository.save(notification);
@@ -249,15 +251,15 @@ public class NotificationService {
     private String buildApprovedMessage(String dishName, String contentTitle) {
         StringBuilder message = new StringBuilder();
         if (hasText(dishName)) {
-            message.append("Công thức \"").append(dishName).append("\"");
+            message.append("Recipe \"").append(dishName).append("\"");
         }
         if (hasText(contentTitle)) {
-            message.append(message.length() > 0 ? " từ bài viết \"" : "Bài viết \"").append(contentTitle).append("\"");
+            message.append(message.length() > 0 ? " from post \"" : "Post \"").append(contentTitle).append("\"");
         }
         if (message.length() == 0) {
-            message.append("Công thức từ bài viết của bạn");
+            message.append("Your recipe");
         }
-        message.append(" của bạn đã được duyệt và thêm vào hệ thống. Bạn có thể tìm món này trong danh mục món ăn.");
+        message.append(" was approved and added to NutriBot. You can find it in the dishes catalog.");
         return truncate(message.toString());
     }
 
@@ -267,17 +269,17 @@ public class NotificationService {
     private String buildRejectedMessage(String dishName, String contentTitle, String rejectionReason) {
         StringBuilder message = new StringBuilder();
         if (hasText(dishName)) {
-            message.append("Công thức \"").append(dishName).append("\"");
+            message.append("Recipe \"").append(dishName).append("\"");
         }
         if (hasText(contentTitle)) {
-            message.append(message.length() > 0 ? " từ bài viết \"" : "Bài viết \"").append(contentTitle).append("\"");
+            message.append(message.length() > 0 ? " from post \"" : "Post \"").append(contentTitle).append("\"");
         }
         if (message.length() == 0) {
-            message.append("Công thức từ bài viết của bạn");
+            message.append("Your recipe");
         }
-        message.append(" của bạn chưa được duyệt.");
+        message.append(" was not approved.");
         if (hasText(rejectionReason)) {
-            message.append(" Lý do: ").append(rejectionReason.trim());
+            message.append(" Reason: ").append(rejectionReason.trim());
         }
         return truncate(message.toString());
     }
@@ -288,17 +290,17 @@ public class NotificationService {
     private String buildClosedMessage(String dishName, String contentTitle, String reason) {
         StringBuilder message = new StringBuilder();
         if (hasText(dishName)) {
-            message.append("Công thức \"").append(dishName).append("\"");
+            message.append("Recipe \"").append(dishName).append("\"");
         }
         if (hasText(contentTitle)) {
-            message.append(message.length() > 0 ? " từ bài viết \"" : "Bài viết \"").append(contentTitle).append("\"");
+            message.append(message.length() > 0 ? " from post \"" : "Post \"").append(contentTitle).append("\"");
         }
         if (message.length() == 0) {
-            message.append("Đề xuất công thức của bạn");
+            message.append("Your recipe suggestion");
         }
-        message.append(" đã được đóng và không được duyệt.");
+        message.append(" was closed.");
         if (hasText(reason)) {
-            message.append(" Lý do: ").append(reason.trim());
+            message.append(" Reason: ").append(reason.trim());
         }
         return truncate(message.toString());
     }
@@ -402,6 +404,40 @@ public class NotificationService {
         notificationRepository.save(notification);
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void notifyCommentReplied(Integer contentId, Integer commentId, Integer parentId, Integer commenterId) {
+        if (contentId == null || commentId == null || parentId == null || commenterId == null) return;
+        var parent = commentRepository.findById(parentId).orElse(null);
+        if (parent == null || parent.getUserId() == null || parent.getUserId().equals(commenterId)) return;
+        User recipient = userRepository.findById(parent.getUserId()).orElse(null);
+        User actor = userRepository.findById(commenterId).orElse(null);
+        Content content = contentRepository.findById(contentId).orElse(null);
+        if (recipient == null || actor == null) return;
+        String title = "Someone replied to your comment";
+        String message = actor.getFullName() + " replied to your comment"
+                + (content == null || content.getTitle() == null ? "." : " on \"" + content.getTitle() + "\".");
+        notificationRepository.save(Notification.builder()
+                .recipient(recipient).actor(actor).type(TYPE_CONTENT_COMMENT_REPLIED)
+                .referenceType(REFERENCE_TYPE_CONTENT).referenceId(contentId)
+                .title(title).message(message).actionUrl(buildActionUrl(contentId)).build());
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void createForAdminContentApproved(Integer contentId) {
+        if (contentId == null) return;
+        Content content = contentRepository.findById(contentId).orElse(null);
+        if (content == null || content.getUser() == null || !"published".equalsIgnoreCase(content.getStatus())) return;
+        Integer authorId = content.getUser().getUserId();
+        if (notificationRepository.existsByRecipient_UserIdAndTypeAndReferenceTypeAndReferenceId(
+                authorId, TYPE_CONTENT_MODERATION_APPROVED, REFERENCE_TYPE_CONTENT, contentId)) return;
+        String kind = "VIDEO".equalsIgnoreCase(content.getContentType()) ? "video" : "blog";
+        String title = "Content approved";
+        String message = "Your " + kind + " \"" + content.getTitle() + "\" has been approved and is now published.";
+        notificationRepository.save(Notification.builder().recipient(content.getUser()).actor(null)
+                .type(TYPE_CONTENT_MODERATION_APPROVED).referenceType(REFERENCE_TYPE_CONTENT).referenceId(contentId)
+                .title(title).message(message).actionUrl(buildActionUrl(contentId)).build());
+    }
+
     /**
      * NB-83: Lấy tác giả của content kèm khoá dòng (PESSIMISTIC_WRITE) để serialize việc
      * tạo/gộp notification cho cùng 1 bài viết, tránh race tạo trùng notification.
@@ -431,6 +467,18 @@ public class NotificationService {
         LocalDateTime updatedAt = notification.getUpdatedAt() != null
                 ? notification.getUpdatedAt()
                 : notification.getCreatedAt();
+        String displayTitle = notification.getTitle();
+        String displayMessage = notification.getMessage();
+        if (TYPE_CONTENT_MODERATION_REJECTED.equals(notification.getType())) {
+            String[] normalized = normalizeModerationNotification(notification.getTitle(), notification.getMessage());
+            displayTitle = normalized[0];
+            displayMessage = normalized[1];
+        } else if (TYPE_RECIPE_SUGGESTION_APPROVED.equals(notification.getType())
+                || TYPE_RECIPE_SUGGESTION_REJECTED.equals(notification.getType())) {
+            String[] normalized = normalizeRecipeSuggestionNotification(notification.getTitle(), notification.getMessage());
+            displayTitle = normalized[0];
+            displayMessage = normalized[1];
+        }
         return NotificationResponse.builder()
                 .notificationId(notification.getNotificationId())
                 .type(notification.getType())
@@ -445,9 +493,97 @@ public class NotificationService {
                 .readAt(notification.getReadAt())
                 .createdAt(notification.getCreatedAt())
                 .updatedAt(updatedAt)
-                .title(notification.getTitle())
-                .message(notification.getMessage())
+                .title(displayTitle)
+                .message(displayMessage)
                 .actionUrl(notification.getActionUrl())
                 .build();
+    }
+
+    /**
+     * Converts legacy Vietnamese recipe suggestion notifications into English.
+     */
+    private String[] normalizeRecipeSuggestionNotification(String title, String message) {
+        String displayTitle = title;
+        if (displayTitle != null) {
+            if (displayTitle.contains("Công thức đã được thêm")) {
+                displayTitle = TITLE_SUGGESTION_APPROVED;
+            } else if (displayTitle.contains("chưa được duyệt")) {
+                displayTitle = TITLE_SUGGESTION_REJECTED;
+            } else if (displayTitle.contains("đã được đóng")) {
+                displayTitle = TITLE_SUGGESTION_CLOSED;
+            }
+        }
+
+        if (message == null || message.isBlank()) {
+            return new String[]{displayTitle, message};
+        }
+
+        if (message.contains("đã được duyệt và thêm vào hệ thống")) {
+            Matcher m = QUOTED_TITLE.matcher(message);
+            String dishName = m.find() ? m.group(1) : null;
+            String contentTitle = m.find() ? m.group(1) : null;
+            return new String[]{displayTitle, buildApprovedMessage(dishName, contentTitle)};
+        }
+
+        if (message.contains("chưa được duyệt")) {
+            Matcher m = QUOTED_TITLE.matcher(message);
+            String dishName = m.find() ? m.group(1) : null;
+            String contentTitle = m.find() ? m.group(1) : null;
+            String reason = null;
+            int reasonIdx = message.indexOf("Lý do:");
+            if (reasonIdx >= 0) {
+                reason = message.substring(reasonIdx + "Lý do:".length()).trim();
+            }
+            return new String[]{displayTitle, buildRejectedMessage(dishName, contentTitle, reason)};
+        }
+
+        if (message.contains("đã được đóng và không được duyệt") || message.contains("đã được đóng")) {
+            Matcher m = QUOTED_TITLE.matcher(message);
+            String dishName = m.find() ? m.group(1) : null;
+            String contentTitle = m.find() ? m.group(1) : null;
+            String reason = null;
+            int reasonIdx = message.indexOf("Lý do:");
+            if (reasonIdx >= 0) {
+                reason = message.substring(reasonIdx + "Lý do:".length()).trim();
+                if ("Tác giả đã gỡ đồng thuận dùng công thức cho bài viết này".equals(reason)) {
+                    reason = RecipeConsentRevocationService.REASON_CONSENT_REVOKED;
+                }
+            }
+            return new String[]{displayTitle, buildClosedMessage(dishName, contentTitle, reason)};
+        }
+
+        return new String[]{displayTitle, message};
+    }
+
+    /**
+     * Converts only the known legacy moderation template. User supplied title and
+     * reason are extracted from their structured positions and are never translated.
+     */
+    private String[] normalizeModerationNotification(String title, String message) {
+        String source = (title == null ? "" : title) + " " + (message == null ? "" : message);
+        boolean legacy = source.contains("Bài viết") || source.contains("Tài khoản")
+                || source.contains("Lý do:") || source.contains("Cảnh báo")
+                || source.contains("gậy") || source.contains("bị từ chối");
+        if (!legacy) return new String[]{title, message};
+
+        Matcher titleMatcher = QUOTED_TITLE.matcher(message == null ? "" : message);
+        String contentTitle = titleMatcher.find() ? titleMatcher.group(1) : null;
+        Matcher strikeMatcher = STRIKE_COUNT.matcher(source);
+        String strikes = strikeMatcher.find() ? strikeMatcher.group(1) : null;
+        String reason = null;
+        int reasonStart = message == null ? -1 : message.indexOf("Lý do:");
+        if (reasonStart >= 0) {
+            reason = message.substring(reasonStart + "Lý do:".length()).trim();
+            int end = reason.indexOf(". Cảnh báo");
+            if (end >= 0) reason = reason.substring(0, end).trim();
+            if (reason.endsWith(".")) reason = reason.substring(0, reason.length() - 1).trim();
+        }
+        if (contentTitle == null || reason == null || strikes == null) return new String[]{title, message};
+        boolean suspended = "3".equals(strikes);
+        String displayMessage = suspended
+                ? "Your account has been suspended after reaching 3 strikes."
+                : "Your post \"" + contentTitle + "\" was rejected. Reason: " + reason
+                    + ". Account warning: " + strikes + "/3 strikes.";
+        return new String[]{suspended ? "Account suspended" : "Content rejected", displayMessage};
     }
 }

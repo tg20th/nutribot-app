@@ -4,6 +4,7 @@ import com.fpt.swp391.nutribot.dto.request.AdminUserStatusRequest;
 import com.fpt.swp391.nutribot.dto.response.AdminUserResponse;
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
+import com.fpt.swp391.nutribot.dto.response.ModerationAuditResponse;
 import com.fpt.swp391.nutribot.service.AdminUserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -38,5 +39,18 @@ public class AdminUserController {
         String currentAdminUsername = authentication != null ? authentication.getName() : null;
         AdminUserResponse result = adminUserService.updateUserStatus(userId, request, currentAdminUsername);
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái người dùng thành công", result));
+    }
+    @GetMapping("/{userId}/violations")
+    public ResponseEntity<ApiResponse<PagedResponse<ModerationAuditResponse>>> getViolationHistory(
+            @PathVariable Integer userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ResponseEntity.ok(ApiResponse.success("Violation history loaded", adminUserService.getViolationHistory(userId, page, size)));
+    }
+
+    @GetMapping("/{userId}/status-history")
+    public ResponseEntity<ApiResponse<PagedResponse<com.fpt.swp391.nutribot.dto.response.UserModerationActionResponse>>> getStatusHistory(
+            @PathVariable Integer userId, @RequestParam(required = false) String action, @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(ApiResponse.success("Account status history loaded", adminUserService.getStatusHistory(userId, action, page, size)));
     }
 }

@@ -1,4 +1,4 @@
-﻿-- WARNING: FULL REBUILD SCRIPT. DROPS NutriBotV2 AND ALL ITS DATA.
+-- WARNING: FULL REBUILD SCRIPT. DROPS NutriBotV2 AND ALL ITS DATA.
 -- Run ONLY on a disposable/new environment after backup.
 -- Chatbot tables and contents media structure preserved from original.
 -- This is a fresh-install schema, NOT a migration for existing data.
@@ -288,12 +288,17 @@ CREATE TABLE contents (
     recipe_consent              BIT NULL,          -- Đồng thuận dùng công thức (NB-80)
     recipe_consent_at           DATETIME2(3) NULL,
     recipe_consent_terms_version NVARCHAR(20) NULL,
+    content_hash                VARCHAR(64) NULL,  -- Mã băm SHA-256 chống trùng lặp 100% (NB-97)
+    moderation_flag             NVARCHAR(50) NULL, -- SUSPECTED_DUPLICATE, CLEAN,... (NB-97)
+    similarity_score            DECIMAL(5,2) NULL, -- Điểm tương đồng 0.00 -> 1.00 (NB-97)
+    matched_content_id          INT NULL,          -- ID bài viết gốc bị nghi ngờ sao chép (NB-97)
     view_count      INT NOT NULL CONSTRAINT DF_contents_view_count DEFAULT (0),
     created_at      DATETIME2(3) NOT NULL CONSTRAINT DF_contents_created_at DEFAULT (SYSUTCDATETIME()),
     updated_at      DATETIME2(3) NOT NULL CONSTRAINT DF_contents_updated_at DEFAULT (SYSUTCDATETIME()),
     CONSTRAINT UQ_contents_slug UNIQUE (slug),
     CONSTRAINT FK_contents_users FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE NO ACTION,
     CONSTRAINT FK_contents_categories FOREIGN KEY (category_id) REFERENCES categories(category_id),
+    CONSTRAINT FK_contents_matched_content FOREIGN KEY (matched_content_id) REFERENCES contents(content_id) ON DELETE NO ACTION,
     CONSTRAINT CK_contents_type CHECK (content_type IN (N'BLOG', N'VIDEO')),
     CONSTRAINT CK_contents_status CHECK (status IN (N'draft', N'ai_processing', N'under_review', N'published', N'flagged', N'rejected', N'archived')),
     CONSTRAINT CK_contents_view_count CHECK (view_count >= 0),
@@ -765,6 +770,8 @@ CREATE NONCLUSTERED INDEX IX_contents_user_id           ON contents(user_id);
 CREATE NONCLUSTERED INDEX IX_contents_status            ON contents(status) INCLUDE (title, content_type, created_at);
 CREATE NONCLUSTERED INDEX IX_contents_type_status       ON contents(content_type, status);
 CREATE NONCLUSTERED INDEX IX_contents_category_id       ON contents(category_id);
+CREATE NONCLUSTERED INDEX IX_contents_content_hash      ON contents(content_hash);
+CREATE NONCLUSTERED INDEX IX_contents_type_title        ON contents(content_type, title);
 
 CREATE NONCLUSTERED INDEX IX_comments_content_id        ON comments(content_id);
 CREATE NONCLUSTERED INDEX IX_comments_parent_id         ON comments(parent_id);
@@ -915,4 +922,44 @@ BEGIN
         ON content_recipe_suggestion_audit(suggestion_id, created_at DESC);
     PRINT 'NB-84: Da them index idx_crsa_suggestion';
 END
+GO
+
+-- Review and apply separately. This migration is intentionally not executed by the application.
+IF OBJECT_ID(N'dbo.user_moderation_actions', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.user_moderation_actions (
+        action_id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        user_id INT NOT NULL,
+        admin_id INT NULL,
+        action NVARCHAR(30) NOT NULL,
+        previous_status NVARCHAR(20) NULL,
+        new_status NVARCHAR(20) NOT NULL,
+        strike_delta SMALLINT NOT NULL CONSTRAINT DF_uma_strike_delta DEFAULT (0),
+        reason NVARCHAR(1000) NOT NULL,
+        created_at DATETIME2(3) NOT NULL CONSTRAINT DF_uma_created DEFAULT (SYSUTCDATETIME()),
+        CONSTRAINT FK_uma_user FOREIGN KEY (user_id) REFERENCES dbo.users(user_id),
+        CONSTRAINT FK_uma_admin FOREIGN KEY (admin_id) REFERENCES dbo.users(user_id),
+        CONSTRAINT CK_uma_action CHECK (action IN (N'WARN', N'BAN', N'UNBAN', N'REMOVE_WARNING', N'STATUS_CHANGE')),
+        CONSTRAINT CK_uma_status CHECK (new_status IN (N'ACTIVE', N'WARN', N'BANNED', N'PENDING_VERIFY')),
+        CONSTRAINT CK_uma_reason CHECK (LEN(LTRIM(RTRIM(reason))) > 0)
+    );
+    CREATE INDEX IX_uma_user_created ON dbo.user_moderation_actions(user_id, created_at DESC);
+END;
+IF COL_LENGTH(N'dbo.user_moderation_actions', N'source') IS NULL
+    ALTER TABLE dbo.user_moderation_actions ADD source NVARCHAR(20) NOT NULL CONSTRAINT DF_uma_source DEFAULT (N'MANUAL');
+IF COL_LENGTH(N'dbo.user_moderation_actions', N'additional_explanation') IS NULL
+    ALTER TABLE dbo.user_moderation_actions ADD additional_explanation NVARCHAR(1000) NULL;
+
+IF COL_LENGTH('dbo.user_moderation_actions', 'additional_explanation') IS NULL
+BEGIN
+    ALTER TABLE dbo.user_moderation_actions
+    ADD additional_explanation NVARCHAR(1000) NULL;
+END;
+GO
+
+IF COL_LENGTH('dbo.user_moderation_actions', 'source') IS NULL
+BEGIN
+    ALTER TABLE dbo.user_moderation_actions
+    ADD source NVARCHAR(20) NULL;
+END;
 GO

@@ -3,6 +3,7 @@ package com.fpt.swp391.nutribot.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fpt.swp391.nutribot.dto.response.ApiResponse;
+import com.fpt.swp391.nutribot.exception.AccountBannedException;
 import com.fpt.swp391.nutribot.filter.GuestRateLimitFilter;
 import com.fpt.swp391.nutribot.service.AuthService;
 import com.fpt.swp391.nutribot.service.TokenBlacklistService;
@@ -24,12 +25,16 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
+import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import java.net.URLEncoder;
 import java.time.Instant;
 import java.util.Arrays;
@@ -40,28 +45,43 @@ import java.util.Map;
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final AuthService authService;
     private final TokenBlacklistService tokenBlacklistService;
     private final JwtTokenProvider jwtTokenProvider;
     private final GuestRateLimitFilter guestRateLimitFilter;
+    private final String frontendBaseUrl;
+
+    @Autowired
+    public SecurityConfig(@Lazy JwtAuthenticationFilter jwtAuthenticationFilter,
+                          @Lazy AuthService authService,
+                          TokenBlacklistService tokenBlacklistService,
+                          JwtTokenProvider jwtTokenProvider,
+                          @Lazy GuestRateLimitFilter guestRateLimitFilter,
+                          @Value("${spring.security.oauth2.client.registration.google.client-id:}") String googleClientId,
+                          @Value("${FRONTEND_BASE_URL:http://localhost:5173}") String frontendBaseUrl) {
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.authService = authService;
+        this.tokenBlacklistService = tokenBlacklistService;
+        this.jwtTokenProvider = jwtTokenProvider;
+        this.guestRateLimitFilter = guestRateLimitFilter;
+        this.frontendBaseUrl = frontendBaseUrl.replaceAll("/+$", "");
+        this.oauth2Enabled = StringUtils.hasText(googleClientId);
+    }
+
+    private final boolean oauth2Enabled;
 
     public SecurityConfig(@Lazy JwtAuthenticationFilter jwtAuthenticationFilter,
                           @Lazy AuthService authService,
                           TokenBlacklistService tokenBlacklistService,
                           JwtTokenProvider jwtTokenProvider,
                           @Lazy GuestRateLimitFilter guestRateLimitFilter,
-                          @Value("${spring.security.oauth2.client.registration.google.client-id:}") String googleClientId) {
-        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
-        this.authService = authService;
-        this.tokenBlacklistService = tokenBlacklistService;
-        this.jwtTokenProvider = jwtTokenProvider;
-        this.guestRateLimitFilter = guestRateLimitFilter;
-        this.oauth2Enabled = StringUtils.hasText(googleClientId);
+                          String googleClientId) {
+        this(jwtAuthenticationFilter, authService, tokenBlacklistService, jwtTokenProvider,
+                guestRateLimitFilter, googleClientId, "http://localhost:5173");
     }
-
-    private final boolean oauth2Enabled;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -163,7 +183,7 @@ public class SecurityConfig {
                 );
 
         if (oauth2Enabled) {
-            http.oauth2Login(oauth2 -> oauth2.successHandler(oauth2SuccessHandler()));
+            http.oauth2Login(oauth2 -> oauth2.successHandler(oauth2SuccessHandler()).failureHandler(oauth2FailureHandler()));
         }
 
         return http.build();
@@ -200,28 +220,52 @@ public class SecurityConfig {
                 String picture = (String) attrs.get("picture");
 
                 var authResponse = authService.handleOAuth2Login(email, fullName, picture);
+                log.info("OAuth2 success handler completed account authentication");
 
-                String frontendBaseUrl = determineFrontendBaseUrl(request);
                 String frontendUrl = frontendBaseUrl + "/auth/callback?token=" + URLEncoder.encode(authResponse.getToken(), StandardCharsets.UTF_8)
                         + "&username=" + URLEncoder.encode(authResponse.getUsername(), StandardCharsets.UTF_8)
                         + "&role=" + URLEncoder.encode(authResponse.getRole(), StandardCharsets.UTF_8);
 
                 response.sendRedirect(frontendUrl);
             } catch (Exception e) {
-                response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
-                response.setContentType("application/json");
-                response.getWriter().write("{\"success\":false,\"message\":\"OAuth login failed: " + e.getMessage() + "\"}");
+                clearOAuthAuthentication(request);
+                String errorCode = isBannedAccount(e) ? "ACCOUNT_BANNED" : "OAUTH_FAILED";
+                log.warn("OAuth2 success handler failed: exceptionClass={}, selectedErrorCode={}", e.getClass().getName(), errorCode, e);
+                response.sendRedirect(buildOAuthErrorRedirect(request, errorCode));
             }
         };
     }
 
-    private String determineFrontendBaseUrl(HttpServletRequest request) {
-        String forwardedHost = request.getHeader("X-Forwarded-Host");
-        if (StringUtils.hasText(forwardedHost) && !forwardedHost.contains("localhost") && !forwardedHost.contains("127.0.0.1")) {
-            String cleanHost = forwardedHost.split(":")[0];
-            return "https://" + cleanHost;
+    private AuthenticationFailureHandler oauth2FailureHandler() {
+        return (request, response, exception) -> {
+            clearOAuthAuthentication(request);
+            String errorCode = isBannedAccount(exception) ? "ACCOUNT_BANNED" : "OAUTH_FAILED";
+            log.warn("OAuth2 failure handler invoked: exceptionClass={}, selectedErrorCode={}", exception.getClass().getName(), errorCode, exception);
+            response.sendRedirect(buildOAuthErrorRedirect(request, errorCode));
+        };
+    }
+
+    private boolean isBannedAccount(Exception exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof AccountBannedException) return true;
+            String message = cause.getMessage();
+            if (message != null && (message.toLowerCase().contains("banned")
+                    || message.toLowerCase().contains("suspended")
+                    || message.contains("bá»‹ khÃ³a")
+                    || message.contains("Ä‘Ã£ bá»‹ khÃ³a"))) return true;
         }
-        return "http://localhost:5173";
+        return false;
+    }
+
+    private String buildOAuthErrorRedirect(HttpServletRequest request, String errorCode) {
+        return frontendBaseUrl + "/auth/callback?error="
+                + URLEncoder.encode(errorCode, StandardCharsets.UTF_8);
+    }
+
+    private void clearOAuthAuthentication(HttpServletRequest request) {
+        SecurityContextHolder.clearContext();
+        var session = request.getSession(false);
+        if (session != null) session.invalidate();
     }
 
     @Bean
