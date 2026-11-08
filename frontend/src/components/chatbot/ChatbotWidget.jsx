@@ -71,6 +71,11 @@ const getGuestSessionId = () => {
 const getActionStorageKey = (sessionId, messageId) => `nutribot-action:${sessionId || 'guest'}:${messageId}`;
 const getInternalHistoryContent = (item) => {
   const parts = [item.text || ''];
+  const image = item.analysis;
+  if (image?.imageContext) parts.push(`image_context: ${image.imageContext}`);
+  if (image?.recognizedIngredients?.length) parts.push(`recognized_ingredients: ${image.recognizedIngredients.join(', ')}`);
+  if (image?.uncertainIngredients?.length) parts.push(`uncertain_ingredients: ${image.uncertainIngredients.join(', ')}`);
+  if (image?.warnings?.length) parts.push(`warnings: ${image.warnings.join(' ')}`);
   if (item.videoAnalysis) parts.push(`video_analysis: ${JSON.stringify(item.videoAnalysis)}`);
   if (item.videoSummary) parts.push(`video_context: ${item.videoSummary}`);
   if (item.videoSource) parts.push(`video_source: ${JSON.stringify(item.videoSource)}`);
@@ -468,7 +473,9 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     localStorage.setItem(getActionStorageKey(sessionIdRef.current, item.id), choice);
     if (choice !== 'yes') return;
     submitMessage('Yes, show me the cooking steps.', {
-      requestMessage: 'Show the cooking instructions using the structured video analysis already present in the conversation history.',
+      // Use the action type as the machine-facing intent. The visible label
+      // remains user-friendly and works for image or video context.
+      requestMessage: 'COOKING_INSTRUCTIONS: Provide complete cooking instructions for the dish selected or explicitly referenced in the previous conversation, using the preserved ingredients and dietary/allergy constraints.',
       displayMessage: 'Yes, show me the cooking steps.',
     });
   };
