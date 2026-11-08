@@ -82,10 +82,19 @@ public class ContentModerationListener {
                     contentId, Math.round(similarityResult.getSimilarityScore() * 100),
                     similarityResult.getMatchedContentId(), similarityResult.getMatchedTitle());
 
-            String duplicateReason = String.format("Suspected duplicate (%d%% similarity) with original post #%d: \"%s\"",
-                    Math.round(similarityResult.getSimilarityScore() * 100),
-                    similarityResult.getMatchedContentId(),
-                    similarityResult.getMatchedTitle());
+            String duplicateReason;
+            if (similarityResult.getLongestMatchingBlock() >= 20) {
+                duplicateReason = String.format("Suspected duplicate (%d%% similarity, %d consecutive words match) with original post #%d: \"%s\"",
+                        Math.round(similarityResult.getSimilarityScore() * 100),
+                        similarityResult.getLongestMatchingBlock(),
+                        similarityResult.getMatchedContentId(),
+                        similarityResult.getMatchedTitle());
+            } else {
+                duplicateReason = String.format("Suspected duplicate (%d%% similarity) with original post #%d: \"%s\"",
+                        Math.round(similarityResult.getSimilarityScore() * 100),
+                        similarityResult.getMatchedContentId(),
+                        similarityResult.getMatchedTitle());
+            }
 
             saveOrUpdateModeration(contentId, new ContentModerationGatewayService.ModerationResult(
                     "NEEDS_REVIEW", duplicateReason, similarityResult.getSimilarityScore(), java.util.List.of("DUPLICATE_CONTENT")), false);
