@@ -254,6 +254,7 @@ public class ContentService {
                 .contentId(content.getContentId())
                 .title(content.getTitle())
                 .body(content.getBody())
+                .recipe(contentRecipePersistenceService.read(content.getContentId()))
                 .mediaUrl(content.getMediaUrl())
                 .thumbnailUrl(content.getThumbnailUrl())
                 .durationSec(content.getDurationSec())

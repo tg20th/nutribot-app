@@ -141,7 +141,7 @@ public class AuthorContentService {
                 .build();
 
         Content saved = contentRepository.save(content);
-        if ("BLOG".equalsIgnoreCase(contentType) && request.getRecipe() != null) contentRecipePersistenceService.replace(saved, request.getRecipe());
+        if (request.getRecipe() != null) contentRecipePersistenceService.replace(saved, request.getRecipe());
         if (consentGranted) {
             saveConsentAudit(user, saved, null, true, "CREATE");
         }
@@ -277,7 +277,7 @@ public class AuthorContentService {
         }
 
         Content saved = contentRepository.save(content);
-        if ("BLOG".equalsIgnoreCase(content.getContentType()) && request.getRecipe() != null) contentRecipePersistenceService.replace(saved, request.getRecipe());
+        if (request.getRecipe() != null) contentRecipePersistenceService.replace(saved, request.getRecipe());
         return toAuthorResponse(saved);
     }
 
@@ -576,14 +576,20 @@ public class AuthorContentService {
     private AuthorContentResponse toAuthorResponse(Content content) {
         String avatar = content.getUser() != null ? content.getUser().getAvatarUrl() : null;
         ContentModeration moderation = contentModerationRepository.findByContentId(content.getContentId()).orElse(null);
+        ContentRecipeDto resolvedRecipe = null;
+        if (contentRecipePersistenceService != null) {
+            resolvedRecipe = contentRecipePersistenceService.read(content.getContentId());
+        }
+        if (resolvedRecipe == null) {
+            resolvedRecipe = toRecipeDto(content);
+        }
         return AuthorContentResponse.builder()
                 .contentId(content.getContentId())
                 .contentType(content.getContentType())
                 .title(content.getTitle())
                 .slug(content.getSlug())
                 .body(content.getBody())
-                .recipe("BLOG".equalsIgnoreCase(content.getContentType()) ? contentRecipePersistenceService.read(content.getContentId()) : null)
-                .recipe(toRecipeDto(content))
+                .recipe(resolvedRecipe)
                 .categoryId(content.getCategoryId())
                 .mediaUrl(content.getMediaUrl())
                 .thumbnailUrl(content.getThumbnailUrl())
@@ -642,7 +648,7 @@ public class AuthorContentService {
     }
 
     private ContentRecipeDto toRecipeDto(Content content) {
-        if (!"BLOG".equalsIgnoreCase(content.getContentType()) || contentRecipeDetailRepository == null) return null;
+        if (content == null || content.getContentId() == null || contentRecipeDetailRepository == null) return null;
         var detail = contentRecipeDetailRepository.findById(content.getContentId()).orElse(null);
         var ingredients = contentRecipeIngredientRepository.findByContentIdOrderBySortOrderAsc(content.getContentId()).stream()
                 .map(value -> ContentRecipeDto.Ingredient.builder().name(value.getIngredientName()).quantity(value.getQuantity())

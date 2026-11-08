@@ -26,6 +26,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -862,5 +863,106 @@ class AuthorContentServiceTest {
 
         assertThrows(ConflictException.class, () ->
                 authorContentService.updateContent("truong_author", 100, "BLOG", request));
+    }
+
+    @Test
+    @DisplayName("Video: Tạo video có kèm recipe/ingredients -> Lưu vào ContentRecipePersistenceService")
+    void createContent_videoWithRecipe_persistsRecipe() {
+        ContentRecipeDto recipeDto = ContentRecipeDto.builder()
+                .prepMinutes(15)
+                .cookMinutes(30)
+                .ingredients(List.of(
+                        ContentRecipeDto.Ingredient.builder().name("Đậu phụ").quantity("300").unit("g").isCustom(false).build()
+                ))
+                .build();
+        ContentCreateRequest request = ContentCreateRequest.builder()
+                .title("Video Hướng Dẫn Làm Đậu Phụ Sốt Cà")
+                .body("Các bước làm...")
+                .categoryId(10)
+                .mediaUrl("https://res.cloudinary.com/test-cloud/video.mp4")
+                .durationSec(120)
+                .recipe(recipeDto)
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(categoryRepository.findById(10)).thenReturn(Optional.of(validCategory));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> {
+            Content c = invocation.getArgument(0);
+            c.setContentId(201);
+            return c;
+        });
+
+        AuthorContentResponse response = authorContentService.createContent("truong_author", "VIDEO", request);
+
+        assertNotNull(response);
+        assertEquals("VIDEO", response.getContentType());
+        verify(contentRecipePersistenceService, times(1)).replace(any(Content.class), eq(recipeDto));
+    }
+
+    @Test
+    @DisplayName("Video: Cập nhật video có kèm recipe/ingredients -> Lưu vào ContentRecipePersistenceService")
+    void updateContent_videoWithRecipe_persistsRecipe() {
+        Content videoContent = Content.builder()
+                .contentId(202)
+                .user(authorUser)
+                .contentType("VIDEO")
+                .categoryId(10)
+                .title("Video Cũ")
+                .mediaUrl("https://res.cloudinary.com/test-cloud/video.mp4")
+                .status("draft")
+                .build();
+
+        ContentRecipeDto recipeDto = ContentRecipeDto.builder()
+                .prepMinutes(10)
+                .ingredients(List.of(
+                        ContentRecipeDto.Ingredient.builder().name("Nấm kim châm").quantity("100").unit("g").build()
+                ))
+                .build();
+
+        ContentUpdateRequest request = ContentUpdateRequest.builder()
+                .title("Video Mới")
+                .recipe(recipeDto)
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(202)).thenReturn(Optional.of(videoContent));
+        when(contentRepository.save(any(Content.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AuthorContentResponse response = authorContentService.updateContent("truong_author", 202, "VIDEO", request);
+
+        assertNotNull(response);
+        verify(contentRecipePersistenceService, times(1)).replace(any(Content.class), eq(recipeDto));
+    }
+
+    @Test
+    @DisplayName("Video: getContentById trả về recipe đã lưu cho tác giả")
+    void getContentById_video_returnsRecipe() {
+        Content videoContent = Content.builder()
+                .contentId(203)
+                .user(authorUser)
+                .contentType("VIDEO")
+                .categoryId(10)
+                .title("Video Món Chay")
+                .mediaUrl("https://res.cloudinary.com/test-cloud/video.mp4")
+                .status("draft")
+                .build();
+
+        ContentRecipeDto recipeDto = ContentRecipeDto.builder()
+                .prepMinutes(5)
+                .ingredients(List.of(
+                        ContentRecipeDto.Ingredient.builder().name("Cà chua").quantity("2").unit("quả").build()
+                ))
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(contentRepository.findById(203)).thenReturn(Optional.of(videoContent));
+        when(contentRecipePersistenceService.read(203)).thenReturn(recipeDto);
+
+        AuthorContentResponse response = authorContentService.getContentById("truong_author", 203, "VIDEO");
+
+        assertNotNull(response);
+        assertNotNull(response.getRecipe());
+        assertEquals(5, response.getRecipe().getPrepMinutes());
+        assertEquals("Cà chua", response.getRecipe().getIngredients().get(0).getName());
     }
 }
