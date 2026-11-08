@@ -341,4 +341,28 @@ class ContentServiceTest {
         assertEquals("https://img.test/avatar_2.jpg", videoDetail.getAuthorAvatar());
         assertEquals("https://img.test/avatar_2.jpg", videoDetail.getAvatarUrl());
     }
+
+    @Test
+    @DisplayName("Lấy chi tiết Video kèm recipe và ingredients từ ContentRecipePersistenceService")
+    void getVideoById_IncludesRecipeDetail() {
+        Content video = createSampleVideo(201, "Hướng dẫn nấu cháo nấm", "nau-chao-nam", 30);
+        when(contentRepository.findPublishedByIdAndType(201, "VIDEO", "published"))
+                .thenReturn(Optional.of(video));
+        com.fpt.swp391.nutribot.dto.ContentRecipeDto expectedRecipe = com.fpt.swp391.nutribot.dto.ContentRecipeDto.builder()
+                .prepMinutes(10)
+                .cookMinutes(20)
+                .ingredients(List.of(
+                        com.fpt.swp391.nutribot.dto.ContentRecipeDto.Ingredient.builder().name("Nấm rơm").quantity("200").unit("g").isCustom(false).build()
+                ))
+                .build();
+        when(contentRecipePersistenceService.read(201)).thenReturn(expectedRecipe);
+
+        VideoDetailResponse response = contentService.getVideoById(201);
+
+        assertNotNull(response);
+        assertNotNull(response.getRecipe());
+        assertEquals(10, response.getRecipe().getPrepMinutes());
+        assertEquals(1, response.getRecipe().getIngredients().size());
+        assertEquals("Nấm rơm", response.getRecipe().getIngredients().get(0).getName());
+    }
 }

@@ -1,6 +1,7 @@
 package com.fpt.swp391.nutribot.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fpt.swp391.nutribot.dto.ContentRecipeDto;
 import lombok.*;
 import java.time.LocalDateTime;
 
@@ -18,6 +19,9 @@ public class VideoDetailResponse {
 
     @JsonProperty("body")
     private String body;
+
+    @JsonProperty("recipe")
+    private ContentRecipeDto recipe;
 
     @JsonProperty("mediaUrl")
     private String mediaUrl;
