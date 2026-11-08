@@ -685,6 +685,11 @@ class GeminiService:
                     ),
                 ]
             inference_started = time.perf_counter()
+            response_parser = (
+                self._parse_video_followup_response
+                if has_video_context and not is_image_request
+                else self._parse_response
+            )
             generation = self._generate_with_fallback(
                 client,
                 contents,
@@ -692,6 +697,7 @@ class GeminiService:
                 telemetry=telemetry,
                 fallback_on_timeout=True,
                 task=task,
+                response_validator=response_parser,
             )
             request_timeout = (
                 self._settings.gemini_image_timeout_seconds
@@ -703,9 +709,7 @@ class GeminiService:
             response = await asyncio.wait_for(generation, timeout=request_timeout)
             telemetry["inference_duration_ms"] = round((time.perf_counter() - inference_started) * 1000)
             result = (
-                self._parse_video_followup_response(response)
-                if has_video_context and not is_image_request
-                else self._parse_response(response)
+                response_parser(response)
             )
             if has_video_context and any(term in request.message.casefold() for term in ("cooking instruction", "cooking step", "show me the cooking", "show the cooking")):
                 result = result.model_copy(update={"recommendations": []})
@@ -792,6 +796,7 @@ class GeminiService:
         video_request: bool = False,
         task: str | None = None,
         deadline: float | None = None,
+        response_validator: Any | None = None,
     ) -> Any:
         telemetry = telemetry if telemetry is not None else {}
         telemetry.setdefault("models", [])
@@ -810,6 +815,7 @@ class GeminiService:
             routing_task, candidates, candidates[0],
         )
 
+        last_invalid_response: AIResponseInvalidError | None = None
         for index, model in enumerate(candidates):
             telemetry["models"].append(model)
             telemetry["calls"] += 1
@@ -828,6 +834,29 @@ class GeminiService:
                     response = await client.aio.models.generate_content(
                         model=model, contents=prompt, config=config
                     )
+                if response_validator is not None:
+                    try:
+                        response_validator(response)
+                    except AIResponseInvalidError as exc:
+                        # A malformed provider response is model health failure,
+                        # not a successful generation. Cool it down and use the
+                        # already-routed alternative at most once.
+                        last_invalid_response = exc
+                        self._model_router.mark_failure(
+                            model, 502, "invalid_structured_response"
+                        )
+                        telemetry["errors"].append(
+                            {"model": model, "type": "AIResponseInvalidError"}
+                        )
+                        logger.warning(
+                            "Gemini structured response invalid task=%s model=%s fallback=%s",
+                            routing_task,
+                            model,
+                            index == 0 and len(candidates) > 1,
+                        )
+                        if index == 0 and len(candidates) > 1:
+                            continue
+                        raise
                 self._model_router.mark_success(model)
                 return response
             except errors.APIError as exc:
@@ -866,6 +895,8 @@ class GeminiService:
             except Exception as exc:
                 telemetry["errors"].append({"model": model, "type": type(exc).__name__})
                 raise
+        if last_invalid_response is not None:
+            raise last_invalid_response
         raise self._model_router.unavailable_error(routing_task)
 
     async def _legacy_generate_with_fallback(

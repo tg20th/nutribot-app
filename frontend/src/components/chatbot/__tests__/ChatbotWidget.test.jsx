@@ -269,7 +269,7 @@ describe('ChatbotWidget', () => {
     expect(screen.queryByText('Would you like to see the cooking instructions?')).not.toBeInTheDocument();
     expect(requestNutritionAdvice).toHaveBeenCalledTimes(2);
     expect(requestNutritionAdvice.mock.calls[1][0].attachment).toBeUndefined();
-    expect(requestNutritionAdvice.mock.calls[1][0].message).toMatch(/structured video analysis/i);
+    expect(requestNutritionAdvice.mock.calls[1][0].message).toMatch(/^COOKING_INSTRUCTIONS:/);
   });
 
   it('dismisses the cooking follow-up without sending another request', async () => {
