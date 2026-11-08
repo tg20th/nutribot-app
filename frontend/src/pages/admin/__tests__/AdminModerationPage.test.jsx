@@ -135,7 +135,7 @@ describe('admin moderation screen', () => {
   it('renders AI moderation evaluation and confidence when available', async () => {
     render(<AdminModerationPage />);
     expect(await screen.findByRole('heading', { name: 'AI Review' })).toBeTruthy();
-    expect(screen.getByText(/Confidence: 91%/)).toBeTruthy();
+    expect(document.querySelector('.moderation-ai-confidence')?.textContent).toBe('Confidence: 91%');
   });
 
   it('renders a YouTube player for a VIDEO submission instead of its thumbnail', async () => {
@@ -254,7 +254,32 @@ describe('admin moderation screen', () => {
     expect(screen.queryByText(recipeBody)).toBeNull();
   });
 
-  it('renders duplicate warning banner and opens side-by-side diff modal for suspected duplicates (NB-97)', async () => {
+  it('renders relational recipe submissions from content.body as the story', async () => {
+    const recipePost = {
+      id: 4,
+      type: 'BLOG',
+      title: 'Relational recipe submission',
+      status: 'pending',
+      author: 'recipe_author',
+      submittedAt: '2026-10-09T08:30:00',
+      body: 'First story paragraph.\n\nSecond story paragraph.',
+      recipe: {
+        prepMinutes: 10,
+        ingredients: [{ name: 'Oats', quantity: '50', unit: 'g' }],
+        steps: [{ instruction: 'Mix the ingredients.' }],
+      },
+    };
+
+    adminApi.getModerationQueue.mockResolvedValueOnce({ content: [recipePost], totalElements: 1, totalPages: 1 });
+    render(<AdminModerationPage />);
+
+    expect(await screen.findByText(/First story paragraph\./)).toBeInTheDocument();
+    expect(screen.getByText(/Second story paragraph\./)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Recipe overview' })).toBeInTheDocument();
+    expect(screen.queryByText('No story is available for this recipe submission.')).toBeNull();
+  });
+
+  it('renders the consolidated AI review and opens the comparison modal for suspected duplicates (NB-97)', async () => {
     adminApi.getModerationQueue.mockResolvedValueOnce({
       content: [
         {
@@ -280,25 +305,25 @@ describe('admin moderation screen', () => {
 
     render(<AdminModerationPage />);
 
-    // Kiểm tra hiển thị banner cảnh báo gần trùng lặp
-    expect(await screen.findByText('Cảnh báo nội dung gần trùng lặp')).toBeInTheDocument();
-    expect(screen.getByText('87% Tương đồng')).toBeInTheDocument();
-    expect(screen.getByText(/Bí quyết phở nấm chay truyền thống/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'AI Review' })).toBeInTheDocument();
+    expect(screen.getByText(/87% similarity/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Bí quyết phở nấm chay truyền thống/).length).toBeGreaterThan(0);
 
     // Bấm nút mở Modal So sánh trực diện
-    const diffButton = screen.getByRole('button', { name: /So sánh trực diện/i });
+    const diffButton = screen.getByRole('button', { name: /Compare/i });
     expect(diffButton).toBeInTheDocument();
     fireEvent.click(diffButton);
 
     // Modal hiển thị hai cột đối chiếu
-    expect(await screen.findByRole('dialog', { name: /So sánh trực diện bài viết nghi ngờ sao chép/i })).toBeInTheDocument();
-    expect(screen.getByText('BÀI GỐC ĐÃ XUẤT BẢN (#12)')).toBeInTheDocument();
-    expect(screen.getByText('BÀI MỚI NỘP DUYỆT (#88)')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Từ chối vì sao chép/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Bỏ qua & Duyệt bài/i })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Content comparison' })).toBeInTheDocument();
+    expect(screen.getByText('ORIGINAL ARTICLE')).toBeInTheDocument();
+    expect(screen.getByText('FLAGGED FOR POSSIBLE PLAGIARISM')).toBeInTheDocument();
+    expect(document.querySelectorAll('.content-diff-sentence.is-match').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: /Reject for Plagiarism/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Override & Approve/i })).toBeInTheDocument();
 
     // Bấm Đóng modal
-    fireEvent.click(screen.getByRole('button', { name: 'Đóng cửa sổ' }));
-    expect(screen.queryByRole('dialog', { name: /So sánh trực diện bài viết nghi ngờ sao chép/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close comparison' }));
+    expect(screen.queryByRole('dialog', { name: 'Side-by-Side Comparison' })).toBeNull();
   });
 });

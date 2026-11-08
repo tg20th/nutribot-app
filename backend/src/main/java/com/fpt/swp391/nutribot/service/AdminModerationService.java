@@ -30,6 +30,7 @@ public class AdminModerationService {
     private final NotificationService notificationService;
     private final ModerationDecisionAuditRepository moderationDecisionAuditRepository;
     private final UserModerationActionRepository userModerationActionRepository;
+    private final ContentRecipePersistenceService contentRecipePersistenceService;
 
     @Transactional(readOnly = true)
     public PagedResponse<AdminContentResponse> getPendingContents(String contentType, int page, int size) {
@@ -156,6 +157,7 @@ public class AdminModerationService {
                 .matchedAuthor(matchedAuthor)
                 .matchedBody(matched == null ? null : matched.getBody())
                 .matchedPublishedAt(matched == null ? null : matched.getCreatedAt())
+                .recipe(contentRecipePersistenceService.read(c.getContentId()))
                 .build();
     }
 }

@@ -10,7 +10,6 @@ import java.util.regex.Pattern;
  */
 public final class ContentTextNormalizer {
 
-    private static final Pattern HTML_TAG_PATTERN = Pattern.compile("<[^>]*>");
     private static final Pattern PUNCTUATION_PATTERN = Pattern.compile("[^\\p{L}\\p{Nd}\\s]");
     private static final Pattern MULTI_SPACE_PATTERN = Pattern.compile("\\s+");
 
@@ -23,12 +22,12 @@ public final class ContentTextNormalizer {
      * @param htmlContent chuỗi nội dung (có thể chứa HTML từ rich text editor)
      * @return chuỗi văn bản thuần túy đã chuẩn hóa
      */
-    public static String extractPlainText(String htmlContent) {
-        if (htmlContent == null || htmlContent.isBlank()) {
+    public static String extractPlainText(String content) {
+        if (content == null || content.isBlank()) {
             return "";
         }
-        String strippedHtml = HTML_TAG_PATTERN.matcher(htmlContent).replaceAll(" ");
-        String strippedPunctuation = PUNCTUATION_PATTERN.matcher(strippedHtml).replaceAll(" ");
+        String normalizedPlainText = AuthorContentService.normalizeBody(content);
+        String strippedPunctuation = PUNCTUATION_PATTERN.matcher(normalizedPlainText).replaceAll(" ");
         return MULTI_SPACE_PATTERN.matcher(strippedPunctuation).replaceAll(" ").trim().toLowerCase();
     }
 

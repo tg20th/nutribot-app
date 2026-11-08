@@ -1,5 +1,6 @@
 package com.fpt.swp391.nutribot.dto.response;
 
+import com.fpt.swp391.nutribot.dto.ContentRecipeDto;
 import lombok.*;
 import java.time.LocalDateTime;
 
@@ -33,4 +34,5 @@ public class AdminContentResponse {
     private String matchedAuthor;
     private String matchedBody;
     private LocalDateTime matchedPublishedAt;
+    private ContentRecipeDto recipe;
 }

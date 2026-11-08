@@ -68,6 +68,9 @@ class AdminModerationServiceTest {
     @Mock
     private UserModerationActionRepository userModerationActionRepository;
 
+    @Mock
+    private ContentRecipePersistenceService contentRecipePersistenceService;
+
     @InjectMocks
     private AdminModerationService adminModerationService;
 

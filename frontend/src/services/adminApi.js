@@ -81,6 +81,7 @@ const mapModerationItem = (item) => ({
   updatedAt: item.updatedAt,
   viewCount: item.viewCount ?? 0,
   body: item.body,
+  recipe: item.recipe ?? null,
   thumbnailUrl: item.thumbnailUrl,
   aiFlagged: item.aiFlagged,
   aiReason: item.aiReason,

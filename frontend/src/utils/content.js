@@ -18,6 +18,62 @@ const tags = (item) => asArray(item.tags ?? item.categories)
   .map((tag) => typeof tag === 'string' ? tag : tag?.name)
   .filter(Boolean);
 
+const plainTextBlockTags = new Set(['address', 'article', 'blockquote', 'div', 'dl', 'fieldset', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hr', 'li', 'main', 'nav', 'ol', 'p', 'pre', 'section', 'table', 'tr', 'ul']);
+
+function decodeHtmlEntities(value) {
+  if (typeof document === 'undefined') return value
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'");
+  const decoder = document.createElement('textarea');
+  decoder.innerHTML = value;
+  return decoder.value;
+}
+
+/** Convert legacy rich-text HTML to readable text without injecting markup. */
+export function htmlToPlainText(value) {
+  if (typeof value !== 'string' || !value) return '';
+  if (!/<[a-z][\s\S]*>/i.test(value)) return decodeHtmlEntities(value).replace(/\u00a0/g, ' ');
+  if (typeof document === 'undefined') {
+    return decodeHtmlEntities(value
+      .replace(/<!--\s*[\s\S]*?-->/g, '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|h[1-6]|li|blockquote|tr)>/gi, '\n')
+      .replace(/<[^>]*>/g, ''))
+      .replace(/\r\n?/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+  const root = document.createElement('div');
+  root.innerHTML = value;
+  let output = '';
+  const appendBreak = () => { if (output && !output.endsWith('\n')) output += '\n'; };
+  const visit = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      output += node.nodeValue || '';
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = node.tagName.toLowerCase();
+    if (['script', 'style', 'iframe', 'object'].includes(tag)) return;
+    if (tag === 'br') { output += '\n'; return; }
+    const block = plainTextBlockTags.has(tag);
+    if (block) appendBreak();
+    [...node.childNodes].forEach(visit);
+    if (block) appendBreak();
+  };
+  [...root.childNodes].forEach(visit);
+  return decodeHtmlEntities(output)
+    .replace(/\u00a0/g, ' ')
+    .replace(/\r\n?/g, '\n')
+    .split('\n').map((line) => line.replace(/[ \t]+$/g, '')).join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export const extractStoryText = (value) => {
   if (!value || typeof value !== 'string') return '';
   const trimmed = value.trim();
@@ -32,7 +88,7 @@ export const extractStoryText = (value) => {
       return '';
     }
   }
-  return value;
+  return htmlToPlainText(value);
 };
 
 export const cleanExcerpt = (value, maxLength) => {

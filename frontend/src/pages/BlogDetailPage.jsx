@@ -36,11 +36,7 @@ function renderHtmlNode(node, key) {
 }
 
 function ArticleBody({ body }) {
-  if (/<[a-z][\s\S]*>/i.test(body || '')) {
-    const document = new DOMParser().parseFromString(body, 'text/html');
-    return [...document.body.childNodes].map((node, index) => renderHtmlNode(node, index));
-  }
-  const lines = String(body || '').replace(/\r\n/g, '\n').split('\n');
+  const lines = extractStoryText(body).replace(/\r\n/g, '\n').split('\n');
   const blocks = [];
   let index = 0;
   while (index < lines.length) {
