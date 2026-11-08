@@ -115,9 +115,9 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, 
       ? `Author consented to terms ${source.recipeConsentTermsVersion}; current terms are ${RECIPE_CONSENT_TERMS_VERSION}. The author must consent again.`
       : 'Author consent is required before this suggestion can be approved.')
     : 'Resolve the validation errors before approving this suggestion.';
-  return <article className="recipe-suggestion-detail" aria-label="Suggestion detail">
-    <header className="recipe-suggestion-detail-head">
-      <div><span>REVIEW DETAIL</span><SuggestionStatus status={suggestion.status} /></div>
+  return <article className="admin-panel moderation-detail recipe-suggestion-detail" aria-label="Suggestion detail">
+    <header className="moderation-detail-header recipe-suggestion-detail-head">
+      <div><span>{source.contentType === 'VIDEO' ? 'VIDEO SUBMISSION' : 'BLOG SUBMISSION'}</span><SuggestionStatus status={suggestion.status} /></div>
       <time dateTime={suggestion.createdAt}>Received {formatDate(suggestion.createdAt)}</time>
     </header>
 
@@ -178,7 +178,7 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, 
         <div><strong>{suggestion.status === 'REJECTED' ? 'Suggestion rejected' : 'Suggestion reviewed'}</strong>{suggestion.rejectionReason && <p>{suggestion.rejectionReason}</p>}</div>
         {suggestion.reviewedAt && <time dateTime={suggestion.reviewedAt}>{formatDate(suggestion.reviewedAt)}{suggestion.reviewerName ? ` by ${suggestion.reviewerName}` : ''}</time>}
       </section>}
-      {showReviewControls && suggestion.status === 'PENDING' && <footer className="recipe-suggestion-review-actions"><div><strong>Decision required</strong><span>{approvalBlocked ? blockedMessage : 'Approve to import this dish and recipe, or reject with a reason.'}</span></div><div><button type="button" className="admin-btn secondary recipe-suggestion-reject" disabled={submitting} onClick={() => onReview('REJECT')}><X size={16} /> Reject</button><button type="button" className="admin-btn primary" disabled={submitting || approvalBlocked} title={approvalBlocked ? blockedMessage : undefined} onClick={() => onReview('APPROVE')}><Check size={16} /> Approve suggestion</button></div></footer>}
+      {showReviewControls && suggestion.status === 'PENDING' && <footer className="moderation-actions recipe-suggestion-review-actions"><div><strong>Decision required</strong><span>{approvalBlocked ? blockedMessage : 'Approve to import this dish and recipe, or reject with a reason.'}</span></div><div><button type="button" className="admin-btn secondary recipe-suggestion-reject" disabled={submitting} onClick={() => onReview('REJECT')}><X size={16} /> Reject</button><button type="button" className="admin-btn primary" disabled={submitting || approvalBlocked} title={approvalBlocked ? blockedMessage : undefined} onClick={() => onReview('APPROVE')}><Check size={16} /> Approve suggestion</button></div></footer>}
     </div>
   </article>;
 }
@@ -247,7 +247,11 @@ function SourceContentModal({ open, loading, error, post, fallback, onClose, onR
 
 export default function AdminContentRecipeSuggestionsPage() {
   const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview') === '1';
+  const [workspace, setWorkspace] = useState('QUEUE');
   const [status, setStatus] = useState('PENDING');
+  const [historyQuery, setHistoryQuery] = useState('');
+  const [queueQuery, setQueueQuery] = useState('');
+  const [queueContentType, setQueueContentType] = useState('');
   const [sortDirection, setSortDirection] = useState('desc');
   const [page, setPage] = useState(1);
   const [result, setResult] = useState({ content: [], totalElements: 0, totalPages: 0 });
@@ -306,12 +310,15 @@ export default function AdminContentRecipeSuggestionsPage() {
           return;
         }
         setResult(next);
-        setSelectedId((current) => next.content.some((item) => item.suggestionId === current) ? current : next.content[0]?.suggestionId ?? null);
+        setSelectedId((current) => {
+          if (workspace !== 'QUEUE') return next.content.some((item) => item.suggestionId === current) ? current : null;
+          return next.content.some((item) => item.suggestionId === current) ? current : next.content[0]?.suggestionId ?? null;
+        });
       })
       .catch(() => { if (!controller.signal.aborted) { setResult({ content: [], totalElements: 0, totalPages: 0 }); setSelectedId(null); setError(true); } })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [page, refreshKey, status]);
+  }, [page, refreshKey, status, workspace]);
 
   useEffect(() => {
     if (!selectedId) { setDetail(null); setDetailError(false); setDetailUnavailable(false); return undefined; }
@@ -353,8 +360,33 @@ export default function AdminContentRecipeSuggestionsPage() {
     const rightTime = new Date(right.createdAt ?? 0).getTime();
     return sortDirection === 'desc' ? rightTime - leftTime : leftTime - rightTime;
   }), [result.content, sortDirection]);
+  const visibleSuggestions = useMemo(() => {
+    const query = historyQuery.trim().toLocaleLowerCase('vi');
+    if (workspace === 'QUEUE') {
+      const queueSearch = queueQuery.trim().toLocaleLowerCase('vi');
+      return sortedSuggestions.filter((item) => (!queueContentType || item.source.contentType === queueContentType)
+        && (!queueSearch || [item.source.title, item.source.authorName, item.dish.name]
+          .some((value) => String(value ?? '').toLocaleLowerCase('vi').includes(queueSearch))));
+    }
+    const reviewedSuggestions = sortedSuggestions.filter((item) => item.status !== 'PENDING');
+    if (!query) return reviewedSuggestions;
+    return reviewedSuggestions.filter((item) => [item.source.title, item.source.authorName, item.dish.name, item.suggestionId]
+      .some((value) => String(value ?? '').toLocaleLowerCase('vi').includes(query)));
+  }, [historyQuery, queueContentType, queueQuery, sortedSuggestions, workspace]);
   const selected = useMemo(() => sortedSuggestions.find((item) => item.suggestionId === selectedId) ?? null, [sortedSuggestions, selectedId]);
+  const isQueue = workspace === 'QUEUE';
   const changeStatus = (nextStatus) => { setStatus(nextStatus); setPage(1); setSelectedId(null); };
+  const changeWorkspace = (nextWorkspace) => {
+    setWorkspace(nextWorkspace);
+    setHistoryQuery('');
+    setQueueQuery('');
+    setQueueContentType('');
+    changeStatus(nextWorkspace === 'QUEUE' ? 'PENDING' : '');
+  };
+  const workspaceTitle = isQueue ? 'Recipe suggestions' : 'Recipe suggestion history';
+  const workspaceText = isQueue
+    ? 'Assess pending community recipes, resolve validation issues, then approve or reject.'
+    : 'Review completed approvals and rejections without interrupting the active queue.';
   const retry = () => setRefreshKey((value) => value + 1);
   const openCreateIngredient = (proposalIndex, name) => {
     setCreateIngredientDraft({ proposalIndex, name: name ?? '', slug: slugFromName(name), categoryId: '', description: '' });
@@ -441,30 +473,55 @@ export default function AdminContentRecipeSuggestionsPage() {
     } finally { setSubmittingReview(false); }
   };
 
-  return <div className="recipe-suggestions-page">
+  return <div className="moderation-page recipe-suggestions-page">
     <PageHeader
       eyebrow="ADMINISTRATION / CONTENT REVIEW"
-      title="Recipe suggestions"
-      text="Review server-generated dish and recipe proposals from published community content."
-      action={<div className="recipe-suggestions-total" aria-live="polite"><Soup size={18} /><div><strong>{result.totalElements}</strong><span>server suggestions</span></div></div>}
+      title={workspaceTitle}
+      text={workspaceText}
+      action={<div className="recipe-suggestions-total" aria-live="polite"><Soup size={18} /><div><strong>{result.totalElements}</strong><span>{isQueue ? 'awaiting review' : 'completed records'}</span></div></div>}
     />
 
-    <AdminToolbar className="recipe-suggestions-toolbar" label="Suggestion filters">
-      <select className="admin-filter-select" aria-label="Filter suggestions by status" value={status} onChange={(event) => changeStatus(event.target.value)}><option value="PENDING">Pending</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option><option value="">All statuses</option></select>
-      <button type="button" className="recipe-suggestions-sort" onClick={() => setSortDirection((value) => value === 'desc' ? 'asc' : 'desc')} aria-label={sortDirection === 'desc' ? 'Sort by oldest first' : 'Sort by newest first'} title={sortDirection === 'desc' ? 'Newest first' : 'Oldest first'}><ArrowUpDown size={16} /><span>{sortDirection === 'desc' ? 'Newest' : 'Oldest'}</span></button>
-    </AdminToolbar>
+    <section className="recipe-suggestions-workspace" aria-label="Recipe suggestion workspace">
+      <nav className="moderation-workspace-tabs recipe-suggestions-tabs" aria-label="Recipe suggestion views">
+        <button type="button" aria-current={isQueue ? 'page' : undefined} className={isQueue ? 'is-active' : ''} onClick={() => changeWorkspace('QUEUE')}>Review Queue</button>
+        <button type="button" aria-current={!isQueue ? 'page' : undefined} className={!isQueue ? 'is-active' : ''} onClick={() => changeWorkspace('HISTORY')}>History</button>
+      </nav>
+      {isQueue && <AdminToolbar className="recipe-suggestions-toolbar" label="Suggestion filters">
+        <label className="admin-search moderation-search" aria-label="Search pending recipe suggestions"><Search size={17} aria-hidden="true" /><input aria-label="Search pending recipe suggestions" value={queueQuery} onChange={(event) => setQueueQuery(event.target.value)} placeholder="Search title or author on this page..." />{queueQuery && <button type="button" onClick={() => setQueueQuery('')} aria-label="Clear pending recipe search"><X size={15} /></button>}</label>
+        <div className="moderation-type-filter"><select className="admin-filter-select" aria-label="Recipe source type" value={queueContentType} onChange={(event) => setQueueContentType(event.target.value)}><option value="">All content</option><option value="BLOG">Blogs</option><option value="VIDEO">Videos</option></select></div>
+      </AdminToolbar>}
+    </section>
 
     {loading ? <section className="admin-panel recipe-suggestions-state"><LoadingState /></section>
       : error ? <section className="admin-panel recipe-suggestions-state"><ErrorState onRetry={retry} /></section>
-        : !result.content.length ? <section className="admin-panel recipe-suggestions-state"><EmptyState title="No suggestions found." text={status ? 'Try another server status filter.' : 'Eligible content will appear here when the server creates a suggestion.'} /></section>
-          : <div className="recipe-suggestions-board">
-            <section className="admin-panel recipe-suggestions-list" aria-label="Content recipe suggestions">
-              <header><div><h2>Suggestions to review</h2></div><span>{sortedSuggestions.length} on this page</span></header>
-              <div>{sortedSuggestions.map((item) => {
+        : !visibleSuggestions.length ? <section className="admin-panel recipe-suggestions-state"><EmptyState title={isQueue ? 'The review queue is clear.' : 'No history matches this filter.'} text={isQueue ? 'Eligible community content will appear here when the server creates a proposal.' : 'Try another decision filter or search term to see completed reviews.'} /></section>
+          : !isQueue ? <>
+            <section className="moderation-history-workspace recipe-suggestion-history-workspace" aria-label="Recipe review history controls">
+              <div className="moderation-history-primary">
+                <label className="moderation-history-search"><Search size={17} aria-hidden="true" /><input aria-label="Search recipe review history" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search recipe, author or ID" />{historyQuery && <button type="button" onClick={() => setHistoryQuery('')} aria-label="Clear recipe history search"><X size={15} /></button>}</label>
+                <div className="moderation-history-toolbar-controls"><label className="moderation-decision-dropdown"><span>Decision</span><select aria-label="Filter review history by decision" value={status} onChange={(event) => changeStatus(event.target.value)}><option value="">All decisions</option><option value="APPROVED">Approved</option><option value="REJECTED">Rejected</option></select></label><button type="button" className="recipe-suggestions-sort" onClick={() => setSortDirection((value) => value === 'desc' ? 'asc' : 'desc')} aria-label={sortDirection === 'desc' ? 'Sort by oldest first' : 'Sort by newest first'}><ArrowUpDown size={16} /><span>{sortDirection === 'desc' ? 'Newest' : 'Oldest'}</span></button></div>
+              </div>
+            </section>
+            <section className="moderation-history-list recipe-suggestion-history-list" aria-label="Recipe review history">
+              {visibleSuggestions.map((item) => {
+                const approved = item.status === 'APPROVED';
+                const Icon = item.source.contentType === 'VIDEO' ? PlaySquare : FileText;
+                return <button className="moderation-history-row" type="button" key={item.suggestionId} onClick={() => setSelectedId(item.suggestionId)}>
+                  <span className="moderation-history-content"><span className="moderation-history-type-icon"><Icon size={16} /></span><span><b>{item.source.title}</b><small>{item.source.contentType === 'VIDEO' ? 'Video' : 'Blog'} <i>/</i> @{item.source.authorName} <i>/</i> #{item.suggestionId}</small><em>{item.dish.name}</em></span></span>
+                  <span className="moderation-history-trailing"><span className={approved ? 'moderation-decision approved' : 'moderation-decision rejected'}>{approved ? <Check size={16} /> : <X size={16} />}{approved ? 'Approved' : 'Rejected'}</span><time dateTime={item.reviewedAt || item.createdAt}>{formatDate(item.reviewedAt || item.createdAt)}</time><ChevronRight className="moderation-history-chevron" size={17} /></span>
+                </button>;
+              })}
+              {result.totalPages > 1 && <nav className="moderation-pagination recipe-suggestion-history-pagination" aria-label="Recipe history pagination"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} aria-label="Previous page"><ChevronLeft size={17} /></button><span>{page} / {result.totalPages}</span><button type="button" disabled={page >= result.totalPages} onClick={() => setPage((value) => value + 1)} aria-label="Next page"><ChevronRight size={17} /></button></nav>}
+            </section>
+          </>
+          : <div className="moderation-board recipe-suggestions-board">
+            <section className="admin-panel moderation-queue recipe-suggestions-list" aria-label="Content recipe suggestions">
+              <header><h2>Review queue</h2><span>{visibleSuggestions.length} shown</span></header>
+              <div>{visibleSuggestions.map((item) => {
                 const active = item.suggestionId === selectedId;
                 const Icon = item.source.contentType === 'VIDEO' ? PlaySquare : FileText;
-                return <button key={item.suggestionId} type="button" className={active ? 'recipe-suggestion-row is-active' : 'recipe-suggestion-row'} onClick={() => setSelectedId(item.suggestionId)} aria-pressed={active}>
-                  <span className="recipe-suggestion-row-icon"><Icon size={18} /></span><span className="recipe-suggestion-row-copy"><span className="recipe-suggestion-row-top"><small>{item.source.contentType === 'VIDEO' ? 'Video' : 'Blog'}</small><SuggestionStatus status={item.status} /></span><strong>{item.source.title}</strong><small>By {item.source.authorName}</small><span className="recipe-suggestion-row-proposal">Proposed dish: <b>{item.dish.name}</b></span><time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time></span>
+                return <button key={item.suggestionId} type="button" className={active ? 'moderation-queue-item recipe-suggestion-row is-active' : 'moderation-queue-item recipe-suggestion-row'} onClick={() => setSelectedId(item.suggestionId)} aria-pressed={active}>
+                  <span className="moderation-type-icon recipe-suggestion-row-icon"><Icon size={18} /></span><span className="moderation-queue-copy recipe-suggestion-row-copy"><strong>{item.source.title}</strong><small>{item.source.contentType === 'VIDEO' ? 'Video' : 'Blog'} <i>/</i> @{item.source.authorName}</small><time dateTime={item.createdAt}>{formatDate(item.createdAt)}</time></span><span className="moderation-queue-badges"><SuggestionStatus status={item.status} /></span>
                 </button>;
               })}</div>
               {result.totalPages > 1 && <nav className="recipe-suggestion-pagination" aria-label="Suggestion pagination"><button type="button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} aria-label="Previous page"><ChevronLeft size={16} /></button><span>Page {page} of {result.totalPages}</span><button type="button" disabled={page >= result.totalPages} onClick={() => setPage((value) => value + 1)} aria-label="Next page"><ChevronRight size={16} /></button></nav>}
@@ -475,6 +532,7 @@ export default function AdminContentRecipeSuggestionsPage() {
                 : detail ? <RecipeDetail suggestion={detail} showReviewControls onReview={openReview} onOpenSource={(sourceInfo) => openSource(sourceInfo, detail)} submitting={submittingReview} catalogIngredients={catalogIngredients} ingredientMappings={ingredientMappings} onIngredientMapping={(index, id) => setIngredientMappings((current) => ({ ...current, [index]: id }))} onCreateIngredient={openCreateIngredient} mappingSectionRef={mappingSectionRef} />
                   : selected ? <section className="admin-panel recipe-suggestion-detail-state"><EmptyState title="Suggestion detail is unavailable." text="The source may have changed or is no longer available on the server." /></section> : null}
           </div>}
+    {!isQueue && selectedId && <aside className="moderation-history-drawer recipe-suggestion-history-drawer" role="dialog" aria-modal="true" aria-label="Recipe suggestion review detail"><header><div><span className="moderation-detail-kicker">RECIPE REVIEW</span><h2>{detail?.source?.title || selected?.source?.title || 'Recipe suggestion'}</h2></div><button type="button" onClick={() => setSelectedId(null)} aria-label="Close recipe history detail"><X size={19} /></button></header><div className="moderation-history-drawer-body recipe-suggestion-history-drawer-body">{detailLoading ? <LoadingState /> : detailError ? <ErrorState onRetry={() => setDetailRefresh((value) => value + 1)} /> : detail ? <RecipeDetail suggestion={detail} showReviewControls={false} onOpenSource={(sourceInfo) => openSource(sourceInfo, detail)} /> : <EmptyState title="Suggestion detail is unavailable." />}</div></aside>}
     {reviewDialog && <div className="admin-modal-backdrop" onMouseDown={closeReview}><section className="admin-dialog recipe-suggestion-review-dialog" role="dialog" aria-modal="true" aria-labelledby="suggestion-review-title" onMouseDown={(event) => event.stopPropagation()}><p>REVIEW</p><h2 id="suggestion-review-title">{reviewDialog === 'APPROVE' ? 'Approve this suggestion?' : 'Reject this suggestion?'}</h2><span>{reviewDialog === 'APPROVE' ? 'The proposed dish and recipe will be imported into the catalog.' : 'State why this proposal should not enter the catalog.'}</span>{reviewDialog === 'REJECT' && <label>Rejection reason<textarea value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} placeholder="Example: nutrition information needs a verifiable source" aria-invalid={Boolean(reviewError)} /></label>}{reviewError && <div className="recipe-suggestion-review-error" role="alert"><strong>{reviewDialog === 'APPROVE' ? 'Approval was blocked' : 'Review failed'}</strong><p>{reviewError}</p>{reviewIssues.length > 0 && <ul>{reviewIssues.map((issue, index) => <li key={`${issue.field}-${issue.code}-${index}`}><b>{issue.field || 'Suggestion'}</b>{issue.message}</li>)}</ul>}</div>}<div><button type="button" className="admin-btn secondary" disabled={submittingReview} onClick={closeReview}>Cancel</button><button type="button" className={`admin-btn ${reviewDialog === 'APPROVE' ? 'primary' : 'danger'}`} disabled={submittingReview} onClick={submitReview}>{submittingReview ? 'Saving...' : reviewDialog === 'APPROVE' ? 'Approve' : 'Reject'}</button></div></section></div>}
     <CreateIngredientDialog draft={createIngredientDraft} categories={ingredientCategories} saving={creatingIngredient} error={createIngredientError} onClose={() => !creatingIngredient && setCreateIngredientDraft(null)} onChange={changeCreateIngredient} onSubmit={submitCreateIngredient} />
     <SourceContentModal open={Boolean(source)} loading={sourceLoading} error={sourceError} post={sourcePost} fallback={source?.fallback} onClose={closeSource} onRetry={() => setSourceRefresh((value) => value + 1)} />

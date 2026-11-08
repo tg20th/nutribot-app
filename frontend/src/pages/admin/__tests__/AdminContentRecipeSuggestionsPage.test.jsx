@@ -79,14 +79,38 @@ describe('admin recipe suggestion review (NB-87)', () => {
     vi.clearAllMocks();
   });
 
-  it('opens on Pending and lets Admin toggle chronological order', async () => {
+  it('opens on the Pending queue with moderation-style search and content filters', async () => {
     render(<AdminContentRecipeSuggestionsPage />);
 
     await waitFor(() => expect(contentRecipeSuggestionsApi.list).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'PENDING' }), expect.any(AbortSignal),
     ));
-    fireEvent.click(await screen.findByRole('button', { name: 'Sort by oldest first' }));
-    expect(screen.getByRole('button', { name: 'Sort by newest first' })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Search pending recipe suggestions' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Recipe source type' })).toBeTruthy();
+  });
+
+  it('keeps pending work separate from completed review history', async () => {
+    const approved = suggestion({ suggestionId: 6, status: 'APPROVED', source: { ...suggestion().source, title: 'Approved soup' } });
+    contentRecipeSuggestionsApi.list.mockResolvedValue({ content: [suggestion(), approved], totalElements: 2, totalPages: 1 });
+    render(<AdminContentRecipeSuggestionsPage />);
+
+    await screen.findByRole('button', { name: 'Review Queue' });
+    fireEvent.click(screen.getByRole('button', { name: 'History' }));
+
+    await waitFor(() => expect(contentRecipeSuggestionsApi.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: '' }), expect.any(AbortSignal),
+    ));
+    expect(screen.getByRole('heading', { name: 'Recipe suggestion history' })).toBeTruthy();
+    expect(screen.getByText('Approved soup')).toBeTruthy();
+    expect(screen.queryByText('BÃºn gáº¡o lá»©t rau cá»§')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Recipe suggestion review detail' })).toBeNull();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Filter review history by decision' }), {
+      target: { value: 'APPROVED' },
+    });
+    await waitFor(() => expect(contentRecipeSuggestionsApi.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 'APPROVED' }), expect.any(AbortSignal),
+    ));
   });
 
   it('blocks approval and lists validation issues for an invalid suggestion', async () => {
