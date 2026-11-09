@@ -152,6 +152,25 @@
   .recipe-suggestions-sort{margin-left:auto}
 }
 
+/* Validation issue rows: compact hierarchy for readable nutrition feedback. */
+.recipe-suggestion-issues{gap:6px;margin-top:14px}
+.recipe-suggestion-issues li{grid-template-columns:18px minmax(0,auto);align-items:start;gap:8px;padding:7px 0;border:0;background:transparent;color:#9a4b3d}
+.recipe-suggestion-issues li.is-warning{color:#947329}
+.recipe-suggestion-issues li>span{width:18px;height:18px;margin-top:1px}
+.recipe-suggestion-issues li div{display:flex;align-items:baseline;flex-wrap:wrap;column-gap:8px;row-gap:2px;min-width:0}
+.recipe-suggestion-issues li strong{color:currentColor;font-size:12px;font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+.recipe-suggestion-issues li p{color:#5d625b;font-size:12px;line-height:1.45}
+.recipe-suggestion-compact-issues li{display:grid;grid-template-columns:18px minmax(0,1fr);gap:7px;align-items:start}
+.recipe-suggestion-compact-issues li>div{display:flex;flex-wrap:wrap;align-items:baseline;gap:3px 8px;min-width:0;line-height:1.45}
+.recipe-suggestion-compact-issues li b{font-weight:600;white-space:nowrap}
+.recipe-suggestion-compact-issues li>div>span{color:#5d625b;overflow-wrap:anywhere}
+.recipe-suggestion-review-error li{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px;line-height:1.45}
+.recipe-suggestion-review-error li b{font-weight:600}
+@media(max-width:520px){
+  .recipe-suggestion-issues li div{display:grid;gap:2px}
+  .recipe-suggestion-compact-issues li>div{display:grid;gap:2px}
+}
+
 /* Editorial review refinements: source opens the full modal and steps breathe without trailing space. */
 .recipe-suggestion-steps li{grid-template-columns:36px minmax(0,1fr)!important;padding-bottom:28px!important}
 .recipe-suggestion-steps li:last-child{padding-bottom:0!important}
@@ -202,3 +221,19 @@
   .recipe-suggestion-history-list .moderation-history-trailing{grid-template-columns:auto 17px;gap:10px}
   .recipe-suggestion-history-list .moderation-history-trailing time{grid-column:1;grid-row:2;min-width:0;text-align:left}
 }
+/* Pending matching: compact, responsive hierarchy for original to catalog mapping. */
+.recipe-suggestion-mapping-section{padding:16px;border:1px solid #d8e7d3;border-radius:10px;background:#f8fbf6}
+.recipe-suggestion-mapping-section .recipe-suggestion-section-title{align-items:center;gap:8px}
+.recipe-suggestion-mapping-section .recipe-suggestion-section-title>span{margin-left:auto;padding:4px 7px;border-radius:5px;background:#edf4e9;color:#5d765e;font-size:10px;font-weight:700;white-space:nowrap}
+.recipe-suggestion-mapping-help{margin:7px 0 12px!important;color:#657363!important;font-size:12px!important}
+.recipe-suggestion-mapping-list{display:grid;gap:7px}
+.recipe-suggestion-ingredient-match{display:grid;grid-template-columns:minmax(150px,.85fr) minmax(220px,1.15fr) auto;align-items:end;gap:10px;margin:0;padding:11px 12px;border:1px solid #dce8d6;border-radius:8px;background:#fff}
+.recipe-suggestion-original-ingredient{display:grid;align-self:stretch;align-content:center;gap:4px;min-width:0}
+.recipe-suggestion-original-ingredient strong{overflow-wrap:anywhere;color:#24362a;font-size:12px;line-height:1.35}
+.recipe-suggestion-mapping-arrow{display:none}
+.recipe-suggestion-ingredient-search{position:relative;display:flex;align-items:center;gap:8px;min-width:0;min-height:36px;padding:0 10px;border:1px solid #cbdcc4;border-radius:7px;background:#fff;color:#5d775d}
+.recipe-suggestion-ingredient-search:focus-within{border-color:#5f9c61;box-shadow:0 0 0 3px rgba(75,133,75,.12)}
+.recipe-suggestion-ingredient-search input{height:34px;font-size:12px}
+.recipe-suggestion-create-ingredient{min-height:36px;padding:0 10px;border-radius:7px;font-size:11px}
+@media(max-width:760px){.recipe-suggestion-ingredient-match{grid-template-columns:minmax(0,1fr) auto}.recipe-suggestion-ingredient-search{grid-column:1/-1}.recipe-suggestion-create-ingredient{grid-column:2;grid-row:1;align-self:center}}
+@media(max-width:520px){.recipe-suggestion-mapping-section{padding:13px}.recipe-suggestion-mapping-section .recipe-suggestion-section-title{align-items:flex-start;flex-wrap:wrap}.recipe-suggestion-mapping-section .recipe-suggestion-section-title>span{margin-left:25px}.recipe-suggestion-ingredient-match{grid-template-columns:1fr;align-items:stretch}.recipe-suggestion-create-ingredient{grid-column:auto;grid-row:auto;width:100%}}

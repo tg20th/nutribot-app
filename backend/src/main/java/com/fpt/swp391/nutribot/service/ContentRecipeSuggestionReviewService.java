@@ -478,6 +478,12 @@ public class ContentRecipeSuggestionReviewService {
                 ? null
                 : reviewerNames.get(suggestion.getReviewedBy());
 
+        List<RecipeExtractionGatewayService.IngredientProposal> legacyIngredients =
+                java.util.Optional.ofNullable(payloadReader.readIngredients(suggestion.getIngredientsJson()).value())
+                        .orElseGet(List::of);
+        List<String> legacySteps = java.util.Optional.ofNullable(payloadReader.readSteps(suggestion.getRecipeStepsJson()).value())
+                .orElseGet(List::of);
+
         return ContentRecipeSuggestionResponse.builder()
                 .suggestionId(suggestion.getSuggestionId())
                 .status(suggestion.getStatus())
@@ -515,7 +521,7 @@ public class ContentRecipeSuggestionReviewService {
                         .fiberG(suggestion.getFiberG())
                         .build())
                 .ingredients((suggestion.getIngredients().isEmpty()
-                        ? payloadReader.readIngredients(suggestion.getIngredientsJson()).value().stream()
+                        ? legacyIngredients.stream()
                             .map(ingredient -> ContentRecipeSuggestionResponse.IngredientInfo.builder()
                                     .name(ingredient.name()).quantity(ingredient.quantity())
                                     .unit(ingredient.unit()).notes(ingredient.notes()).build())
@@ -523,6 +529,7 @@ public class ContentRecipeSuggestionReviewService {
                         : suggestion.getIngredients().stream()
                         .sorted(java.util.Comparator.comparing(ContentRecipeSuggestionIngredient::getSortOrder))
                         .map(ingredient -> ContentRecipeSuggestionResponse.IngredientInfo.builder()
+                                .ingredientId(ingredient.getIngredientId())
                                 .name(ingredient.getIngredientName())
                                 .quantity(ingredient.getQuantity())
                                 .unit(ingredient.getUnit())
@@ -536,7 +543,7 @@ public class ContentRecipeSuggestionReviewService {
                         .cookTimeMin(suggestion.getCookTimeMin())
                         .servings(suggestion.getServings())
                         .steps((suggestion.getSteps().isEmpty()
-                                ? payloadReader.readSteps(suggestion.getRecipeStepsJson()).value()
+                                ? legacySteps
                                 : suggestion.getSteps().stream()
                                 .sorted(java.util.Comparator.comparing(ContentRecipeSuggestionStep::getStepNumber))
                                 .map(ContentRecipeSuggestionStep::getInstruction)

@@ -83,9 +83,10 @@ public class RecipeIngredientResolver {
                     ingredient = null;
                 }
             } else if (matches.isEmpty()) {
-                status = "UNRESOLVED";
-                issue(issues, "ingredients[" + index + "]", "INGREDIENT_MAPPING_REQUIRED",
-                        "Không tìm thấy nguyên liệu phù hợp trong catalog; Admin cần chọn nguyên liệu có sẵn");
+                status = "OTHER";
+                resolved.add(ResolvedRecipeIngredient.builder().proposalIndex(index).proposedName(proposal.name())
+                        .ingredientId(null).ingredientName(proposal.name()).status(status).build());
+                continue;
             } else {
                 status = "AMBIGUOUS";
                 issue(issues, "ingredients[" + index + "]", "INGREDIENT_MAPPING_AMBIGUOUS",
