@@ -61,4 +61,26 @@ class ContentModerationGatewayServiceTest {
         assertEquals("NEEDS_REVIEW", result.decision());
         assertTrue(result.categories().contains("AI_UNAVAILABLE"));
     }
+
+    @Test
+    @DisplayName("moderateContent: Bắt lỗi graceful khi kiểm duyệt VIDEO và AI service offline")
+    void testModerateContent_Video_ServiceOffline_GracefulFallback() {
+        ContentModerationGatewayService service = new ContentModerationGatewayService("http://127.0.0.1:59998");
+        ContentModerationGatewayService.ModerationResult result =
+                service.moderateContent(
+                        2,
+                        "VIDEO",
+                        "Hướng dẫn nấu ăn chay",
+                        "Mô tả video",
+                        "Chi tiết các bước",
+                        "Món chay",
+                        List.of("chay", "healthy"),
+                        "https://res.cloudinary.com/demo/image/upload/sample.jpg",
+                        "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+                );
+
+        assertNotNull(result);
+        assertEquals("NEEDS_REVIEW", result.decision());
+        assertTrue(result.categories().contains("AI_UNAVAILABLE"));
+    }
 }

@@ -18,6 +18,7 @@ import java.util.Map;
 public class ContentModerationGatewayService {
 
     private final RestClient aiClient;
+    private final RestClient videoAiClient;
 
     public ContentModerationGatewayService(
             @Value("${ai-service.base-url:http://localhost:8000}") String aiServiceBaseUrl) {
@@ -28,6 +29,15 @@ public class ContentModerationGatewayService {
         this.aiClient = RestClient.builder()
                 .baseUrl(aiServiceBaseUrl.replaceAll("/$", ""))
                 .requestFactory(requestFactory)
+                .build();
+
+        SimpleClientHttpRequestFactory videoRequestFactory = new SimpleClientHttpRequestFactory();
+        videoRequestFactory.setConnectTimeout(Duration.ofSeconds(5));
+        videoRequestFactory.setReadTimeout(Duration.ofSeconds(90));
+
+        this.videoAiClient = RestClient.builder()
+                .baseUrl(aiServiceBaseUrl.replaceAll("/$", ""))
+                .requestFactory(videoRequestFactory)
                 .build();
     }
 
@@ -73,7 +83,10 @@ public class ContentModerationGatewayService {
 
             String requestBody = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(request);
 
-            AiModerationResponse response = aiClient.post()
+            boolean isVideo = contentType != null && contentType.equalsIgnoreCase("VIDEO");
+            RestClient clientToUse = isVideo ? videoAiClient : aiClient;
+
+            AiModerationResponse response = clientToUse.post()
                     .uri("/api/ai/moderate-content")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(requestBody.getBytes(StandardCharsets.UTF_8))

@@ -18,7 +18,7 @@ class ContentModerationService:
  def rules(self,r):
   """Only clear cases decide here; contextual mentions are deliberately deferred."""
   t=self._text(r)
-  if len(t)<20:return ModelModeration(decision="NEEDS_REVIEW",reason="Insufficient text for reliable moderation",confidence=1,categories=["AMBIGUOUS"])
+  if len(t)<20 and not (r.content_type == "VIDEO" and r.media_url):return ModelModeration(decision="NEEDS_REVIEW",reason="Insufficient text for reliable moderation",confidence=1,categories=["AMBIGUOUS"])
   if ("chữa khỏi ung thư" in t and "không có bằng chứng" not in t) or ("cure cancer" in t and "no evidence" not in t):return ModelModeration(decision="REJECT",reason="Unsafe medical cure claim",confidence=.99,categories=["MEDICAL_CLAIM","UNSAFE_NUTRITION_ADVICE"])
   if "crypto" in t or "free bitcoin" in t:return ModelModeration(decision="REJECT",reason="Off-topic promotional spam",confidence=.99,categories=["SPAM","OFF_TOPIC"])
   contextual=any(x in t for x in ("alternative","replace","avoid","thay thế","món chay"))
