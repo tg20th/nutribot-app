@@ -134,6 +134,7 @@ export function mapContentRecipeSuggestion(raw) {
     ingredients: ingredients.map((ingredient) => {
       const value = typeof ingredient === 'string' ? { name: ingredient } : asObject(ingredient);
       return {
+        ingredientId: value.ingredientId ?? null,
         name: value.name ?? value.ingredientName ?? 'Ingredient unavailable',
         quantity: value.quantity ?? value.amount ?? null,
         unit: value.unit ?? null,

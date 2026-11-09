@@ -50,14 +50,41 @@ class RecipeIngredientResolverTest {
     }
 
     @Test
-    void unknownNameRequiresAdminMappingAndNeverCreatesIngredient() {
+    void otherIngredientKeepsNameWithoutCreatingCatalogIngredient() {
         Ingredient catalog = ingredient(12, "Cà rốt", 4);
         when(ingredientRepository.findAllByActiveTrueOrderByNameAsc()).thenReturn(List.of(catalog));
 
         var result = resolver.resolve(List.of(proposal("Bún gạo lứt")), null);
 
-        assertEquals("INGREDIENT_MAPPING_REQUIRED", result.issues().get(0).getCode());
+        assertTrue(result.issues().isEmpty());
         assertNull(result.ingredients().get(0).getIngredientId());
+        assertFalse(result.ingredients().get(0).getIngredientName().isBlank());
+        assertEquals("OTHER", result.ingredients().get(0).getStatus());
+    }
+
+    @Test
+    void mixedOtherAndCatalogIngredientsResolveOnlyCatalogId() {
+        Ingredient catalog = ingredient(12, "Carrot", 4);
+        when(ingredientRepository.findAllByActiveTrueOrderByNameAsc()).thenReturn(List.of(catalog));
+        when(categoryRepository.findById(4)).thenReturn(Optional.of(category(4, "INGREDIENT", true)));
+
+        var result = resolver.resolve(List.of(proposal("Other"), proposal("carrot")), null);
+
+        assertTrue(result.issues().isEmpty());
+        assertNull(result.ingredients().get(0).getIngredientId());
+        assertEquals(12, result.ingredients().get(1).getIngredientId());
+    }
+
+    @Test
+    void allCatalogIngredientsStillResolveNormally() {
+        Ingredient catalog = ingredient(12, "Carrot", 4);
+        when(ingredientRepository.findAllByActiveTrueOrderByNameAsc()).thenReturn(List.of(catalog));
+        when(categoryRepository.findById(4)).thenReturn(Optional.of(category(4, "INGREDIENT", true)));
+
+        var result = resolver.resolve(List.of(proposal("carrot")), null);
+
+        assertTrue(result.issues().isEmpty());
+        assertEquals(12, result.ingredients().get(0).getIngredientId());
     }
 
     @Test

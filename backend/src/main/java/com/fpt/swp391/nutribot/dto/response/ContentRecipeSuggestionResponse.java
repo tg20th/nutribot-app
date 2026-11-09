@@ -75,6 +75,7 @@ public class ContentRecipeSuggestionResponse {
     @NoArgsConstructor
     @AllArgsConstructor
     public static class IngredientInfo {
+        private Integer ingredientId;
         private String name;
         private BigDecimal quantity;
         private String unit;

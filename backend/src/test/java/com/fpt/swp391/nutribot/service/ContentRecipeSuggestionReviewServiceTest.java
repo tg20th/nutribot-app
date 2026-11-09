@@ -628,4 +628,22 @@ class ContentRecipeSuggestionReviewServiceTest {
         assertNull(item.getValidation());
         verify(validator, never()).validate(any());
     }
+
+    @Test
+    @DisplayName("NB-500: Danh sách không lỗi khi JSON nguyên liệu và bước làm bị hỏng")
+    void list_malformedLegacyPayload_returnsEmptyCollections() {
+        ContentRecipeSuggestion suggestion = pendingSuggestion(content(20));
+        suggestion.setIngredientsJson("{broken-json");
+        suggestion.setRecipeStepsJson("[broken-json");
+
+        when(suggestionRepository.findAllWithContent(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(suggestion)));
+
+        ContentRecipeSuggestionResponse item = service.list(null, 0, 10).getContent().get(0);
+
+        assertNotNull(item.getIngredients());
+        assertTrue(item.getIngredients().isEmpty());
+        assertNotNull(item.getRecipe().getSteps());
+        assertTrue(item.getRecipe().getSteps().isEmpty());
+    }
 }

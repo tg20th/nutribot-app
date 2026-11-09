@@ -116,9 +116,9 @@ describe('admin recipe suggestion review (NB-87)', () => {
   it('blocks approval and lists validation issues for an invalid suggestion', async () => {
     render(<AdminContentRecipeSuggestionsPage />);
 
-    expect(await screen.findByRole('heading', { name: 'Cannot approve yet' })).toBeTruthy();
+    expect(await screen.findByText('Validation needs attention')).toBeTruthy();
     expect(screen.getByText('Nguyên liệu "Bún gạo lứt" thiếu số lượng')).toBeTruthy();
-    expect(screen.getByText('ingredients[0].quantity')).toBeTruthy();
+    expect(document.querySelector('.recipe-suggestion-compact-issues')?.textContent).toContain('ingredients[0].quantity');
     expect(screen.getByRole('button', { name: 'Approve suggestion' }).disabled).toBe(true);
     expect(screen.getByRole('button', { name: 'Reject' }).disabled).toBe(false);
   });
@@ -133,7 +133,7 @@ describe('admin recipe suggestion review (NB-87)', () => {
 
     render(<AdminContentRecipeSuggestionsPage />);
 
-    expect((await screen.findByLabelText('Serving information')).textContent).not.toContain('Missing');
+    expect((await screen.findByText('Nutrition')).closest('.recipe-suggestion-detail-body')?.textContent).not.toContain('Missing serving');
   });
 
   it('does not show the legacy serving warning in pre-approval checks', async () => {
@@ -147,7 +147,7 @@ describe('admin recipe suggestion review (NB-87)', () => {
 
     render(<AdminContentRecipeSuggestionsPage />);
 
-    expect(await screen.findByText('Data validation passed.')).toBeTruthy();
+    expect(await screen.findByText('Validation warnings')).toBeTruthy();
     expect(screen.queryByText('Serving information is missing.')).toBeNull();
   });
 
@@ -213,7 +213,7 @@ describe('admin recipe suggestion review (NB-87)', () => {
 
     render(<AdminContentRecipeSuggestionsPage />);
 
-    expect(await screen.findByText('! Consent outdated')).toBeTruthy();
+    expect(await screen.findByText(/Consent outdated/)).toBeTruthy();
     expect(screen.getByText(/Author consented to terms v0; current terms are v1/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Approve suggestion' }).disabled).toBe(true);
   });
@@ -226,7 +226,7 @@ describe('admin recipe suggestion review (NB-87)', () => {
 
     render(<AdminContentRecipeSuggestionsPage />);
 
-    expect(await screen.findByRole('heading', { name: 'Ready to approve' })).toBeTruthy();
+    expect(await screen.findByText('Validation confirmed')).toBeTruthy();
     const approve = screen.getByRole('button', { name: 'Approve suggestion' });
     expect(approve.disabled).toBe(false);
     fireEvent.click(approve);
@@ -262,7 +262,7 @@ describe('admin recipe suggestion review (NB-87)', () => {
     const alert = await screen.findByRole('alert');
     expect(alert.textContent).toContain('Approval was blocked');
     expect(alert.textContent).toContain('Dữ liệu công thức chưa hợp lệ, không thể duyệt');
-    expect(alert.textContent).toContain('dish.name');
+    expect(alert.textContent).toContain('Dish name');
     expect(alert.textContent).toContain('Đề xuất thiếu tên món ăn');
     expect(screen.getByRole('heading', { name: 'Approve this suggestion?' })).toBeTruthy();
   });
@@ -276,10 +276,11 @@ describe('admin recipe suggestion review (NB-87)', () => {
     render(<AdminContentRecipeSuggestionsPage />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Reject' }));
-    fireEvent.change(screen.getByPlaceholderText(/nutrition information needs a verifiable source/), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Rejection reason' }), { target: { value: 'OTHER' } });
+    fireEvent.change(screen.getByPlaceholderText(/Explain why this recipe should be rejected/), {
       target: { value: 'Thiếu nguồn dinh dưỡng' },
     });
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Reject' }));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Confirm rejection' }));
 
     await waitFor(() => expect(contentRecipeSuggestionsApi.review)
       .toHaveBeenCalledWith(5, 'REJECT', 'Thiếu nguồn dinh dưỡng', []));
