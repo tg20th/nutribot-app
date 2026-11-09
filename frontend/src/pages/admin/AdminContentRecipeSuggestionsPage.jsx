@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowUpDown, Check, ChevronLeft, ChevronRight, ExternalLink, Eye, FileText, ListOrdered, MapPin, PlaySquare, Plus, Search, Soup, UserRound, UtensilsCrossed, X } from 'lucide-react';
+import { AlertTriangle, ArrowUpDown, Check, ChefHat, ChevronLeft, ChevronRight, Clock3, ExternalLink, Eye, FileText, Info, ListOrdered, MapPin, PlaySquare, Plus, Search, Soup, UserRound, UsersRound, UtensilsCrossed, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminToolbar, EmptyState, ErrorState, LoadingState, PageHeader, Toast } from '../../components/admin/AdminUi';
 import { contentRecipeSuggestionsApi, isRecipeConsentValid, RECIPE_CONSENT_TERMS_VERSION } from '../../services/contentRecipeSuggestionsApi';
@@ -22,6 +22,18 @@ const formatDate = (value) => {
 
 const statusLabels = { PENDING: 'Pending', APPROVED: 'Approved', REJECTED: 'Rejected' };
 const statusLabel = (status) => statusLabels[status] ?? status ?? 'Pending';
+const recipeRejectionReasons = [
+  ['INCOMPLETE_RECIPE', 'Incomplete recipe information'],
+  ['INCORRECT_INGREDIENTS', 'Incorrect ingredient information'],
+  ['INVALID_INSTRUCTIONS', 'Invalid preparation instructions'],
+  ['INACCURATE_NUTRITION', 'Inaccurate nutritional information'],
+  ['SOURCE_MISMATCH', 'Recipe does not match the source blog'],
+  ['DUPLICATE_RECIPE', 'Duplicate or substantially similar recipe'],
+  ['DIETARY_REQUIREMENTS', 'Does not meet dietary requirements'],
+  ['CONTENT_QUALITY', 'Content quality does not meet standards'],
+  ['OTHER', 'Other — specify a reason'],
+];
+const recipeRejectionReasonMaxLength = 2000;
 
 const groupIngredientValidationIssues = (issues = []) => {
   const groups = new Map();
@@ -183,6 +195,44 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, 
   </article>;
 }
 
+function RecipeSuggestionMetadata({ totalMinutes, servings, ingredientCount, stepCount }) {
+  return <div className="recipe-suggestion-metadata" aria-label="Recipe summary">
+    <span className="recipe-suggestion-metadata__item"><Clock3 size={15} /><b>{totalMinutes > 0 ? `${totalMinutes} min` : '—'}</b><small>Total time</small></span>
+    <span className="recipe-suggestion-metadata__item"><UsersRound size={15} /><b>{servings ?? '—'}</b><small>Servings</small></span>
+    <span className="recipe-suggestion-metadata__item"><UtensilsCrossed size={15} /><b>{ingredientCount}</b><small>Ingredients</small></span>
+    <span className="recipe-suggestion-metadata__item"><ListOrdered size={15} /><b>{stepCount}</b><small>Steps</small></span>
+  </div>;
+}
+
+function EditorialRecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, sourceImage, submitting, catalogIngredients = [], ingredientMappings = {}, onIngredientMapping, onCreateIngredient, mappingSectionRef }) {
+  const { source, dish, recipe, nutrition, ingredients, restaurant, validation } = suggestion;
+  const consentValid = isRecipeConsentValid(source);
+  const consentOutdated = source.recipeConsent === true && Boolean(source.recipeConsentTermsVersion) && source.recipeConsentTermsVersion !== RECIPE_CONSENT_TERMS_VERSION;
+  const errors = (validation?.issues ?? []).filter((issue) => issue.severity === 'ERROR');
+  const warnings = (validation?.issues ?? []).filter((issue) => issue.severity === 'WARNING');
+  const mappingCodes = ['INGREDIENT_MAPPING_REQUIRED', 'INGREDIENT_MAPPING_AMBIGUOUS', 'INGREDIENT_CATEGORY_INVALID', 'INGREDIENT_MAPPING_DUPLICATED', 'VEGETARIAN_TYPE_UNKNOWN'];
+  const mappingOnlyBlocked = errors.length > 0 && errors.every((issue) => mappingCodes.includes(issue.code));
+  const approvalBlocked = !consentValid || (validation?.canApprove === false && !mappingOnlyBlocked);
+  const blockedMessage = !consentValid ? (consentOutdated ? `Author consented to terms ${source.recipeConsentTermsVersion}; current terms are ${RECIPE_CONSENT_TERMS_VERSION}. The author must consent again.` : 'Author consent is required before this suggestion can be approved.') : 'Resolve the validation errors before approving this suggestion.';
+  const unresolved = validation?.ingredientResolutions?.filter((item) => ['UNRESOLVED', 'AMBIGUOUS', 'INVALID_CATEGORY', 'DUPLICATED'].includes(item.status)) ?? [];
+  const totalMinutes = (recipe.prepTimeMin ?? 0) + (recipe.cookTimeMin ?? 0);
+  const validationTone = errors.length ? 'is-blocked' : warnings.length ? 'is-warning' : 'is-ready';
+  const validationIssues = (validation?.issues ?? []).filter((issue) => issue.field !== 'dish.serving');
+  const displayedValidationIssues = groupIngredientValidationIssues(validationIssues);
+  return <article className="admin-panel moderation-detail recipe-suggestion-detail" aria-label="Suggestion detail">
+    <header className="moderation-detail-header recipe-suggestion-detail-head"><div><span>RECIPE SUGGESTION</span><SuggestionStatus status={suggestion.status} /></div><time dateTime={suggestion.createdAt}>Received {formatDate(suggestion.createdAt)}</time></header>
+    <div className="recipe-suggestion-detail-body">
+      <section className="recipe-suggestion-hero" aria-labelledby="proposed-dish-title"><div className="recipe-suggestion-hero-top"><div className="recipe-suggestion-hero-copy"><div className="recipe-suggestion-kicker"><ChefHat size={16} /><span>PROPOSED DISH</span></div><h2 id="proposed-dish-title">{dish.name}</h2>{dish.description && <p className="recipe-suggestion-hero-description">{dish.description}</p>}<div className={`recipe-suggestion-validation-compact ${validationTone}`}><span className="recipe-suggestion-validation-dot" /><strong>{errors.length ? 'Validation needs attention' : warnings.length ? 'Validation warnings' : validation?.valid === true ? 'Validation confirmed' : 'Validation not confirmed'}</strong>{validation?.vegetarianType && <span className="recipe-suggestion-diet">{validation.vegetarianType.replaceAll('_', ' ')}</span>}<button type="button" className="recipe-suggestion-source-toggle" aria-haspopup="dialog" onClick={() => onOpenSource(source)}><FileText size={14} /> View source blog</button></div>{displayedValidationIssues.length > 0 && <ul className="recipe-suggestion-compact-issues">{displayedValidationIssues.map((issue, index) => <li key={`${issue.field}-${issue.code}-${index}`} className={`is-${issue.severity.toLowerCase()}`}><span>{issue.severity === 'ERROR' ? <X size={13} /> : <AlertTriangle size={13} />}</span><span><b>{issue.field || 'Suggestion'}</b> {issue.message}</span></li>)}</ul>}</div>{sourceImage && <img className="recipe-suggestion-hero-image" src={sourceImage} alt={`${dish.name} proposed dish`} />}</div><RecipeSuggestionMetadata totalMinutes={totalMinutes} servings={recipe.servings} ingredientCount={ingredients.length} stepCount={recipe.steps.length} /></section>
+      <section className="recipe-suggestion-section recipe-suggestion-nutrition-section" aria-labelledby="nutrition-title"><div className="recipe-suggestion-section-title"><Soup size={17} /><h3 id="nutrition-title">Nutrition</h3><span>{recipe.servings ? `Per ${recipe.servings === 1 ? 'serving' : 'recipe'}` : 'Available values'}</span></div><NutritionGrid nutrition={nutrition} /></section>
+      <section className="recipe-suggestion-section" aria-labelledby="ingredients-title"><div className="recipe-suggestion-section-title"><UtensilsCrossed size={17} /><h3 id="ingredients-title">Ingredients</h3></div>{ingredients.length ? <ul className="recipe-suggestion-ingredients">{ingredients.map((ingredient, index) => <li key={`${ingredient.name}-${index}`}><span>{ingredient.name}</span><small>{[ingredient.quantity, ingredient.unit].filter(Boolean).join(' ') || ingredient.notes || 'Quantity unavailable'}</small></li>)}</ul> : <p className="recipe-suggestion-missing">No ingredients were supplied by the server.</p>}{unresolved.length > 0 && <section ref={mappingSectionRef} className="recipe-suggestion-mapping-section" aria-label="Ingredient catalog matching"><div className="recipe-suggestion-section-title"><UtensilsCrossed size={16} /><h3>Match ingredients to catalog</h3><span>{unresolved.length} need attention</span></div><p className="recipe-suggestion-mapping-help">Choose an existing catalog ingredient, or create one without leaving this review.</p><div className="recipe-suggestion-mapping-list">{unresolved.map((item) => <div key={item.proposalIndex} className="recipe-suggestion-ingredient-match"><div className="recipe-suggestion-original-ingredient"><small>Original ingredient</small><strong>{item.proposedName}</strong></div><span className="recipe-suggestion-mapping-arrow">Convert to</span><IngredientMatcher proposalName={item.proposedName} ingredients={catalogIngredients} value={ingredientMappings[item.proposalIndex] ?? ''} onChange={(id) => onIngredientMapping?.(item.proposalIndex, id)} /><button type="button" className="recipe-suggestion-create-ingredient" onClick={() => onCreateIngredient?.(item.proposalIndex, item.proposedName)}><Plus size={15} /> Add ingredient</button></div>)}</div></section>}</section>
+      <section className="recipe-suggestion-section" aria-labelledby="steps-title"><div className="recipe-suggestion-section-title"><ListOrdered size={17} /><h3 id="steps-title">Preparation Steps</h3></div>{recipe.description && <p className="recipe-suggestion-recipe-description">{recipe.description}</p>}{recipe.steps.length ? <ol className="recipe-suggestion-steps">{recipe.steps.map((step, index) => <li key={`${step}-${index}`}><span className="recipe-suggestion-step-number">{index + 1}</span><p>{step}</p></li>)}</ol> : <p className="recipe-suggestion-missing">No recipe steps were supplied by the server.</p>}</section>
+      {(restaurant.name || restaurant.address || restaurant.reference) && <div className="recipe-suggestion-restaurant-note recipe-suggestion-restaurant-inline"><MapPin size={14} /> {restaurant.name || restaurant.address}{restaurant.reference && <a href={restaurant.reference} target="_blank" rel="noreferrer">Open restaurant reference <ExternalLink size={13} /></a>}</div>}
+      {(suggestion.rejectionReason || suggestion.reviewedAt) && <section className={`recipe-suggestion-review-record is-${String(suggestion.status || '').toLowerCase()}`}><span className="recipe-suggestion-review-record-icon">{suggestion.status === 'REJECTED' ? <X size={16} /> : <Check size={16} />}</span><div><strong>{suggestion.status === 'REJECTED' ? 'Suggestion rejected' : 'Suggestion reviewed'}</strong>{suggestion.rejectionReason && <p>{suggestion.rejectionReason}</p>}</div>{suggestion.reviewedAt && <time dateTime={suggestion.reviewedAt}>{formatDate(suggestion.reviewedAt)}{suggestion.reviewerName ? ` by ${suggestion.reviewerName}` : ''}</time>}</section>}
+      {showReviewControls && suggestion.status === 'PENDING' && <footer className="moderation-actions recipe-suggestion-review-actions"><div><strong>Decision required</strong><span>{approvalBlocked ? blockedMessage : 'Approve to import this dish and recipe, or reject with a reason.'}</span></div><div><button type="button" className="admin-btn secondary recipe-suggestion-reject" disabled={submitting} onClick={() => onReview('REJECT')}><X size={16} /> Reject</button><button type="button" className="admin-btn primary" disabled={submitting || approvalBlocked} title={approvalBlocked ? blockedMessage : undefined} onClick={() => onReview('APPROVE')}><Check size={16} /> Approve suggestion</button></div></footer>}
+    </div>
+  </article>;
+}
+
 function CreateIngredientDialog({ draft, categories, saving, error, onClose, onChange, onSubmit }) {
   if (!draft) return null;
   return <div className="admin-modal-backdrop" onMouseDown={() => !saving && onClose()}>
@@ -245,6 +295,28 @@ function SourceContentModal({ open, loading, error, post, fallback, onClose, onR
   </div>;
 }
 
+function ReviewDecisionDialog({ submitting, error, issues, onClose, onSubmit }) {
+  return <div className="admin-modal-backdrop" onMouseDown={onClose}><section className="admin-dialog recipe-review-dialog" role="dialog" aria-modal="true" aria-labelledby="suggestion-review-title" onMouseDown={(event) => event.stopPropagation()}>
+    <header className="recipe-dialog-header"><p>REVIEW</p><button type="button" className="recipe-dialog-close" onClick={onClose} disabled={submitting} aria-label="Close approval dialog"><X size={18} /></button></header>
+    <div className="recipe-dialog-body"><h2 id="suggestion-review-title">Approve this suggestion?</h2><p>This recipe will be imported into the catalog after approval.</p><p className="recipe-dialog-note"><Info size={14} /> Please confirm that the recipe details have been reviewed.</p>{error && <div className="recipe-suggestion-review-error" role="alert"><strong>Approval was blocked</strong><p>{error}</p>{issues.length > 0 && <ul>{issues.map((issue, index) => <li key={`${issue.field}-${issue.code}-${index}`}><b>{issue.field || 'Suggestion'}</b>{issue.message}</li>)}</ul>}</div>}</div><div className="recipe-dialog-divider" />
+    <footer className="recipe-dialog-footer"><button type="button" className="admin-btn secondary" disabled={submitting} onClick={onClose}>Cancel</button><button type="button" className="admin-btn primary" disabled={submitting} onClick={onSubmit}>{submitting ? 'Saving...' : 'Approve'}</button></footer>
+  </section></div>;
+}
+
+function RejectionDialog({ reasonCode, reason, error, submitting, onReasonCodeChange, onReasonChange, onClose, onConfirm }) {
+  const isOther = reasonCode === 'OTHER';
+  const valid = Boolean(reasonCode) && (!isOther || Boolean(reason.trim()));
+  return <div className="admin-modal-backdrop" onMouseDown={onClose}><form className="admin-dialog recipe-review-dialog recipe-suggestion-rejection-dialog" role="dialog" aria-modal="true" aria-labelledby="recipe-rejection-title" onSubmit={(event) => { event.preventDefault(); if (valid) onConfirm(); }} onMouseDown={(event) => event.stopPropagation()}>
+    <header className="recipe-dialog-header"><p>REVIEW DECISION</p><button type="button" className="recipe-dialog-close" onClick={onClose} disabled={submitting} aria-label="Close rejection dialog"><X size={18} /></button></header>
+    <div className="recipe-dialog-body"><h2 id="recipe-rejection-title">Reject recipe suggestion</h2><p>Choose a reason for rejecting this recipe.</p>
+      <label htmlFor="recipe-rejection-reason">Rejection reason<select id="recipe-rejection-reason" value={reasonCode} disabled={submitting} onChange={(event) => onReasonCodeChange(event.target.value)}><option value="">Select a reason</option>{recipeRejectionReasons.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></label>
+      {isOther && <label htmlFor="recipe-rejection-custom">Specify rejection reason<textarea id="recipe-rejection-custom" maxLength={recipeRejectionReasonMaxLength} value={reason} disabled={submitting} onChange={(event) => onReasonChange(event.target.value)} placeholder="Explain why this recipe should be rejected..." aria-invalid={Boolean(error)} /><small>{reason.length}/{recipeRejectionReasonMaxLength}</small></label>}
+      {error && <div className="recipe-suggestion-review-error" role="alert"><strong>Rejection could not be submitted</strong><p>{error}</p></div>}
+    </div>
+    <footer className="recipe-dialog-footer"><button type="button" className="admin-btn secondary" disabled={submitting} onClick={onClose}>Cancel</button><button type="submit" className="admin-btn danger" disabled={!valid || submitting}>{submitting ? 'Rejecting...' : 'Confirm rejection'}</button></footer>
+  </form></div>;
+}
+
 export default function AdminContentRecipeSuggestionsPage() {
   const preview = import.meta.env.DEV && new URLSearchParams(window.location.search).get('preview') === '1';
   const [workspace, setWorkspace] = useState('QUEUE');
@@ -265,6 +337,8 @@ export default function AdminContentRecipeSuggestionsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [detailRefresh, setDetailRefresh] = useState(0);
   const [reviewDialog, setReviewDialog] = useState(null);
+  const [rejectionDialog, setRejectionDialog] = useState(false);
+  const [rejectionReasonCode, setRejectionReasonCode] = useState('');
   const [reviewReason, setReviewReason] = useState('');
   const [reviewError, setReviewError] = useState('');
   const [reviewIssues, setReviewIssues] = useState([]);
@@ -272,9 +346,28 @@ export default function AdminContentRecipeSuggestionsPage() {
   const [toast, setToast] = useState('');
   const [source, setSource] = useState(null);
   const [sourcePost, setSourcePost] = useState(null);
+  const [sourcePreviewPost, setSourcePreviewPost] = useState(null);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState(null);
   const [sourceRefresh, setSourceRefresh] = useState(0);
+  useEffect(() => {
+    if (!source) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [source]);
+
+  useEffect(() => {
+    if (!reviewDialog && !rejectionDialog) return undefined;
+    const onKey = (event) => {
+      if (event.key === 'Escape' && !submittingReview) {
+        if (reviewDialog) closeReview();
+        else closeRejection();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [reviewDialog, rejectionDialog, submittingReview]);
   const [catalogIngredients, setCatalogIngredients] = useState([]);
   const [ingredientMappings, setIngredientMappings] = useState({});
   const mappingSectionRef = useRef(null);
@@ -347,6 +440,15 @@ export default function AdminContentRecipeSuggestionsPage() {
       .finally(() => { if (!controller.signal.aborted) setSourceLoading(false); });
     return () => controller.abort();
   }, [source, sourceRefresh]);
+
+  useEffect(() => {
+    if (!detail?.source?.contentId) { setSourcePreviewPost(null); return undefined; }
+    const controller = new AbortController();
+    getPost(detail.source.contentId, controller.signal, detail.source.contentType)
+      .then((next) => { if (!controller.signal.aborted) setSourcePreviewPost(next); })
+      .catch(() => { if (!controller.signal.aborted) setSourcePreviewPost(null); });
+    return () => controller.abort();
+  }, [detail]);
 
   useEffect(() => {
     if (!source) return undefined;
@@ -432,26 +534,36 @@ export default function AdminContentRecipeSuggestionsPage() {
       setToast('This suggestion cannot be approved until consent and validation checks pass.');
       return;
     }
+    if (action === 'REJECT') {
+      setRejectionDialog(true);
+      setRejectionReasonCode('');
+      setReviewReason('');
+      setReviewError('');
+      setReviewIssues([]);
+      return;
+    }
     setReviewDialog(action);
     setReviewReason('');
     setReviewError('');
     setReviewIssues([]);
   };
   const closeReview = () => { if (!submittingReview) setReviewDialog(null); };
+  const closeRejection = () => { if (!submittingReview) setRejectionDialog(false); };
   const openSource = (sourceInfo, fallback) => setSource({ contentId: sourceInfo.contentId, contentType: sourceInfo.contentType, fallback });
   const closeSource = () => setSource(null);
-  const submitReview = async () => {
-    if (!selectedId || !reviewDialog || submittingReview) return;
-    if (reviewDialog === 'REJECT' && !reviewReason.trim()) { setReviewError('Enter a reason before rejecting this suggestion.'); return; }
+  const submitReview = async (actionOverride = reviewDialog, reasonOverride = reviewReason) => {
+    if (!selectedId || !actionOverride || submittingReview) return;
+    if (actionOverride === 'REJECT' && !reasonOverride.trim()) { setReviewError('Enter a reason before rejecting this suggestion.'); return; }
     setSubmittingReview(true);
     setReviewError('');
     setReviewIssues([]);
     try {
       const mappings = Object.entries(ingredientMappings).filter(([, id]) => id).map(([proposalIndex, ingredientId]) => ({ proposalIndex: Number(proposalIndex), ingredientId: Number(ingredientId) }));
-      const updated = await contentRecipeSuggestionsApi.review(selectedId, reviewDialog, reviewReason, mappings);
+      const updated = await contentRecipeSuggestionsApi.review(selectedId, actionOverride, reasonOverride, mappings);
       setDetail(updated);
       setReviewDialog(null);
-      setToast(reviewDialog === 'APPROVE' ? 'Suggestion approved.' : 'Suggestion rejected.');
+      setRejectionDialog(false);
+      setToast(actionOverride === 'APPROVE' ? 'Suggestion approved.' : 'Suggestion rejected.');
       setRefreshKey((value) => value + 1);
     } catch (requestError) {
       const payloadData = requestError?.payload?.data;
@@ -471,6 +583,15 @@ export default function AdminContentRecipeSuggestionsPage() {
         }
       }
     } finally { setSubmittingReview(false); }
+  };
+  const confirmRejection = () => {
+    const selectedLabel = recipeRejectionReasons.find(([code]) => code === rejectionReasonCode)?.[1] ?? '';
+    const reason = rejectionReasonCode === 'OTHER' ? reviewReason.trim() : selectedLabel;
+    if (!rejectionReasonCode || (rejectionReasonCode === 'OTHER' && !reason)) {
+      setReviewError('Select a reason before rejecting this suggestion.');
+      return;
+    }
+    submitReview('REJECT', reason);
   };
 
   return <div className="moderation-page recipe-suggestions-page">
@@ -529,11 +650,12 @@ export default function AdminContentRecipeSuggestionsPage() {
             {detailLoading ? <section className="admin-panel recipe-suggestion-detail-state"><LoadingState /></section>
               : detailError ? <section className="admin-panel recipe-suggestion-detail-state"><ErrorState onRetry={() => setDetailRefresh((value) => value + 1)} /></section>
                 : detailUnavailable ? <section className="admin-panel recipe-suggestion-detail-state"><EmptyState title="Suggestion is no longer available." text="The server reported that this suggestion or its source content cannot be reviewed." /></section>
-                : detail ? <RecipeDetail suggestion={detail} showReviewControls onReview={openReview} onOpenSource={(sourceInfo) => openSource(sourceInfo, detail)} submitting={submittingReview} catalogIngredients={catalogIngredients} ingredientMappings={ingredientMappings} onIngredientMapping={(index, id) => setIngredientMappings((current) => ({ ...current, [index]: id }))} onCreateIngredient={openCreateIngredient} mappingSectionRef={mappingSectionRef} />
+                : detail ? <EditorialRecipeDetail suggestion={detail} showReviewControls onReview={openReview} onOpenSource={(sourceInfo) => openSource(sourceInfo, detail)} sourceImage={sourcePreviewPost?.image} submitting={submittingReview} catalogIngredients={catalogIngredients} ingredientMappings={ingredientMappings} onIngredientMapping={(index, id) => setIngredientMappings((current) => ({ ...current, [index]: id }))} onCreateIngredient={openCreateIngredient} mappingSectionRef={mappingSectionRef} />
                   : selected ? <section className="admin-panel recipe-suggestion-detail-state"><EmptyState title="Suggestion detail is unavailable." text="The source may have changed or is no longer available on the server." /></section> : null}
           </div>}
-    {!isQueue && selectedId && <aside className="moderation-history-drawer recipe-suggestion-history-drawer" role="dialog" aria-modal="true" aria-label="Recipe suggestion review detail"><header><div><span className="moderation-detail-kicker">RECIPE REVIEW</span><h2>{detail?.source?.title || selected?.source?.title || 'Recipe suggestion'}</h2></div><button type="button" onClick={() => setSelectedId(null)} aria-label="Close recipe history detail"><X size={19} /></button></header><div className="moderation-history-drawer-body recipe-suggestion-history-drawer-body">{detailLoading ? <LoadingState /> : detailError ? <ErrorState onRetry={() => setDetailRefresh((value) => value + 1)} /> : detail ? <RecipeDetail suggestion={detail} showReviewControls={false} onOpenSource={(sourceInfo) => openSource(sourceInfo, detail)} /> : <EmptyState title="Suggestion detail is unavailable." />}</div></aside>}
-    {reviewDialog && <div className="admin-modal-backdrop" onMouseDown={closeReview}><section className="admin-dialog recipe-suggestion-review-dialog" role="dialog" aria-modal="true" aria-labelledby="suggestion-review-title" onMouseDown={(event) => event.stopPropagation()}><p>REVIEW</p><h2 id="suggestion-review-title">{reviewDialog === 'APPROVE' ? 'Approve this suggestion?' : 'Reject this suggestion?'}</h2><span>{reviewDialog === 'APPROVE' ? 'The proposed dish and recipe will be imported into the catalog.' : 'State why this proposal should not enter the catalog.'}</span>{reviewDialog === 'REJECT' && <label>Rejection reason<textarea value={reviewReason} onChange={(event) => setReviewReason(event.target.value)} placeholder="Example: nutrition information needs a verifiable source" aria-invalid={Boolean(reviewError)} /></label>}{reviewError && <div className="recipe-suggestion-review-error" role="alert"><strong>{reviewDialog === 'APPROVE' ? 'Approval was blocked' : 'Review failed'}</strong><p>{reviewError}</p>{reviewIssues.length > 0 && <ul>{reviewIssues.map((issue, index) => <li key={`${issue.field}-${issue.code}-${index}`}><b>{issue.field || 'Suggestion'}</b>{issue.message}</li>)}</ul>}</div>}<div><button type="button" className="admin-btn secondary" disabled={submittingReview} onClick={closeReview}>Cancel</button><button type="button" className={`admin-btn ${reviewDialog === 'APPROVE' ? 'primary' : 'danger'}`} disabled={submittingReview} onClick={submitReview}>{submittingReview ? 'Saving...' : reviewDialog === 'APPROVE' ? 'Approve' : 'Reject'}</button></div></section></div>}
+    {!isQueue && selectedId && <aside className="moderation-history-drawer recipe-suggestion-history-drawer" role="dialog" aria-modal="true" aria-label="Recipe suggestion review detail"><header><div><span className="moderation-detail-kicker">RECIPE REVIEW</span><h2>{detail?.source?.title || selected?.source?.title || 'Recipe suggestion'}</h2></div><button type="button" onClick={() => setSelectedId(null)} aria-label="Close recipe history detail"><X size={19} /></button></header><div className="moderation-history-drawer-body recipe-suggestion-history-drawer-body">{detailLoading ? <LoadingState /> : detailError ? <ErrorState onRetry={() => setDetailRefresh((value) => value + 1)} /> : detail ? <EditorialRecipeDetail suggestion={detail} showReviewControls={false} onOpenSource={(sourceInfo) => openSource(sourceInfo, detail)} sourceImage={sourcePreviewPost?.image} /> : <EmptyState title="Suggestion detail is unavailable." />}</div></aside>}
+{reviewDialog && <ReviewDecisionDialog submitting={submittingReview} error={reviewError} issues={reviewIssues} onClose={closeReview} onSubmit={() => submitReview()} />}
+    {rejectionDialog && <RejectionDialog reasonCode={rejectionReasonCode} reason={reviewReason} error={reviewError} submitting={submittingReview} onReasonCodeChange={(value) => { setRejectionReasonCode(value); setReviewError(''); }} onReasonChange={(value) => { setReviewReason(value); setReviewError(''); }} onClose={closeRejection} onConfirm={confirmRejection} />}
     <CreateIngredientDialog draft={createIngredientDraft} categories={ingredientCategories} saving={creatingIngredient} error={createIngredientError} onClose={() => !creatingIngredient && setCreateIngredientDraft(null)} onChange={changeCreateIngredient} onSubmit={submitCreateIngredient} />
     <SourceContentModal open={Boolean(source)} loading={sourceLoading} error={sourceError} post={sourcePost} fallback={source?.fallback} onClose={closeSource} onRetry={() => setSourceRefresh((value) => value + 1)} />
     <Toast message={toast} onDismiss={() => setToast('')} />
