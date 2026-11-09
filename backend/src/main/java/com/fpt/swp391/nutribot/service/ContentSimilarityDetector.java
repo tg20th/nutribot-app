@@ -5,6 +5,7 @@ import com.fpt.swp391.nutribot.repository.ContentRepository;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +28,7 @@ public class ContentSimilarityDetector {
     private final double similarityThreshold;
     private final int matchingBlockThreshold;
 
+    @Autowired
     public ContentSimilarityDetector(
             ContentRepository contentRepository,
             @Value("${app.content.duplicate-similarity-threshold:0.80}") double similarityThreshold,
