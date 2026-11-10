@@ -364,6 +364,29 @@ def test_malformed_json_uses_structured_response_fallback():
     assert models.calls == ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
 
 
+def test_malformed_fallback_response_does_not_make_next_text_request_ineligible():
+    class MalformedFallback:
+        calls = []
+
+        async def generate_content(self, **kwargs):
+            self.calls.append(kwargs["model"])
+            if kwargs["model"] == "gemini-3.5-flash-lite":
+                raise errors.APIError(503, {"error": {"message": "high demand"}})
+            return SimpleNamespace(text="not json")
+
+    models = MalformedFallback()
+    service = GeminiService(
+        Settings(gemini_api_key="test-key"),
+        client=SimpleNamespace(aio=SimpleNamespace(models=models)),
+    )
+    with pytest.raises(AIResponseInvalidError):
+        asyncio.run(service.chat(ChatRequest(message="nutrition", session_id="s")))
+
+    # The primary remains in its intentional provider cooldown, but the
+    # malformed fallback response must not make both text models unavailable.
+    assert service._model_router.candidates("text") == ["gemini-3.6-flash"]
+
+
 def test_malformed_json_fallback_exhaustion_is_controlled_and_bounded():
     class AlwaysMalformed:
         calls = []

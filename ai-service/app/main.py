@@ -86,7 +86,7 @@ def create_app(
         invalid_input = first_error.get("input")
         body_keys = sorted(exc.body.keys()) if isinstance(exc.body, dict) else None
         logger.warning(
-            "Chat request validation failed at '%s'; error_type=%s, input type=%s, expected=string(max_length=2000), normalization=ConversationMessage.before, body type=%s, body keys=%s",
+            "Chat request validation failed at '%s'; error_type=%s, input type=%s, expected=string(max_length=10000), normalization=ConversationMessage.before, body type=%s, body keys=%s",
             location or "body",
             error_type,
             type(invalid_input).__name__,

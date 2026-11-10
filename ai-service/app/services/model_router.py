@@ -80,6 +80,20 @@ class ModelAvailabilityTracker:
             state.last_status = None
             state.last_error = None
 
+    def mark_invalid_response(self, model: str, error: str) -> None:
+        """Record schema trouble without treating it as provider downtime.
+
+        Structured-output failures are retryable/model-response defects, but
+        they are not evidence of quota exhaustion or transport unavailability.
+        Keep the diagnostic state while leaving the configured model eligible
+        for a later request.
+        """
+        state = self._models.get(model)
+        if state is not None:
+            state.cooldown_until = 0.0
+            state.last_status = 502
+            state.last_error = error
+
     def all_quota_exhausted(self, models: list[str], task: str) -> bool:
         relevant = [self._models.get(model) for model in dict.fromkeys(models)]
         relevant = [state for state in relevant if state and task in state.tasks]
@@ -169,6 +183,9 @@ class GeminiModelRouter:
 
     def mark_success(self, model: str) -> None:
         self._tracker.mark_success(model)
+
+    def mark_invalid_response(self, model: str, error: str) -> None:
+        self._tracker.mark_invalid_response(model, error)
 
     def all_quota_exhausted(self, task: str) -> bool:
         if task == LEGACY_TASK:
