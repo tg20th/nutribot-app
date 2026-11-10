@@ -317,7 +317,7 @@ public class ChatbotController {
 
     public record ChatbotQueryRequest(
             @Size(max = 100, message = "Session ID cannot exceed 100 characters.") String sessionId,
-            @Size(max = MAX_LENGTH, message = "Message cannot exceed 10000 characters.") String message,
+            @Size(max = MAX_LENGTH, message = "Message cannot exceed 2000 characters.") String message,
             @Size(max = MAX_CONVERSATION_HISTORY, message = "Conversation history cannot exceed 50 messages.")
             List<@Valid ConversationTurn> conversationHistory,
             @Size(max = 100, message = "Idempotency key cannot exceed 100 characters.") String idempotencyKey,

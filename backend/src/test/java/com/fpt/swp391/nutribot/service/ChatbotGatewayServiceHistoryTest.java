@@ -20,11 +20,11 @@ class ChatbotGatewayServiceHistoryTest {
 
     @Test
     void boundsLegacyStoredHistoryToTheFastApiContractWithoutDroppingTheTurn() {
-        String legacyContent = "nutrition advice ".repeat(700);
+        String legacyContent = "nutrition advice ".repeat(200);
 
         String normalized = ChatbotGatewayService.normalizeAiHistoryContent(legacyContent);
 
-        assertEquals(10_000, normalized.length());
+        assertEquals(2_000, normalized.length());
         assertTrue(normalized.endsWith("[Earlier history truncated]"));
     }
 

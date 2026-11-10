@@ -186,6 +186,19 @@ def test_request_rejects_invalid_message_and_history(payload):
         ChatRequest.model_validate(payload)
 
 
+@pytest.mark.parametrize("length", [1, 1_999, 2_000])
+def test_request_accepts_message_lengths_through_shared_limit(length):
+    request = ChatRequest.model_validate({"message": "x" * length, "session_id": "s"})
+
+    assert len(request.message) == length
+
+
+@pytest.mark.parametrize("length", [2_001, 5_000, 10_000])
+def test_request_rejects_message_above_shared_limit(length):
+    with pytest.raises(ValidationError):
+        ChatRequest.model_validate({"message": "x" * length, "session_id": "s"})
+
+
 def test_history_accepts_text_and_known_legacy_image_context():
     request = ChatRequest.model_validate({
         "message": "Can I follow up?",

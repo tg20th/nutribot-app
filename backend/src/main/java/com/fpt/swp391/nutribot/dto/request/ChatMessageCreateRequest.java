@@ -19,7 +19,7 @@ public class ChatMessageCreateRequest {
     private String senderType;
 
     @NotBlank(message = "Nội dung không được trống")
-    @Size(max = MAX_LENGTH, message = "Message cannot exceed 10000 characters.")
+    @Size(max = MAX_LENGTH, message = "Message cannot exceed 2000 characters.")
     private String content;
 
     @Size(max = 100, message = "Idempotency key quá dài")

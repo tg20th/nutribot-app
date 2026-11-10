@@ -63,7 +63,7 @@ def validate_youtube_url(value: str) -> str:
     return normalized
 
 
-CHAT_MESSAGE_MAX_LENGTH = 10_000
+CHAT_MESSAGE_MAX_LENGTH = 2_000
 
 
 class ConversationMessage(BaseModel):

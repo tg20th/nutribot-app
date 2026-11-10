@@ -148,7 +148,7 @@ describe('ChatbotWidget', () => {
     fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
     const input = screen.getByLabelText(/message nutribot/i);
 
-    expect(input).toHaveAttribute('maxLength', '10000');
+    expect(input).toHaveAttribute('maxLength', '2000');
     fireEvent.change(input, { target: { value: '   ' } });
     fireEvent.submit(input.closest('form'));
     expect(requestNutritionAdvice).not.toHaveBeenCalled();

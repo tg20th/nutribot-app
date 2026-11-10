@@ -38,7 +38,7 @@ import '../../styles/chatbot-widget.css';
 
 const GUEST_TRIAL_LIMIT = 3;
 const GUEST_SESSION_KEY = 'nutribot_guest_chat_session_id';
-const MAX_MESSAGE_LENGTH = 10_000;
+const MAX_MESSAGE_LENGTH = 2_000;
 const CHATBOT_TIMEOUTS = {
   // AI text processing is bounded at 30s; leave room for the backend
   // gateway and network response without changing image/video deadlines.
@@ -500,7 +500,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     const requestType = getRequestType(selectedAttachment, selectedYoutube);
     if (!requestMessage && !selectedAttachment && !selectedYoutube) return;
     if (requestMessage.length > MAX_MESSAGE_LENGTH) {
-      setConversationError('Message cannot exceed 10000 characters.');
+      setConversationError('Message cannot exceed 2000 characters.');
       return;
     }
     if (isLoading || sendingRef.current) return;

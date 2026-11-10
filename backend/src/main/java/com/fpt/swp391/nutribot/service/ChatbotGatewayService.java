@@ -311,7 +311,7 @@ public class ChatbotGatewayService {
             throw new BadRequestException("A session ID between 1 and 100 characters is required.");
         }
         if (message != null && message.length() > MAX_LENGTH) {
-            throw new BadRequestException("Message cannot exceed 10000 characters.");
+            throw new BadRequestException("Message cannot exceed 2000 characters.");
         }
     }
 
@@ -345,7 +345,7 @@ public class ChatbotGatewayService {
 
     public record ConversationTurn(
             @NotBlank @Pattern(regexp = "USER|ASSISTANT") String sender,
-            @NotBlank @Size(max = MAX_LENGTH, message = "Message cannot exceed 10000 characters.") String content) { }
+            @NotBlank @Size(max = MAX_LENGTH, message = "Message cannot exceed 2000 characters.") String content) { }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record ChatbotReply(
