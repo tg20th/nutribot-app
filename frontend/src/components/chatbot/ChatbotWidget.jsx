@@ -306,6 +306,11 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     event.preventDefault();
     submitMessage();
   };
+  const handleMessageChange = (event) => {
+    setDraft(event.target.value);
+    resizeComposer(event.currentTarget);
+  };
+  const messageOverLimit = draft.length > MAX_MESSAGE_LENGTH;
 
   const loadSessions = useCallback(async () => {
     setHistoryState('loading'); setHistoryError('');
@@ -571,8 +576,8 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   };
   const showWelcome = conversationState === 'new';
   const selectWelcomePrompt = (prompt) => {
-    setDraft(prompt);
-    inputRef.current?.focus();
+    if (isLoading || sendingRef.current) return;
+    submitMessage(prompt);
   };
 
   const renderHistoryState = (cardMode = false) => <div className={`chatbot-widget__history-list${cardMode ? ' chatbot-widget__history-list--cards' : ''}`}>
@@ -675,17 +680,21 @@ export default function ChatbotWidget({ onSend, onAuth }) {
                 </div> : <>
                   <div className="chatbot-widget__composer-input-row">
                     <label htmlFor="nutribot-message" className="chatbot-widget__sr-only">Message NutriBot</label>
-                    <textarea ref={inputRef} id="nutribot-message" value={draft} onChange={(event) => { setDraft(event.target.value); resizeComposer(event.currentTarget); }} onKeyDown={handleComposerKeyDown} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={(event) => { composingRef.current = false; resizeComposer(event.currentTarget); }} placeholder="Ask NutriBot..." autoComplete="off" maxLength={MAX_MESSAGE_LENGTH} rows="1" disabled={isLoading} />
+                    <textarea ref={inputRef} id="nutribot-message" value={draft} onChange={handleMessageChange} onKeyDown={handleComposerKeyDown} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={(event) => { composingRef.current = false; resizeComposer(event.currentTarget); }} placeholder="Ask NutriBot..." autoComplete="off" rows="1" disabled={isLoading} />
                   </div>
                   <div className="chatbot-widget__composer-actions">
                     <div ref={attachmentMenuRef} className="chatbot-widget__attach-wrap"><button type="button" className="chatbot-widget__attach-button" onClick={() => setAttachmentMenuOpen((current) => !current)} aria-label="Add attachment" aria-expanded={attachmentMenuOpen}><Plus size={18} /></button>{attachmentMenuOpen && <div className="chatbot-widget__attach-menu"><button type="button" className="chatbot-widget__attach-menu-item" aria-label="Photo or video" onClick={() => mediaInputRef.current?.click()}><span className="chatbot-widget__attach-menu-item-icon chatbot-widget__attach-menu-item-icon--photo"><ImageIcon size={20} aria-hidden="true" /></span><span className="chatbot-widget__attach-menu-item-label">Photo or video</span></button><button type="button" className="chatbot-widget__attach-menu-item" aria-label="YouTube link" onClick={chooseYoutube}><span className="chatbot-widget__attach-menu-item-icon chatbot-widget__attach-menu-item-icon--youtube"><YoutubeIcon /></span><span className="chatbot-widget__attach-menu-item-label">YouTube link</span></button></div>}</div>
-                    <button type="submit" disabled={(!draft.trim() && !attachment && !youtubeUrl) || isLoading} aria-label="Send message"><Send size={18} /></button>
+                    <button type="submit" disabled={(!draft.trim() && !attachment && !youtubeUrl) || messageOverLimit || isLoading} aria-label="Send message"><Send size={18} /></button>
                   </div>
                 </>}
               </div>
               {youtubeEditorError && <p className="chatbot-widget__youtube-error" role="alert">{youtubeEditorError}</p>}
             </form>
             <input ref={mediaInputRef} className="chatbot-widget__file-input" type="file" accept={[...IMAGE_TYPES, ...VIDEO_TYPES].join(',')} onChange={choosePhotoOrVideo} />
+            <div className={`chatbot-widget__message-counter${messageOverLimit ? ' is-over-limit' : ''}`} aria-live="polite">
+              {messageOverLimit && <span className="chatbot-widget__message-limit-warning" role="alert">Maximum 2,000 characters allowed.</span>}
+              <span>{draft.length.toLocaleString('en-US')}/{MAX_MESSAGE_LENGTH.toLocaleString('en-US')}</span>
+            </div>
             {showTrialBadge && <div className={`chatbot-widget__trial-badge${guestTrialsLeft === 1 ? ' is-warning' : ''}`} aria-live="polite"><AlertCircle size={13} aria-hidden="true" /><span><strong>{guestTrialsLeft} of {GUEST_TRIAL_LIMIT}</strong> questions left</span></div>}
             <p className="chatbot-widget__notice">NutriBot offers general guidance, not medical advice.</p>
           </div>
