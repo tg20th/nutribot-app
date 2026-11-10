@@ -980,8 +980,8 @@ class GeminiService:
                         # not a successful generation. Cool it down and use the
                         # already-routed alternative at most once.
                         last_invalid_response = exc
-                        self._model_router.mark_failure(
-                            model, 502, "invalid_structured_response"
+                        self._model_router.mark_invalid_response(
+                            model, "invalid_structured_response"
                         )
                         telemetry["errors"].append(
                             {"model": model, "type": "AIResponseInvalidError"}

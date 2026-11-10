@@ -32,11 +32,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.fpt.swp391.nutribot.validation.ChatMessageValidation.MAX_LENGTH;
+
 @Slf4j
 @Service
 public class ChatbotGatewayService {
 
-    private static final int MAX_MESSAGE_LENGTH = 2_000;
     private static final int MAX_SESSION_ID_LENGTH = 100;
     private static final JsonMapper JSON_MAPPER = JsonMapper.shared();
 
@@ -309,7 +310,7 @@ public class ChatbotGatewayService {
         if (sessionId == null || sessionId.isBlank() || sessionId.length() > MAX_SESSION_ID_LENGTH) {
             throw new BadRequestException("A session ID between 1 and 100 characters is required.");
         }
-        if (message != null && message.length() > MAX_MESSAGE_LENGTH) {
+        if (message != null && message.length() > MAX_LENGTH) {
             throw new BadRequestException("Message cannot exceed 2000 characters.");
         }
     }
@@ -330,21 +331,21 @@ public class ChatbotGatewayService {
     }
 
     /**
-     * Stored messages predate the current 2,000-character API contract. Keep
+     * Stored messages may exceed the current API contract. Keep
      * the turn and an explicit prefix, but never send an invalid AI payload.
      */
     static String normalizeAiHistoryContent(String content) {
         String normalized = content == null ? "" : content.strip();
-        if (normalized.length() <= MAX_MESSAGE_LENGTH) return normalized;
+        if (normalized.length() <= MAX_LENGTH) return normalized;
         log.warn("AI history content exceeded contract; sender contentLength={} truncated=true",
                 normalized.length());
-        int prefixLength = MAX_MESSAGE_LENGTH - HISTORY_TRUNCATION_MARKER.length();
+        int prefixLength = MAX_LENGTH - HISTORY_TRUNCATION_MARKER.length();
         return normalized.substring(0, prefixLength) + HISTORY_TRUNCATION_MARKER;
     }
 
     public record ConversationTurn(
             @NotBlank @Pattern(regexp = "USER|ASSISTANT") String sender,
-            @NotBlank @Size(max = 2_000) String content) { }
+            @NotBlank @Size(max = MAX_LENGTH, message = "Message cannot exceed 2000 characters.") String content) { }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record ChatbotReply(

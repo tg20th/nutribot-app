@@ -186,6 +186,19 @@ def test_request_rejects_invalid_message_and_history(payload):
         ChatRequest.model_validate(payload)
 
 
+@pytest.mark.parametrize("length", [1, 1_999, 2_000])
+def test_request_accepts_message_lengths_through_shared_limit(length):
+    request = ChatRequest.model_validate({"message": "x" * length, "session_id": "s"})
+
+    assert len(request.message) == length
+
+
+@pytest.mark.parametrize("length", [2_001, 5_000, 10_000])
+def test_request_rejects_message_above_shared_limit(length):
+    with pytest.raises(ValidationError):
+        ChatRequest.model_validate({"message": "x" * length, "session_id": "s"})
+
+
 def test_history_accepts_text_and_known_legacy_image_context():
     request = ChatRequest.model_validate({
         "message": "Can I follow up?",
@@ -362,6 +375,29 @@ def test_malformed_json_uses_structured_response_fallback():
     response = asyncio.run(service.chat(ChatRequest(message="nutrition", session_id="s")))
     assert response.reply == "Validated fallback"
     assert models.calls == ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
+
+
+def test_malformed_fallback_response_does_not_make_next_text_request_ineligible():
+    class MalformedFallback:
+        calls = []
+
+        async def generate_content(self, **kwargs):
+            self.calls.append(kwargs["model"])
+            if kwargs["model"] == "gemini-3.5-flash-lite":
+                raise errors.APIError(503, {"error": {"message": "high demand"}})
+            return SimpleNamespace(text="not json")
+
+    models = MalformedFallback()
+    service = GeminiService(
+        Settings(gemini_api_key="test-key"),
+        client=SimpleNamespace(aio=SimpleNamespace(models=models)),
+    )
+    with pytest.raises(AIResponseInvalidError):
+        asyncio.run(service.chat(ChatRequest(message="nutrition", session_id="s")))
+
+    # The primary remains in its intentional provider cooldown, but the
+    # malformed fallback response must not make both text models unavailable.
+    assert service._model_router.candidates("text") == ["gemini-3.6-flash"]
 
 
 def test_malformed_json_fallback_exhaustion_is_controlled_and_bounded():

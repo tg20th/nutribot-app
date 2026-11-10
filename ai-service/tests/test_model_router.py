@@ -148,3 +148,14 @@ def test_cooldown_expiration_reenables_model(monkeypatch):
 
     now[0] += 11
     assert router.candidates(TEXT_TASK)[0] == "gemini-3.5-flash-lite"
+
+
+def test_invalid_structured_response_is_recorded_without_cooldown():
+    router = GeminiModelRouter(settings())
+
+    router.mark_invalid_response("gemini-3.5-flash-lite", "invalid_structured_response")
+
+    assert router.candidates(TEXT_TASK) == ["gemini-3.5-flash-lite", "gemini-3.6-flash"]
+    state = next(item for item in router.snapshot() if item["model"] == "gemini-3.5-flash-lite")
+    assert state["last_status"] == 502
+    assert state["eligible"] is True

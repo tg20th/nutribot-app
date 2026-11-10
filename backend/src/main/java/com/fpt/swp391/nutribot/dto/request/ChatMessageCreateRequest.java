@@ -10,6 +10,8 @@ import lombok.Setter;
 import java.util.List;
 import java.util.Map;
 
+import static com.fpt.swp391.nutribot.validation.ChatMessageValidation.MAX_LENGTH;
+
 @Getter @Setter
 public class ChatMessageCreateRequest {
     @NotBlank(message = "Người gửi không được trống")
@@ -17,7 +19,7 @@ public class ChatMessageCreateRequest {
     private String senderType;
 
     @NotBlank(message = "Nội dung không được trống")
-    @Size(max = 10000, message = "Nội dung quá dài")
+    @Size(max = MAX_LENGTH, message = "Message cannot exceed 2000 characters.")
     private String content;
 
     @Size(max = 100, message = "Idempotency key quá dài")

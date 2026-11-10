@@ -3,32 +3,37 @@ import gsap from 'gsap';
 import {
   AlertCircle,
   ArrowLeft,
-  BotMessageSquare,
   Check,
   ChevronDown,
   ChevronRight,
-  Clock3,
   History,
+  Leaf,
   Image as ImageIcon,
   Loader2,
   Maximize2,
+  MoreHorizontal,
   Minimize2,
   PanelLeftClose,
   PanelLeftOpen,
   Play,
   Plus,
   Search,
+  SquarePen,
   Send,
-  Sparkles,
+  Sunrise,
+  Utensils,
+  Clock3,
   Video,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getChatMessages, getChatSessions, requestNutritionAdvice } from '../../services/chatbotApi';
+import { deleteChatSession, getChatMessages, getChatSessions, requestNutritionAdvice } from '../../services/chatbotApi';
 import { googleAuthUrl } from '../../services/contentApi';
 import { isAdminRole } from '../../utils/auth';
 import AuthModal from '../AuthModal';
+import MessageMarkdown, { markdownToPlainText } from './MessageMarkdown';
+import NutriBotIcon from './NutriBotIcon';
 import '../../styles/chatbot-widget.css';
 
 const GUEST_TRIAL_LIMIT = 3;
@@ -46,11 +51,15 @@ const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
-const QUICK_PROMPTS = [
-  'Build a balanced plate',
-  'High-protein meal ideas',
-  'Healthy afternoon snacks',
-  'Plan an easy breakfast',
+const QUICK_PROMPTS = {
+  en: ['Build a balanced plate', 'High-protein meal ideas', 'Healthy afternoon snacks', 'Plan an easy breakfast'],
+  vi: ['Xây dựng một đĩa ăn cân bằng', 'Gợi ý bữa ăn giàu đạm', 'Món ăn nhẹ lành mạnh buổi chiều', 'Lên kế hoạch bữa sáng đơn giản'],
+};
+const COMPACT_WELCOME_PROMPTS = [
+  { label: 'What should I eat tonight?', Icon: Utensils },
+  { label: 'High-protein meal ideas', Icon: Leaf },
+  { label: 'Healthy snack ideas', Icon: Clock3 },
+  { label: 'Plan a balanced breakfast', Icon: Sunrise },
 ];
 
 const INITIAL_MESSAGES = [{
@@ -69,6 +78,22 @@ const getGuestSessionId = () => {
 };
 
 const getActionStorageKey = (sessionId, messageId) => `nutribot-action:${sessionId || 'guest'}:${messageId}`;
+const startOfLocalDay = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+};
+const getHistoryGroup = (updatedAt) => {
+  const timestamp = startOfLocalDay(updatedAt);
+  if (timestamp == null) return 'Older';
+  const today = startOfLocalDay(new Date());
+  const daysAgo = Math.floor((today - timestamp) / 86_400_000);
+  if (daysAgo <= 0) return 'Today';
+  if (daysAgo === 1) return 'Yesterday';
+  if (daysAgo <= 7) return 'Previous 7 days';
+  return 'Older';
+};
+const HISTORY_GROUPS = ['Today', 'Yesterday', 'Previous 7 days', 'Older'];
 const getInternalHistoryContent = (item) => {
   const parts = [item.text || ''];
   const image = item.analysis;
@@ -128,17 +153,18 @@ const readAsBase64 = (file) => new Promise((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
-function AnalysisCard({ attachment, videoAnalysis, videoSource, videoSummary, showSteps = false }) {
+function AnalysisCard({ attachment, videoAnalysis, videoSource, videoSummary, showSteps = false, language = 'en' }) {
+  const vi = language === 'vi';
   const [expanded, setExpanded] = useState(false);
   if (attachment?.type === 'IMAGE') {
     const recognized = normalizeList(attachment.recognizedIngredients);
     const uncertain = normalizeList(attachment.uncertainIngredients);
     const warnings = normalizeList(attachment.warnings);
     if (!recognized.length && !uncertain.length && !warnings.length) return null;
-    return <section className="chatbot-analysis-card chatbot-analysis-card--image" aria-label="Ingredient analysis">
-      <header><span className="chatbot-analysis-card__icon"><ImageIcon size={15} /></span><strong>Ingredient analysis</strong></header>
-      {recognized.length > 0 && <div className="chatbot-analysis-card__group"><span className="chatbot-analysis-card__label">Clearly visible</span><ul>{recognized.map((item) => <li key={item}>{item}</li>)}</ul></div>}
-      {uncertain.length > 0 && <div className="chatbot-analysis-card__group is-muted"><span className="chatbot-analysis-card__label">Uncertain</span><ul>{uncertain.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+    return <section className="chatbot-analysis-card chatbot-analysis-card--image" aria-label={vi ? 'Phân tích nguyên liệu' : 'Ingredient analysis'}>
+      <header><span className="chatbot-analysis-card__icon"><ImageIcon size={15} /></span><strong>{vi ? 'Phân tích nguyên liệu' : 'Ingredient analysis'}</strong></header>
+      {recognized.length > 0 && <div className="chatbot-analysis-card__group"><span className="chatbot-analysis-card__label">{vi ? 'Nhìn thấy rõ' : 'Clearly visible'}</span><ul>{recognized.map((item) => <li key={item}>{item}</li>)}</ul></div>}
+      {uncertain.length > 0 && <div className="chatbot-analysis-card__group is-muted"><span className="chatbot-analysis-card__label">{vi ? 'Chưa chắc chắn' : 'Uncertain'}</span><ul>{uncertain.map((item) => <li key={item}>{item}</li>)}</ul></div>}
       {warnings.length > 0 && <p className="chatbot-analysis-card__warning"><AlertCircle size={14} />{warnings.join(' ')}</p>}
     </section>;
   }
@@ -148,8 +174,8 @@ function AnalysisCard({ attachment, videoAnalysis, videoSource, videoSummary, sh
   const steps = showSteps ? normalizeList(videoAnalysis.steps) : [];
   const uncertainties = normalizeList(videoAnalysis.uncertainties);
   const visibleSteps = expanded ? steps : steps.slice(0, 3);
-  return <section className="chatbot-analysis-card chatbot-analysis-card--video" aria-label="Video analyzed">
-    <header><span className="chatbot-analysis-card__icon"><Video size={15} /></span><strong>Video analyzed</strong></header>
+  return <section className="chatbot-analysis-card chatbot-analysis-card--video" aria-label={vi ? 'Đã phân tích video' : 'Video analyzed'}>
+    <header><span className="chatbot-analysis-card__icon"><Video size={15} /></span><strong>{vi ? 'Đã phân tích video' : 'Video analyzed'}</strong></header>
     <h4>{videoAnalysis.dish_name || videoAnalysis.dishName || 'Dish name unavailable'}</h4>
     <p className="chatbot-analysis-card__summary">{ingredients.length} ingredients · {steps.length} instructions</p>
     {ingredients.length > 0 && <div className="chatbot-analysis-card__group"><span className="chatbot-analysis-card__label">Ingredients</span><p>{ingredients.map((item) => typeof item === 'string' ? item : item.name).join(', ')}</p></div>}
@@ -158,17 +184,11 @@ function AnalysisCard({ attachment, videoAnalysis, videoSource, videoSummary, sh
   </section>;
 }
 
-function MessageText({ text }) {
-  return <>{String(text || '').split('\n').map((line, index, lines) => {
-    const stepHeading = line.match(/^\*\*(Step\s+\d+\s*[—-].*?)\*\*$/i);
-    return <span key={`${line}-${index}`}>{stepHeading ? <strong>{stepHeading[1]}</strong> : line}{index < lines.length - 1 && <br />}</span>;
-  })}</>;
-}
-
-function CookingFollowUp({ item, onSelect, disabled }) {
+function CookingFollowUp({ item, onSelect, disabled, language = 'en' }) {
   const action = normalizeList(item.suggestedActions || item.suggested_actions).find((candidate) => (candidate.type || '').toUpperCase() === 'COOKING_INSTRUCTIONS');
   if (!action || item.actionState) return null;
-  return <section className="chatbot-cooking-follow-up" aria-label="Cooking instructions follow-up"><p>Would you like to see the cooking instructions?</p><div><button type="button" onClick={() => onSelect('yes')} disabled={disabled}>Yes, show steps</button><button type="button" className="is-secondary" onClick={() => onSelect('no')} disabled={disabled}>No, thanks</button></div></section>;
+  const vi = language === 'vi';
+  return <section className="chatbot-cooking-follow-up" aria-label={vi ? 'Yêu cầu hướng dẫn nấu ăn' : 'Cooking instructions follow-up'}><p>{vi ? 'Bạn có muốn xem hướng dẫn nấu ăn không?' : 'Would you like to see the cooking instructions?'}</p><div><button type="button" onClick={() => onSelect('yes')} disabled={disabled}>{vi ? 'Có, hiển thị các bước' : 'Yes, show steps'}</button><button type="button" className="is-secondary" onClick={() => onSelect('no')} disabled={disabled}>{vi ? 'Không, cảm ơn' : 'No, thanks'}</button></div></section>;
 }
 
 function YoutubeIcon() {
@@ -191,14 +211,16 @@ function SentMedia({ attachment }) {
 
 function ComposerAttachmentPreview({ attachment, youtubeUrl, onRemoveAttachment, onRemoveYoutube }) {
   if (youtubeUrl) {
-    return <div className="chatbot-widget__attachment-preview chatbot-widget__attachment-preview--youtube">
+    const tile = youtubeUrl.length > 30;
+    return <div className={`chatbot-widget__attachment-preview chatbot-widget__attachment-preview--youtube${tile ? ' is-tile' : ''}`}>
       <YoutubeIcon />
       <span><strong>YouTube video</strong><small title={youtubeUrl}>{youtubeUrl}</small></span>
       <button type="button" onClick={onRemoveYoutube} aria-label="Remove YouTube URL"><X size={15} /></button>
     </div>;
   }
   if (!attachment) return null;
-  return <div className="chatbot-widget__attachment-preview">
+  const tile = attachment.filename.length > 26;
+  return <div className={`chatbot-widget__attachment-preview${tile ? ' is-tile' : ''}`} title={tile ? attachment.filename : undefined} aria-label={tile ? attachment.filename : undefined}>
     {attachment.kind === 'image' && attachment.preview ? <img src={attachment.preview} alt="Selected image" /> : <span className="chatbot-widget__attachment-video-icon"><Play size={18} fill="currentColor" aria-hidden="true" /></span>}
     <span><strong>{attachment.filename}</strong><small>{formatBytes(attachment.size)}</small></span>
     <button type="button" onClick={onRemoveAttachment} aria-label="Remove attachment"><X size={15} /></button>
@@ -220,7 +242,9 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const [historyState, setHistoryState] = useState('idle');
   const [historyError, setHistoryError] = useState('');
   const [historyQuery, setHistoryQuery] = useState('');
+  const [openHistoryMenu, setOpenHistoryMenu] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [conversationLanguage, setConversationLanguage] = useState('en');
   const [activeRequestType, setActiveRequestType] = useState('text');
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [authMode, setAuthMode] = useState(null);
@@ -228,6 +252,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const [guestTrialsLeft, setGuestTrialsLeft] = useState(null);
   const [attachment, setAttachment] = useState(null);
   const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [textareaExpanded, setTextareaExpanded] = useState(false);
   const [youtubeEditorOpen, setYoutubeEditorOpen] = useState(false);
   const [youtubeDraft, setYoutubeDraft] = useState('');
   const [youtubeEditorError, setYoutubeEditorError] = useState('');
@@ -239,14 +264,17 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const launcherRef = useRef(null);
   const mediaInputRef = useRef(null);
   const youtubeInputRef = useRef(null);
+  const historySearchInputRef = useRef(null);
   const attachmentMenuRef = useRef(null);
   const requestControllerRef = useRef(null);
   const activeRequestRef = useRef(null);
   const requestSequenceRef = useRef(0);
   const conversationKeyRef = useRef(0);
   const sendingRef = useRef(false);
+  const composingRef = useRef(false);
   const sessionIdRef = useRef(null);
   const isGuest = !authToken;
+  const detectLanguage = (text) => /[ăâđêôơư]|\b(ăn|nên|gì|vào|trưa|tối|sáng|bữa|món|không|cho|tôi|mình|giúp|hôm|nay)\b/i.test(text || '') ? 'vi' : 'en';
 
   const refreshAuthState = useCallback(() => {
     const token = localStorage.getItem('nutribot-auth-token');
@@ -260,14 +288,48 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     if (count === 0) setShowLimitModal(true);
   }, [isGuest]);
   const showTrialBadge = isGuest && Number.isInteger(guestTrialsLeft) && guestTrialsLeft > 0;
+  const resizeComposer = (element) => {
+    if (!element) return;
+    element.style.height = 'auto';
+    const nextHeight = Math.min(element.scrollHeight, 132);
+    element.style.height = `${nextHeight}px`;
+    setTextareaExpanded(element.scrollHeight > 42);
+  };
+  useEffect(() => {
+    resizeComposer(inputRef.current);
+  }, [draft]);
+  useEffect(() => {
+    resizeComposer(inputRef.current);
+  }, [attachment, youtubeUrl, displayMode]);
+  const handleComposerKeyDown = (event) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing || composingRef.current) return;
+    event.preventDefault();
+    submitMessage();
+  };
 
   const loadSessions = useCallback(async () => {
     setHistoryState('loading'); setHistoryError('');
     try { setSessions(await getChatSessions()); setHistoryState('ready'); }
     catch { setHistoryError('Chat history is unavailable. Please try again.'); setHistoryState('error'); }
   }, []);
+  const handleDeleteSession = async (sessionId) => {
+    setOpenHistoryMenu(null);
+    if (!window.confirm('Delete this conversation?')) return;
+    try {
+      await deleteChatSession(sessionId);
+      if (String(sessionId) === String(sessionIdRef.current)) startNewConversation();
+      await loadSessions();
+    } catch {
+      setHistoryError('Unable to delete this conversation. Please try again.');
+      setHistoryState('error');
+    }
+  };
   const openWidget = useCallback(() => { refreshAuthState(); setIsMounted(true); setIsOpen(true); }, [refreshAuthState]);
   const openHistory = async () => { if (isGuest) return; setHistoryOpen(true); if (historyState !== 'loading') await loadSessions(); };
+  const openFullscreenHistorySearch = () => {
+    if (!historySidebarOpen) setHistorySidebarOpen(true);
+    requestAnimationFrame(() => historySearchInputRef.current?.focus());
+  };
   const abortActiveRequest = useCallback(() => {
     conversationKeyRef.current += 1;
     requestControllerRef.current?.abort();
@@ -279,11 +341,14 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     setConversationState('new');
     setConversationError('');
     setMessages(INITIAL_MESSAGES);
+    setConversationLanguage('en');
     setHistoryOpen(false);
+    setOpenHistoryMenu(null);
     setAttachmentMenuOpen(false);
   };
   const selectSession = async (sessionId) => {
     abortActiveRequest();
+    if (displayMode === 'compact') setHistoryOpen(false);
     const key = conversationKeyRef.current;
     setConversationState('loading');
     setConversationError('');
@@ -291,12 +356,14 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     setHistoryError('');
     setMessages([]);
     setAttachmentMenuOpen(false);
+    setOpenHistoryMenu(null);
     let loaded = false;
     try {
       const persisted = await getChatMessages(sessionId);
       if (key !== conversationKeyRef.current) return;
       sessionIdRef.current = sessionId;
       setMessages(persisted.map((item) => ({ id: item.messageId, sender: item.senderType === 'USER' ? 'user' : 'assistant', text: item.content, createdAt: item.createdAt, attachment: item.attachments?.[0], actionState: localStorage.getItem(getActionStorageKey(sessionId, item.messageId)) || undefined, ...(item.metadata || {}) })));
+      setConversationLanguage(detectLanguage(persisted.find((item) => item.senderType === 'USER')?.content));
       setConversationState('existing');
       setHistoryOpen(false);
       loaded = true;
@@ -429,8 +496,14 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const submitMessage = async (value = draft, retryContext = null) => {
     const message = value.trim(); const requestMessage = retryContext?.requestMessage ?? message; const displayMessage = retryContext?.displayMessage ?? message; const selectedAttachment = retryContext?.attachment ?? attachment;
     const selectedYoutube = retryContext?.youtubeUrl ?? youtubeUrl;
+    if (!retryContext && detectLanguage(displayMessage) === 'vi') setConversationLanguage('vi');
     const requestType = getRequestType(selectedAttachment, selectedYoutube);
-    if ((!requestMessage && !selectedAttachment && !selectedYoutube) || requestMessage.length > MAX_MESSAGE_LENGTH || isLoading || sendingRef.current) return;
+    if (!requestMessage && !selectedAttachment && !selectedYoutube) return;
+    if (requestMessage.length > MAX_MESSAGE_LENGTH) {
+      setConversationError('Message cannot exceed 2000 characters.');
+      return;
+    }
+    if (isLoading || sendingRef.current) return;
     if ((selectedAttachment || selectedYoutube) && isGuest) { setMediaError('Sign in to send an image or video for analysis.'); return; }
     sendingRef.current = true;
     const conversationHistory = retryContext?.conversationHistory ?? messages.filter((item) => item.id !== 'welcome' && !item.pending && !item.error).slice(-40).map((item) => ({ sender: item.sender === 'user' ? 'USER' : 'ASSISTANT', content: getInternalHistoryContent(item) }));
@@ -457,14 +530,14 @@ export default function ChatbotWidget({ onSend, onAuth }) {
       if (!assistantText) { const invalid = new Error('NutriBot returned an incomplete response.'); invalid.code = 'CHATBOT_INVALID_RESPONSE'; throw invalid; }
       if (!guest && response.sessionId != null) sessionIdRef.current = response.sessionId;
       if (guest) syncGuestTrialCount(response.remainingTrialCount);
-      setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `assistant-${Date.now()}`, sender: 'assistant', text: assistantText, analysis: response.attachment, videoAnalysis: response.videoAnalysis || response.video_analysis, videoSource: response.videoSource || response.video_source, videoSummary: response.videoSummary || response.video_summary, suggestedActions: response.suggestedActions || response.suggested_actions }]);
+      setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `assistant-${Date.now()}`, sender: 'assistant', text: assistantText, animate: !prefersReducedMotion(), analysis: response.attachment, videoAnalysis: response.videoAnalysis || response.video_analysis, videoSource: response.videoSource || response.video_source, videoSummary: response.videoSummary || response.video_summary, suggestedActions: response.suggestedActions || response.suggested_actions }]);
     } catch (error) {
       if (activeRequestRef.current?.id !== requestId || conversationKey !== conversationKeyRef.current) return;
       if (error.name === 'AbortError') { setMessages((current) => current.filter((item) => item.id !== pendingId)); setDraft(displayMessage); setAttachment(selectedAttachment); setYoutubeUrl(selectedYoutube); return; }
       if (error.status === 429 && isGuest) syncGuestTrialCount(0);
       setDraft(displayMessage); setAttachment(selectedAttachment); setYoutubeUrl(selectedYoutube);
       const messageText = error.status === 429 ? "AI is temporarily unavailable\n\nWe've reached the current AI usage limit. You can still view your previous conversations and analysis results. Please try again later." : error.code === 'CHATBOT_TIMEOUT' ? 'NutriBot phản hồi quá lâu. Vui lòng thử lại.' : error.code === 'CHATBOT_INVALID_RESPONSE' ? 'NutriBot returned an incomplete response. Please try again.' : error.status === 503 || error.status === 504 ? 'AI is temporarily unavailable. Please try again later.' : error.status === 413 ? 'The attachment exceeds the allowed size.' : 'NutriBot could not respond right now. Please try again.';
-      setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `error-${Date.now()}`, sender: 'assistant', text: messageText, error: true, retry: { message: requestMessage, displayMessage, sessionId, guest, conversationHistory, conversationKey, idempotencyKey, attachment: selectedAttachment, youtubeUrl: selectedYoutube } }]);
+      setMessages((current) => [...current.filter((item) => item.id !== pendingId), { id: `error-${Date.now()}`, sender: 'assistant', text: error.code === 'CHATBOT_TIMEOUT' ? 'NutriBot took too long to respond. Please try again.' : messageText, error: true, retry: { message: requestMessage, displayMessage, sessionId, guest, conversationHistory, conversationKey, idempotencyKey, attachment: selectedAttachment, youtubeUrl: selectedYoutube } }]);
     } finally { window.clearTimeout(timeoutId); if (activeRequestRef.current?.id === requestId) { requestControllerRef.current = null; activeRequestRef.current = null; sendingRef.current = false; setIsLoading(false); setActiveRequestType('text'); } }
   };
   const selectCookingFollowUp = (item, choice) => {
@@ -481,7 +554,8 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   };
   const retryMessage = (item) => item.retry && submitMessage(item.retry.message, { ...item.retry, errorId: item.id });
   const openAuth = (mode) => { setShowLimitModal(false); setIsOpen(false); setIsMounted(false); onAuth ? onAuth(mode) : navigate('/', { state: { authMode: mode } }); };
-  const filteredSessions = sessions.filter((item) => `${item.title} ${item.preview}`.toLowerCase().includes(historyQuery.toLowerCase()));
+  const filteredSessions = sessions.filter((item) => `${item.title || ''} ${item.preview || ''}`.toLowerCase().includes(historyQuery.toLowerCase().trim().toLowerCase()));
+  const groupedSessions = HISTORY_GROUPS.map((label) => ({ label, items: [...filteredSessions].filter((session) => getHistoryGroup(session.updatedAt) === label).sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0)) })).filter((group) => group.items.length > 0);
   const toggleFullscreen = () => { setDisplayMode((mode) => mode === 'fullscreen' ? 'compact' : 'fullscreen'); setHistoryOpen(false); setAttachmentMenuOpen(false); };
 
   const trimText = (value, length) => {
@@ -489,37 +563,87 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     return clean.length > length ? `${clean.slice(0, length - 1).trimEnd()}…` : clean;
   };
   const sessionTitle = (session) => trimText(session.title || session.preview || 'New conversation', 58);
-  const sessionPreview = (session) => trimText(session.title ? (session.preview || 'No messages yet') : '', 92);
+  const sessionPreview = (session) => trimText(markdownToPlainText(session.preview || ''), 130);
+  const sessionDate = (session) => {
+    const date = new Date(session.updatedAt);
+    if (Number.isNaN(date.getTime())) return '';
+    return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+  };
   const showWelcome = conversationState === 'new';
+  const selectWelcomePrompt = (prompt) => {
+    setDraft(prompt);
+    inputRef.current?.focus();
+  };
 
-  const historyPanel = <aside className={`chatbot-widget__history${displayMode === 'fullscreen' ? ' chatbot-widget__history--sidebar' : ''}`} aria-label="Chat history">
-    <div className="chatbot-widget__history-head"><div><span>YOUR CONVERSATIONS</span><h2>Pick up where you left off.</h2></div><button type="button" onClick={startNewConversation}><Plus size={16} /> <span>NEW CONVERSATION</span></button></div>
-    <label className="chatbot-widget__history-search"><Search size={15} /><input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search conversations" aria-label="Search conversations" /></label>
-    <div className="chatbot-widget__history-list">
-      {historyState === 'loading' && <p className="chatbot-widget__history-status"><Loader2 className="is-spinning" size={17} /> Loading conversations...</p>}
-      {historyState === 'error' && <p className="chatbot-widget__history-status is-error">{historyError}</p>}
-      {historyState === 'ready' && !filteredSessions.length && <p className="chatbot-widget__history-status">No conversations yet.</p>}
-      {historyState === 'ready' && filteredSessions.map((session) => <button type="button" key={session.sessionId} className={`chatbot-widget__history-item${String(session.sessionId) === String(sessionIdRef.current) ? ' is-active' : ''}`} onClick={() => selectSession(session.sessionId)}><span>{sessionTitle(session)}</span><small>{sessionPreview(session)}<i><Clock3 size={12} /> {session.updatedAt ? new Date(session.updatedAt).toLocaleDateString('vi-VN') : ''}</i></small></button>)}
+  const renderHistoryState = (cardMode = false) => <div className={`chatbot-widget__history-list${cardMode ? ' chatbot-widget__history-list--cards' : ''}`}>
+    {historyState === 'loading' && <p className="chatbot-widget__history-status"><Loader2 className="is-spinning" size={17} /> Loading conversations...</p>}
+    {historyState === 'error' && <p className="chatbot-widget__history-status is-error">{historyError}</p>}
+    {historyState === 'ready' && !filteredSessions.length && <p className="chatbot-widget__history-status">{historyQuery ? 'No conversations match your search.' : 'No conversations yet.'}</p>}
+    {historyState === 'ready' && groupedSessions.map((group) => <section className="chatbot-widget__history-group" key={group.label}><h3>{group.label}</h3>{group.items.map((session) => {
+      const active = String(session.sessionId) === String(sessionIdRef.current);
+      const preview = sessionPreview(session);
+      const date = sessionDate(session);
+      return <div className={`chatbot-widget__history-item${active ? ' is-active' : ''}${cardMode ? ' chatbot-widget__history-item--card' : ''}`} key={session.sessionId}>
+        <button type="button" className="chatbot-widget__history-select" onClick={() => selectSession(session.sessionId)}>
+          <span>{sessionTitle(session)}</span>
+          {cardMode && preview && <small>{preview}</small>}
+          {cardMode && date && <time dateTime={session.updatedAt}>{date}</time>}
+        </button>
+        <button type="button" className="chatbot-widget__history-menu-toggle" onClick={() => setOpenHistoryMenu((current) => current === session.sessionId ? null : session.sessionId)} aria-label={`Options for ${sessionTitle(session)}`} aria-expanded={openHistoryMenu === session.sessionId}><MoreHorizontal size={17} /></button>
+        {openHistoryMenu === session.sessionId && <div className="chatbot-widget__history-menu"><button type="button" onClick={() => handleDeleteSession(session.sessionId)}>Delete conversation</button></div>}
+      </div>;
+    })}</section>)}
+  </div>;
+
+  const closeHistory = () => displayMode === 'fullscreen' ? setHistorySidebarOpen(false) : setHistoryOpen(false);
+  const historyPanel = displayMode === 'compact' ? <aside className="chatbot-widget__history chatbot-widget__history--compact" aria-label="Chat history">
+    <div className="chatbot-widget__history-head chatbot-widget__history-head--editorial">
+      <div><span>Your conversations</span><h2>Continue the<br />conversation.</h2><p>Pick up right where you left off.</p></div>
+      <button type="button" className="chatbot-widget__history-new chatbot-widget__history-new--editorial" onClick={startNewConversation} aria-label="New conversation (New chat)"><Plus size={23} aria-hidden="true" /></button>
     </div>
+    <label className="chatbot-widget__history-search"><Search size={16} /><input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search conversations" aria-label="Search conversations" /></label>
+    {renderHistoryState(true)}
+  </aside> : <aside className={`chatbot-widget__history chatbot-widget__history--sidebar${historySidebarOpen ? '' : ' is-collapsed'}`} aria-label="Chat history">
+    {historySidebarOpen ? <>
+      <div className="chatbot-widget__history-head chatbot-widget__history-head--sidebar">
+        <h2>Your conversations</h2>
+        <button type="button" className="chatbot-widget__history-sidebar-toggle" onClick={() => setHistorySidebarOpen(false)} aria-label="Collapse conversations"><PanelLeftClose size={18} /></button>
+      </div>
+      <button type="button" className="chatbot-widget__history-new" onClick={startNewConversation} aria-label="New conversation"><SquarePen size={18} /> <span>New conversation</span></button>
+      <label className="chatbot-widget__history-search"><Search size={17} /><input ref={historySearchInputRef} value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search conversations" aria-label="Search conversations" /></label>
+      {renderHistoryState(false)}
+    </> : <div className="chatbot-widget__history-rail" aria-label="Collapsed chat history">
+      <button type="button" className="chatbot-widget__history-rail-toggle" onClick={() => setHistorySidebarOpen(true)} aria-label="Expand conversations" title="Expand conversations"><NutriBotIcon size={21} /></button>
+      <button type="button" className="chatbot-widget__history-new" onClick={startNewConversation} aria-label="New conversation" title="New conversation"><SquarePen size={18} /></button>
+      <button type="button" className="chatbot-widget__history-search-collapsed" onClick={openFullscreenHistorySearch} aria-label="Search conversations" title="Search conversations"><Search size={18} /></button>
+    </div>}
   </aside>;
 
   return <div className={`chatbot-widget${displayMode === 'fullscreen' && isOpen ? ' is-fullscreen' : ''}${isOpen ? ' is-open' : ''}`}>
     {isMounted && !showLimitModal && <section ref={panelRef} id="nutribot-chat-panel" className={`chatbot-widget__panel${displayMode === 'fullscreen' ? ' chatbot-widget__panel--fullscreen' : ''}`} role="dialog" aria-label="NutriBot nutrition assistant" aria-modal={displayMode === 'fullscreen' ? 'true' : 'false'}>
-      <header className="chatbot-widget__header">
-        <div className="chatbot-widget__brand"><span className="chatbot-widget__brand-mark" aria-hidden="true"><BotMessageSquare size={20} /></span><span><strong>NutriBot AI</strong><small><i aria-hidden="true" /> {isLoading ? (activeRequestType === 'video' ? 'Analyzing video...' : activeRequestType === 'image' ? 'Analyzing image...' : 'Thinking...') : 'Ready to help'}</small></span></div>
+      {!(historyOpen && displayMode === 'compact') && <header className="chatbot-widget__header">
+        <div className="chatbot-widget__brand"><span className="chatbot-widget__brand-mark"><NutriBotIcon size={20} /></span><span><strong>NutriBot AI</strong><small><i aria-hidden="true" /> {isLoading ? (activeRequestType === 'video' ? 'Analyzing video...' : activeRequestType === 'image' ? 'Analyzing image...' : 'Thinking...') : 'Ready to help'}</small></span></div>
         <div className="chatbot-widget__header-actions">
-          {!isGuest && <button type="button" className="chatbot-widget__history-toggle" onClick={displayMode === 'fullscreen' ? () => setHistorySidebarOpen((current) => !current) : openHistory} aria-label={displayMode === 'fullscreen' ? (historySidebarOpen ? 'Hide chat history' : 'Show chat history') : 'Open chat history'}>{displayMode === 'fullscreen' ? (historySidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />) : <History size={18} />}</button>}
+          {!isGuest && displayMode !== 'fullscreen' && <button type="button" className="chatbot-widget__history-toggle" onClick={openHistory} aria-label="Open chat history"><History size={18} /></button>}
           <button type="button" className="chatbot-widget__expand-toggle" onClick={toggleFullscreen} aria-label={displayMode === 'fullscreen' ? 'Minimize NutriBot chat' : 'Expand NutriBot chat'}>{displayMode === 'fullscreen' ? <Minimize2 size={18} /> : <Maximize2 size={18} />}</button>
           <button type="button" className="chatbot-widget__minimize" onClick={closeWidget} aria-label="Close NutriBot chat"><X size={19} /></button>
         </div>
-      </header>
-      {historyOpen && displayMode === 'compact' && historyPanel}
+      </header>}
       <div className="chatbot-widget__body">
-        {displayMode === 'fullscreen' && historySidebarOpen && historyPanel}
-        <div className="chatbot-widget__conversation">
+        {displayMode === 'fullscreen' && historyPanel}
+        {displayMode === 'compact' && historyOpen ? historyPanel : <div className="chatbot-widget__conversation">
           <div ref={threadRef} className="chatbot-widget__thread" aria-live="polite">
             <div className="chatbot-widget__conversation-inner">
-              {showWelcome && <div className="chatbot-widget__welcome"><span className="chatbot-widget__identity-mark" aria-hidden="true"><Sparkles size={23} /></span><div><p>Your everyday nutrition companion</p><h2>Small choices, made clearer.</h2></div></div>}
+              {showWelcome ? <section className={`chatbot-widget__welcome-screen${displayMode === 'compact' ? ' chatbot-widget__welcome-screen--compact' : ''}`} aria-labelledby="nutribot-welcome-title">
+                <div className="chatbot-widget__welcome-intro">
+                  <span className="chatbot-widget__welcome-avatar" aria-hidden="true"><NutriBotIcon size={displayMode === 'compact' ? 24 : 34} /></span>
+                  <h1 id="nutribot-welcome-title">What shall we eat today?</h1>
+                  <p>{displayMode === 'compact' ? 'Your everyday companion for healthier meals and smarter food choices.' : 'Your everyday nutrition companion. Explore vegetarian meals, discover ingredients, and make healthier food choices.'}</p>
+                </div>
+                <div className="chatbot-widget__welcome-prompts" aria-label="Suggested questions">
+                  {(displayMode === 'compact' ? COMPACT_WELCOME_PROMPTS : QUICK_PROMPTS.en).map((prompt) => { const label = typeof prompt === 'string' ? prompt : prompt.label; const Icon = typeof prompt === 'string' ? null : prompt.Icon; return <button key={label} type="button" className="chatbot-widget__prompt" onClick={() => selectWelcomePrompt(label)} disabled={isLoading}>{Icon && <Icon size={16} aria-hidden="true" />}{label}</button>; })}
+                </div>
+              </section> : <>
               {conversationState === 'loading' && <p className="chatbot-widget__conversation-status"><Loader2 className="is-spinning" size={17} /> Loading conversation...</p>}
               {conversationError && conversationState !== 'loading' && <p className="chatbot-widget__conversation-status is-error" role="alert">{conversationError}</p>}
               <div className="chatbot-widget__messages">{messages.map((item, index) => {
@@ -527,30 +651,36 @@ export default function ChatbotWidget({ onSend, onAuth }) {
                 const hasMedia = Boolean(item.attachment?.type);
                 const hasMessageContent = item.pending || hasText || item.analysis || item.videoAnalysis || item.error;
                 if (!hasMedia && !hasMessageContent) return null;
-                return <div key={item.id} className={`chatbot-widget__message-row chatbot-widget__message-row--${item.sender}`} data-latest-message={index === messages.length - 1 ? 'true' : undefined}>
+                return <Fragment key={item.id}><div className={`chatbot-widget__message-row chatbot-widget__message-row--${item.sender}`} data-latest-message={index === messages.length - 1 ? 'true' : undefined}>
                   {hasMedia && <SentMedia attachment={item.attachment} />}
-                  {hasMessageContent && <div className={`chatbot-widget__message chatbot-widget__message--${item.sender}`}>{item.pending ? <span className="chatbot-widget__typing" aria-label={item.mediaKind === 'video' ? 'Analyzing video' : item.mediaKind === 'image' ? 'Analyzing image' : 'NutriBot is thinking'}><i /><i /><i /></span> : <><MessageText text={item.text} />{item.analysis && <AnalysisCard attachment={item.analysis} />}{item.error && item.retry && <button type="button" className="chatbot-widget__retry" onClick={() => retryMessage(item)}>Retry</button>}</>}</div>}
-                  {!item.pending && item.sender === 'assistant' && <CookingFollowUp item={item} onSelect={(choice) => selectCookingFollowUp(item, choice)} disabled={isLoading || Boolean(item.actionState)} />}
-                </div>;
-              })}</div>
-              {showWelcome && <div className="chatbot-widget__prompts" aria-label="Suggested questions">{QUICK_PROMPTS.map((prompt) => <button key={prompt} type="button" className="chatbot-widget__prompt" onClick={() => submitMessage(prompt)} disabled={isLoading}><span>{prompt}</span><span aria-hidden="true">+</span></button>)}</div>}
+                  {hasMessageContent && <>{item.sender === 'assistant' && <span className="chatbot-widget__assistant-avatar"><NutriBotIcon size={20} /></span>}<div className={`chatbot-widget__message chatbot-widget__message--${item.sender}`}>{item.pending ? <span className="chatbot-widget__typing" aria-label={item.mediaKind === 'video' ? 'Analyzing video' : item.mediaKind === 'image' ? 'Analyzing image' : 'NutriBot is thinking'}><i /><i /><i /></span> : <><MessageMarkdown text={item.text} animate={item.sender === 'assistant' && item.animate} onComplete={() => item.animate && setMessages((current) => current.map((message) => message.id === item.id ? { ...message, animate: false } : message))} />{item.animate && <button type="button" className="chatbot-widget__reveal" onClick={() => setMessages((current) => current.map((message) => message.id === item.id ? { ...message, animate: false } : message))}>Show full response</button>}{item.analysis && <AnalysisCard attachment={item.analysis} language={conversationLanguage} />}{item.error && item.retry && <button type="button" className="chatbot-widget__retry" onClick={() => retryMessage(item)}>Retry</button>}</>}</div></>}
+                  {!item.pending && item.sender === 'assistant' && <CookingFollowUp item={item} language={conversationLanguage} onSelect={(choice) => selectCookingFollowUp(item, choice)} disabled={isLoading || Boolean(item.actionState)} />}
+                </div></Fragment>;
+              })}</div></>}
             </div>
           </div>
           <div className="chatbot-widget__composer-wrap">
+            <div className="chatbot-widget__composer-ambient" aria-hidden="true" />
             {mediaError && <p className="chatbot-widget__media-error" role="alert"><AlertCircle size={14} />{mediaError}</p>}
-            <form className="chatbot-widget__composer" onSubmit={(event) => { event.preventDefault(); submitMessage(); }}>
+            <form className={`chatbot-widget__composer${attachment || youtubeUrl || textareaExpanded ? ' is-expanded' : ''}`} onSubmit={(event) => { event.preventDefault(); submitMessage(); }}>
               <ComposerAttachmentPreview attachment={attachment} youtubeUrl={youtubeUrl} onRemoveAttachment={clearAttachment} onRemoveYoutube={() => setYoutubeUrl('')} />
-              <div className="chatbot-widget__composer-row">
-                {youtubeEditorOpen ? <>
+              <div className="chatbot-widget__composer-content">
+                {youtubeEditorOpen ? <div className="chatbot-widget__youtube-row">
                   <button type="button" className="chatbot-widget__composer-back" onClick={closeYoutubeEditor} aria-label="Back to message composer"><ArrowLeft size={17} /></button>
                   <label htmlFor="nutribot-youtube-url" className="chatbot-widget__sr-only">YouTube URL</label>
                   <div className={`chatbot-widget__youtube-input${youtubeEditorError ? ' is-error' : ''}`}>
                     <input ref={youtubeInputRef} id="nutribot-youtube-url" value={youtubeDraft} onChange={(event) => { setYoutubeDraft(event.target.value); if (youtubeEditorError) setYoutubeEditorError(''); }} onBlur={() => { if (youtubeValue && !isValidYoutubeUrl(youtubeValue)) setYoutubeEditorError('Enter a valid YouTube URL.'); }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); if (canConfirmYoutube) confirmYoutube(event); else if (youtubeValue) setYoutubeEditorError('Enter a valid YouTube URL.'); } }} placeholder="Paste YouTube URL..." autoComplete="off" />
                   </div>
                   <button type="button" className="chatbot-widget__youtube-confirm" onClick={confirmYoutube} disabled={!canConfirmYoutube} aria-label="Confirm YouTube URL"><Check size={15} /></button>
-                </> : <>
-                  <div ref={attachmentMenuRef} className="chatbot-widget__attach-wrap"><button type="button" className="chatbot-widget__attach-button" onClick={() => setAttachmentMenuOpen((current) => !current)} aria-label="Add attachment" aria-expanded={attachmentMenuOpen}><Plus size={18} /></button>{attachmentMenuOpen && <div className="chatbot-widget__attach-menu"><button type="button" onClick={() => mediaInputRef.current?.click()}><ImageIcon size={16} /> Photo or video</button><button type="button" onClick={chooseYoutube}><YoutubeIcon /> YouTube link</button></div>}</div>
-                  <label htmlFor="nutribot-message" className="chatbot-widget__sr-only">Message NutriBot</label><input ref={inputRef} id="nutribot-message" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask about food or nutrition..." autoComplete="off" maxLength={MAX_MESSAGE_LENGTH} disabled={isLoading} /><button type="submit" disabled={(!draft.trim() && !attachment && !youtubeUrl) || isLoading} aria-label="Send message"><Send size={18} /></button>
+                </div> : <>
+                  <div className="chatbot-widget__composer-input-row">
+                    <label htmlFor="nutribot-message" className="chatbot-widget__sr-only">Message NutriBot</label>
+                    <textarea ref={inputRef} id="nutribot-message" value={draft} onChange={(event) => { setDraft(event.target.value); resizeComposer(event.currentTarget); }} onKeyDown={handleComposerKeyDown} onCompositionStart={() => { composingRef.current = true; }} onCompositionEnd={(event) => { composingRef.current = false; resizeComposer(event.currentTarget); }} placeholder="Ask NutriBot..." autoComplete="off" maxLength={MAX_MESSAGE_LENGTH} rows="1" disabled={isLoading} />
+                  </div>
+                  <div className="chatbot-widget__composer-actions">
+                    <div ref={attachmentMenuRef} className="chatbot-widget__attach-wrap"><button type="button" className="chatbot-widget__attach-button" onClick={() => setAttachmentMenuOpen((current) => !current)} aria-label="Add attachment" aria-expanded={attachmentMenuOpen}><Plus size={18} /></button>{attachmentMenuOpen && <div className="chatbot-widget__attach-menu"><button type="button" className="chatbot-widget__attach-menu-item" aria-label="Photo or video" onClick={() => mediaInputRef.current?.click()}><span className="chatbot-widget__attach-menu-item-icon chatbot-widget__attach-menu-item-icon--photo"><ImageIcon size={20} aria-hidden="true" /></span><span className="chatbot-widget__attach-menu-item-label">Photo or video</span></button><button type="button" className="chatbot-widget__attach-menu-item" aria-label="YouTube link" onClick={chooseYoutube}><span className="chatbot-widget__attach-menu-item-icon chatbot-widget__attach-menu-item-icon--youtube"><YoutubeIcon /></span><span className="chatbot-widget__attach-menu-item-label">YouTube link</span></button></div>}</div>
+                    <button type="submit" disabled={(!draft.trim() && !attachment && !youtubeUrl) || isLoading} aria-label="Send message"><Send size={18} /></button>
+                  </div>
                 </>}
               </div>
               {youtubeEditorError && <p className="chatbot-widget__youtube-error" role="alert">{youtubeEditorError}</p>}
@@ -559,11 +689,11 @@ export default function ChatbotWidget({ onSend, onAuth }) {
             {showTrialBadge && <div className={`chatbot-widget__trial-badge${guestTrialsLeft === 1 ? ' is-warning' : ''}`} aria-live="polite"><AlertCircle size={13} aria-hidden="true" /><span><strong>{guestTrialsLeft} of {GUEST_TRIAL_LIMIT}</strong> questions left</span></div>}
             <p className="chatbot-widget__notice">NutriBot offers general guidance, not medical advice.</p>
           </div>
-        </div>
+        </div>}
       </div>
     </section>}
     {showLimitModal && <div className="chatbot-widget__modal-overlay" onClick={() => setShowLimitModal(false)}><div className="chatbot-widget__modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="limit-modal-title"><button type="button" className="chatbot-widget__modal-close" onClick={() => setShowLimitModal(false)} aria-label="Close"><X size={18} /></button><div className="chatbot-widget__modal-icon"><AlertCircle size={48} /></div><h2 id="limit-modal-title">Your free trial has ended</h2><p>You have used all {GUEST_TRIAL_LIMIT} free questions with NutriBot.</p><p className="chatbot-widget__modal-cta">Create an account or log in to keep chatting with NutriBot.</p><div className="chatbot-widget__modal-actions"><button type="button" className="chatbot-widget__modal-btn chatbot-widget__modal-btn--primary" onClick={() => openAuth('signup')}>Sign Up</button><button type="button" className="chatbot-widget__modal-btn chatbot-widget__modal-btn--secondary" onClick={() => openAuth('login')}>Log In</button></div></div></div>}
     {authMode && <AuthModal mode={authMode} backdropClassName="chatbot-auth-backdrop" onClose={() => setAuthMode(null)} onSubmit={(_, mode) => setAuthMode(mode)} onAuthenticated={(data) => navigate(isAdminRole(data?.role) ? '/admin' : '/home', { replace: true })} onGoogle={() => window.location.assign(googleAuthUrl())} />}
-    <button ref={launcherRef} type="button" className={`chatbot-widget__launcher${isOpen ? ' is-open' : ''}`} onClick={isOpen ? closeWidget : openWidget} aria-label={isOpen ? 'Minimize NutriBot chat' : 'Open NutriBot chat'} aria-expanded={isOpen} aria-controls="nutribot-chat-panel"><span className="chatbot-widget__launcher-icon" aria-hidden="true">{isOpen ? <ChevronDown size={23} /> : <BotMessageSquare size={24} />}</span><span className="chatbot-widget__launcher-label" aria-hidden="true">Ask NutriBot</span></button>
+    <button ref={launcherRef} type="button" className={`chatbot-widget__launcher${isOpen ? ' is-open' : ''}`} onClick={isOpen ? closeWidget : openWidget} aria-label={isOpen ? 'Minimize NutriBot chat' : 'Open NutriBot chat'} aria-expanded={isOpen} aria-controls="nutribot-chat-panel"><span className="chatbot-widget__launcher-icon" aria-hidden="true">{isOpen ? <ChevronDown size={23} /> : <NutriBotIcon size={24} />}</span><span className="chatbot-widget__launcher-label" aria-hidden="true">Ask NutriBot</span></button>
   </div>;
 }

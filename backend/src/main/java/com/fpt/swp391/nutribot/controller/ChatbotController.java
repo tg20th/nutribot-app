@@ -37,6 +37,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.fpt.swp391.nutribot.validation.ChatMessageValidation.MAX_LENGTH;
+
 @RestController
 @RequestMapping("/api/v1/chatbot")
 @RequiredArgsConstructor
@@ -124,7 +126,7 @@ public class ChatbotController {
         }
         log.info("Chatbot route={}, hasMedia={}", fastReply.isPresent() ? "FAST" : "AI", attachment != null);
 
-        String assistantContent = toStoredAssistantContent(reply);
+        String assistantContent = toStoredAssistantContent(reply, request.message());
         LocalDateTime createdAt = null;
         if (!guest) {
             Map<String, Object> responseMetadata = new HashMap<>();
@@ -269,10 +271,10 @@ public class ChatbotController {
         return chatHistoryService.addMessage(username, sessionId, request);
     }
 
-    private String toStoredAssistantContent(ChatbotGatewayService.ChatbotReply reply) {
+    private String toStoredAssistantContent(ChatbotGatewayService.ChatbotReply reply, String userMessage) {
         StringBuilder content = new StringBuilder(reply.reply());
         if (!reply.recommendations().isEmpty()) {
-            content.append("\n\nQuick suggestions:\n- ")
+            content.append("\n\n").append(isVietnamese(userMessage) ? "Gợi ý nhanh:" : "Quick suggestions:").append("\n- ")
                     .append(String.join("\n- ", reply.recommendations()));
         }
         ChatAttachmentResponse attachment = reply.attachment();
@@ -298,6 +300,11 @@ public class ChatbotController {
         return content.toString();
     }
 
+    private boolean isVietnamese(String text) {
+        return text != null && (text.matches(".*[ăâđêôơưĂÂĐÊÔƠƯ].*")
+                || text.toLowerCase(java.util.Locale.ROOT).matches(".*\\b(ăn|nên|gì|vào|trưa|tối|sáng|bữa|món|không|cho|tôi|mình|giúp)\\b.*"));
+    }
+
     private boolean isGuest(Authentication authentication) {
         return authentication == null
                 || !authentication.isAuthenticated()
@@ -310,7 +317,7 @@ public class ChatbotController {
 
     public record ChatbotQueryRequest(
             @Size(max = 100, message = "Session ID cannot exceed 100 characters.") String sessionId,
-            @Size(max = 2_000, message = "Message cannot exceed 2000 characters.") String message,
+            @Size(max = MAX_LENGTH, message = "Message cannot exceed 2000 characters.") String message,
             @Size(max = MAX_CONVERSATION_HISTORY, message = "Conversation history cannot exceed 50 messages.")
             List<@Valid ConversationTurn> conversationHistory,
             @Size(max = 100, message = "Idempotency key cannot exceed 100 characters.") String idempotencyKey,

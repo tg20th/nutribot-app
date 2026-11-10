@@ -11,6 +11,7 @@ export class ChatbotApiError extends Error {
 
 export const getChatSessions = async (signal) => unwrapData(await apiRequest('/api/v1/chatbot/sessions', { signal }), []);
 export const createChatSession = async () => unwrapData(await apiRequest('/api/v1/chatbot/sessions', { method: 'POST' }), null);
+export const deleteChatSession = async (sessionId) => unwrapData(await apiRequest(`/api/v1/chatbot/sessions/${sessionId}`, { method: 'DELETE' }), null);
 export const getChatMessages = async (sessionId, signal) => {
   const response = await apiRequest(`/api/v1/chatbot/sessions/${sessionId}/messages`, { signal });
   const data = response?.data;
