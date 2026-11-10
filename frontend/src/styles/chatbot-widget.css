@@ -1779,6 +1779,8 @@
 
 .chatbot-widget__history--sidebar .chatbot-widget__history-search {
   display: flex;
+  align-items: center;
+  gap: 8px;
   height: 44px;
   margin: 10px 0;
   padding: 0 14px;
@@ -1811,6 +1813,11 @@
 .chatbot-widget__history--sidebar .chatbot-widget__history-search svg {
   display: block;
   flex: 0 0 auto;
+}
+.chatbot-widget__history--sidebar .chatbot-widget__history-search > svg {
+  width: 17px;
+  height: 17px;
+  align-self: center;
 }
 .chatbot-widget__history-search-collapsed {
   display: none;
