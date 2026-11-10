@@ -46,7 +46,6 @@ vi.mock('../../../services/chatbotApi', () => ({
 const renderWithRouter = (ui) => render(<BrowserRouter>{ui}</BrowserRouter>);
 const sendWelcomePrompt = () => {
   fireEvent.click(screen.getByRole('button', { name: /what should i eat tonight/i }));
-  fireEvent.submit(screen.getByLabelText(/message nutribot/i).closest('form'));
 };
 
 describe('ChatbotWidget', () => {
@@ -148,10 +147,35 @@ describe('ChatbotWidget', () => {
     fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
     const input = screen.getByLabelText(/message nutribot/i);
 
-    expect(input).toHaveAttribute('maxLength', '2000');
+    expect(input).not.toHaveAttribute('maxLength');
     fireEvent.change(input, { target: { value: '   ' } });
     fireEvent.submit(input.closest('form'));
     expect(requestNutritionAdvice).not.toHaveBeenCalled();
+  });
+
+  it('shows the live counter and blocks over-limit input without truncating it', () => {
+    renderWithRouter(<ChatbotWidget />);
+    fireEvent.click(screen.getByRole('button', { name: /open nutribot chat/i }));
+    const input = screen.getByLabelText(/message nutribot/i);
+    const sendButton = screen.getByRole('button', { name: /send message/i });
+
+    expect(screen.getByText('0/2,000')).toBeInTheDocument();
+    expect(sendButton).toBeDisabled();
+
+    fireEvent.change(input, { target: { value: 'x'.repeat(2_000) } });
+    expect(input).toHaveValue('x'.repeat(2_000));
+    expect(screen.getByText('2,000/2,000')).toBeInTheDocument();
+    expect(sendButton).toBeEnabled();
+
+    fireEvent.change(input, { target: { value: 'x'.repeat(2_001) } });
+    expect(input).toHaveValue('x'.repeat(2_001));
+    expect(screen.getByText('2,001/2,000')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Maximum 2,000 characters allowed.');
+    expect(sendButton).toBeDisabled();
+
+    fireEvent.change(input, { target: { value: 'x'.repeat(1_999) } });
+    expect(screen.queryByText('Maximum 2,000 characters allowed.')).not.toBeInTheDocument();
+    expect(screen.getByText('1,999/2,000')).toBeInTheDocument();
   });
 
   it('turns an incomplete successful response into an error instead of a fake assistant answer', async () => {
