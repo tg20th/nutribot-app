@@ -604,7 +604,10 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const historyPanel = displayMode === 'compact' ? <aside className="chatbot-widget__history chatbot-widget__history--compact" aria-label="Chat history">
     <div className="chatbot-widget__history-head chatbot-widget__history-head--editorial">
       <div><span>Your conversations</span><h2>Continue the<br />conversation.</h2><p>Pick up right where you left off.</p></div>
-      <button type="button" className="chatbot-widget__history-new chatbot-widget__history-new--editorial" onClick={startNewConversation} aria-label="New conversation (New chat)"><Plus size={23} aria-hidden="true" /></button>
+      <div className="chatbot-widget__history-editorial-actions">
+        <button type="button" className="chatbot-widget__history-close" onClick={closeHistory} aria-label="Close conversation history"><X size={20} aria-hidden="true" /></button>
+        <button type="button" className="chatbot-widget__history-new chatbot-widget__history-new--editorial" onClick={startNewConversation} aria-label="New conversation (New chat)"><Plus size={23} aria-hidden="true" /></button>
+      </div>
     </div>
     <label className="chatbot-widget__history-search"><Search size={16} /><input value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="Search conversations" aria-label="Search conversations" /></label>
     {renderHistoryState(true)}
