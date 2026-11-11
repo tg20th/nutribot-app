@@ -115,6 +115,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/community/highlights").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/search/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/contents/*/comments").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/contents/*/engagement").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/contents/*/vote").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
 

@@ -16,6 +16,7 @@ import { getMyProfile } from '../services/profileApi';
 import { extractStoryText } from '../utils/content';
 import UserProfileLink from '../components/UserProfileLink';
 import { isAuthenticated } from '../utils/auth';
+import useContentEngagement from '../hooks/useContentEngagement';
 
 function loadMyContent(postId, contentType, signal) {
   const request = String(contentType).toLowerCase() === 'video'
@@ -83,6 +84,7 @@ export default function CommunityContentDetailPage() {
   const page = useRef(null);
   const [query, setQuery] = useState('');
   const [currentUser, setCurrentUser] = useState({});
+  useContentEngagement({ contentId: post?.id ?? postId, enabled: Boolean(post) });
 
   useEffect(() => {
     if (!isAuthenticated()) return undefined;
