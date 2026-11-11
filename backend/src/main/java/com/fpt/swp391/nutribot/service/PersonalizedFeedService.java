@@ -17,8 +17,8 @@ import com.fpt.swp391.nutribot.repository.UserProfileRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.VoteRepository;
 import com.fpt.swp391.nutribot.repository.ContentViewEventRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -38,7 +38,6 @@ import java.util.regex.Pattern;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class PersonalizedFeedService {
 
     /** Backward-compatible constructor for existing feed tests and integrations. */
@@ -47,6 +46,20 @@ public class PersonalizedFeedService {
                                    RestClient restClient, ObjectMapper objectMapper) {
         this(contentRepository, userRepository, userProfileRepository, voteRepository,
                 null, restClient, objectMapper);
+    }
+
+    @Autowired
+    public PersonalizedFeedService(ContentRepository contentRepository, UserRepository userRepository,
+                                   UserProfileRepository userProfileRepository, VoteRepository voteRepository,
+                                   ContentViewEventRepository contentViewEventRepository,
+                                   RestClient restClient, ObjectMapper objectMapper) {
+        this.contentRepository = contentRepository;
+        this.userRepository = userRepository;
+        this.userProfileRepository = userProfileRepository;
+        this.voteRepository = voteRepository;
+        this.contentViewEventRepository = contentViewEventRepository;
+        this.restClient = restClient;
+        this.objectMapper = objectMapper;
     }
 
     private static final Pattern RECIPE_SECTION_BOUNDARY = Pattern.compile(
