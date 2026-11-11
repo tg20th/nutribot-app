@@ -9,14 +9,16 @@ import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.entity.UserProfile;
 import com.fpt.swp391.nutribot.entity.Vote;
+import com.fpt.swp391.nutribot.entity.ContentViewEvent;
 import com.fpt.swp391.nutribot.exception.AIServiceUnavailableException;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.UserProfileRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import com.fpt.swp391.nutribot.repository.VoteRepository;
-import lombok.RequiredArgsConstructor;
+import com.fpt.swp391.nutribot.repository.ContentViewEventRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -36,8 +38,29 @@ import java.util.regex.Pattern;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class PersonalizedFeedService {
+
+    /** Backward-compatible constructor for existing feed tests and integrations. */
+    public PersonalizedFeedService(ContentRepository contentRepository, UserRepository userRepository,
+                                   UserProfileRepository userProfileRepository, VoteRepository voteRepository,
+                                   RestClient restClient, ObjectMapper objectMapper) {
+        this(contentRepository, userRepository, userProfileRepository, voteRepository,
+                null, restClient, objectMapper);
+    }
+
+    @Autowired
+    public PersonalizedFeedService(ContentRepository contentRepository, UserRepository userRepository,
+                                   UserProfileRepository userProfileRepository, VoteRepository voteRepository,
+                                   ContentViewEventRepository contentViewEventRepository,
+                                   RestClient restClient, ObjectMapper objectMapper) {
+        this.contentRepository = contentRepository;
+        this.userRepository = userRepository;
+        this.userProfileRepository = userProfileRepository;
+        this.voteRepository = voteRepository;
+        this.contentViewEventRepository = contentViewEventRepository;
+        this.restClient = restClient;
+        this.objectMapper = objectMapper;
+    }
 
     private static final Pattern RECIPE_SECTION_BOUNDARY = Pattern.compile(
             "(?im)^\\s*##\\s*(?:recipe details|ingredients|steps)\\s*$|<h2[^>]*>\\s*(?:recipe details|ingredients|steps)\\s*</h2>");
@@ -81,6 +104,7 @@ public class PersonalizedFeedService {
     private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
     private final VoteRepository voteRepository;
+    private final ContentViewEventRepository contentViewEventRepository;
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
@@ -303,14 +327,20 @@ public class PersonalizedFeedService {
 
     private List<RecommendationRequestDto.InteractionDto> fetchInteractions(Integer userId) {
         List<Vote> votes = voteRepository.findByUserId(userId);
-        return votes.stream()
-                .filter(v -> v.getContentId() != null)
-                .limit(MAX_INTERACTIONS)
-                .map(vote -> RecommendationRequestDto.InteractionDto.builder()
-                        .contentId(vote.getContentId())
-                        .vote(vote.getVoteValue() != null ? vote.getVoteValue().intValue() : null)
-                        .build())
-                .collect(Collectors.toList());
+        Map<Integer, RecommendationRequestDto.InteractionDto.InteractionDtoBuilder> merged = new LinkedHashMap<>();
+        votes.stream().filter(v -> v.getContentId() != null).forEach(v -> merged
+                .computeIfAbsent(v.getContentId(), ignored -> RecommendationRequestDto.InteractionDto.builder())
+                .vote(v.getVoteValue() == null ? null : v.getVoteValue().intValue()));
+        Map<Integer, List<ContentViewEvent>> events = (contentViewEventRepository == null ? List.<ContentViewEvent>of() : contentViewEventRepository.findTop1000ByUserIdOrderByLastActiveAtDesc(userId))
+                .stream().filter(e -> e.getContentId() != null).collect(Collectors.groupingBy(ContentViewEvent::getContentId));
+        events.forEach((contentId, rows) -> {
+            double dwell = rows.stream().mapToInt(e -> e.getDwellTimeSec() == null ? 0 : e.getDwellTimeSec()).sum();
+            double scroll = rows.stream().map(e -> e.getMaxScrollPct() == null ? 0d : e.getMaxScrollPct().doubleValue()).max(Double::compare).orElse(0d);
+            boolean completed = rows.stream().anyMatch(e -> Boolean.TRUE.equals(e.getCompleted()));
+            merged.computeIfAbsent(contentId, ignored -> RecommendationRequestDto.InteractionDto.builder())
+                    .activeDwellSeconds(dwell).maxScrollPct(scroll).completed(completed);
+        });
+        return merged.entrySet().stream().limit(MAX_INTERACTIONS).map(entry -> entry.getValue().contentId(entry.getKey()).build()).toList();
     }
 
     private RecommendationRequestDto buildRecommendationRequest(
