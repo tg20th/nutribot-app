@@ -30,6 +30,8 @@ body:not(:has(.admin-shell)) #root .create-blog-page #create-blog-body:empty:bef
 .create-blog-form label:not(.create-blog-upload){display:flex;justify-content:space-between;margin:11px 0 6px;font-size:13px;font-weight:700}
 .create-blog-form label small{color:#68746c;font-size:11px;font-weight:400}
 .create-blog-form input:not([type=file]),.create-blog-form select,.create-blog-form textarea{width:100%;min-width:0;border:1px solid #d2dbca;border-radius:10px;background:#fffefa;color:#173529;font:400 14px/1.6 var(--create-blog-body-font)}
+.create-blog-form input.create-blog-input-error{border-color:#c4573d;box-shadow:0 0 0 2px rgba(196,87,61,.12)}
+.create-blog-field-error{margin:6px 0 0;color:#913f2c;font-size:12px;line-height:1.5}
 .create-blog-form input:not([type=file]),.create-blog-form select{min-height:46px;padding:10px 13px}
 .create-blog-editor{display:flex;flex:1;flex-direction:column;overflow:hidden;border:1px solid #d2dbca;border-radius:10px;background:#fffefa}
 .create-blog-form textarea{display:block;flex:1 0 auto;min-height:116px;padding:12px 15px;border:0;border-radius:0;resize:none;overflow:hidden}.create-blog-rich-editor{min-height:170px;padding:15px;border:0;outline:0;background:#fffefa;color:#173529;font:400 14px/1.65 var(--create-blog-body-font)}.create-blog-rich-editor:empty:before{content:attr(data-placeholder);color:#78837b;pointer-events:none;font:400 14px/1.65 var(--create-blog-body-font)}.create-blog-rich-editor h2{margin:0 0 10px;font:600 21px/1.2 var(--create-blog-heading-font)}.create-blog-rich-editor p{margin:0 0 11px}.create-blog-rich-editor ul{margin:0 0 11px;padding-left:22px}
