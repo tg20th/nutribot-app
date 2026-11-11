@@ -72,6 +72,61 @@ class CloudinaryMediaServiceTest {
     }
 
     @Test
+    @DisplayName("Cho phép video đúng giới hạn 25 MB")
+    void uploadVideo_exactly25Mb_success() throws Exception {
+        when(cloudinary.uploader()).thenReturn(uploader);
+        when(uploader.uploadLarge(any(byte[].class), anyMap())).thenReturn(Map.of(
+                "secure_url", "https://res.cloudinary.com/test-cloud/video/upload/nutribot/videos/video_1.mp4",
+                "public_id", "nutribot/videos/video_1"
+        ));
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "recipe.mp4", "video/mp4", new byte[25 * 1024 * 1024]
+        );
+
+        assertNotNull(mediaService.uploadVideo(file, 1));
+    }
+
+    @Test
+    @DisplayName("Cho phép video 24 MB")
+    void uploadVideo_24Mb_success() throws Exception {
+        when(cloudinary.uploader()).thenReturn(uploader);
+        when(uploader.uploadLarge(any(byte[].class), anyMap())).thenReturn(Map.of(
+                "secure_url", "https://res.cloudinary.com/test-cloud/video/upload/nutribot/videos/video_1.mp4",
+                "public_id", "nutribot/videos/video_1"
+        ));
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "recipe.mp4", "video/mp4", new byte[24 * 1024 * 1024]
+        );
+
+        assertNotNull(mediaService.uploadVideo(file, 1));
+    }
+
+    @Test
+    @DisplayName("Từ chối video vượt quá 25 MB")
+    void uploadVideo_over25Mb_throwsBadRequest() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "recipe.mp4", "video/mp4", new byte[25 * 1024 * 1024 + 1]
+        );
+
+        BadRequestException error = assertThrows(BadRequestException.class, () -> mediaService.uploadVideo(file, 1));
+        assertEquals("Dung lượng video không được vượt quá 25 MB", error.getMessage());
+        verifyNoInteractions(cloudinary);
+    }
+
+    @Test
+    @DisplayName("Từ chối video sai định dạng MIME")
+    void uploadVideo_invalidMime_throwsBadRequest() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file", "recipe.avi", "video/avi", new byte[]{1, 2, 3}
+        );
+
+        assertThrows(BadRequestException.class, () -> mediaService.uploadVideo(file, 1));
+        verifyNoInteractions(cloudinary);
+    }
+
+    @Test
     @DisplayName("Xóa thumbnail an toàn theo URL")
     void deleteThumbnailByUrl_validUrl_callsCloudinaryDestroy() throws Exception {
         when(cloudinary.uploader()).thenReturn(uploader);

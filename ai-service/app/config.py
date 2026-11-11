@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 _DEPRECATED_MODELS = {"gemini-3.7-flash"}
+MAX_VIDEO_BYTES = 25 * 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,7 +39,7 @@ class Settings:
     gemini_video_attempt_timeout_seconds: float = 120.0
     gemini_video_poll_interval_seconds: float = 2.0
     gemini_video_max_poll_seconds: float = 120.0
-    gemini_video_max_bytes: int = 25 * 1024 * 1024
+    gemini_video_max_bytes: int = MAX_VIDEO_BYTES
     gemini_video_max_duration_seconds: int = 60
     max_history_messages: int = 6
 
@@ -90,9 +91,7 @@ class Settings:
             gemini_video_max_poll_seconds=_positive_float(
                 "GEMINI_VIDEO_MAX_POLL_SECONDS", 120.0
             ),
-            gemini_video_max_bytes=_positive_int(
-                "GEMINI_VIDEO_MAX_BYTES", 25 * 1024 * 1024
-            ),
+            gemini_video_max_bytes=_video_max_bytes_from_env(),
             gemini_video_max_duration_seconds=_positive_int(
                 "GEMINI_VIDEO_MAX_DURATION_SECONDS", 60
             ),
@@ -159,6 +158,13 @@ def _positive_int(name: str, default: int) -> int:
         raise ValueError(f"{name} phải là số nguyên") from exc
     if value <= 0:
         raise ValueError(f"{name} phải lớn hơn 0")
+    return value
+
+
+def _video_max_bytes_from_env() -> int:
+    value = _positive_int("GEMINI_VIDEO_MAX_BYTES", MAX_VIDEO_BYTES)
+    if value != MAX_VIDEO_BYTES:
+        raise ValueError("GEMINI_VIDEO_MAX_BYTES must be exactly 25 MB")
     return value
 def _minimum_float(name: str, default: float, minimum: float) -> float:
     value = _positive_float(name, default)

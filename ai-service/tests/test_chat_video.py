@@ -6,9 +6,9 @@ import pytest
 from google.genai import errors
 from pydantic import ValidationError
 
-from app.config import Settings
+from app.config import MAX_VIDEO_BYTES, Settings
 from app.exceptions import AIProviderUnavailableError, AIResponseInvalidError
-from app.schemas.chat import ChatRequest, GeminiChatResult, GeminiVideoExtraction, VideoSource
+from app.schemas.chat import ChatRequest, GeminiChatResult, GeminiVideoExtraction, VideoSource, _MAX_VIDEO_BYTES
 from app.services.gemini_service import GeminiService
 
 
@@ -24,6 +24,30 @@ def video_request(**overrides):
     }
     payload.update(overrides)
     return ChatRequest.model_validate(payload)
+
+
+@pytest.mark.parametrize("size", [_MAX_VIDEO_BYTES - 1, _MAX_VIDEO_BYTES])
+def test_accepts_video_at_or_under_25_mb(size):
+    data = MP4 + b"0" * (size - len(MP4))
+    request = ChatRequest(message="x", session_id="s", video={
+        "data_base64": base64.b64encode(data).decode(), "mime_type": "video/mp4",
+    })
+    assert len(request.video.decoded_bytes()) == size
+
+
+def test_rejects_video_over_25_mb():
+    data = MP4 + b"0" * (_MAX_VIDEO_BYTES - len(MP4) + 1)
+    with pytest.raises(ValidationError, match="25 MB"):
+        ChatRequest(message="x", session_id="s", video={
+            "data_base64": base64.b64encode(data).decode(), "mime_type": "video/mp4",
+        })
+
+
+def test_ai_video_limit_default_and_environment_are_exactly_25_mb(monkeypatch):
+    assert Settings().gemini_video_max_bytes == MAX_VIDEO_BYTES == 25 * 1024 * 1024
+    monkeypatch.setenv("GEMINI_VIDEO_MAX_BYTES", str(26 * 1024 * 1024))
+    with pytest.raises(ValueError, match="exactly 25 MB"):
+        Settings.from_env()
 
 
 class FakeFiles:

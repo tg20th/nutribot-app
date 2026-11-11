@@ -39,4 +39,22 @@ describe('apiClient AbortError & network handling', () => {
         return true;
       });
   });
+
+  it('preserves the backend message for an upload-size response', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: false,
+      message: 'Dung lượng tệp tải lên không được vượt quá 25 MB.',
+    }), {
+      status: 413,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+
+    await expect(apiRequest('/api/v1/author/videos/upload', { method: 'POST', body: new FormData() }))
+      .rejects.toSatisfy((err) => {
+        expect(err instanceof ApiError).toBe(true);
+        expect(err.status).toBe(413);
+        expect(err.message).toBe('Dung lượng tệp tải lên không được vượt quá 25 MB.');
+        return true;
+      });
+  });
 });

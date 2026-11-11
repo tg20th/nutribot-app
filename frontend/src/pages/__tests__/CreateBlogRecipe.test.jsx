@@ -45,6 +45,41 @@ vi.mock('../../components/chatbot/ChatbotWidget', () => ({
 describe('CreateBlogPage Recipe Details & Steps UI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    URL.createObjectURL = vi.fn(() => 'blob:video-preview');
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  function videoFile(size, type = 'video/mp4', name = 'recipe.mp4') {
+    const file = new File(['video'], name, { type });
+    Object.defineProperty(file, 'size', { value: size });
+    return file;
+  }
+
+  it.each([
+    ['24 MB', 24 * 1024 * 1024],
+    ['exactly 25 MB', 25 * 1024 * 1024],
+  ])('accepts a %s video file', async (_label, size) => {
+    render(<MemoryRouter><CreateBlogPage defaultType="video" /></MemoryRouter>);
+    const input = screen.getByLabelText(/Upload a video file/i);
+    fireEvent.change(input, { target: { files: [videoFile(size)] } });
+    expect(await screen.findByText('recipe.mp4')).toBeInTheDocument();
+    expect(screen.queryByText('Video size must not exceed 25 MB. Please choose a smaller file.')).not.toBeInTheDocument();
+  });
+
+  it('rejects and clears a video file over 25 MB in the upload section', async () => {
+    render(<MemoryRouter><CreateBlogPage defaultType="video" /></MemoryRouter>);
+    const input = screen.getByLabelText(/Upload a video file/i);
+    fireEvent.change(input, { target: { files: [videoFile(25 * 1024 * 1024 + 1)] } });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Video size must not exceed 25 MB. Please choose a smaller file.');
+    expect(screen.getByText('Upload a video file')).toBeInTheDocument();
+  });
+
+  it('rejects unsupported video formats', async () => {
+    render(<MemoryRouter><CreateBlogPage defaultType="video" /></MemoryRouter>);
+    fireEvent.change(screen.getByLabelText(/Upload a video file/i), {
+      target: { files: [videoFile(1024, 'video/avi', 'recipe.avi')] },
+    });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Choose an MP4, WebM, or MOV video.');
   });
 
   it('renders Recipe details section with English labels and Auto calculate nutrition button', async () => {

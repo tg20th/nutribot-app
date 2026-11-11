@@ -21,7 +21,7 @@ public class CloudinaryMediaService {
     private static final String THUMBNAIL_FOLDER = "nutribot/thumbnails";
     private static final String VIDEO_FOLDER = "nutribot/videos";
     private static final long MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
-    private static final long MAX_VIDEO_SIZE = 200 * 1024 * 1024; // 200 MB
+    private static final long MAX_VIDEO_SIZE = 25 * 1024 * 1024; // 25 MB
     private static final List<String> ALLOWED_MIME_TYPES = List.of(
             "image/jpeg",
             "image/png",
@@ -99,7 +99,7 @@ public class CloudinaryMediaService {
             throw new BadRequestException("Vui lòng chọn video để tải lên");
         }
         if (file.getSize() > MAX_VIDEO_SIZE) {
-            throw new BadRequestException("Dung lượng video không được vượt quá 200MB");
+            throw new BadRequestException("Dung lượng video không được vượt quá 25 MB");
         }
 
         String contentType = file.getContentType();

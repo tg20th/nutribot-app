@@ -81,8 +81,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
         log.warn("Upload too large: {}", ex.getMessage());
         return ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error("Avatar images must be 5 MB or smaller."));
+                .status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ApiResponse.error("Dung lượng tệp tải lên không được vượt quá 25 MB."));
     }
 
     @ExceptionHandler(CloudinaryUploadException.class)
