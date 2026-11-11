@@ -2101,6 +2101,18 @@
   padding: 0 2px;
 }
 .chatbot-widget__history-head--editorial > div { flex: 1 1 auto; }
+.chatbot-widget__history-editorial-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex: 0 0 auto;
+  width: 46px;
+  margin-top: 0;
+}
+.chatbot-widget__history-editorial-actions .chatbot-widget__history-close {
+  flex: 0 0 32px;
+  margin: 0 0 36px;
+}
 .chatbot-widget__history-head--editorial span {
   margin-bottom: 25px;
   color: #748b7d;
@@ -2124,7 +2136,7 @@
   height: 46px;
   min-width: 46px;
   min-height: 46px;
-  margin: 69px 1px 0 0;
+  margin: 0 1px 0 0;
   padding: 0;
   border-radius: 50%;
   display: grid;
@@ -2284,11 +2296,16 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  align-self: center;
+  width: 100%;
   flex: 0 1 auto;
 }
 .chatbot-widget__welcome-screen--compact .chatbot-widget__welcome-avatar {
   width: 46px;
   height: 46px;
+  align-self: center;
+  margin-left: auto;
+  margin-right: auto;
   margin-bottom: 14px;
 }
 .chatbot-widget__welcome-screen--compact h1 {
@@ -2334,7 +2351,7 @@
 }
 .chatbot-widget__panel:not(.chatbot-widget__panel--fullscreen) .chatbot-widget__composer {
   min-height: 50px;
-  padding: 5px 12px;
+  padding: 10px 12px 0;
 }
 .chatbot-widget__panel:not(.chatbot-widget__panel--fullscreen) .chatbot-widget__composer textarea {
   min-height: 36px;
@@ -2350,6 +2367,40 @@
   bottom: -190px;
   width: 180%;
   height: 430px;
+}
+
+/* Keep the composer controls on one optical center line in every mode. */
+.chatbot-widget__composer-input-row {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+}
+
+.chatbot-widget__composer-input-row textarea {
+  align-self: center;
+  margin: 0;
+  line-height: 20px;
+}
+
+.chatbot-widget__composer-actions {
+  align-items: center;
+  margin-top: 0;
+  padding-top: 0;
+  min-height: 36px;
+}
+
+.chatbot-widget__composer-actions > button,
+.chatbot-widget__composer-actions .chatbot-widget__attach-button {
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  margin: 0;
+  transform: none;
+}
+
+.chatbot-widget__composer-actions > button:not(:disabled):hover,
+.chatbot-widget__composer-actions .chatbot-widget__attach-button:hover {
+  transform: none;
 }
 
 @media (max-height: 650px) {
