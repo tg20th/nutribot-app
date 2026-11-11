@@ -28,6 +28,12 @@ export async function createContentComment(contentId, body, parentId = null) {
   }));
 }
 
+export async function deleteContentComment(commentId) {
+  const response = await apiRequest(`/api/v1/comments/${encodeURIComponent(commentId)}`, { method: 'DELETE' });
+  if (response?.success !== true) throw new Error(response?.message || 'Unable to delete comment.');
+  return true;
+}
+
 export async function getContentVote(contentId, signal) {
   const data = responseData(await apiRequest(`${contentPath(contentId)}/vote`, { signal }));
   if (!Number.isFinite(data.voteCount) || typeof data.isVoted !== 'boolean') {

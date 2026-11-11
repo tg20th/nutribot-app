@@ -12,8 +12,10 @@ import VoteButton from '../components/content/VoteButton';
 import RelatedContentSection from '../components/content/RelatedContentSection';
 import { getPost, normalizePost } from '../services/communityApi';
 import { getMyBlog, getMyVideo } from '../services/authorBlogApi';
+import { getMyProfile } from '../services/profileApi';
 import { extractStoryText } from '../utils/content';
 import UserProfileLink from '../components/UserProfileLink';
+import { isAuthenticated } from '../utils/auth';
 
 function loadMyContent(postId, contentType, signal) {
   const request = String(contentType).toLowerCase() === 'video'
@@ -80,6 +82,16 @@ export default function CommunityContentDetailPage() {
   const [storyExpanded, setStoryExpanded] = useState(false);
   const page = useRef(null);
   const [query, setQuery] = useState('');
+  const [currentUser, setCurrentUser] = useState({});
+
+  useEffect(() => {
+    if (!isAuthenticated()) return undefined;
+    const controller = new AbortController();
+    getMyProfile(controller.signal)
+      .then((profile) => { if (!controller.signal.aborted) setCurrentUser(profile); })
+      .catch(() => { /* Comments remain readable when profile refresh fails. */ });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -178,7 +190,7 @@ export default function CommunityContentDetailPage() {
         {!isRejectedOwnerView && <RelatedContentSection contentId={post.id} contentType={post.type}/>} 
         {!isRejectedOwnerView && <RestaurantRecommendations dishName={post.title}/>} 
         {!isRejectedOwnerView && <><section className="detail-actions detail-reveal"><VoteButton contentId={post.id}/></section>
-        <section className="detail-comments detail-reveal"><CommentSection contentId={post.id} showEmptyState={false}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><Link to="/home">Open the feed</Link></div></section></>}
+        <section className="detail-comments detail-reveal"><CommentSection contentId={post.id} currentUser={currentUser} showEmptyState={false}/><div className="detail-community-cta"><UsersRound size={22}/><div><b>Have a variation worth sharing?</b><span>Your kitchen notes might make someone else&apos;s dinner easier.</span></div><Link to="/home">Open the feed</Link></div></section></>}
       </main>
     </div>
     <ChatbotWidget/>

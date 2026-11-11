@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createContentComment, getContentCommentCount, getContentComments, toggleContentVote } from '../contentInteractionApi';
+import { createContentComment, deleteContentComment, getContentCommentCount, getContentComments, toggleContentVote } from '../contentInteractionApi';
 
 const ok = (data) => ({ ok: true, status: 200, headers: { get: () => 'application/json' },
   json: async () => ({ success: true, message: 'Success', data }) });
@@ -31,5 +31,11 @@ describe('content interaction API contract', () => {
     }));
     expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/contents/8/vote');
     expect(fetchMock.mock.calls[1][1].method).toBe('POST');
+  });
+
+  it('deletes a comment through the existing owner-protected endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(ok(null));
+    await expect(deleteContentComment(42)).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/v1/comments/42'), expect.objectContaining({ method: 'DELETE' }));
   });
 });

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { MessageCircle, Send } from 'lucide-react';
-import { createContentComment, getContentComments } from '../../services/contentInteractionApi';
+import { LoaderCircle, MessageCircle, Send, Trash2, X } from 'lucide-react';
+import { createContentComment, deleteContentComment, getContentComments } from '../../services/contentInteractionApi';
 import '../../styles/content-interactions.css';
 import UserProfileLink from '../UserProfileLink';
 import { getProfileAvatarUrl } from '../../utils/avatar';
+import useDialogAccessibility from '../../hooks/useDialogAccessibility';
 
 const memberName = (comment) => comment.userName || 'NutriBot member';
 const replyList = (comment) => Array.isArray(comment.replies) ? comment.replies : [];
@@ -44,6 +45,16 @@ function appendReply(comments, parentId, reply) {
   });
 }
 
+function removeComment(comments, commentId) {
+  return comments
+    .filter((comment) => comment.commentId !== commentId)
+    .map((comment) => ({ ...comment, replies: removeComment(replyList(comment), commentId) }));
+}
+
+function countCommentTree(comment) {
+  return 1 + replyList(comment).reduce((count, reply) => count + countCommentTree(reply), 0);
+}
+
 function submitOnEnter(event) {
   if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
   event.preventDefault();
@@ -65,7 +76,26 @@ function ReplyComposer({ comment, inputRef, value, submitting, error, onChange, 
   </form>;
 }
 
-function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, submittingReply, replyError, expandedReplyIds, onReplyChange, onReplyCancel, onReplySubmit, onStartReply, onToggleReplies, readOnly = false }) {
+function DeleteCommentModal({ comment, deleting, error, onCancel, onConfirm }) {
+  const dialogRef = useRef(null);
+  const close = useCallback(() => { if (!deleting) onCancel(); }, [deleting, onCancel]);
+  useDialogAccessibility(dialogRef, close, { enabled: true, closeOnEscape: !deleting });
+  if (!comment) return null;
+  const hasReplies = replyList(comment).length > 0;
+  return createPortal(<div className="content-comment-delete-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
+    <section ref={dialogRef} className="content-comment-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-comment-title" aria-describedby="delete-comment-description" tabIndex={-1}>
+      <button className="content-comment-delete-close" type="button" onClick={close} disabled={deleting} aria-label="Close delete confirmation"><X size={18}/></button>
+      <div className="content-comment-delete-icon" aria-hidden="true"><Trash2 size={24}/></div>
+      <h2 id="delete-comment-title">Delete comment?</h2>
+      <p id="delete-comment-description">Are you sure you want to delete this comment? This action cannot be undone.</p>
+      {hasReplies && <p className="content-comment-delete-warning">Its replies will also be removed from this discussion.</p>}
+      {error && <p className="content-comment-delete-error" role="alert">{error}</p>}
+      <div className="content-comment-delete-actions"><button type="button" className="content-comment-delete-cancel" onClick={close} disabled={deleting}>Cancel</button><button type="button" className="content-comment-delete-confirm" onClick={onConfirm} disabled={deleting}>{deleting ? <LoaderCircle size={15} className="content-comment-delete-spinner"/> : <Trash2 size={15}/>} {deleting ? 'Deleting...' : 'Delete'}</button></div>
+    </section>
+  </div>, document.body);
+}
+
+function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, submittingReply, replyError, expandedReplyIds, onReplyChange, onReplyCancel, onReplySubmit, onStartReply, onToggleReplies, onDelete, deletingId, currentUserId, readOnly = false }) {
   const replies = depth === 0 ? replyList(comment) : depth === 1 ? flattenReplies(comment) : [];
   const hasReplies = replies.length > 0;
   const isExpanded = expandedReplyIds.has(comment.commentId);
@@ -73,6 +103,7 @@ function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, 
   const nested = depth > 0;
   const replyTotal = replyCount(comment);
   const timestamp = formatDate(comment.createdAt);
+  const canDelete = !readOnly && currentUserId != null && String(comment.userId) === String(currentUserId);
 
   return <article className={`content-comment content-comment--depth-${Math.min(depth, 2)}`}>
     {comment.userId != null && <UserProfileLink userId={comment.userId} className="content-comment-avatar-link" aria-label={`Open ${memberName(comment)} profile`} />}
@@ -84,6 +115,7 @@ function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, 
       <p>{nested && <span className="content-comment-mention">@{memberName(comment.parentComment || {})}</span>}{comment.body}</p>
       <div className="content-comment-actions">
         {!readOnly && <button type="button" onClick={() => onStartReply(depth > 0 ? (comment.parentComment || comment) : comment)}>Reply</button>}
+        {canDelete && <button type="button" className="content-comment-delete" disabled={deletingId === comment.commentId} onClick={() => onDelete(comment)}>{deletingId === comment.commentId ? 'Deleting...' : 'Delete'}</button>}
         {hasReplies && <button type="button" onClick={() => onToggleReplies(comment.commentId)} aria-expanded={isExpanded}>
           {isExpanded ? 'Hide replies' : `View replies (${replyTotal})`}
         </button>}
@@ -96,12 +128,12 @@ function CommentItem({ comment, depth, activeReplyId, replyText, replyInputRef, 
         {replies.map((reply) => <CommentItem key={reply.commentId} comment={depth === 0 ? { ...reply, parentComment: comment } : reply} depth={depth === 0 ? 1 : 2}
           activeReplyId={activeReplyId} replyText={replyText} replyInputRef={replyInputRef} submittingReply={submittingReply} replyError={replyError}
           expandedReplyIds={expandedReplyIds} onReplyChange={onReplyChange} onReplyCancel={onReplyCancel} onReplySubmit={onReplySubmit}
-          onStartReply={onStartReply} onToggleReplies={onToggleReplies} readOnly={readOnly}/>)}</div>}
+          onStartReply={onStartReply} onToggleReplies={onToggleReplies} onDelete={onDelete} deletingId={deletingId} currentUserId={currentUserId} readOnly={readOnly}/>)}</div>}
     </div>
   </article>;
 }
 
-export default function CommentSection({ contentId, loadComments = getContentComments, submitComment = createContentComment, composerTarget, showFilter = false, onCommentCountChange, currentUser = {}, readOnly = false, heading = 'Comments', showEmptyState = true }) {
+export default function CommentSection({ contentId, loadComments = getContentComments, submitComment = createContentComment, deleteComment = deleteContentComment, composerTarget, showFilter = false, onCommentCountChange, currentUser = {}, readOnly = false, heading = 'Comments', showEmptyState = true }) {
   const [comments, setComments] = useState([]);
   const [totalThreads, setTotalThreads] = useState(0);
   const [nextPage, setNextPage] = useState(0);
@@ -120,6 +152,9 @@ export default function CommentSection({ contentId, loadComments = getContentCom
   const [expandedReplyIds, setExpandedReplyIds] = useState(() => new Set());
   const [retry, setRetry] = useState(0);
   const [commentFilter, setCommentFilter] = useState('all');
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteCandidate, setDeleteCandidate] = useState(null);
   const replyInput = useRef(null);
 
   useEffect(() => {
@@ -240,6 +275,26 @@ export default function CommentSection({ contentId, loadComments = getContentCom
     }
   }
 
+  function requestDelete(comment) {
+    if (!deletingId) { setDeleteError(''); setDeleteCandidate(comment); }
+  }
+
+  async function confirmDelete() {
+    if (!deleteCandidate || deletingId) return;
+    const comment = deleteCandidate;
+    setDeletingId(comment.commentId);
+    setDeleteError('');
+    try {
+      await deleteComment(comment.commentId);
+      const removedCount = countCommentTree(comment);
+      setComments((current) => removeComment(current, comment.commentId));
+      setTotalThreads((current) => { const next = Math.max(0, current - removedCount); onCommentCountChange?.(next); return next; });
+      if (replyTo?.commentId === comment.commentId) cancelReply();
+      setDeleteCandidate(null);
+    } catch (failure) { setDeleteError(failure.message || 'Unable to delete this comment.'); }
+    finally { setDeletingId(null); }
+  }
+
   const composer = <>
     <form className="content-comment-form" onSubmit={submitCommentForm}>
       {composerTarget && <CurrentUserAvatar user={currentUser}/>}
@@ -251,6 +306,7 @@ export default function CommentSection({ contentId, loadComments = getContentCom
       </div>
     </form>
     {commentError && <p className="content-comment-error" role="alert">{commentError}</p>}
+    {deleteError && <p className="content-comment-error" role="alert">{deleteError}</p>}
   </>;
   const visibleComments = [...comments].sort((left, right) => {
     const direction = commentFilter === 'newest' ? -1 : 1;
@@ -269,9 +325,10 @@ export default function CommentSection({ contentId, loadComments = getContentCom
     {!!visibleComments.length && <div className="content-comment-list">{visibleComments.map((comment) => <CommentItem key={comment.commentId} comment={comment} depth={0}
       activeReplyId={replyTo?.commentId} replyText={replyText} replyInputRef={replyInput} submittingReply={submittingReply} replyError={replyError}
       expandedReplyIds={expandedReplyIds} onReplyChange={setReplyText} onReplyCancel={cancelReply} onReplySubmit={submitReply}
-      onStartReply={startReply} onToggleReplies={toggleReplies} readOnly={readOnly}/>)}</div>}
+      onStartReply={startReply} onToggleReplies={toggleReplies} onDelete={requestDelete} deletingId={deletingId} currentUserId={currentUser.userId} readOnly={readOnly}/>)}</div>}
     {loadError && !!comments.length && <p className="content-comment-error" role="alert">{loadError}</p>}
     {nextPage < totalPages && <button className="content-comments-more" type="button" disabled={loadingMore} onClick={loadMore}>
       <MessageCircle size={16}/>{loadingMore ? 'Loading...' : 'Load more comments'}</button>}
+    {deleteCandidate && <DeleteCommentModal comment={deleteCandidate} deleting={Boolean(deletingId)} error={deleteError} onCancel={() => setDeleteCandidate(null)} onConfirm={confirmDelete}/>}
   </section>;
 }
