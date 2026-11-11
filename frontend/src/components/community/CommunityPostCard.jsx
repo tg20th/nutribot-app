@@ -50,7 +50,7 @@ export default function CommunityPostCard({ post: sourcePost, interactionApi = {
     setCommentsOpen(true);
   }, []);
   const closePost = useCallback(() => { setCommentsOpen(false); setFocusComments(false); setVoteRevision((value) => value + 1); }, []);
-  return <article className="community-post community-post--social">
+  return <article className="community-post community-post--social" data-feed-post>
     <header className="community-post-header">
       {post.authorId != null && <UserProfileLink className="community-post-author-link" userId={post.authorId} aria-label={`Open ${post.author || 'author'} profile`} />}
       {post.avatar ? (

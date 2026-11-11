@@ -1,13 +1,16 @@
 package com.fpt.swp391.nutribot.service;
 
 import com.fpt.swp391.nutribot.dto.response.NotificationResponse;
+import com.fpt.swp391.nutribot.dto.response.NotificationActorResponse;
 import com.fpt.swp391.nutribot.dto.response.PagedResponse;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.entity.Notification;
+import com.fpt.swp391.nutribot.entity.Vote;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.NotFoundException;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import com.fpt.swp391.nutribot.repository.NotificationRepository;
+import com.fpt.swp391.nutribot.repository.VoteRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -26,6 +29,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.Collections;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -63,6 +69,8 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final ContentRepository contentRepository;
+    @Autowired(required = false)
+    private VoteRepository voteRepository;
     @Autowired
     private com.fpt.swp391.nutribot.repository.CommentRepository commentRepository;
 
@@ -73,8 +81,44 @@ public class NotificationService {
         Pageable pageable = PageRequest.of(pageNumber, pageSize);
         Page<Notification> notificationPage = notificationRepository.findByRecipientIdOrderByActivityDesc(userId, pageable);
         Map<Integer, Content> contentMap = loadReferencedContents(notificationPage.getContent());
-        Page<NotificationResponse> mapped = notificationPage.map(notification -> toResponse(notification, contentMap));
+        Map<Integer, List<NotificationActorResponse>> actorMap = loadVoteActors(notificationPage.getContent());
+        Page<NotificationResponse> mapped = notificationPage.map(notification -> toResponse(notification, contentMap, actorMap));
         return PagedResponse.of(mapped);
+    }
+
+    private Map<Integer, List<NotificationActorResponse>> loadVoteActors(List<Notification> notifications) {
+        if (voteRepository == null) return Map.of();
+        Set<Integer> contentIds = notifications.stream()
+                .filter(n -> TYPE_CONTENT_VOTED.equals(n.getType()) && REFERENCE_TYPE_CONTENT.equals(n.getReferenceType()))
+                .map(Notification::getReferenceId).filter(Objects::nonNull).collect(Collectors.toSet());
+        if (contentIds.isEmpty()) return Map.of();
+        Map<Integer, List<NotificationActorResponse>> result = new LinkedHashMap<>();
+        List<Vote> votes = voteRepository.findActiveByContentIdIn(contentIds);
+        for (Notification notification : notifications) {
+            if (!TYPE_CONTENT_VOTED.equals(notification.getType())) continue;
+            // The vote is persisted before the AFTER_COMMIT notification event
+            // creates/updates the notification. Include the grouping window
+            // before createdAt so the first voter is not lost.
+            LocalDateTime start = notification.getCreatedAt() == null
+                    ? null
+                    : notification.getCreatedAt().minusMinutes(VOTE_GROUP_WINDOW_MINUTES);
+            LocalDateTime end = notification.getUpdatedAt() != null ? notification.getUpdatedAt() : start;
+            Map<Integer, NotificationActorResponse> distinct = new LinkedHashMap<>();
+            votes.stream().filter(v -> Objects.equals(v.getContentId(), notification.getReferenceId()))
+                    .filter(v -> v.getCreatedAt() == null || start == null ||
+                            (!v.getCreatedAt().isBefore(start) && (end == null || !v.getCreatedAt().isAfter(end))))
+                    .sorted((a, b) -> compareNullableDates(b.getCreatedAt(), a.getCreatedAt()))
+                    .forEach(v -> { if (v.getUser() != null) distinct.putIfAbsent(v.getUserId(), NotificationActorResponse.builder().userId(v.getUserId()).fullName(v.getUser().getFullName()).avatarUrl(v.getUser().getAvatarUrl()).build()); });
+            if (!distinct.isEmpty()) result.put(notification.getNotificationId(), new ArrayList<>(distinct.values()));
+        }
+        return result;
+    }
+
+    private int compareNullableDates(LocalDateTime first, LocalDateTime second) {
+        if (first == null && second == null) return 0;
+        if (first == null) return 1;
+        if (second == null) return -1;
+        return first.compareTo(second);
     }
 
     /**
@@ -352,7 +396,7 @@ public class NotificationService {
                     ? notification.getUpdatedAt()
                     : notification.getCreatedAt();
             if (lastActivity != null && ChronoUnit.MINUTES.between(lastActivity, now) < VOTE_GROUP_WINDOW_MINUTES) {
-                notification.setActor(actor);
+                notification.setActor(actor); // backward-compatible latest representative
                 notification.setUpdatedAt(now);
                 notification.setReadAt(null);
                 notificationRepository.save(notification);
@@ -451,7 +495,7 @@ public class NotificationService {
     }
 
     private NotificationResponse toResponse(Notification notification) {
-        return toResponse(notification, Map.of());
+        return toResponse(notification, Map.of(), Map.of());
     }
 
     /**
@@ -460,7 +504,18 @@ public class NotificationService {
      * (duyet cong thuc cua NB-81) hoac khi bai viet da bi xoa.
      */
     private NotificationResponse toResponse(Notification notification, Map<Integer, Content> contentMap) {
+        return toResponse(notification, contentMap, Map.of());
+    }
+
+    private NotificationResponse toResponse(Notification notification, Map<Integer, Content> contentMap,
+                                            Map<Integer, List<NotificationActorResponse>> actorMap) {
         User actor = notification.getActor();
+        List<NotificationActorResponse> persistedActors = actorMap.getOrDefault(notification.getNotificationId(), List.of());
+        if (persistedActors.isEmpty() && actor != null) {
+            persistedActors = List.of(NotificationActorResponse.builder().userId(actor.getUserId()).fullName(actor.getFullName()).avatarUrl(actor.getAvatarUrl()).build());
+        }
+        int actorCount = persistedActors.size();
+        List<NotificationActorResponse> actors = persistedActors.stream().limit(3).toList();
         Content content = REFERENCE_TYPE_CONTENT.equals(notification.getReferenceType())
                 ? contentMap.get(notification.getReferenceId())
                 : null;
@@ -487,6 +542,8 @@ public class NotificationService {
                 .actorId(actor != null ? actor.getUserId() : null)
                 .actorFullName(actor != null ? actor.getFullName() : null)
                 .actorAvatarUrl(actor != null ? actor.getAvatarUrl() : null)
+                .actorCount(actorCount)
+                .actors(actors)
                 .contentTitle(content != null ? content.getTitle() : null)
                 .contentType(content != null ? content.getContentType() : null)
                 .read(notification.getReadAt() != null)
@@ -498,6 +555,7 @@ public class NotificationService {
                 .actionUrl(notification.getActionUrl())
                 .build();
     }
+
 
     /**
      * Converts legacy Vietnamese recipe suggestion notifications into English.

@@ -270,6 +270,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const activeRequestRef = useRef(null);
   const requestSequenceRef = useRef(0);
   const conversationKeyRef = useRef(0);
+  const previousAuthTokenRef = useRef(authToken);
   const sendingRef = useRef(false);
   const composingRef = useRef(false);
   const sessionIdRef = useRef(null);
@@ -409,6 +410,23 @@ export default function ChatbotWidget({ onSend, onAuth }) {
     window.addEventListener('storage', storage); window.addEventListener('focus', refreshAuthState); window.addEventListener('nutribot-auth-changed', refreshAuthState);
     return () => { window.removeEventListener('storage', storage); window.removeEventListener('focus', refreshAuthState); window.removeEventListener('nutribot-auth-changed', refreshAuthState); };
   }, [refreshAuthState]);
+  useEffect(() => {
+    if (previousAuthTokenRef.current === authToken) return;
+
+    previousAuthTokenRef.current = authToken;
+    abortActiveRequest();
+    sessionIdRef.current = null;
+    setConversationState('new');
+    setConversationError('');
+    setMessages(INITIAL_MESSAGES);
+    setSessions([]);
+    setHistoryState('idle');
+    setHistoryError('');
+    setHistoryQuery('');
+    setOpenHistoryMenu(null);
+    setHistoryOpen(false);
+    setHistorySidebarOpen(true);
+  }, [abortActiveRequest, authToken]);
   useEffect(() => {
     if (!youtubeEditorOpen) return undefined;
     youtubeInputRef.current?.focus();
@@ -638,7 +656,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
         </div>
       </header>}
       <div className="chatbot-widget__body">
-        {displayMode === 'fullscreen' && historyPanel}
+        {displayMode === 'fullscreen' && !isGuest && historyPanel}
         {displayMode === 'compact' && historyOpen ? historyPanel : <div className="chatbot-widget__conversation">
           <div ref={threadRef} className="chatbot-widget__thread" aria-live="polite">
             <div className="chatbot-widget__conversation-inner">

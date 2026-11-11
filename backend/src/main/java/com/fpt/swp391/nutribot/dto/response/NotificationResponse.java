@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -21,6 +22,8 @@ public class NotificationResponse {
     private Integer actorId;
     private String actorFullName;
     private String actorAvatarUrl;
+    private Integer actorCount;
+    private List<NotificationActorResponse> actors;
     private boolean read;
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime readAt;
