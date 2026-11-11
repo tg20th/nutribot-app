@@ -279,3 +279,10 @@
   - *Tương thích:* Tương thích hoàn toàn API Blogs/Videos, Admin Moderation queue, SQLite/SQL Server schema.
   - *File cần tạo/cập nhật:* `NutriBotV2_FULL_RELATIONAL_MODERATION_AUDIT.sql`, `add_content_duplicate_detection.sql`, `Content.java`, `ContentRepository.java`, `ContentTextNormalizer.java`, `ContentSimilarityDetector.java`, `AuthorContentService.java`, `ContentModerationListener.java`, `AdminModerationService.java`, `AdminModerationPage.jsx`, `ContentDiffModal.jsx`, các unit tests FE & BE.
   - *Dependency:* NB-19, NB-38, NB-37, NB-64.
+
+## NB-98 (Thống nhất thông báo Auth & OTP sang tiếng Anh)
+- [x] **[BE/FE] Thống nhất thông báo Auth & OTP sang tiếng Anh**
+  - *Phạm vi:* Đổi message đăng ký, đăng nhập, OTP và đổi mật khẩu sang tiếng Anh ở backend (DTO, AuthService, OtpService, UserProfileService, AuthController); tách regex mật khẩu đăng ký thành hai `@Pattern`; popup OTP và nút "Enter OTP / Verify email" ở frontend; sửa lỗi nhập mã OTP sai hiện nhầm trạng thái "đã hết hạn".
+  - *Tương thích:* Không đổi endpoint và logic nghiệp vụ; `loginErrorState.js` ánh xạ theo message backend mới.
+  - *File:* `RegisterRequest.java`, `LoginRequest.java`, `VerifyOtpRequest.java`, `PasswordUpdateRequest.java`, `AuthService.java`, `OtpService.java`, `UserProfileService.java`, `AuthController.java`, `AuthModal.jsx`, `EmailVerificationStep.jsx`, `loginErrorState.js` và các unit tests liên quan.
+  - *Dependency:* NB-2, NB-5, NB-1, NB-4.
