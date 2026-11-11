@@ -15,7 +15,8 @@ import '../styles/create-blog.css';
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const CONTENT_TYPES = { BLOG: 'blog', VIDEO: 'video' };
-const MAX_VIDEO_SIZE = 200 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 25 * 1024 * 1024;
+const VIDEO_SIZE_ERROR = 'Video size must not exceed 25 MB. Please choose a smaller file.';
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'];
 
 function handleEditorPaste(event) {
@@ -259,6 +260,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [videoFile, setVideoFile] = useState(null);
+  const [videoError, setVideoError] = useState('');
   const [videoPreviewUrl, setVideoPreviewUrl] = useState('');
   const [videoDuration, setVideoDuration] = useState(null);
   const [categoryId, setCategoryId] = useState('');
@@ -539,11 +541,21 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   function chooseVideo(event) {
     const selected = event.target.files?.[0];
     if (!selected) return;
-    if (!VIDEO_TYPES.includes(selected.type) || selected.size > MAX_VIDEO_SIZE) {
-      setError('Choose an MP4, WebM, or MOV video no larger than 200 MB.');
+    if (selected.size > MAX_VIDEO_SIZE) {
+      setVideoFile(null);
+      setVideoError(VIDEO_SIZE_ERROR);
+      setError('');
       event.target.value = '';
       return;
     }
+    if (!VIDEO_TYPES.includes(selected.type)) {
+      setVideoFile(null);
+      setVideoError('Choose an MP4, WebM, or MOV video.');
+      setError('');
+      event.target.value = '';
+      return;
+    }
+    setVideoError('');
     setError('');
     setVideoFile(selected);
   }
@@ -665,8 +677,9 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         />
         {titleError && <p id="create-blog-title-error" className="create-blog-field-error" role="alert">{titleError}</p>}
         {isVideo && <div className="create-video-upload">
-          <label htmlFor="create-video-file"><FileVideo size={20}/><span><b>{videoFile ? videoFile.name : 'Upload a video file'}</b><small>MP4, WebM, or MOV · max 200 MB</small></span></label>
+          <label htmlFor="create-video-file"><FileVideo size={20}/><span><b>{videoFile ? videoFile.name : 'Upload a video file'}</b><small>MP4, WebM, or MOV · max 25 MB</small></span></label>
           <input id="create-video-file" type="file" accept="video/mp4,video/webm,video/quicktime" onChange={chooseVideo} disabled={busy}/>
+          {videoError && <p className="create-blog-field-error create-video-error" role="alert">{videoError}</p>}
           {videoFile && <button type="button" className="create-blog-remove" onClick={() => setVideoFile(null)} disabled={busy}><X size={14}/> Remove replacement</button>}
           {videoPreviewUrl && <video className="create-video-preview" src={videoPreviewUrl} controls preload="metadata" onLoadedMetadata={(event) => setVideoDuration(event.currentTarget.duration)} aria-label="Video file preview"/>}
         </div>}
