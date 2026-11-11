@@ -278,6 +278,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const [existingMediaUrl, setExistingMediaUrl] = useState('');
   const [loadingContent, setLoadingContent] = useState(isEditing);
   const [error, setError] = useState('');
+  const [titleError, setTitleError] = useState('');
   const [busy, setBusy] = useState(false);
   const bodyRef = useRef(null);
   const dialogRef = useRef(null);
@@ -291,6 +292,12 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   const trimmedBody = plainBody.trim();
   const hasVideo = Boolean(videoFile || (isEditing && existingMediaUrl));
   const hasThumbnail = Boolean(file || existingThumbnailUrl);
+
+  function validateTitle(value = title) {
+    if (!value.trim()) return 'Title is required.';
+    if (value.length > 255) return 'Title must not exceed 255 characters.';
+    return '';
+  }
 
   const ingredientOptions = useMemo(() => {
     const names = new Set();
@@ -307,7 +314,7 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
 
   function missingRequiredFields() {
     const missing = [];
-    if (!trimmedTitle) missing.push('title');
+    if (validateTitle()) missing.push('title');
     if (!trimmedBody) missing.push(isVideo ? 'video description' : 'post content');
     if (isVideo && !hasVideo) missing.push('video file');
     if (!hasThumbnail) missing.push(isVideo ? 'video thumbnail' : 'cover image');
@@ -544,6 +551,9 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
   async function submit(event, intent) {
     event.preventDefault();
     if (preview || submitting.current) return;
+    const currentTitleError = validateTitle();
+    setTitleError(currentTitleError);
+    if (currentTitleError) return;
     const missing = missingRequiredFields();
     if (missing.length) {
       setError(`Vui lòng điền đủ các trường bắt buộc: ${missing.join(', ')}.`);
@@ -639,7 +649,21 @@ export default function CreateBlogPage({ modal = false, onClose, defaultType = '
         </div></div>}
         <div className="create-blog-section-heading"><span>01</span><div><h2>{isVideo ? 'Your video' : 'Your blog'}</h2><p>{isVideo ? 'Upload the clip and explain what viewers will learn.' : 'Give it a clear title and share the details your readers need.'}</p></div></div>
         <label htmlFor="create-blog-title">Title <small>{title.length}/255</small></label>
-        <input id="create-blog-title" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={255} placeholder="What would you like to share?" disabled={busy}/>
+        <input
+          id="create-blog-title"
+          value={title}
+          onChange={(event) => {
+            const nextTitle = event.target.value;
+            setTitle(nextTitle);
+            setTitleError(validateTitle(nextTitle));
+          }}
+          className={titleError ? 'create-blog-input-error' : ''}
+          aria-invalid={Boolean(titleError)}
+          aria-describedby={titleError ? 'create-blog-title-error' : undefined}
+          placeholder="What would you like to share?"
+          disabled={busy}
+        />
+        {titleError && <p id="create-blog-title-error" className="create-blog-field-error" role="alert">{titleError}</p>}
         {isVideo && <div className="create-video-upload">
           <label htmlFor="create-video-file"><FileVideo size={20}/><span><b>{videoFile ? videoFile.name : 'Upload a video file'}</b><small>MP4, WebM, or MOV · max 200 MB</small></span></label>
           <input id="create-video-file" type="file" accept="video/mp4,video/webm,video/quicktime" onChange={chooseVideo} disabled={busy}/>
