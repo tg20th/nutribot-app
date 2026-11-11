@@ -275,6 +275,32 @@ export default function CommunityFeedPage() {
     const matchesFilter = filter === 'All' || post.title.toLowerCase().includes(filter.replace('#', '').toLowerCase());
     return matchesFilter;
   }), [posts, filter]);
+
+  useLayoutEffect(() => {
+    const feedPosts = Array.from(page.current?.querySelectorAll('[data-feed-post]') ?? []);
+    if (!feedPosts.length) return undefined;
+
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const viewportBottom = window.innerHeight * 0.92;
+    feedPosts.forEach((post) => {
+      const alreadyVisible = post.getBoundingClientRect().top < viewportBottom;
+      post.classList.toggle('is-feed-reveal-pending', !reducedMotion && !alreadyVisible);
+      post.classList.toggle('is-feed-revealed', reducedMotion || alreadyVisible);
+    });
+
+    if (reducedMotion || !('IntersectionObserver' in window)) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.remove('is-feed-reveal-pending');
+        entry.target.classList.add('is-feed-revealed');
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -6% 0px' });
+    feedPosts.filter((post) => !post.classList.contains('is-feed-revealed')).forEach((post) => observer.observe(post));
+    return () => observer.disconnect();
+  }, [visiblePosts.length]);
+
   const discoverPosts = useMemo(() => posts.filter((post) => post.image).slice(0, 2), [posts]);
   const openComposer = (type = 'blog') => { composerTrigger.current = document.activeElement; setComposerType(type); };
   const closeComposer = () => { setComposerType(null); requestAnimationFrame(() => composerTrigger.current?.focus()); };

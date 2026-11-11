@@ -58,15 +58,49 @@ const typeDetails = {
   RECIPE_SUGGESTION_REJECTED: { Icon: Info, className: 'is-rejected' }
 };
 
+const isAvailableContentNotification = (notification) => ['BLOG', 'VIDEO'].includes(String(notification.contentType || '').toUpperCase());
+
+const getVoteActors = (notification) => {
+  const fallbackActor = notification.actorFullName || notification.actorAvatarUrl
+    ? { userId: notification.actorId, fullName: notification.actorFullName, avatarUrl: notification.actorAvatarUrl }
+    : null;
+  const source = Array.isArray(notification.actors) && notification.actors.length
+    ? notification.actors
+    : (fallbackActor ? [fallbackActor] : []);
+  return source
+    .filter((actor) => actor && (actor.userId != null || actor.fullName || actor.avatarUrl))
+    .filter((actor, index, list) => {
+      const key = actor.userId != null ? `id:${actor.userId}` : `name:${String(actor.fullName || '').trim().toLowerCase()}`;
+      return list.findIndex((candidate) => {
+        const candidateKey = candidate.userId != null ? `id:${candidate.userId}` : `name:${String(candidate.fullName || '').trim().toLowerCase()}`;
+        return candidateKey === key;
+      }) === index;
+    });
+};
+
+const getVoteActorCount = (notification, actors) => {
+  const count = Number(notification.actorCount);
+  return Number.isFinite(count) && count > 0 ? Math.floor(count) : Math.max(actors.length, 1);
+};
+
 function notificationCopy(notification) {
   if (['CONTENT_MODERATION_REJECTED', 'CONTENT_MODERATION_APPROVED', 'RECIPE_SUGGESTION_APPROVED', 'RECIPE_SUGGESTION_REJECTED', 'CONTENT_COMMENT_REPLIED'].includes(notification.type)) {
     return notification.message || 'You have a new notification.';
   }
-  const actor = notification.actorFullName || 'Someone';
   const title = notification.contentTitle ? ` ${notification.contentTitle}` : '';
   switch (notification.type) {
-    case 'CONTENT_VOTED': return `${actor} liked your post${title}.`;
-    case 'CONTENT_COMMENTED': return `${actor} commented on your post${title}.`;
+    case 'CONTENT_VOTED': {
+      const actors = getVoteActors(notification);
+      const names = actors.map((actor) => String(actor.fullName || '').trim()).filter(Boolean).slice(0, 2);
+      const count = getVoteActorCount(notification, actors);
+      if (count === 1) return `${names[0] || 'Someone'} liked your post.`;
+      if (count === 2) return `${names[0] || 'Someone'} and ${names[1] || 'another person'} liked your post.`;
+      const otherCount = Math.max(1, count - names.length);
+      return `${names.length > 1 ? `${names[0]} and ${names[1]}` : (names[0] || 'Someone')} and ${otherCount} ${otherCount === 1 ? 'other' : 'others'} liked your post.`;
+    }
+    case 'CONTENT_COMMENTED': return isAvailableContentNotification(notification)
+      ? `${notification.actorFullName || 'Someone'} commented on your post${title}.`
+      : `${notification.actorFullName || 'Someone'} commented on a post that is no longer available.`;
     case 'RECIPE_SUGGESTION_APPROVED': return 'Your recipe suggestion has been approved.';
     case 'RECIPE_SUGGESTION_REJECTED': return 'Your recipe suggestion was not approved.';
     default: return 'You have a new notification.';
@@ -77,9 +111,50 @@ function NotificationAvatar({ notification }) {
   const [failed, setFailed] = useState(false);
   if (notification.type === 'CONTENT_MODERATION_REJECTED') return <NutriBotSystemAvatar moderation/>;
   if (notification.type === 'CONTENT_MODERATION_APPROVED') return <NutriBotSystemAvatar approved/>;
-  const name = notification.actorFullName || 'NutriBot Member';
-  if (!notification.actorAvatarUrl || failed) return <span className="notification-avatar notification-avatar--fallback" aria-hidden="true">{buildInitials(name)}</span>;
-  return <img className="notification-avatar" src={notification.actorAvatarUrl} alt="" onError={() => setFailed(true)} referrerPolicy="no-referrer" />;
+  const representative = Array.isArray(notification.actors) ? notification.actors[0] : null;
+  const name = representative?.fullName || notification.actorFullName || 'NutriBot Member';
+  const avatarUrl = representative?.avatarUrl || notification.actorAvatarUrl;
+  if (!avatarUrl || failed) return <span className="notification-avatar notification-avatar--fallback" aria-hidden="true">{buildInitials(name)}</span>;
+  return <img className="notification-avatar" src={avatarUrl} alt="" onError={() => setFailed(true)} referrerPolicy="no-referrer" />;
+}
+
+function VoteNotificationMessage({ notification }) {
+  const actors = getVoteActors(notification);
+  const names = actors.map((actor) => String(actor.fullName || '').trim()).filter(Boolean).slice(0, 2);
+  const count = getVoteActorCount(notification, actors);
+  const unavailable = !isAvailableContentNotification(notification);
+  let lead;
+  if (count === 1) lead = names[0] || 'Someone';
+  else if (count === 2) lead = <><strong>{names[0] || 'Someone'}</strong> and <strong>{names[1] || 'another person'}</strong></>;
+  else {
+    const otherCount = Math.max(1, count - names.length);
+    lead = <>{names.length > 1 ? <><strong>{names[0]}</strong>, <strong>{names[1]}</strong></> : <strong>{names[0] || 'Someone'}</strong>} and {otherCount} {otherCount === 1 ? 'other' : 'others'}</>;
+  }
+  if (count === 1) lead = <strong>{lead}</strong>;
+  return <>
+    <span className="notification-item__primary">{lead} <span>{unavailable ? 'liked a post that is no longer available.' : 'liked your post.'}</span></span>
+    {!unavailable && notification.contentTitle && <span className="notification-item__content-title" title={notification.contentTitle}>{notification.contentTitle}</span>}
+  </>;
+}
+
+function NotificationAvatarGroup({ notification }) {
+  const actors = getVoteActors(notification).slice(0, 3);
+  const renderedActors = actors.length ? actors : [{ fullName: 'NutriBot Member' }];
+  const [failedActors, setFailedActors] = useState(() => new Set());
+
+  const groupWidth = `${Math.max(36, (renderedActors.length * 25) + 11)}px`;
+  return <span className="notification-avatar-group" style={{ width: groupWidth }} aria-hidden="true">
+    <span className="notification-avatar-group__faces">
+      {renderedActors.map((actor, index) => {
+        const key = actor.userId != null ? String(actor.userId) : `${actor.fullName || 'member'}-${index}`;
+        const name = actor.fullName || 'NutriBot Member';
+        return failedActors.has(key) || !actor.avatarUrl
+          ? <span className="notification-avatar notification-avatar--fallback notification-avatar-group__face" key={key}>{buildInitials(name)}</span>
+          : <img className="notification-avatar notification-avatar-group__face" key={key} src={actor.avatarUrl} alt="" onError={() => setFailedActors((current) => new Set(current).add(key))} referrerPolicy="no-referrer" />;
+      })}
+    </span>
+    <span className="notification-voted-heart" aria-hidden="true"><Heart size={12} fill="currentColor"/></span>
+  </span>;
 }
 
 function NotificationItem({ notification, onSelect, marking }) {
@@ -87,16 +162,18 @@ function NotificationItem({ notification, onSelect, marking }) {
   const Icon = details.Icon;
   return <button
     type="button"
-    className={`notification-item${notification.read ? '' : ' is-unread'}`}
+    className={`notification-item${notification.type === 'CONTENT_VOTED' ? ' notification-item--voted' : ''}${notification.read ? '' : ' is-unread'}`}
     onClick={() => onSelect(notification)}
     disabled={marking}
   >
     <span className="notification-item__avatar-wrap">
-      <NotificationAvatar notification={notification}/>
-      {!['CONTENT_MODERATION_REJECTED', 'CONTENT_MODERATION_APPROVED'].includes(notification.type) && <span className={`notification-item__interaction-icon ${details.className}`} aria-hidden="true"><Icon size={15}/></span>}
+      {notification.type === 'CONTENT_VOTED'
+        ? <NotificationAvatarGroup notification={notification}/>
+        : <NotificationAvatar notification={notification}/>} 
+      {notification.type !== 'CONTENT_VOTED' && !['CONTENT_MODERATION_REJECTED', 'CONTENT_MODERATION_APPROVED'].includes(notification.type) && <span className={`notification-item__interaction-icon ${details.className}`} aria-hidden="true"><Icon size={15}/></span>}
     </span>
     <span className="notification-item__body">
-      <span className="notification-item__message">{notification.title ? <strong className={`notification-item__title${notification.type === 'CONTENT_MODERATION_REJECTED' ? ' is-rejected' : ''}`}>{notification.title}</strong> : null}{notificationCopy(notification)}</span>
+      <span className="notification-item__message">{notification.type === 'CONTENT_VOTED' ? <VoteNotificationMessage notification={notification}/> : notification.title ? <strong className={`notification-item__title${notification.type === 'CONTENT_MODERATION_REJECTED' ? ' is-rejected' : ''}`}>{notification.title}</strong> : null}{notification.type === 'CONTENT_VOTED' ? null : notificationCopy(notification)}</span>
       <span className="notification-item__meta"><time dateTime={notification.updatedAt || notification.createdAt}>{formatRelativeTime(notification.updatedAt || notification.createdAt)}</time></span>
     </span>
     {!notification.read && <i className="notification-item__unread-dot" aria-label="Unread"/>}
@@ -113,6 +190,7 @@ export default function NotificationCenter() {
   const [listState, setListState] = useState({ loading: false, loadingMore: false, error: '' });
   const [page, setPage] = useState({ current: 0, totalPages: 1, last: true });
   const [markingId, setMarkingId] = useState(null);
+  const [unavailableNotification, setUnavailableNotification] = useState(null);
   const [popoverPosition, setPopoverPosition] = useState({ top: 12, left: 'auto', right: 12 });
   const triggerRef = useRef(null);
   const popoverRef = useRef(null);
@@ -151,11 +229,15 @@ export default function NotificationCenter() {
   useEffect(() => () => { listController.current?.abort(); }, []);
 
   useEffect(() => {
-    if (!open) return undefined;
-    const handler = (event) => { if (event.key === 'Escape') setOpen(false); };
+    if (!open && !unavailableNotification) return undefined;
+    const handler = (event) => {
+      if (event.key !== 'Escape') return;
+      if (unavailableNotification) setUnavailableNotification(null);
+      else setOpen(false);
+    };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [open]);
+  }, [open, unavailableNotification]);
 
   const updatePopoverPosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -214,6 +296,11 @@ export default function NotificationCenter() {
         setMarkingId(null);
       }
     }
+    const isContentInteraction = ['CONTENT_VOTED', 'CONTENT_COMMENTED', 'CONTENT_COMMENT_REPLIED'].includes(notification.type);
+    if (notification.referenceId && notification.referenceType === 'CONTENT' && isContentInteraction && !isAvailableContentNotification(notification)) {
+      setUnavailableNotification(notification);
+      return;
+    }
     if (notification.referenceId && notification.referenceType === 'CONTENT' && ['BLOG', 'VIDEO'].includes(String(notification.contentType).toUpperCase())) {
       const contentType = String(notification.contentType).toLowerCase();
       navigate(`/community/posts/${notification.referenceId}`, { state: notification.type === 'CONTENT_MODERATION_REJECTED'
@@ -260,6 +347,14 @@ export default function NotificationCenter() {
               : <div className="notification-list">{['Today', 'Yesterday', 'Earlier'].map((group) => groupedItems[group]?.length ? <section className="notification-group" key={group}><h3>{group}</h3>{groupedItems[group].map((notification) => <NotificationItem key={notification.notificationId} notification={notification} onSelect={handleSelect} marking={markingId === notification.notificationId}/>)}</section> : null)}{!page.last && tab === 'all' && <button type="button" className="notification-load-more" onClick={() => loadNotifications()} disabled={listState.loadingMore}>{listState.loadingMore ? <LoaderCircle className="notification-spin" size={15}/> : <ChevronDown size={15}/>} {listState.loadingMore ? 'Loading...' : 'Load more'}</button>}</div>}
       </div>
     </aside>
+    {unavailableNotification && <div className="notification-unavailable-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setUnavailableNotification(null); }}>
+      <section className="notification-unavailable-modal" role="dialog" aria-modal="true" aria-labelledby="notification-unavailable-title">
+        <button type="button" className="notification-unavailable-modal__close" onClick={() => setUnavailableNotification(null)} aria-label="Close"><X size={17}/></button>
+        <h2 id="notification-unavailable-title">This post is no longer available</h2>
+        <p>This post may have been deleted or is no longer accessible.</p>
+        <button type="button" className="notification-unavailable-modal__action" onClick={() => setUnavailableNotification(null)}>Close</button>
+      </section>
+    </div>}
   </>;
 
   return <>

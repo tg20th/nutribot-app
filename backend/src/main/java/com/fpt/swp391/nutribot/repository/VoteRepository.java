@@ -12,6 +12,7 @@ import org.springframework.data.jpa.repository.Lock;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
 
 @Repository
 public interface VoteRepository extends JpaRepository<Vote, Integer> {
@@ -26,6 +27,9 @@ public interface VoteRepository extends JpaRepository<Vote, Integer> {
 
     @Query("SELECT COUNT(v) FROM Vote v WHERE v.contentId = :contentId AND v.voteValue = 1")
     Long countByContentId(@Param("contentId") Integer contentId);
+
+    @Query("SELECT v FROM Vote v JOIN FETCH v.user WHERE v.contentId IN :contentIds AND v.voteValue = 1")
+    List<Vote> findActiveByContentIdIn(@Param("contentIds") Collection<Integer> contentIds);
 
     boolean existsByUserIdAndContentId(Integer userId, Integer contentId);
 
