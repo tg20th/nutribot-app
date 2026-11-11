@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 const statusMessages = {
   verifying: 'Verifying...',
   invalid: 'Invalid verification code. Please try again.',
-  expired: 'Mã OTP đã hết hạn. Vui lòng gửi lại mã mới.',
+  expired: 'This verification code has expired. Please request a new one.',
   alreadyUsed: 'This verification code has already been used.',
   tooManyAttempts: 'Too many verification attempts. Please request a new code.',
   resending: 'Sending...',
@@ -182,7 +182,7 @@ export default function EmailVerificationStep({
       <button type="button" onClick={() => onResend?.()} disabled={!onResend || !email || isVerifying || isResending || isVerified}>{isResending ? 'Sending...' : 'Resend code'}</button>
     </div>
 
-    {formattedRemainingTime && <p className={`email-verification__timer${isExpired ? ' email-verification__timer--expired' : ''}`} role="status" aria-live="polite">{isExpired ? 'Mã OTP đã hết hạn' : `Mã OTP còn hiệu lực: ${formattedRemainingTime}`}</p>}
+    {formattedRemainingTime && <p className={`email-verification__timer${isExpired ? ' email-verification__timer--expired' : ''}`} role="status" aria-live="polite">{isExpired ? 'Verification code expired' : `Code expires in ${formattedRemainingTime}`}</p>}
 
     {onBack && <button className="auth-switch email-verification__back" type="button" onClick={onBack}>{copy.backLabel}</button>}
   </section>;

@@ -146,7 +146,7 @@ class UserProfileServiceTest {
 
         assertThatThrownBy(() -> userProfileService.changePassword("jenniekim", request))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Mật khẩu xác nhận không khớp");
+                .hasMessageContaining("Passwords do not match.");
     }
 
     @Test
@@ -169,6 +169,6 @@ class UserProfileServiceTest {
 
         assertThatThrownBy(() -> userProfileService.changePassword("jenniekim", request))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("Mật khẩu hiện tại không chính xác");
+                .hasMessageContaining("Current password is incorrect.");
     }
 }

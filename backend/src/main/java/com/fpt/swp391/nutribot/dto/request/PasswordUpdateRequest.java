@@ -20,13 +20,13 @@ public class PasswordUpdateRequest {
      */
     private String currentPassword;
 
-    @NotBlank(message = "Mật khẩu mới không được để trống.")
+    @NotBlank(message = "New password is required.")
     @Pattern(
         regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$",
-        message = "Mật khẩu mới phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường, số và ký tự đặc biệt (@$!%*?&)."
+        message = "New password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number and a special character (@$!%*?&)."
     )
     private String newPassword;
 
-    @NotBlank(message = "Vui lòng xác nhận mật khẩu mới.")
+    @NotBlank(message = "Please confirm your new password.")
     private String confirmPassword;
 }

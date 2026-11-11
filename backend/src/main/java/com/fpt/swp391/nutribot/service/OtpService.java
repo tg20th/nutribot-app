@@ -84,7 +84,7 @@ public class OtpService {
                 .stream()
                 .filter(candidate -> passwordEncoder.matches(otp, candidate.getOtpHash()))
                 .findFirst()
-                .orElseThrow(() -> new BadRequestException("Mã OTP không hợp lệ hoặc đã hết hạn"));
+                .orElseThrow(() -> new BadRequestException("Invalid or expired verification code."));
 
         emailOtp.setIsUsed(true);
         emailOtpRepository.save(emailOtp);
@@ -99,7 +99,7 @@ public class OtpService {
                 .findFirstByUserIdAndPurposeAndIsUsedFalseOrderByCreatedAtDesc(userId, PURPOSE_EMAIL_CHANGE)
                 .filter(emailOtp -> !emailOtp.getExpiresAt().isBefore(LocalDateTime.now()))
                 .filter(emailOtp -> passwordEncoder.matches(otp, emailOtp.getOtpHash()))
-                .orElseThrow(() -> new BadRequestException("Mã OTP không hợp lệ hoặc đã hết hạn"));
+                .orElseThrow(() -> new BadRequestException("Invalid or expired verification code."));
     }
 
     /**

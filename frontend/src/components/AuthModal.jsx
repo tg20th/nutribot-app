@@ -44,16 +44,16 @@ function clearPendingOtp() {
 
 function isUnverifiedAccountError(error) {
   const message = String(error?.message || '').toLocaleLowerCase();
-  return message.includes('chưa xác thực') || message.includes('not verified') || message.includes('verify your email');
+  return message.includes('not verified') || message.includes('verify your email');
 }
 
 function otpErrorState(error) {
   const message = (error?.message || '').toLocaleLowerCase();
-  if (message.includes('incorrect')) return 'invalid';
-  if (message.includes('hết hạn') || message.includes('expired')) return 'expired';
-  if (message.includes('đã sử dụng') || message.includes('already been used')) return 'alreadyUsed';
-  if (message.includes('quá nhiều') || message.includes('too many')) return 'tooManyAttempts';
-  return message.includes('otp') || message.includes('mã') || message.includes('invalid') ? 'invalid' : 'error';
+  if (message.includes('incorrect') || message.includes('invalid')) return 'invalid';
+  if (message.includes('expired')) return 'expired';
+  if (message.includes('already been used')) return 'alreadyUsed';
+  if (message.includes('too many')) return 'tooManyAttempts';
+  return message.includes('otp') || message.includes('verification code') ? 'invalid' : 'error';
 }
 
 function validateSignup(form) {
@@ -299,7 +299,7 @@ export default function AuthModal({ mode, onClose, onSubmit, onGoogle, onAuthent
         </label>
         {isSignup && <label>Confirm password<span className="password-input"><input name="confirmPassword" type={showConfirmation ? 'text' : 'password'} autoComplete="new-password" value={form.confirmPassword} onChange={update} onBlur={() => touch('confirmPassword')} aria-invalid={Boolean(fieldError('confirmPassword'))} aria-describedby={fieldError('confirmPassword') ? 'confirm-password-error' : undefined} placeholder="Repeat your password" /><button type="button" onClick={() => setShowConfirmation((current) => !current)} aria-label={showConfirmation ? 'Hide password confirmation' : 'Show password confirmation'}>{showConfirmation ? <EyeOff size={18} /> : <Eye size={18} />}</button></span>{fieldError('confirmPassword') && <small id="confirm-password-error">{fieldError('confirmPassword')}</small>}</label>}
         <button className="auth-submit" type="submit" disabled={submitting || Boolean(success)}>{submitting ? <><LoaderCircle className="auth-spinner" size={17} />Please wait...</> : isSignup ? 'Create account' : 'Log in'}</button>
-        {!isSignup && loginErrorState === 'PENDING_VERIFY' && <button className="auth-verification-action" type="button" onClick={openPendingVerification}>Nhập mã OTP / Xác thực email</button>}
+        {!isSignup && loginErrorState === 'PENDING_VERIFY' && <button className="auth-verification-action" type="button" onClick={openPendingVerification}>Enter OTP / Verify email</button>}
         <button className="auth-switch" type="button" onClick={() => onSubmit?.(null, isSignup ? 'login' : 'signup')}>{isSignup ? 'Already have an account? Log in' : 'New here? Create an account'}</button>
       </form>
     </div>
