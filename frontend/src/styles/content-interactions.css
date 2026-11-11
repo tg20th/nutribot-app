@@ -48,6 +48,27 @@
 .content-comment-actions { display: flex; flex-wrap: wrap; gap: 13px; }
 .content-comment-actions button { padding: 0; border: 0; background: transparent; color: #52734f; font-size: 11px; font-weight: 700; cursor: pointer; }
 .content-comment-actions button:hover { color: #315c2b; text-decoration: underline; text-underline-offset: 3px; }
+.content-comment-actions .content-comment-delete { color: #a23f35; }
+.content-comment-actions .content-comment-delete:disabled { opacity: .55; cursor: wait; }
+.content-comment-delete-overlay { position: fixed; z-index: 1000; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(25, 38, 29, .42); }
+.content-comment-delete-dialog { position: relative; width: min(100%, 360px); padding: 30px; border: 1px solid #e5e9df; border-radius: 18px; background: #fffefa; box-shadow: 0 20px 55px rgba(25, 56, 38, .2); color: #49574b; text-align: center; }
+.content-comment-delete-dialog h2 { margin: 14px 0 8px; color: #193e2d; font: 600 24px/1.2 var(--nutribot-brand-font, 'Playfair Display', Georgia, serif); }
+.content-comment-delete-dialog > p { margin: 0 auto; max-width: 330px; font-size: 13px; line-height: 1.55; }
+.content-comment-delete-icon { display: grid; place-items: center; width: 52px; height: 52px; margin: 0 auto; border-radius: 50%; background: #f8e9e5; color: #a23f35; }
+.content-comment-delete-close { position: absolute; top: 13px; right: 13px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #78847a; cursor: pointer; }
+.content-comment-delete-close:hover { background: #edf3e9; color: #315c2b; }
+.content-comment-delete-close:disabled { opacity: .5; cursor: default; }
+.content-comment-delete-warning { margin-top: 10px !important; color: #8d5d2d; font-size: 12px !important; }
+.content-comment-delete-error { margin-top: 13px !important; color: #a23f35 !important; font-size: 12px !important; }
+.content-comment-delete-actions { display: flex; justify-content: center; gap: 10px; margin-top: 24px; }
+.content-comment-delete-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 108px; padding: 10px 16px; border-radius: 9px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.content-comment-delete-cancel { border: 1px solid #b8cab2; background: transparent; color: #315c2b; }
+.content-comment-delete-cancel:hover { background: #edf3e9; }
+.content-comment-delete-confirm { border: 1px solid #a23f35; background: #a23f35; color: #fff; }
+.content-comment-delete-confirm:hover { background: #8e342d; }
+.content-comment-delete-actions button:disabled { opacity: .55; cursor: wait; }
+.content-comment-delete-spinner { animation: content-comment-spin .8s linear infinite; }
+@keyframes content-comment-spin { to { transform: rotate(360deg); } }
 .content-comment-mention { margin-right: 5px; color: #315c2b; font-weight: 700; }
 .content-comment-replies { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 0 14px; padding-left: 14px; border-left: 1px solid #c9d9c2; }
 .content-comment-replies--deep { margin-left: 0; }
