@@ -35,16 +35,16 @@ public class AuthService {
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByNormalizedUsername(request.getUsername())) {
-            throw new BadRequestException("Username đã được sử dụng");
+            throw new BadRequestException("Username is already taken.");
         }
 
         if (userRepository.existsByNormalizedEmail(request.getEmail())) {
-            throw new BadRequestException("Email đã được sử dụng");
+            throw new BadRequestException("Email is already registered.");
         }
 
         Role userRole = roleRepository.findByRoleName("ROLE_USER")
                 .or(() -> roleRepository.findByRoleName("User"))
-                .orElseThrow(() -> new BadRequestException("Không tìm thấy role mặc định"));
+                .orElseThrow(() -> new BadRequestException("Default role not found."));
 
         User user = User.builder()
                 .username(request.getUsername().trim())
@@ -72,14 +72,14 @@ public class AuthService {
     @Transactional
     public AuthResponse verifyRegister(String email, String otpCode) {
         User user = userRepository.findByNormalizedEmail(email)
-                .orElseThrow(() -> new BadRequestException("Tài khoản không tồn tại"));
+                .orElseThrow(() -> new BadRequestException("Account does not exist."));
 
         if (user.getStatus() == AccountStatus.ACTIVE) {
-            throw new BadRequestException("Tài khoản đã được xác thực trước đó");
+            throw new BadRequestException("This account has already been verified.");
         }
 
         if (user.getStatus() != AccountStatus.PENDING_VERIFY) {
-            throw new BadRequestException("Tài khoản đang ở trạng thái không hợp lệ");
+            throw new BadRequestException("This account is in an invalid state.");
         }
 
         // Verify OTP
@@ -107,14 +107,14 @@ public class AuthService {
     @Transactional
     public void resendOtp(String email) {
         User user = userRepository.findByNormalizedEmail(email)
-                .orElseThrow(() -> new BadRequestException("Tài khoản không tồn tại"));
+                .orElseThrow(() -> new BadRequestException("Account does not exist."));
 
         if (user.getStatus() == AccountStatus.ACTIVE) {
-            throw new BadRequestException("Tài khoản đã được xác thực trước đó");
+            throw new BadRequestException("This account has already been verified.");
         }
 
         if (user.getStatus() != AccountStatus.PENDING_VERIFY) {
-            throw new BadRequestException("Tài khoản đang ở trạng thái không hợp lệ");
+            throw new BadRequestException("This account is in an invalid state.");
         }
 
         otpService.generateAndSendRegistrationOtp(email);
@@ -127,18 +127,18 @@ public class AuthService {
 
         if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             log.warn("Đăng nhập thất bại: thông tin xác thực không hợp lệ");
-            throw new BadRequestException("Tài khoản hoặc mật khẩu không chính xác");
+            throw new BadRequestException("Incorrect email or password.");
         }
 
         if (!AccountStatus.canAccessSystem(user.getStatus())) {
             log.warn("Đăng nhập bị từ chối: tài khoản {} đang có trạng thái {}", user.getUsername(), user.getStatus());
             switch (user.getStatus()) {
                 case PENDING_VERIFY:
-                    throw new BadRequestException("Tài khoản chưa xác thực email. Vui lòng kiểm tra hộp thư.");
+                    throw new BadRequestException("Your account is not verified. Please verify your email address.");
                 case BANNED:
-                    throw new BadRequestException("Tài khoản đã bị khóa. Không thể đăng nhập.");
+                    throw new BadRequestException("Your account has been locked. You cannot sign in.");
                 default:
-                    throw new BadRequestException("Tài khoản không hợp lệ.");
+                    throw new BadRequestException("Invalid account.");
             }
         }
 
@@ -197,7 +197,7 @@ public class AuthService {
         } else {
             Role userRole = roleRepository.findByRoleName("ROLE_USER")
                     .or(() -> roleRepository.findByRoleName("User"))
-                    .orElseThrow(() -> new BadRequestException("Không tìm thấy role mặc định"));
+                    .orElseThrow(() -> new BadRequestException("Default role not found."));
 
             String randomPassword = java.util.UUID.randomUUID().toString();
             String username = generateUniqueUsername(fullName != null ? fullName : email.split("@")[0]);
@@ -222,7 +222,7 @@ public class AuthService {
             throw new AccountBannedException();
         }
         if (!AccountStatus.canAccessSystem(user.getStatus())) {
-            throw new BadRequestException("Tài khoản đã bị khóa hoặc suspend");
+            throw new BadRequestException("Your account has been locked or suspended.");
         }
 
         String token = jwtTokenProvider.generateToken(

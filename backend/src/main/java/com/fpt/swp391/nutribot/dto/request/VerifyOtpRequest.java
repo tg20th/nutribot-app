@@ -11,11 +11,11 @@ import lombok.*;
 @Builder
 public class VerifyOtpRequest {
 
-    @NotBlank(message = "Email không được để trống")
-    @Email(message = "Email không hợp lệ")
+    @NotBlank(message = "Email is required.")
+    @Email(message = "Please enter a valid email address.")
     private String email;
 
-    @NotBlank(message = "Mã OTP không được để trống")
-    @Size(min = 6, max = 6, message = "Mã OTP phải có 6 chữ số")
+    @NotBlank(message = "Verification code is required.")
+    @Size(min = 6, max = 6, message = "Verification code must be 6 digits.")
     private String otpCode;
 }

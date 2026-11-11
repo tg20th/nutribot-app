@@ -1,7 +1,7 @@
 const LOGIN_MESSAGES = {
-  INVALID_CREDENTIALS: 'Tài khoản hoặc mật khẩu không chính xác',
-  PENDING_VERIFY: 'Tài khoản chưa xác thực email. Vui lòng kiểm tra hộp thư.',
-  ACCOUNT_BLOCKED: 'Tài khoản đã bị khóa hoặc tạm ngưng hoạt động'
+  INVALID_CREDENTIALS: 'Incorrect email or password.',
+  PENDING_VERIFY: 'Your account is not verified. Please verify your email address.',
+  ACCOUNT_BLOCKED: 'Your account has been locked. You cannot sign in.'
 };
 
 function normalizeMessage(message) {
@@ -16,7 +16,7 @@ const normalizedMessages = Object.fromEntries(
 export function getLoginErrorState(error) {
   if (error?.status === 400) {
     const message = normalizeMessage(error.message);
-    if (message.includes('account has been suspended') || message.includes('account has been banned') || message.includes('đã bị khóa') || message.includes('bị khóa')) return 'ACCOUNT_BLOCKED';
+    if (message.includes('account has been suspended') || message.includes('account has been banned') || message.includes('account has been locked')) return 'ACCOUNT_BLOCKED';
     for (const [state, expectedMessage] of Object.entries(normalizedMessages)) {
       if (message === expectedMessage) return state;
     }

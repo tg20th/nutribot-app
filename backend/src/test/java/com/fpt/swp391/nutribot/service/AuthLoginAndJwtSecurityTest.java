@@ -90,9 +90,9 @@ class AuthLoginAndJwtSecurityTest {
                     authService.login(new LoginRequest("testuser", "WrongPassword@123"))
             );
 
-            assertEquals("Tài khoản hoặc mật khẩu không chính xác", exUnknown.getMessage(),
+            assertEquals("Incorrect email or password.", exUnknown.getMessage(),
                     "Thông báo lỗi user không tồn tại phải được bảo vệ chung");
-            assertEquals("Tài khoản hoặc mật khẩu không chính xác", exWrongPass.getMessage(),
+            assertEquals("Incorrect email or password.", exWrongPass.getMessage(),
                     "Thông báo lỗi sai mật khẩu phải giống hệt thông báo user không tồn tại");
             assertEquals(exUnknown.getClass(), exWrongPass.getClass(),
                     "Phải cùng một exception class để tránh hacker phân biệt response status");
@@ -114,7 +114,7 @@ class AuthLoginAndJwtSecurityTest {
                     authService.login(new LoginRequest("testuser", "Password@123"))
             );
 
-            assertTrue(ex.getMessage().contains("chưa xác thực email"));
+            assertTrue(ex.getMessage().contains("not verified"));
             verify(jwtTokenProvider, never()).generateToken(anyString(), anyString());
         }
 
@@ -129,7 +129,7 @@ class AuthLoginAndJwtSecurityTest {
                     authService.login(new LoginRequest("testuser", "Password@123"))
             );
 
-            assertTrue(ex.getMessage().contains("khóa"));
+            assertTrue(ex.getMessage().contains("locked"));
             verify(jwtTokenProvider, never()).generateToken(anyString(), anyString());
         }
 

@@ -10,11 +10,11 @@ import lombok.*;
 @Builder
 public class LoginRequest {
 
-    @NotBlank(message = "Username hoặc email không được để trống")
-    @Size(max = 255, message = "Username hoặc email tối đa 255 ký tự")
+    @NotBlank(message = "Username or email is required.")
+    @Size(max = 255, message = "Username or email must not exceed 255 characters.")
     private String usernameOrEmail;
 
-    @NotBlank(message = "Mật khẩu không được để trống")
-    @Size(max = 128, message = "Mật khẩu tối đa 128 ký tự")
+    @NotBlank(message = "Password is required.")
+    @Size(max = 128, message = "Password must not exceed 128 characters.")
     private String password;
 }

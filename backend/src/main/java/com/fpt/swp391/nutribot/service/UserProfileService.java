@@ -217,13 +217,13 @@ public class UserProfileService {
         String newPassword = request.getNewPassword();
         String confirmPassword = request.getConfirmPassword();
         if (newPassword == null || newPassword.isBlank()) {
-            throw new BadRequestException("Mật khẩu mới không được để trống.");
+            throw new BadRequestException("New password is required.");
         }
         if (confirmPassword == null || confirmPassword.isBlank()) {
-            throw new BadRequestException("Vui lòng xác nhận mật khẩu mới.");
+            throw new BadRequestException("Please confirm your new password.");
         }
         if (!newPassword.equals(confirmPassword)) {
-            throw new BadRequestException("Mật khẩu xác nhận không khớp.");
+            throw new BadRequestException("Passwords do not match.");
         }
 
         User user = findUserForUpdate(currentUsername);
@@ -232,13 +232,13 @@ public class UserProfileService {
         if (hasPassword) {
             String currentPassword = request.getCurrentPassword();
             if (currentPassword == null || currentPassword.isBlank()) {
-                throw new BadRequestException("Vui lòng nhập mật khẩu hiện tại.");
+                throw new BadRequestException("Please enter your current password.");
             }
             if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
-                throw new BadRequestException("Mật khẩu hiện tại không chính xác.");
+                throw new BadRequestException("Current password is incorrect.");
             }
             if (passwordEncoder.matches(newPassword, user.getPasswordHash())) {
-                throw new BadRequestException("Mật khẩu mới phải khác mật khẩu hiện tại.");
+                throw new BadRequestException("New password must be different from the current password.");
             }
         }
 
