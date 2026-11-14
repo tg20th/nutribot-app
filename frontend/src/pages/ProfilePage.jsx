@@ -21,7 +21,7 @@ import CommunitySideNav from '../components/community/CommunitySideNav';
 import CommunityTopBar from '../components/community/CommunityTopBar';
 import AuthModal from '../components/AuthModal';
 import { useToast } from '../components/notifications/ToastProvider';
-import { changeMyPassword, deleteMyAvatar, getMyProfile, getMyRecipes, updateMyAvatar, updateMyProfile, verifyMyEmailChange } from '../services/profileApi';
+import { changeMyPassword, deleteMyAvatar, getMyProfile, getMyRecipes, getEmailChangeOtpErrorMessage, updateMyAvatar, updateMyProfile, verifyMyEmailChange } from '../services/profileApi';
 import { getPublicProfile, getPublicProfileContent } from '../services/publicProfileApi';
 import { ProfileHeader, ProfileTabs } from '../components/profile/ProfilePresentation';
 import { getCurrentUserFromToken } from '../utils/auth';
@@ -42,6 +42,10 @@ const EMPTY_PROFILE = {
   dateOfBirth: '',
   gender: '',
 };
+
+export function normalizeEmailChangeVerificationError(error) {
+  return new Error(getEmailChangeOtpErrorMessage(error));
+}
 
 const normalizeProfileText = (value, maxLength = Number.POSITIVE_INFINITY) => (
   typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
@@ -402,7 +406,14 @@ export default function ProfilePage({ editing = false }) {
   };
 
   const handleEmailVerification = async (otp) => {
-    const verified = await verifyMyEmailChange(otp);
+    let verified;
+    try {
+      verified = await verifyMyEmailChange(otp);
+    } catch (error) {
+      // Keep the verification modal's state machine independent from API error shapes.
+      // AuthModal receives a stable message and maps invalid/expired/used correctly.
+      throw normalizeEmailChangeVerificationError(error);
+    }
     const confirmedProfile = { ...savedProfile, email: verified.email };
     setProfile(confirmedProfile);
     setSavedProfile(confirmedProfile);

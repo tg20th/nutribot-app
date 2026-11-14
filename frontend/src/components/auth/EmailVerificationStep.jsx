@@ -182,7 +182,7 @@ export default function EmailVerificationStep({
       <button type="button" onClick={() => onResend?.()} disabled={!onResend || !email || isVerifying || isResending || isVerified}>{isResending ? 'Sending...' : 'Resend code'}</button>
     </div>
 
-    {formattedRemainingTime && <p className={`email-verification__timer${isExpired ? ' email-verification__timer--expired' : ''}`} role="status" aria-live="polite">{isExpired ? 'Verification code expired' : `Code expires in ${formattedRemainingTime}`}</p>}
+    {formattedRemainingTime && <p className={`email-verification__timer${isExpired ? ' email-verification__timer--expired' : ''}`} role="status" aria-live="polite">{isExpired ? 'This verification code has expired.' : `Code expires in: ${formattedRemainingTime}`}</p>}
 
     {onBack && <button className="auth-switch email-verification__back" type="button" onClick={onBack}>{copy.backLabel}</button>}
   </section>;
