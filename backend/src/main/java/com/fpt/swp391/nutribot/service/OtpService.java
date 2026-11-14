@@ -26,6 +26,9 @@ public class OtpService {
     private static final int OTP_LENGTH = 6;
     private static final int OTP_VALID_MINUTES = 5;
     private static final int EMAIL_CHANGE_VALID_MINUTES = 30;
+    private static final String INVALID_CODE_MESSAGE = "Invalid verification code. Please try again.";
+    private static final String EXPIRED_CODE_MESSAGE = "This verification code has expired. Please request a new one.";
+    private static final String USED_CODE_MESSAGE = "This verification code has already been used.";
 
     private final EmailOtpRepository emailOtpRepository;
     private final PasswordEncoder passwordEncoder;
@@ -57,7 +60,15 @@ public class OtpService {
     @Transactional
     public void generateAndSendEmailChangeOtp(String email, Integer userId) {
         LocalDateTime now = LocalDateTime.now();
-        emailOtpRepository.deleteExpiredEmailChanges(now);
+        // The filtered unique index permits only one active change OTP per user.
+        // Mark the previous record used and flush that update before inserting its replacement.
+        // This also avoids delete/insert ordering races in SQL Server.
+        emailOtpRepository.findFirstByUserIdAndPurposeAndIsUsedFalseOrderByCreatedAtDesc(
+                        userId, PURPOSE_EMAIL_CHANGE)
+                .ifPresent(previous -> {
+                    previous.setIsUsed(true);
+                    emailOtpRepository.saveAndFlush(previous);
+                });
 
         String otp = generateOtp();
 
@@ -68,7 +79,7 @@ public class OtpService {
                 .userId(userId)
                 .expiresAt(now.plusMinutes(EMAIL_CHANGE_VALID_MINUTES))
                 .build();
-        emailOtpRepository.save(emailOtp);
+        emailOtpRepository.saveAndFlush(emailOtp);
 
         sendOtpViaSender(email, otp, PURPOSE_EMAIL_CHANGE, EMAIL_CHANGE_VALID_MINUTES);
     }
@@ -78,28 +89,42 @@ public class OtpService {
      */
     @Transactional
     public void verifyRegistrationOtp(String email, String otp) {
+        EmailOtp latestOtp = emailOtpRepository.findFirstByEmailIgnoreCaseAndPurposeOrderByCreatedAtDesc(email, PURPOSE_REGISTRATION)
+                .orElseThrow(() -> new BadRequestException(INVALID_CODE_MESSAGE));
+        validateOtp(latestOtp, otp, LocalDateTime.now());
+        latestOtp.setIsUsed(true);
+        emailOtpRepository.save(latestOtp);
+        return;
+        /*
         EmailOtp emailOtp = emailOtpRepository
                 .findAllByEmailIgnoreCaseAndPurposeAndIsUsedFalseAndExpiresAtAfterOrderByCreatedAtDesc(
                         email, PURPOSE_REGISTRATION, LocalDateTime.now())
                 .stream()
                 .filter(candidate -> passwordEncoder.matches(otp, candidate.getOtpHash()))
                 .findFirst()
-                .orElseThrow(() -> new BadRequestException("Invalid or expired verification code."));
+                .orElseThrow(() -> new BadRequestException("Mã OTP không hợp lệ hoặc đã hết hạn"));
 
         emailOtp.setIsUsed(true);
-        emailOtpRepository.save(emailOtp);
+        emailOtpRepository.saveAndFlush(emailOtp);
+        */
     }
 
     /**
      * Verify OTP cho EMAIL_CHANGE: đúng → trả về record để xử lý tiếp.
      */
-    @Transactional(readOnly = true)
+    @Transactional(readOnly = true, noRollbackFor = BadRequestException.class)
     public EmailOtp verifyEmailChangeOtp(Integer userId, String otp) {
         return emailOtpRepository
-                .findFirstByUserIdAndPurposeAndIsUsedFalseOrderByCreatedAtDesc(userId, PURPOSE_EMAIL_CHANGE)
-                .filter(emailOtp -> !emailOtp.getExpiresAt().isBefore(LocalDateTime.now()))
-                .filter(emailOtp -> passwordEncoder.matches(otp, emailOtp.getOtpHash()))
-                .orElseThrow(() -> new BadRequestException("Invalid or expired verification code."));
+                .findFirstByUserIdAndPurposeOrderByCreatedAtDesc(userId, PURPOSE_EMAIL_CHANGE)
+                .map(emailOtp -> validateOtp(emailOtp, otp, LocalDateTime.now()))
+                .orElseThrow(() -> new BadRequestException(INVALID_CODE_MESSAGE));
+    }
+
+    private EmailOtp validateOtp(EmailOtp emailOtp, String otp, LocalDateTime now) {
+        if (Boolean.TRUE.equals(emailOtp.getIsUsed())) throw new BadRequestException(USED_CODE_MESSAGE);
+        if (emailOtp.getExpiresAt().isBefore(now)) throw new BadRequestException(EXPIRED_CODE_MESSAGE);
+        if (!passwordEncoder.matches(otp, emailOtp.getOtpHash())) throw new BadRequestException(INVALID_CODE_MESSAGE);
+        return emailOtp;
     }
 
     /**

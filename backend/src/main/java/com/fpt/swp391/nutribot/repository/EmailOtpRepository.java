@@ -17,11 +17,19 @@ public interface EmailOtpRepository extends JpaRepository<EmailOtp, Integer> {
     List<EmailOtp> findAllByEmailIgnoreCaseAndPurposeAndIsUsedFalseAndExpiresAtAfterOrderByCreatedAtDesc(
             String email, String purpose, LocalDateTime now);
 
+    Optional<EmailOtp> findFirstByEmailIgnoreCaseAndPurposeOrderByCreatedAtDesc(String email, String purpose);
+
     Optional<EmailOtp> findFirstByUserIdAndPurposeAndIsUsedFalseOrderByCreatedAtDesc(
             Integer userId, String purpose);
 
+    Optional<EmailOtp> findFirstByUserIdAndPurposeOrderByCreatedAtDesc(Integer userId, String purpose);
+
     boolean existsByEmailIgnoreCaseAndPurposeAndIsUsedFalseAndUserIdNot(
             String email, String purpose, Integer userId);
+
+    @Modifying(flushAutomatically = true)
+    @Query("DELETE FROM EmailOtp e WHERE e.userId = :userId AND e.purpose = 'EMAIL_CHANGE' AND e.isUsed = false")
+    int deleteActiveEmailChangeByUserId(@Param("userId") Integer userId);
 
     @Modifying
     @Query("DELETE FROM EmailOtp e WHERE e.purpose = 'REGISTRATION' AND (e.expiresAt < :now OR e.isUsed = true)")

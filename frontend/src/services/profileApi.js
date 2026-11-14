@@ -1,5 +1,18 @@
 import { apiRequest, unwrapData } from './apiClient';
 
+export function getEmailChangeOtpErrorMessage(error) {
+  const message = [error?.message, error?.payload?.message]
+    .filter(Boolean)
+    .join(' ')
+    .toLocaleLowerCase();
+  if (message.includes('expired')) return 'This verification code has expired. Please request a new one.';
+  if (message.includes('already been used') || message.includes('already used')) return 'This verification code has already been used.';
+  if (message.includes('invalid') || message.includes('incorrect') || message.includes('verification code')) {
+    return 'Invalid verification code. Please try again.';
+  }
+  return error?.message || 'Something went wrong. Please try again.';
+}
+
 export const getMyProfile = async (signal) => unwrapData(await apiRequest('/api/v1/users/profile', { signal }), {});
 
 export const updateMyProfile = async (payload) => {
@@ -20,7 +33,14 @@ export const updateMyAvatar = async (file) => {
   return unwrapData(await apiRequest('/api/v1/users/profile/avatar', { method: 'PUT', body }), {});
 };
 
-export const verifyMyEmailChange = async (otp) => unwrapData(await apiRequest('/api/v1/users/profile/email/verify', { method: 'POST', body: JSON.stringify({ otp }) }), {});
+export const verifyMyEmailChange = async (otp) => {
+  try {
+    return unwrapData(await apiRequest('/api/v1/users/profile/email/verify', { method: 'POST', body: JSON.stringify({ otp }) }), {});
+  } catch (error) {
+    error.message = getEmailChangeOtpErrorMessage(error);
+    throw error;
+  }
+};
 
 export const uploadMyAvatar = updateMyAvatar;
 

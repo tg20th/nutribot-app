@@ -5,7 +5,6 @@ import com.fpt.swp391.nutribot.entity.EmailOtp;
 import com.fpt.swp391.nutribot.entity.User;
 import com.fpt.swp391.nutribot.exception.BadRequestException;
 import com.fpt.swp391.nutribot.exception.ConflictException;
-import com.fpt.swp391.nutribot.exception.EmailDeliveryException;
 import com.fpt.swp391.nutribot.repository.EmailOtpRepository;
 import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +26,10 @@ public class EmailChangeService {
 
     @Transactional
     public String requestEmailChange(User user, String requestedEmail) {
+        // Serialize resend/replacement requests for this user at the database level.
+        User lockedUser = userRepository.findByIdForUpdate(user.getUserId())
+                .orElseThrow(() -> new BadRequestException("User account was not found."));
+        user = lockedUser;
         String normalizedEmail = requestedEmail.trim().toLowerCase(Locale.ROOT);
 
         if (normalizedEmail.equalsIgnoreCase(user.getEmail())) {
@@ -44,11 +47,7 @@ public class EmailChangeService {
             throw new ConflictException("Email is already pending verification for another account.");
         }
 
-        try {
-            otpService.generateAndSendEmailChangeOtp(normalizedEmail, user.getUserId());
-        } catch (Exception e) {
-            throw new EmailDeliveryException("Unable to send the email verification code.", e);
-        }
+        otpService.generateAndSendEmailChangeOtp(normalizedEmail, user.getUserId());
         return normalizedEmail;
     }
 
