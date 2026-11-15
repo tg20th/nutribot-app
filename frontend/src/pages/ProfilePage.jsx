@@ -61,7 +61,8 @@ const publishProfileUpdate = (profile) => {
     sessionStorage.removeItem('nutribot-profile-avatar');
     localStorage.removeItem('nutribot-profile-avatar');
   }
-  window.dispatchEvent(new CustomEvent('nutribot-profile-updated', { detail: profile }));
+  // Consumers only need the confirmed avatar. Never publish edit-form fields.
+  window.dispatchEvent(new CustomEvent('nutribot-profile-updated', { detail: { avatarUrl: profile.avatarUrl } }));
 };
 
 const normalizeGender = (gender) => {
@@ -140,6 +141,7 @@ export default function ProfilePage({ editing = false }) {
   const navigate = useNavigate();
   const avatarInputRef = useRef(null);
   const savingRef = useRef(false);
+  const wasEditingRef = useRef(editing);
   const fallbackUser = useMemo(() => getCurrentUserFromToken() ?? { username: '', email: '' }, []);
   const [profile, setProfile] = useState(() => toFormProfile(EMPTY_PROFILE, fallbackUser));
   const [savedProfile, setSavedProfile] = useState(() => toFormProfile(EMPTY_PROFILE, fallbackUser));
@@ -189,7 +191,7 @@ export default function ProfilePage({ editing = false }) {
         setConfirmedEmail(mapped.email);
         setServerPendingEmail(data.pendingEmail || '');
         setHasLoadedProfile(true);
-        publishProfileUpdate(editableProfile);
+        publishProfileUpdate(mapped);
       })
       .catch((error) => {
         if (controller.signal.aborted || error?.name === 'AbortError') return;
@@ -204,21 +206,37 @@ export default function ProfilePage({ editing = false }) {
     return () => controller.abort();
   }, [fallbackUser, profileLoadAttempt]);
 
+  // The same component instance serves /profile and /profile/edit. Keep the
+  // edit draft scoped to the edit route so route changes cannot carry it over.
   useEffect(() => {
-    if (!profile.username) return undefined;
+    const enteredEdit = editing && !wasEditingRef.current;
+    const leftEdit = !editing && wasEditingRef.current;
+    if (enteredEdit || leftEdit) {
+      setProfile(savedProfile);
+      setErrors({});
+      setNotice(null);
+      setAvatarFile(null);
+      setAvatarPreview('');
+      setAvatarRemoved(false);
+    }
+    wasEditingRef.current = editing;
+  }, [editing, savedProfile]);
+
+  useEffect(() => {
+    if (!savedProfile.username) return undefined;
     const controller = new AbortController();
-    getPublicProfile(profile.username, controller.signal)
+    getPublicProfile(savedProfile.username, controller.signal)
       .then((publicProfile) => { if (!controller.signal.aborted) setPublicStats(publicProfile.stats ?? {}); })
       .catch(() => { if (!controller.signal.aborted) setPublicStats({}); });
     return () => controller.abort();
-  }, [profile.username]);
+  }, [savedProfile.username]);
 
   useEffect(() => {
-    if (activeTab !== 'posts' || postsLoaded || !profile.username) return undefined;
+    if (activeTab !== 'posts' || postsLoaded || !savedProfile.username) return undefined;
     const controller = new AbortController();
     setPostsLoading(true);
     setPostsError('');
-    getPublicProfileContent(profile.username, { signal: controller.signal })
+    getPublicProfileContent(savedProfile.username, { signal: controller.signal })
       .then((content) => {
         if (controller.signal.aborted) return;
         setMyPosts(Array.isArray(content?.posts) ? content.posts : []);
@@ -234,7 +252,7 @@ export default function ProfilePage({ editing = false }) {
         if (!controller.signal.aborted) setPostsLoading(false);
       });
     return () => controller.abort();
-  }, [activeTab, postsLoaded, profile.username]);
+  }, [activeTab, postsLoaded, savedProfile.username]);
 
   useEffect(() => {
     if (activeTab !== 'recipes' || recipesLoaded) return undefined;
@@ -505,7 +523,7 @@ export default function ProfilePage({ editing = false }) {
 
         <main className="public-profile-page">
           {!editing && <ProfileHeader
-            profile={{ ...profile, avatarUrl: visibleAvatar, displayName: profile.fullName, joinedAt: profile.createdAt }}
+            profile={{ ...savedProfile, avatarUrl: savedProfile.avatarUrl, displayName: savedProfile.fullName, joinedAt: savedProfile.createdAt }}
             stats={{ ...publicStats, posts: publicStats.posts ?? myPosts.length, approvedRecipeContributions: publicStats.approvedRecipeContributions ?? myRecipes.length }}
             isOwner
             onOpenSettings={() => navigate('/profile/edit')}
