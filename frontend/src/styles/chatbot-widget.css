@@ -419,7 +419,8 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 22px 18px 18px;
+  /* Reserve scroll-container space below the final message and above the composer. */
+  padding: 22px 18px 24px;
   scrollbar-color: rgba(24, 61, 45, 0.25) transparent;
   scrollbar-width: thin;
   background:
@@ -531,8 +532,6 @@
 .chatbot-markdown pre { overflow-x: auto; margin: .75rem 0; padding: .75rem; border-radius: 8px; background: #eef3ef; }
 .chatbot-markdown pre code { padding: 0; background: transparent; }
 .chatbot-markdown a { color: #286b49; text-decoration: underline; text-underline-offset: 2px; }
-.chatbot-widget__reveal { display: block; margin-top: .7rem; padding: 0; border: 0; background: transparent; color: #286b49; font-size: .78rem; cursor: pointer; }
-.chatbot-widget__reveal:hover { text-decoration: underline; }
 
 @media (prefers-reduced-motion: reduce) {
   .chatbot-widget__typing i { animation: none; }
@@ -875,8 +874,11 @@
   }
 
   .chatbot-widget__thread {
-    padding-right: 15px;
-    padding-left: 15px;
+    padding: 22px 15px 16px;
+  }
+
+  .chatbot-widget__composer-wrap {
+    padding: 16px 0 4px;
   }
 
   .chatbot-widget__message {
@@ -963,14 +965,14 @@
 
 .chatbot-widget__panel--fullscreen .chatbot-widget__thread {
   flex: 1;
-  padding: 42px 28px 36px;
+  padding: 42px 28px 24px;
 }
 
 .chatbot-widget__panel--fullscreen .chatbot-widget__composer-wrap {
   --composer-edge-inset: 0px;
   width: min(78%, 1050px);
   margin: 0 auto;
-  padding: 0 0 18px;
+  padding: 24px 0 18px;
   background: transparent;
 }
 
@@ -1141,7 +1143,8 @@
   position: relative;
   flex: 0 0 auto;
   --composer-edge-inset: 12px;
-  padding: 12px 0 4px;
+  /* Keep a stable gap between the scroll viewport and the composer. */
+  padding: 24px 0 4px;
   background: transparent;
   overflow: visible;
   isolation: isolate;
@@ -1651,12 +1654,12 @@
   }
 
   .chatbot-widget__panel--fullscreen .chatbot-widget__thread {
-    padding: 28px 15px 25px;
+    padding: 28px 15px 16px;
   }
 
   .chatbot-widget__panel--fullscreen .chatbot-widget__composer-wrap {
     --composer-edge-inset: 10px;
-    padding: 0 0 16px;
+    padding: 16px 0 16px;
   }
 
   .chatbot-widget__panel--fullscreen .chatbot-widget__composer {

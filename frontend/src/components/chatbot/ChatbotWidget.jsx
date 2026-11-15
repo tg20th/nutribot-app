@@ -260,6 +260,8 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   const [mediaError, setMediaError] = useState('');
   const panelRef = useRef(null);
   const threadRef = useRef(null);
+  const shouldFollowLatestRef = useRef(true);
+  const scrollFrameRef = useRef(null);
   const inputRef = useRef(null);
   const launcherRef = useRef(null);
   const mediaInputRef = useRef(null);
@@ -452,11 +454,28 @@ export default function ChatbotWidget({ onSend, onAuth }) {
   }, [attachmentMenuOpen]);
   useEffect(() => () => requestControllerRef.current?.abort(), []);
   useEffect(() => { if (!isGuest) { setShowLimitModal(false); setHistoryOpen(false); } }, [isGuest]);
+  const scheduleFollowLatest = () => {
+    if (!shouldFollowLatestRef.current || scrollFrameRef.current !== null) return;
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      const thread = threadRef.current;
+      if (thread && shouldFollowLatestRef.current) thread.scrollTop = thread.scrollHeight;
+    });
+  };
   useEffect(() => {
     const thread = threadRef.current;
     if (!thread) return undefined;
-    const frame = requestAnimationFrame(() => thread.scrollTo?.({ top: thread.scrollHeight, behavior: conversationState === 'existing' ? 'auto' : 'smooth' }));
-    return () => cancelAnimationFrame(frame);
+    const handleScroll = () => {
+      const distanceFromBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight;
+      shouldFollowLatestRef.current = distanceFromBottom <= 48;
+    };
+    thread.addEventListener('scroll', handleScroll, { passive: true });
+    scheduleFollowLatest();
+    return () => {
+      thread.removeEventListener('scroll', handleScroll);
+      if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current);
+      scrollFrameRef.current = null;
+    };
   }, [conversationState, messages]);
   useGSAP(() => {
     if (!isMounted || !isOpen || !panelRef.current) return;
@@ -679,7 +698,7 @@ export default function ChatbotWidget({ onSend, onAuth }) {
                 if (!hasMedia && !hasMessageContent) return null;
                 return <Fragment key={item.id}><div className={`chatbot-widget__message-row chatbot-widget__message-row--${item.sender}`} data-latest-message={index === messages.length - 1 ? 'true' : undefined}>
                   {hasMedia && <SentMedia attachment={item.attachment} />}
-                  {hasMessageContent && <>{item.sender === 'assistant' && <span className="chatbot-widget__assistant-avatar"><NutriBotIcon size={20} /></span>}<div className={`chatbot-widget__message chatbot-widget__message--${item.sender}`}>{item.pending ? <span className="chatbot-widget__typing" aria-label={item.mediaKind === 'video' ? 'Analyzing video' : item.mediaKind === 'image' ? 'Analyzing image' : 'NutriBot is thinking'}><i /><i /><i /></span> : <><MessageMarkdown text={item.text} animate={item.sender === 'assistant' && item.animate} onComplete={() => item.animate && setMessages((current) => current.map((message) => message.id === item.id ? { ...message, animate: false } : message))} />{item.animate && <button type="button" className="chatbot-widget__reveal" onClick={() => setMessages((current) => current.map((message) => message.id === item.id ? { ...message, animate: false } : message))}>Show full response</button>}{item.analysis && <AnalysisCard attachment={item.analysis} language={conversationLanguage} />}{item.error && item.retry && <button type="button" className="chatbot-widget__retry" onClick={() => retryMessage(item)}>Retry</button>}</>}</div></>}
+                  {hasMessageContent && <>{item.sender === 'assistant' && <span className="chatbot-widget__assistant-avatar"><NutriBotIcon size={20} /></span>}<div className={`chatbot-widget__message chatbot-widget__message--${item.sender}`}>{item.pending ? <span className="chatbot-widget__typing" aria-label={item.mediaKind === 'video' ? 'Analyzing video' : item.mediaKind === 'image' ? 'Analyzing image' : 'NutriBot is thinking'}><i /><i /><i /></span> : <><MessageMarkdown text={item.text} animate={item.sender === 'assistant' && item.animate} onProgress={scheduleFollowLatest} onComplete={() => item.animate && setMessages((current) => current.map((message) => message.id === item.id ? { ...message, animate: false } : message))} />{item.analysis && <AnalysisCard attachment={item.analysis} language={conversationLanguage} />}{item.error && item.retry && <button type="button" className="chatbot-widget__retry" onClick={() => retryMessage(item)}>Retry</button>}</>}</div></>}
                   {!item.pending && item.sender === 'assistant' && <CookingFollowUp item={item} language={conversationLanguage} onSelect={(choice) => selectCookingFollowUp(item, choice)} disabled={isLoading || Boolean(item.actionState)} />}
                 </div></Fragment>;
               })}</div></>}
