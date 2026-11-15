@@ -94,7 +94,7 @@ function MarkdownBlocks({ value }) {
   })}</div>;
 }
 
-export default function MessageMarkdown({ text, animate = false, onComplete }) {
+export default function MessageMarkdown({ text, animate = false, onProgress, onComplete }) {
   const source = String(text || '');
   const [visibleLength, setVisibleLength] = useState(animate ? 0 : source.length);
   const onCompleteRef = useRef(onComplete);
@@ -106,6 +106,7 @@ export default function MessageMarkdown({ text, animate = false, onComplete }) {
     const interval = window.setInterval(() => {
       cursor = Math.min(source.length, cursor + (cursor < 140 ? 2 : 4));
       setVisibleLength(cursor);
+      onProgress?.();
       if (cursor >= source.length) { window.clearInterval(interval); onCompleteRef.current?.(); }
     }, 18);
     return () => window.clearInterval(interval);
