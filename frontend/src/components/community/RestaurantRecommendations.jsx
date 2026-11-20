@@ -43,23 +43,54 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
   const section = useRef(null);
   const [restaurants, setRestaurants] = useState([]);
   const [status, setStatus] = useState('loading');
-  const [userCoords, setUserCoords] = useState(null);
-  const [isLocating, setIsLocating] = useState(false);
-
-  // Read initial cached coords from sessionStorage if available
-  useEffect(() => {
+  const [userCoords, setUserCoords] = useState(() => {
     try {
       const cached = sessionStorage.getItem('nutribot_user_coords');
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
-          setUserCoords(parsed);
+          return parsed;
         }
       }
     } catch {
-      // ignore storage access errors
+      // ignore
     }
-  }, []);
+    return null;
+  });
+  const [isLocating, setIsLocating] = useState(false);
+
+  // Auto-fetch user position immediately on mount without requiring click
+  useEffect(() => {
+    if (previewRestaurants) return;
+
+    let isMounted = true;
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      setIsLocating(true);
+      getUserCurrentPosition()
+        .then((pos) => {
+          if (!isMounted) return;
+          if (pos && typeof pos.lat === 'number' && typeof pos.lng === 'number') {
+            const coords = { lat: pos.lat, lng: pos.lng };
+            setUserCoords(coords);
+            try {
+              sessionStorage.setItem('nutribot_user_coords', JSON.stringify(coords));
+            } catch {
+              // ignore
+            }
+          }
+        })
+        .catch((err) => {
+          console.debug('Auto-geolocation not available or denied:', err?.message);
+        })
+        .finally(() => {
+          if (isMounted) setIsLocating(false);
+        });
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [previewRestaurants]);
 
   useEffect(() => {
     if (previewRestaurants) {
@@ -73,112 +104,57 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
     // Strictly search for verified vegetarian establishments only
     const keywords = ['nhà hàng chay', 'quán chay', 'cơm chay', 'ẩm thực chay', 'buffet chay', 'vegan'];
 
-    const loadData = async () => {
-      let activeCoords = userCoords;
+    const searchParams = {
+      keywords,
+      radiusKm: 25,
+      signal: controller.signal
+    };
 
-      // If userCoords is not yet set in state, check permissions and sessionStorage
-      if (!activeCoords) {
-        try {
-          const cached = sessionStorage.getItem('nutribot_user_coords');
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
-              activeCoords = parsed;
-              setUserCoords(parsed);
+    if (userCoords) {
+      searchParams.lat = userCoords.lat;
+      searchParams.lng = userCoords.lng;
+    }
+
+    searchNearbyRestaurants(searchParams)
+      .then((items) => {
+        if (!controller.signal.aborted) {
+          const validFetched = filterValidRestaurants(items || []);
+          const curatedFallback = CURATED_RESTAURANTS.map((item) => {
+            const norm = normalizeRestaurant(item);
+            if (userCoords) {
+              norm.distanceKm = calculateDistance(userCoords.lat, userCoords.lng, item.lat, item.lng);
             }
-          }
-        } catch {
-          // ignore
-        }
-      }
+            return norm;
+          });
 
-      // If still no coords, check if browser already granted geolocation (e.g. Always allow)
-      if (!activeCoords && typeof navigator !== 'undefined' && navigator.geolocation) {
-        try {
-          let hasPermission = false;
-          if (navigator.permissions && navigator.permissions.query) {
-            try {
-              const perm = await navigator.permissions.query({ name: 'geolocation' });
-              if (perm.state === 'granted') {
-                hasPermission = true;
-              }
-            } catch {
-              // permissions.query may fail in some environments
+          const seenNames = new Set(validFetched.map((r) => r.name?.toLowerCase().trim()));
+          const combined = [...validFetched];
+          for (const curated of curatedFallback) {
+            const key = curated.name?.toLowerCase().trim();
+            if (!seenNames.has(key)) {
+              seenNames.add(key);
+              combined.push(curated);
             }
+            if (combined.length >= 6) break;
           }
 
-          if (hasPermission) {
-            const pos = await getUserCurrentPosition();
-            if (pos && typeof pos.lat === 'number' && typeof pos.lng === 'number') {
-              activeCoords = { lat: pos.lat, lng: pos.lng };
-              setUserCoords(activeCoords);
-              try {
-                sessionStorage.setItem('nutribot_user_coords', JSON.stringify(activeCoords));
-              } catch {
-                // ignore
-              }
-            }
-          }
-        } catch {
-          // Geolocation failed or timed out, gracefully continue with default center
+          setRestaurants(combined.slice(0, 6));
+          setStatus('ready');
         }
-      }
-
-      if (controller.signal.aborted) return;
-
-      const searchParams = {
-        keywords,
-        radiusKm: 25,
-        signal: controller.signal
-      };
-
-      if (activeCoords) {
-        searchParams.lat = activeCoords.lat;
-        searchParams.lng = activeCoords.lng;
-      }
-
-      try {
-        const items = await searchNearbyRestaurants(searchParams);
-        if (controller.signal.aborted) return;
-
-        const validFetched = filterValidRestaurants(items || []);
-        const curatedFallback = CURATED_RESTAURANTS.map((item) => {
-          const norm = normalizeRestaurant(item);
-          if (activeCoords) {
-            norm.distanceKm = calculateDistance(activeCoords.lat, activeCoords.lng, item.lat, item.lng);
-          }
-          return norm;
-        });
-
-        const seenNames = new Set(validFetched.map((r) => r.name?.toLowerCase().trim()));
-        const combined = [...validFetched];
-        for (const curated of curatedFallback) {
-          const key = curated.name?.toLowerCase().trim();
-          if (!seenNames.has(key)) {
-            seenNames.add(key);
-            combined.push(curated);
-          }
-          if (combined.length >= 6) break;
-        }
-
-        setRestaurants(combined.slice(0, 6));
-        setStatus('ready');
-      } catch (err) {
+      })
+      .catch((err) => {
         if (!controller.signal.aborted) {
           const curatedFallback = CURATED_RESTAURANTS.map((item) => {
             const norm = normalizeRestaurant(item);
-            if (activeCoords) {
-              norm.distanceKm = calculateDistance(activeCoords.lat, activeCoords.lng, item.lat, item.lng);
+            if (userCoords) {
+              norm.distanceKm = calculateDistance(userCoords.lat, userCoords.lng, item.lat, item.lng);
             }
             return norm;
           });
           setRestaurants(curatedFallback.slice(0, 6));
           setStatus('ready');
         }
-      }
-    };
-
-    loadData();
+      });
 
     return () => controller.abort();
   }, [previewRestaurants, dishName, userCoords]);
@@ -232,7 +208,7 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
   return (
     <section className="restaurant-recommendations" ref={section} aria-labelledby="restaurant-recommendations-title">
       <header className="restaurant-recommendations-head">
-        <div>
+        <div className="restaurant-recommendations-title-wrap">
           <span>
             <Utensils size={13} aria-hidden="true" /> Where to try it
           </span>
@@ -241,17 +217,16 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
           </h2>
         </div>
         <div className="restaurant-recommendations-meta">
-          <p>Curated dining options serving nourishing plant-based dishes.</p>
           <button
             type="button"
             className={`restaurant-recommendation-locate-btn ${userCoords ? 'is-active' : ''}`}
             onClick={handleLocateClick}
             disabled={isLocating}
-            title={userCoords ? 'Using your GPS location for distances' : 'Click to update distances using your GPS location'}
-            aria-label={userCoords ? 'Using your GPS location' : 'Locate my position'}
+            title={userCoords ? 'Using your GPS location for distances (Click to refresh)' : 'Locating your GPS position...'}
+            aria-label="Your Location"
           >
             <Navigation size={13} className={isLocating ? 'animate-spin' : ''} aria-hidden="true" />
-            <span>{isLocating ? 'Locating...' : (userCoords ? 'Your Location' : 'Locate Me')}</span>
+            <span>{isLocating ? 'Locating...' : 'Your Location'}</span>
           </button>
         </div>
       </header>

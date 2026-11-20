@@ -75,7 +75,7 @@ describe('RestaurantRecommendations component', () => {
     expect(screen.getByText('Nhà Hàng Chay An Lạc')).toBeInTheDocument();
   });
 
-  it('renders Locate Me button and uses GPS coordinates when clicked', async () => {
+  it('renders Your Location button and uses GPS coordinates when clicked', async () => {
     const mockPos = { lat: 10.7500, lng: 106.6500, accuracy: 15 };
     vi.spyOn(restaurantApi, 'getUserCurrentPosition').mockResolvedValue(mockPos);
     vi.spyOn(restaurantApi, 'searchNearbyRestaurants').mockResolvedValue([
@@ -91,7 +91,7 @@ describe('RestaurantRecommendations component', () => {
 
     render(<RestaurantRecommendations />);
 
-    const locateBtn = screen.getByRole('button', { name: /Locate my position/i });
+    const locateBtn = screen.getByRole('button', { name: /Your Location/i });
     expect(locateBtn).toBeInTheDocument();
 
     fireEvent.click(locateBtn);
@@ -133,12 +133,9 @@ describe('RestaurantRecommendations component', () => {
     });
   });
 
-  it('automatically fetches geolocation if browser permission is already granted', async () => {
+  it('automatically fetches geolocation on mount without user click', async () => {
     vi.stubGlobal('navigator', {
-      geolocation: { getCurrentPosition: vi.fn() },
-      permissions: {
-        query: vi.fn().mockResolvedValue({ state: 'granted' })
-      }
+      geolocation: { getCurrentPosition: vi.fn() }
     });
 
     const mockPos = { lat: 10.7300, lng: 106.7100, accuracy: 10 };

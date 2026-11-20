@@ -13,10 +13,15 @@
 
 .restaurant-recommendations-head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 20px;
   margin-bottom: 24px;
+}
+
+.restaurant-recommendations-title-wrap {
+  flex: 1;
+  min-width: 0;
 }
 
 .restaurant-recommendations-head span {
@@ -32,28 +37,20 @@
 }
 
 .restaurant-recommendations-head h2 {
-  max-width: 680px;
-  margin: 10px 0 0;
-  font: 500 clamp(26px, 3vw, 36px) / 1.1 var(--nutribot-brand-font, 'Playfair Display', Georgia, serif);
-  letter-spacing: -0.04em;
+  max-width: none;
+  margin: 6px 0 0;
+  font: 500 clamp(18px, 2.1vw, 25px) / 1.25 var(--nutribot-brand-font, 'Playfair Display', Georgia, serif);
+  letter-spacing: -0.025em;
   color: #1e281b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .restaurant-recommendations-meta {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8px;
-}
-
-.restaurant-recommendations-head p {
-  max-width: 280px;
-  margin: 0;
-  color: var(--text-muted, #66756b);
-  font-size: 12px;
-  line-height: 1.6;
-  font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif);
-  text-align: right;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .restaurant-recommendation-locate-btn {
@@ -89,11 +86,13 @@
 }
 
 @media (max-width: 768px) {
-  .restaurant-recommendations-meta {
+  .restaurant-recommendations-head {
+    flex-direction: column;
     align-items: flex-start;
+    gap: 12px;
   }
-  .restaurant-recommendations-head p {
-    text-align: left;
+  .restaurant-recommendations-head h2 {
+    white-space: normal;
   }
 }
 
