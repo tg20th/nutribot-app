@@ -50,7 +50,7 @@ public class GlobalExceptionHandler {
         log.warn("Data integrity violation / conflict: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.CONFLICT)
-                .body(ApiResponse.error("Thao tác bị trùng lặp hoặc xung đột dữ liệu"));
+                .body(ApiResponse.error("Data conflict or duplicate action occurred."));
     }
 
     @ExceptionHandler(EmailDeliveryException.class)
@@ -66,7 +66,7 @@ public class GlobalExceptionHandler {
         log.warn("Authentication failed: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.error("Vui lòng đăng nhập để tiếp tục"));
+                .body(ApiResponse.error("Please sign in to continue."));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
@@ -74,7 +74,7 @@ public class GlobalExceptionHandler {
         log.warn("Access denied: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error("Bạn không có quyền truy cập tài nguyên này"));
+                .body(ApiResponse.error("Access denied. You do not have permission to access this resource."));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
@@ -82,7 +82,7 @@ public class GlobalExceptionHandler {
         log.warn("Upload too large: {}", ex.getMessage());
         return ResponseEntity
                 .status(HttpStatus.PAYLOAD_TOO_LARGE)
-                .body(ApiResponse.error("Dung lượng tệp tải lên không được vượt quá 25 MB."));
+                .body(ApiResponse.error("Uploaded file size must not exceed 25 MB."));
     }
 
     @ExceptionHandler(CloudinaryUploadException.class)

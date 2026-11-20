@@ -16,7 +16,7 @@ describe('profileApi - changeMyPassword', () => {
 
     const mockResponse = {
       success: true,
-      message: 'Đổi mật khẩu thành công.',
+      message: 'Password changed successfully.',
       data: {
         userId: 1,
         username: 'jenniekim',
@@ -44,7 +44,7 @@ describe('profileApi - changeMyPassword', () => {
 
     const mockResponse = {
       success: true,
-      message: 'Thiết lập mật khẩu thành công. Bạn có thể đăng nhập bằng Google hoặc mật khẩu.',
+      message: 'Password setup successfully. You can now sign in with Google or password.',
       data: {
         userId: 61,
         username: 'truong_google',

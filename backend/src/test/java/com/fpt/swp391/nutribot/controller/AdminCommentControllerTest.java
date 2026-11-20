@@ -70,7 +70,7 @@ class AdminCommentControllerTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().isSuccess()).isTrue();
         assertThat(response.getBody().getData()).isNull();
-        assertThat(response.getBody().getMessage()).isEqualTo("Xóa bình luận thành công");
+        assertThat(response.getBody().getMessage()).isEqualTo("Comment deleted successfully.");
 
         verify(adminCommentService).deleteComment(5, "admin_master");
     }

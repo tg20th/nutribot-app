@@ -34,7 +34,7 @@ public class BlogAuthorController {
             @AuthenticationPrincipal UserDetails user,
             @Valid @RequestBody ContentCreateRequest request) {
         AuthorContentResponse response = authorContentService.createContent(user.getUsername(), "BLOG", request);
-        return ResponseEntity.ok(ApiResponse.success("Tạo bài viết thành công", response));
+        return ResponseEntity.ok(ApiResponse.success("Blog post created successfully.", response));
     }
 
     @GetMapping("/{id}")
@@ -51,7 +51,7 @@ public class BlogAuthorController {
             @PathVariable Integer id,
             @Valid @RequestBody ContentUpdateRequest request) {
         AuthorContentResponse response = authorContentService.updateContent(user.getUsername(), id, request);
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật bài viết thành công", response));
+        return ResponseEntity.ok(ApiResponse.success("Blog post updated successfully.", response));
     }
 
     @DeleteMapping("/{id}")
@@ -59,7 +59,7 @@ public class BlogAuthorController {
             @AuthenticationPrincipal UserDetails user,
             @PathVariable Integer id) {
         authorContentService.deleteContent(user.getUsername(), id);
-        return ResponseEntity.ok(ApiResponse.success("Xóa bài viết thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("Blog post deleted successfully.", null));
     }
 
     @PostMapping("/{id}/submit")
@@ -68,8 +68,8 @@ public class BlogAuthorController {
             @PathVariable Integer id) {
         AuthorContentResponse response = authorContentService.submitContent(user.getUsername(), id);
         String message = "published".equalsIgnoreCase(response.getStatus())
-                ? "Bài viết đã được AI tự động kiểm duyệt và xuất bản thành công"
-                : "Nộp bài viết chờ duyệt thành công";
+                ? "Blog post auto-moderated and published successfully."
+                : "Blog post submitted for review successfully.";
         return ResponseEntity.ok(ApiResponse.success(message, response));
     }
 
@@ -78,6 +78,6 @@ public class BlogAuthorController {
             @AuthenticationPrincipal UserDetails user,
             @PathVariable Integer id) {
         AuthorContentResponse response = authorContentService.recallContent(user.getUsername(), id);
-        return ResponseEntity.ok(ApiResponse.success("Rút bài viết về bản nháp thành công", response));
+        return ResponseEntity.ok(ApiResponse.success("Blog post recalled to draft successfully.", response));
     }
 }

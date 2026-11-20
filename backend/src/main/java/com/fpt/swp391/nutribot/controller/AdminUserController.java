@@ -28,7 +28,7 @@ public class AdminUserController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         PagedResponse<AdminUserResponse> result = adminUserService.getAllUsers(keyword, status, page, size);
-        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách người dùng thành công", result));
+        return ResponseEntity.ok(ApiResponse.success("Users fetched successfully.", result));
     }
 
     @PutMapping("/{userId}/status")
@@ -38,7 +38,7 @@ public class AdminUserController {
             Authentication authentication) {
         String currentAdminUsername = authentication != null ? authentication.getName() : null;
         AdminUserResponse result = adminUserService.updateUserStatus(userId, request, currentAdminUsername);
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái người dùng thành công", result));
+        return ResponseEntity.ok(ApiResponse.success("User status updated successfully.", result));
     }
     @GetMapping("/{userId}/violations")
     public ResponseEntity<ApiResponse<PagedResponse<ModerationAuditResponse>>> getViolationHistory(

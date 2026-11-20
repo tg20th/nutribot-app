@@ -27,7 +27,7 @@ public class AdminCommentController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         PagedResponse<AdminCommentResponse> result = adminCommentService.getAllComments(keyword, status, page, size);
-        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách bình luận thành công", result));
+        return ResponseEntity.ok(ApiResponse.success("Comments fetched successfully.", result));
     }
 
     @DeleteMapping("/{commentId}")
@@ -36,7 +36,7 @@ public class AdminCommentController {
             Authentication authentication) {
         String adminUsername = authentication != null ? authentication.getName() : "ADMIN";
         adminCommentService.deleteComment(commentId, adminUsername);
-        return ResponseEntity.ok(ApiResponse.success("Xóa bình luận thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("Comment deleted successfully.", null));
     }
 
     @PutMapping("/{commentId}/status")
@@ -46,6 +46,6 @@ public class AdminCommentController {
             Authentication authentication) {
         String adminUsername = authentication != null ? authentication.getName() : "ADMIN";
         AdminCommentResponse result = adminCommentService.updateCommentStatus(commentId, request, adminUsername);
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái bình luận thành công", result));
+        return ResponseEntity.ok(ApiResponse.success("Comment status updated successfully.", result));
     }
 }

@@ -18,7 +18,7 @@ public class ChatHistoryController {
 
     @PostMapping("/sessions")
     public ResponseEntity<ApiResponse<ChatSessionResponse>> createSession(Authentication auth) {
-        return ResponseEntity.ok(ApiResponse.success("Đã tạo cuộc trò chuyện", chatHistoryService.createSession(auth.getName())));
+        return ResponseEntity.ok(ApiResponse.success("Conversation created successfully.", chatHistoryService.createSession(auth.getName())));
     }
 
     @GetMapping("/sessions")
@@ -29,7 +29,7 @@ public class ChatHistoryController {
     @DeleteMapping("/sessions/{sessionId}")
     public ResponseEntity<ApiResponse<Void>> deleteSession(Authentication auth, @PathVariable Integer sessionId) {
         chatHistoryService.deleteSession(auth.getName(), sessionId);
-        return ResponseEntity.ok(ApiResponse.success("Đã xóa cuộc trò chuyện", null));
+        return ResponseEntity.ok(ApiResponse.success("Conversation deleted successfully.", null));
     }
 
     @GetMapping("/sessions/{sessionId}/messages")
@@ -49,6 +49,6 @@ public class ChatHistoryController {
             Authentication auth,
             @PathVariable Integer sessionId,
             @Valid @RequestBody ChatMessageCreateRequest request) {
-        return ResponseEntity.ok(ApiResponse.success("Đã lưu tin nhắn", chatHistoryService.addMessage(auth.getName(), sessionId, request)));
+        return ResponseEntity.ok(ApiResponse.success("Message saved successfully.", chatHistoryService.addMessage(auth.getName(), sessionId, request)));
     }
 }

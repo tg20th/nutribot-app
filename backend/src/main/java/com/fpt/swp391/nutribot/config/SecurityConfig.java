@@ -165,14 +165,14 @@ public class SecurityConfig {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                             response.setContentType("application/json");
                             response.setCharacterEncoding("UTF-8");
-                            ApiResponse<Void> apiResponse = ApiResponse.error("Vui lòng đăng nhập để tiếp tục");
+                            ApiResponse<Void> apiResponse = ApiResponse.error("Please sign in to continue.");
                             response.getWriter().write(writeJsonResponse(apiResponse));
                         })
                         .accessDeniedHandler((request, response, exception) -> {
                             response.setStatus(HttpServletResponse.SC_FORBIDDEN);
                             response.setContentType("application/json");
                             response.setCharacterEncoding("UTF-8");
-                            ApiResponse<Void> apiResponse = ApiResponse.error("Bạn không có quyền truy cập tài nguyên này");
+                            ApiResponse<Void> apiResponse = ApiResponse.error("Access denied. You do not have permission to access this resource.");
                             response.getWriter().write(writeJsonResponse(apiResponse));
                         })
                 )
@@ -194,7 +194,7 @@ public class SecurityConfig {
                             response.setStatus(HttpServletResponse.SC_OK);
                             response.setContentType("application/json");
                             response.setCharacterEncoding("UTF-8");
-                            ApiResponse<Void> apiResponse = ApiResponse.success("Đăng xuất thành công", null);
+                            ApiResponse<Void> apiResponse = ApiResponse.success("Logged out successfully.", null);
                             response.getWriter().write(writeJsonResponse(apiResponse));
                         })
                 );

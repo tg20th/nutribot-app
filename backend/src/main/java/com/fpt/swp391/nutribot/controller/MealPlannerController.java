@@ -24,6 +24,6 @@ public class MealPlannerController {
             @AuthenticationPrincipal UserDetails user,
             @Valid @RequestBody MealPlanGenerateRequest request) {
         MealPlanGenerateResponse response = mealPlannerService.generate(user.getUsername(), request);
-        return ResponseEntity.ok(ApiResponse.success("AI đã tạo thực đơn thành công", response));
+        return ResponseEntity.ok(ApiResponse.success("Meal plan generated successfully.", response));
     }
 }

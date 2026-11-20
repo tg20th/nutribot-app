@@ -84,7 +84,7 @@ class VideoAuthorControllerTest {
 
         assertNotNull(response);
         assertEquals(200, response.getStatusCode().value());
-        assertEquals("Tạo video thành công", response.getBody().getMessage());
+        assertEquals("Video created successfully.", response.getBody().getMessage());
         assertEquals(200, response.getBody().getData().getContentId());
         verify(authorContentService).createContent("author_user", "VIDEO", request);
     }
@@ -132,7 +132,7 @@ class VideoAuthorControllerTest {
 
         assertNotNull(response);
         assertEquals(200, response.getStatusCode().value());
-        assertEquals("Cập nhật video thành công", response.getBody().getMessage());
+        assertEquals("Video updated successfully.", response.getBody().getMessage());
         verify(authorContentService).updateContent("author_user", 200, "VIDEO", request);
     }
 
@@ -146,7 +146,7 @@ class VideoAuthorControllerTest {
 
         assertNotNull(response);
         assertEquals(200, response.getStatusCode().value());
-        assertEquals("Xóa video thành công", response.getBody().getMessage());
+        assertEquals("Video deleted successfully.", response.getBody().getMessage());
         verify(authorContentService).deleteContent("author_user", 200, "VIDEO");
     }
 
@@ -167,7 +167,7 @@ class VideoAuthorControllerTest {
 
         assertNotNull(response);
         assertEquals(200, response.getStatusCode().value());
-        assertEquals("Nộp video chờ duyệt thành công", response.getBody().getMessage());
+        assertEquals("Video submitted for review successfully.", response.getBody().getMessage());
         assertEquals("under_review", response.getBody().getData().getStatus());
         verify(authorContentService).submitContent("author_user", 200, "VIDEO");
     }
@@ -189,7 +189,7 @@ class VideoAuthorControllerTest {
 
         assertNotNull(response);
         assertEquals(200, response.getStatusCode().value());
-        assertEquals("Rút video về bản nháp thành công", response.getBody().getMessage());
+        assertEquals("Video recalled to draft successfully.", response.getBody().getMessage());
         assertEquals("draft", response.getBody().getData().getStatus());
         verify(authorContentService).recallContent("author_user", 200, "VIDEO");
     }

@@ -78,7 +78,7 @@ class SecurityAuthorizationAndLogoutTest {
         response.setStatus(401);
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
-        ApiResponse<Void> apiResponse = ApiResponse.error("Vui lòng đăng nhập để tiếp tục");
+        ApiResponse<Void> apiResponse = ApiResponse.error("Please sign in to continue.");
         response.getWriter().write(objectMapper.writeValueAsString(apiResponse));
 
         assertEquals(401, response.getStatus());
@@ -86,7 +86,7 @@ class SecurityAuthorizationAndLogoutTest {
 
         JsonNode jsonNode = objectMapper.readTree(response.getContentAsString());
         assertFalse(jsonNode.get("success").asBoolean());
-        assertEquals("Vui lòng đăng nhập để tiếp tục", jsonNode.get("message").asText());
+        assertEquals("Please sign in to continue.", jsonNode.get("message").asText());
         assertTrue(jsonNode.get("data") == null || jsonNode.get("data").isNull());
         assertNotNull(jsonNode.get("timestamp"));
     }
@@ -101,7 +101,7 @@ class SecurityAuthorizationAndLogoutTest {
         response.setStatus(403);
         response.setContentType("application/json");
         response.setCharacterEncoding("UTF-8");
-        ApiResponse<Void> apiResponse = ApiResponse.error("Bạn không có quyền truy cập tài nguyên này");
+        ApiResponse<Void> apiResponse = ApiResponse.error("Access denied. You do not have permission to access this resource.");
         response.getWriter().write(objectMapper.writeValueAsString(apiResponse));
 
         assertEquals(403, response.getStatus());
@@ -109,7 +109,7 @@ class SecurityAuthorizationAndLogoutTest {
 
         JsonNode jsonNode = objectMapper.readTree(response.getContentAsString());
         assertFalse(jsonNode.get("success").asBoolean());
-        assertEquals("Bạn không có quyền truy cập tài nguyên này", jsonNode.get("message").asText());
+        assertEquals("Access denied. You do not have permission to access this resource.", jsonNode.get("message").asText());
         assertTrue(jsonNode.get("data") == null || jsonNode.get("data").isNull());
         assertNotNull(jsonNode.get("timestamp"));
     }

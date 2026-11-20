@@ -44,7 +44,7 @@ public class CategoryController {
         List<CategoryResponse> response = categoryRepository.findCategories(normalizedType, activeOnly).stream()
                 .map(this::toResponse)
                 .toList();
-        return ResponseEntity.ok(ApiResponse.success("Lấy danh mục thành công", response));
+        return ResponseEntity.ok(ApiResponse.success("Categories fetched successfully.", response));
     }
 
     @PostMapping

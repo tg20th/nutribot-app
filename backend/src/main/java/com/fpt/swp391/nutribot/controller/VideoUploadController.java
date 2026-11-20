@@ -27,15 +27,15 @@ public class VideoUploadController {
             @RequestParam("file") MultipartFile file) {
 
         if (userDetails == null) {
-            throw new BadRequestException("Vui lòng đăng nhập để tải video lên");
+            throw new BadRequestException("Please sign in to upload video.");
         }
 
         User user = userRepository.findByUsername(userDetails.getUsername())
-                .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
+                .orElseThrow(() -> new BadRequestException("User not found."));
 
         CloudinaryMediaService.MediaUploadResult result = cloudinaryMediaService.uploadVideo(file, user.getUserId());
         return ResponseEntity.ok(ApiResponse.success(
-                "Tải video lên thành công",
+                "Video uploaded successfully.",
                 Map.of(
                         "mediaUrl", result.secureUrl(),
                         "publicId", result.publicId()
