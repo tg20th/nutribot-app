@@ -695,6 +695,8 @@
 
 .chatbot-widget__youtube-row {
   display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
