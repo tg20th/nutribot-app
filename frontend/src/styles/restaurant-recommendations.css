@@ -47,50 +47,7 @@
   text-overflow: ellipsis;
 }
 
-.restaurant-recommendations-meta {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.restaurant-recommendation-locate-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  background: #f1f5ee;
-  border: 1px solid #d8e2d4;
-  border-radius: 999px;
-  color: #2e6047;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif);
-}
-
-.restaurant-recommendation-locate-btn:hover {
-  background: #e2ede0;
-  border-color: #2e6047;
-}
-
-.restaurant-recommendation-locate-btn.is-active {
-  background: #2e6047;
-  border-color: #2e6047;
-  color: #ffffff;
-}
-
-.restaurant-recommendation-locate-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 @media (max-width: 768px) {
-  .restaurant-recommendations-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 12px;
-  }
   .restaurant-recommendations-head h2 {
     white-space: normal;
   }

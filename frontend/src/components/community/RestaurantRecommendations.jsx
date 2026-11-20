@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { ArrowUpRight, MapPin, Navigation, Utensils } from 'lucide-react';
+import { ArrowUpRight, MapPin, Utensils } from 'lucide-react';
 import {
   searchNearbyRestaurants,
   CURATED_RESTAURANTS,
@@ -159,27 +159,6 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
     return () => controller.abort();
   }, [previewRestaurants, dishName, userCoords]);
 
-  const handleLocateClick = async () => {
-    if (isLocating) return;
-    setIsLocating(true);
-    try {
-      const pos = await getUserCurrentPosition();
-      if (pos && typeof pos.lat === 'number' && typeof pos.lng === 'number') {
-        const coords = { lat: pos.lat, lng: pos.lng };
-        setUserCoords(coords);
-        try {
-          sessionStorage.setItem('nutribot_user_coords', JSON.stringify(coords));
-        } catch {
-          // ignore
-        }
-      }
-    } catch (err) {
-      console.warn('Manual locate failed:', err?.message);
-    } finally {
-      setIsLocating(false);
-    }
-  };
-
   useGSAP(() => {
     if (
       status !== 'ready' ||
@@ -215,19 +194,6 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
           <h2 id="restaurant-recommendations-title">
             You can enjoy vegetarian dishes at these restaurants.
           </h2>
-        </div>
-        <div className="restaurant-recommendations-meta">
-          <button
-            type="button"
-            className={`restaurant-recommendation-locate-btn ${userCoords ? 'is-active' : ''}`}
-            onClick={handleLocateClick}
-            disabled={isLocating}
-            title={userCoords ? 'Using your GPS location for distances (Click to refresh)' : 'Locating your GPS position...'}
-            aria-label="Your Location"
-          >
-            <Navigation size={13} className={isLocating ? 'animate-spin' : ''} aria-hidden="true" />
-            <span>{isLocating ? 'Locating...' : 'Your Location'}</span>
-          </button>
         </div>
       </header>
 

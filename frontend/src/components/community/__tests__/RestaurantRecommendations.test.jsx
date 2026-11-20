@@ -75,10 +75,14 @@ describe('RestaurantRecommendations component', () => {
     expect(screen.getByText('Nhà Hàng Chay An Lạc')).toBeInTheDocument();
   });
 
-  it('renders Your Location button and uses GPS coordinates when clicked', async () => {
+  it('automatically fetches geolocation on mount and calculates distance from user coords', async () => {
+    vi.stubGlobal('navigator', {
+      geolocation: { getCurrentPosition: vi.fn() }
+    });
+
     const mockPos = { lat: 10.7500, lng: 106.6500, accuracy: 15 };
     vi.spyOn(restaurantApi, 'getUserCurrentPosition').mockResolvedValue(mockPos);
-    vi.spyOn(restaurantApi, 'searchNearbyRestaurants').mockResolvedValue([
+    const searchSpy = vi.spyOn(restaurantApi, 'searchNearbyRestaurants').mockResolvedValue([
       {
         id: 'r-1',
         name: 'Quán Chay Diệu Hạnh',
@@ -91,13 +95,14 @@ describe('RestaurantRecommendations component', () => {
 
     render(<RestaurantRecommendations />);
 
-    const locateBtn = screen.getByRole('button', { name: /Your Location/i });
-    expect(locateBtn).toBeInTheDocument();
-
-    fireEvent.click(locateBtn);
-
     await waitFor(() => {
       expect(restaurantApi.getUserCurrentPosition).toHaveBeenCalled();
+      expect(searchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lat: 10.7500,
+          lng: 106.6500
+        })
+      );
       expect(screen.getByText('Quán Chay Diệu Hạnh')).toBeInTheDocument();
       expect(screen.getByText('3 km away')).toBeInTheDocument();
     });
@@ -130,38 +135,6 @@ describe('RestaurantRecommendations component', () => {
       );
       expect(screen.getByText('Nhà Hàng Chay Thanh Lương')).toBeInTheDocument();
       expect(screen.getAllByText('1.8 km away').length).toBeGreaterThan(0);
-    });
-  });
-
-  it('automatically fetches geolocation on mount without user click', async () => {
-    vi.stubGlobal('navigator', {
-      geolocation: { getCurrentPosition: vi.fn() }
-    });
-
-    const mockPos = { lat: 10.7300, lng: 106.7100, accuracy: 10 };
-    vi.spyOn(restaurantApi, 'getUserCurrentPosition').mockResolvedValue(mockPos);
-    const searchSpy = vi.spyOn(restaurantApi, 'searchNearbyRestaurants').mockResolvedValue([
-      {
-        id: 'r-3',
-        name: 'Ẩm Thực Chay Tuệ',
-        address: '76 Mai Thị Lựu, Đa Kao',
-        distanceKm: 2.3,
-        category: 'Ẩm thực Chay',
-        tags: ['Chay']
-      }
-    ]);
-
-    render(<RestaurantRecommendations />);
-
-    await waitFor(() => {
-      expect(restaurantApi.getUserCurrentPosition).toHaveBeenCalled();
-      expect(searchSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          lat: 10.7300,
-          lng: 106.7100
-        })
-      );
-      expect(screen.getByText('Ẩm Thực Chay Tuệ')).toBeInTheDocument();
     });
   });
 });
