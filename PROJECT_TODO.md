@@ -190,6 +190,7 @@
 - [ ] **#50 [FE] Giao diện Giới hạn Khách vãng lai**
   - *Mô tả:* Badge hiển thị số câu hỏi dùng thử còn lại ("Còn 2/3 câu hỏi"), modal thông báo hết lượt kèm nút Đăng ký/Đăng nhập.
 - [ ] **#41 [FE] Màn hình Quản lý Thực đơn Tuần**
+  - [x] Sửa cảnh báo vượt mục tiêu dinh dưỡng khi thêm nhiều món cùng lúc; chỉ lưu sau khi xác nhận và tránh cộng trùng món khi kiểm tra.
   - *Mô tả:* Bảng lịch 7 ngày trong tuần, các slot bữa sáng, trưa, tối, nút thêm món ăn và xóa món ăn trực tiếp trên lịch.
   - *File cần tạo:* `frontend/src/pages/WeeklyMenuPage.jsx`.
 

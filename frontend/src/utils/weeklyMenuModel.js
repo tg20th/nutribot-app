@@ -192,10 +192,12 @@ export const checkNutritionOverflow = (menu, dayIndex, newMeal, oldMealKey = nul
   const day = menu.days[dayIndex];
   if (!day) return null;
 
-  // Build meal list after change: remove old meal (REPLACE) then add new meal
-  const tempMeals = oldMealKey
-    ? [...(day.meals ?? []).filter((m) => m.key !== oldMealKey), newMeal]
-    : [...(day.meals ?? []), newMeal];
+  // Include each proposed meal once, excluding the old meal when replacing.
+  const newMeals = Array.isArray(newMeal) ? newMeal : [newMeal];
+  const tempMeals = [
+    ...(day.meals ?? []).filter((meal) => !oldMealKey || meal.key !== oldMealKey),
+    ...newMeals
+  ];
   const totals = tempMeals.reduce((sum, meal) => {
     const m = mealTotals(meal);
     return { calories: sum.calories + m.calories, protein: sum.protein + m.protein, carbs: sum.carbs + m.carbs, fats: sum.fats + m.fats };

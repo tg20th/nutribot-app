@@ -1,6 +1,6 @@
 import { X } from 'lucide-react';
 
-export default function NutritionOverflowDialog({ overflow, isAddMode, onKeep, onCancel }) {
+export default function NutritionOverflowDialog({ overflow, isAddMode, dishCount = 1, onKeep, onCancel }) {
   if (!overflow) return null;
   const { details } = overflow;
   const metrics = [
@@ -18,7 +18,7 @@ export default function NutritionOverflowDialog({ overflow, isAddMode, onKeep, o
           <button type="button" className="meal-dialog-close" onClick={onCancel} aria-label="Close"><X size={18}/></button>
         </header>
         <div className="overflow-body">
-          <p id="overflow-description">This dish goes over your daily target.</p>
+          <p id="overflow-description">{dishCount > 1 ? 'These dishes go over your daily target.' : 'This dish goes over your daily target.'}</p>
           <div className="overflow-metrics" aria-label="Nutrition target comparison">
             {metrics.map(({ label, value, unit }) => (
               <div className={`overflow-row${value ? ' is-exceeded' : ''}`} key={label}>
