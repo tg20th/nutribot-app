@@ -1,5 +1,7 @@
 package com.fpt.swp391.nutribot.service;
 
+import com.fpt.swp391.nutribot.dto.ContentRecipeDto;
+
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -39,6 +41,38 @@ public final class ContentTextNormalizer {
             return "";
         }
         return MULTI_SPACE_PATTERN.matcher(title.trim()).replaceAll(" ");
+    }
+
+    /**
+     * Gộp văn bản bài viết với tên nguyên liệu và hướng dẫn các bước nấu ăn (nếu có)
+     * thành một chuỗi tổng thể phục vụ băm SHA-256 và đối soát tương đồng toàn diện (NB-97).
+     *
+     * @param body nội dung bài viết
+     * @param recipe cấu trúc công thức đi kèm
+     * @return chuỗi văn bản gộp đã chuẩn bị sẵn sàng
+     */
+    public static String buildSearchableText(String body, ContentRecipeDto recipe) {
+        StringBuilder sb = new StringBuilder();
+        if (body != null && !body.isBlank()) {
+            sb.append(body.trim());
+        }
+        if (recipe != null) {
+            if (recipe.getIngredients() != null && !recipe.getIngredients().isEmpty()) {
+                for (var ingredient : recipe.getIngredients()) {
+                    if (ingredient != null && ingredient.getName() != null && !ingredient.getName().isBlank()) {
+                        sb.append(" ").append(ingredient.getName().trim());
+                    }
+                }
+            }
+            if (recipe.getSteps() != null && !recipe.getSteps().isEmpty()) {
+                for (var step : recipe.getSteps()) {
+                    if (step != null && step.getInstruction() != null && !step.getInstruction().isBlank()) {
+                        sb.append(" ").append(step.getInstruction().trim());
+                    }
+                }
+            }
+        }
+        return sb.toString().trim();
     }
 
     /**
