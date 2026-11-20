@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import RestaurantRecommendations from '../RestaurantRecommendations';
+import * as restaurantApi from '../../../services/restaurantApi';
 
 describe('RestaurantRecommendations component', () => {
   const sampleRestaurants = [
@@ -14,10 +15,12 @@ describe('RestaurantRecommendations component', () => {
 
   beforeEach(() => {
     vi.stubGlobal('open', vi.fn());
+    sessionStorage.clear();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    sessionStorage.clear();
   });
 
   it('renders clean cards with NO images, NO stars, and NO emojis', async () => {
@@ -70,5 +73,68 @@ describe('RestaurantRecommendations component', () => {
     expect(screen.queryByText('GreenSQL - Học Lập Trình Online')).not.toBeInTheDocument();
     expect(screen.queryByText('Phở Bò Tái Nạm')).not.toBeInTheDocument();
     expect(screen.getByText('Nhà Hàng Chay An Lạc')).toBeInTheDocument();
+  });
+
+  it('automatically fetches geolocation on mount and calculates distance from user coords', async () => {
+    vi.stubGlobal('navigator', {
+      geolocation: { getCurrentPosition: vi.fn() }
+    });
+
+    const mockPos = { lat: 10.7500, lng: 106.6500, accuracy: 15 };
+    vi.spyOn(restaurantApi, 'getUserCurrentPosition').mockResolvedValue(mockPos);
+    const searchSpy = vi.spyOn(restaurantApi, 'searchNearbyRestaurants').mockResolvedValue([
+      {
+        id: 'r-1',
+        name: 'Quán Chay Diệu Hạnh',
+        address: '20 Nguyễn Thiện Thành, An Khánh',
+        distanceKm: 3.0,
+        category: 'Cơm Chay',
+        tags: ['Chay', 'Healthy']
+      }
+    ]);
+
+    render(<RestaurantRecommendations />);
+
+    await waitFor(() => {
+      expect(restaurantApi.getUserCurrentPosition).toHaveBeenCalled();
+      expect(searchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lat: 10.7500,
+          lng: 106.6500
+        })
+      );
+      expect(screen.getByText('Quán Chay Diệu Hạnh')).toBeInTheDocument();
+      expect(screen.getByText('3 km away')).toBeInTheDocument();
+    });
+
+    expect(sessionStorage.getItem('nutribot_user_coords')).toContain('10.75');
+  });
+
+  it('automatically reads cached coordinates from sessionStorage on mount', async () => {
+    sessionStorage.setItem('nutribot_user_coords', JSON.stringify({ lat: 10.7900, lng: 106.6800 }));
+
+    const searchSpy = vi.spyOn(restaurantApi, 'searchNearbyRestaurants').mockResolvedValue([
+      {
+        id: 'r-2',
+        name: 'Nhà Hàng Chay Thanh Lương',
+        address: '491 CMT8, Q10',
+        distanceKm: 1.8,
+        category: 'Buffet Chay',
+        tags: ['Chay', 'Healthy']
+      }
+    ]);
+
+    render(<RestaurantRecommendations />);
+
+    await waitFor(() => {
+      expect(searchSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lat: 10.7900,
+          lng: 106.6800
+        })
+      );
+      expect(screen.getByText('Nhà Hàng Chay Thanh Lương')).toBeInTheDocument();
+      expect(screen.getAllByText('1.8 km away').length).toBeGreaterThan(0);
+    });
   });
 });

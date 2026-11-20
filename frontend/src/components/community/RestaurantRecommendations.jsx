@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
 import { ArrowUpRight, MapPin, Utensils } from 'lucide-react';
-import { searchNearbyRestaurants, CURATED_RESTAURANTS, normalizeRestaurant } from '../../services/restaurantApi';
+import {
+  searchNearbyRestaurants,
+  CURATED_RESTAURANTS,
+  normalizeRestaurant,
+  getUserCurrentPosition,
+  calculateDistance
+} from '../../services/restaurantApi';
 import '../../styles/restaurant-recommendations.css';
 
 const filterValidRestaurants = (list) => {
@@ -37,6 +43,54 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
   const section = useRef(null);
   const [restaurants, setRestaurants] = useState([]);
   const [status, setStatus] = useState('loading');
+  const [userCoords, setUserCoords] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('nutribot_user_coords');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+  const [isLocating, setIsLocating] = useState(false);
+
+  // Auto-fetch user position immediately on mount without requiring click
+  useEffect(() => {
+    if (previewRestaurants) return;
+
+    let isMounted = true;
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      setIsLocating(true);
+      getUserCurrentPosition()
+        .then((pos) => {
+          if (!isMounted) return;
+          if (pos && typeof pos.lat === 'number' && typeof pos.lng === 'number') {
+            const coords = { lat: pos.lat, lng: pos.lng };
+            setUserCoords(coords);
+            try {
+              sessionStorage.setItem('nutribot_user_coords', JSON.stringify(coords));
+            } catch {
+              // ignore
+            }
+          }
+        })
+        .catch((err) => {
+          console.debug('Auto-geolocation not available or denied:', err?.message);
+        })
+        .finally(() => {
+          if (isMounted) setIsLocating(false);
+        });
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [previewRestaurants]);
 
   useEffect(() => {
     if (previewRestaurants) {
@@ -50,15 +104,28 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
     // Strictly search for verified vegetarian establishments only
     const keywords = ['nhà hàng chay', 'quán chay', 'cơm chay', 'ẩm thực chay', 'buffet chay', 'vegan'];
 
-    searchNearbyRestaurants({
+    const searchParams = {
       keywords,
       radiusKm: 25,
       signal: controller.signal
-    })
+    };
+
+    if (userCoords) {
+      searchParams.lat = userCoords.lat;
+      searchParams.lng = userCoords.lng;
+    }
+
+    searchNearbyRestaurants(searchParams)
       .then((items) => {
         if (!controller.signal.aborted) {
           const validFetched = filterValidRestaurants(items || []);
-          const curatedFallback = CURATED_RESTAURANTS.map(normalizeRestaurant);
+          const curatedFallback = CURATED_RESTAURANTS.map((item) => {
+            const norm = normalizeRestaurant(item);
+            if (userCoords) {
+              norm.distanceKm = calculateDistance(userCoords.lat, userCoords.lng, item.lat, item.lng);
+            }
+            return norm;
+          });
 
           const seenNames = new Set(validFetched.map((r) => r.name?.toLowerCase().trim()));
           const combined = [...validFetched];
@@ -77,13 +144,20 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
       })
       .catch((err) => {
         if (!controller.signal.aborted) {
-          setRestaurants(CURATED_RESTAURANTS.map(normalizeRestaurant).slice(0, 6));
+          const curatedFallback = CURATED_RESTAURANTS.map((item) => {
+            const norm = normalizeRestaurant(item);
+            if (userCoords) {
+              norm.distanceKm = calculateDistance(userCoords.lat, userCoords.lng, item.lat, item.lng);
+            }
+            return norm;
+          });
+          setRestaurants(curatedFallback.slice(0, 6));
           setStatus('ready');
         }
       });
 
     return () => controller.abort();
-  }, [previewRestaurants, dishName]);
+  }, [previewRestaurants, dishName, userCoords]);
 
   useGSAP(() => {
     if (
@@ -113,7 +187,7 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
   return (
     <section className="restaurant-recommendations" ref={section} aria-labelledby="restaurant-recommendations-title">
       <header className="restaurant-recommendations-head">
-        <div>
+        <div className="restaurant-recommendations-title-wrap">
           <span>
             <Utensils size={13} aria-hidden="true" /> Where to try it
           </span>
@@ -121,7 +195,6 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
             You can enjoy vegetarian dishes at these restaurants.
           </h2>
         </div>
-        <p>Curated dining options serving nourishing plant-based dishes.</p>
       </header>
 
       {status === 'loading' && (
