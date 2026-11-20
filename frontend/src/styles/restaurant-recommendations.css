@@ -39,13 +39,62 @@
   color: #1e281b;
 }
 
-.restaurant-recommendations-head > p {
+.restaurant-recommendations-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.restaurant-recommendations-head p {
   max-width: 280px;
   margin: 0;
   color: var(--text-muted, #66756b);
   font-size: 12px;
   line-height: 1.6;
   font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif);
+  text-align: right;
+}
+
+.restaurant-recommendation-locate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: #f1f5ee;
+  border: 1px solid #d8e2d4;
+  border-radius: 999px;
+  color: #2e6047;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif);
+}
+
+.restaurant-recommendation-locate-btn:hover {
+  background: #e2ede0;
+  border-color: #2e6047;
+}
+
+.restaurant-recommendation-locate-btn.is-active {
+  background: #2e6047;
+  border-color: #2e6047;
+  color: #ffffff;
+}
+
+.restaurant-recommendation-locate-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .restaurant-recommendations-meta {
+    align-items: flex-start;
+  }
+  .restaurant-recommendations-head p {
+    text-align: left;
+  }
 }
 
 /* Grid Layout: 3 columns on desktop, 2 on tablet, 1 on mobile */

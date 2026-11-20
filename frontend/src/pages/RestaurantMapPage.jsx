@@ -222,6 +222,11 @@ export default function RestaurantMapPage() {
 
       setUserLocation({ lat: pos.lat, lng: pos.lng });
       setCenter({ lat: pos.lat, lng: pos.lng, city: 'Vị trí của bạn' });
+      try {
+        sessionStorage.setItem('nutribot_user_coords', JSON.stringify({ lat: pos.lat, lng: pos.lng }));
+      } catch {
+        // ignore storage errors
+      }
 
       if (mapRef.current) {
         mapRef.current.flyTo({

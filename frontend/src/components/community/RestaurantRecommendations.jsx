@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGSAP } from '@gsap/react';
 import gsap from 'gsap';
-import { ArrowUpRight, MapPin, Utensils } from 'lucide-react';
-import { searchNearbyRestaurants, CURATED_RESTAURANTS, normalizeRestaurant } from '../../services/restaurantApi';
+import { ArrowUpRight, MapPin, Navigation, Utensils } from 'lucide-react';
+import {
+  searchNearbyRestaurants,
+  CURATED_RESTAURANTS,
+  normalizeRestaurant,
+  getUserCurrentPosition,
+  calculateDistance
+} from '../../services/restaurantApi';
 import '../../styles/restaurant-recommendations.css';
 
 const filterValidRestaurants = (list) => {
@@ -37,6 +43,23 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
   const section = useRef(null);
   const [restaurants, setRestaurants] = useState([]);
   const [status, setStatus] = useState('loading');
+  const [userCoords, setUserCoords] = useState(null);
+  const [isLocating, setIsLocating] = useState(false);
+
+  // Read initial cached coords from sessionStorage if available
+  useEffect(() => {
+    try {
+      const cached = sessionStorage.getItem('nutribot_user_coords');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+          setUserCoords(parsed);
+        }
+      }
+    } catch {
+      // ignore storage access errors
+    }
+  }, []);
 
   useEffect(() => {
     if (previewRestaurants) {
@@ -50,40 +73,136 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
     // Strictly search for verified vegetarian establishments only
     const keywords = ['nhà hàng chay', 'quán chay', 'cơm chay', 'ẩm thực chay', 'buffet chay', 'vegan'];
 
-    searchNearbyRestaurants({
-      keywords,
-      radiusKm: 25,
-      signal: controller.signal
-    })
-      .then((items) => {
-        if (!controller.signal.aborted) {
-          const validFetched = filterValidRestaurants(items || []);
-          const curatedFallback = CURATED_RESTAURANTS.map(normalizeRestaurant);
+    const loadData = async () => {
+      let activeCoords = userCoords;
 
-          const seenNames = new Set(validFetched.map((r) => r.name?.toLowerCase().trim()));
-          const combined = [...validFetched];
-          for (const curated of curatedFallback) {
-            const key = curated.name?.toLowerCase().trim();
-            if (!seenNames.has(key)) {
-              seenNames.add(key);
-              combined.push(curated);
+      // If userCoords is not yet set in state, check permissions and sessionStorage
+      if (!activeCoords) {
+        try {
+          const cached = sessionStorage.getItem('nutribot_user_coords');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+              activeCoords = parsed;
+              setUserCoords(parsed);
             }
-            if (combined.length >= 6) break;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      // If still no coords, check if browser already granted geolocation (e.g. Always allow)
+      if (!activeCoords && typeof navigator !== 'undefined' && navigator.geolocation) {
+        try {
+          let hasPermission = false;
+          if (navigator.permissions && navigator.permissions.query) {
+            try {
+              const perm = await navigator.permissions.query({ name: 'geolocation' });
+              if (perm.state === 'granted') {
+                hasPermission = true;
+              }
+            } catch {
+              // permissions.query may fail in some environments
+            }
           }
 
-          setRestaurants(combined.slice(0, 6));
-          setStatus('ready');
+          if (hasPermission) {
+            const pos = await getUserCurrentPosition();
+            if (pos && typeof pos.lat === 'number' && typeof pos.lng === 'number') {
+              activeCoords = { lat: pos.lat, lng: pos.lng };
+              setUserCoords(activeCoords);
+              try {
+                sessionStorage.setItem('nutribot_user_coords', JSON.stringify(activeCoords));
+              } catch {
+                // ignore
+              }
+            }
+          }
+        } catch {
+          // Geolocation failed or timed out, gracefully continue with default center
         }
-      })
-      .catch((err) => {
+      }
+
+      if (controller.signal.aborted) return;
+
+      const searchParams = {
+        keywords,
+        radiusKm: 25,
+        signal: controller.signal
+      };
+
+      if (activeCoords) {
+        searchParams.lat = activeCoords.lat;
+        searchParams.lng = activeCoords.lng;
+      }
+
+      try {
+        const items = await searchNearbyRestaurants(searchParams);
+        if (controller.signal.aborted) return;
+
+        const validFetched = filterValidRestaurants(items || []);
+        const curatedFallback = CURATED_RESTAURANTS.map((item) => {
+          const norm = normalizeRestaurant(item);
+          if (activeCoords) {
+            norm.distanceKm = calculateDistance(activeCoords.lat, activeCoords.lng, item.lat, item.lng);
+          }
+          return norm;
+        });
+
+        const seenNames = new Set(validFetched.map((r) => r.name?.toLowerCase().trim()));
+        const combined = [...validFetched];
+        for (const curated of curatedFallback) {
+          const key = curated.name?.toLowerCase().trim();
+          if (!seenNames.has(key)) {
+            seenNames.add(key);
+            combined.push(curated);
+          }
+          if (combined.length >= 6) break;
+        }
+
+        setRestaurants(combined.slice(0, 6));
+        setStatus('ready');
+      } catch (err) {
         if (!controller.signal.aborted) {
-          setRestaurants(CURATED_RESTAURANTS.map(normalizeRestaurant).slice(0, 6));
+          const curatedFallback = CURATED_RESTAURANTS.map((item) => {
+            const norm = normalizeRestaurant(item);
+            if (activeCoords) {
+              norm.distanceKm = calculateDistance(activeCoords.lat, activeCoords.lng, item.lat, item.lng);
+            }
+            return norm;
+          });
+          setRestaurants(curatedFallback.slice(0, 6));
           setStatus('ready');
         }
-      });
+      }
+    };
+
+    loadData();
 
     return () => controller.abort();
-  }, [previewRestaurants, dishName]);
+  }, [previewRestaurants, dishName, userCoords]);
+
+  const handleLocateClick = async () => {
+    if (isLocating) return;
+    setIsLocating(true);
+    try {
+      const pos = await getUserCurrentPosition();
+      if (pos && typeof pos.lat === 'number' && typeof pos.lng === 'number') {
+        const coords = { lat: pos.lat, lng: pos.lng };
+        setUserCoords(coords);
+        try {
+          sessionStorage.setItem('nutribot_user_coords', JSON.stringify(coords));
+        } catch {
+          // ignore
+        }
+      }
+    } catch (err) {
+      console.warn('Manual locate failed:', err?.message);
+    } finally {
+      setIsLocating(false);
+    }
+  };
 
   useGSAP(() => {
     if (
@@ -121,7 +240,20 @@ export default function RestaurantRecommendations({ dishName, previewRestaurants
             You can enjoy vegetarian dishes at these restaurants.
           </h2>
         </div>
-        <p>Curated dining options serving nourishing plant-based dishes.</p>
+        <div className="restaurant-recommendations-meta">
+          <p>Curated dining options serving nourishing plant-based dishes.</p>
+          <button
+            type="button"
+            className={`restaurant-recommendation-locate-btn ${userCoords ? 'is-active' : ''}`}
+            onClick={handleLocateClick}
+            disabled={isLocating}
+            title={userCoords ? 'Using your GPS location for distances' : 'Click to update distances using your GPS location'}
+            aria-label={userCoords ? 'Using your GPS location' : 'Locate my position'}
+          >
+            <Navigation size={13} className={isLocating ? 'animate-spin' : ''} aria-hidden="true" />
+            <span>{isLocating ? 'Locating...' : (userCoords ? 'Your Location' : 'Locate Me')}</span>
+          </button>
+        </div>
       </header>
 
       {status === 'loading' && (
