@@ -25,21 +25,28 @@ public class ContentSimilarityDetector {
     public static final String FLAG_CLEAN = "CLEAN";
 
     private final ContentRepository contentRepository;
+    private final ContentRecipePersistenceService recipePersistenceService;
     private final double similarityThreshold;
     private final int matchingBlockThreshold;
 
     @Autowired
     public ContentSimilarityDetector(
             ContentRepository contentRepository,
+            @Autowired(required = false) ContentRecipePersistenceService recipePersistenceService,
             @Value("${app.content.duplicate-similarity-threshold:0.80}") double similarityThreshold,
             @Value("${app.content.duplicate-block-threshold:25}") int matchingBlockThreshold) {
         this.contentRepository = contentRepository;
+        this.recipePersistenceService = recipePersistenceService;
         this.similarityThreshold = similarityThreshold;
         this.matchingBlockThreshold = matchingBlockThreshold;
     }
 
     public ContentSimilarityDetector(ContentRepository contentRepository, double similarityThreshold) {
-        this(contentRepository, similarityThreshold, 25);
+        this(contentRepository, null, similarityThreshold, 25);
+    }
+
+    public ContentSimilarityDetector(ContentRepository contentRepository, ContentRecipePersistenceService recipePersistenceService, double similarityThreshold) {
+        this(contentRepository, recipePersistenceService, similarityThreshold, 25);
     }
 
     @Getter
@@ -68,7 +75,8 @@ public class ContentSimilarityDetector {
      * @return kết quả đối soát độ tương đồng
      */
     public SimilarityResult detect(Content targetContent) {
-        if (targetContent == null || targetContent.getBody() == null || targetContent.getBody().isBlank()) {
+        String targetText = resolveFullSearchableText(targetContent);
+        if (targetText.isBlank()) {
             return SimilarityResult.clean();
         }
 
@@ -85,12 +93,13 @@ public class ContentSimilarityDetector {
         Content bestMatch = null;
 
         for (Content candidate : publishedContents) {
-            if (candidate.getBody() == null || candidate.getBody().isBlank()) {
+            String candidateText = resolveFullSearchableText(candidate);
+            if (candidateText.isBlank()) {
                 continue;
             }
 
-            double score = calculateCompositeSimilarity(targetContent.getBody(), candidate.getBody());
-            int matchingBlock = findLongestContiguousMatchingWords(targetContent.getBody(), candidate.getBody());
+            double score = calculateCompositeSimilarity(targetText, candidateText);
+            int matchingBlock = findLongestContiguousMatchingWords(targetText, candidateText);
 
             boolean isSuspectedByBlock = matchingBlockThreshold > 0 && matchingBlock >= matchingBlockThreshold;
             boolean isSuspectedByScore = score >= similarityThreshold;
@@ -127,6 +136,30 @@ public class ContentSimilarityDetector {
         }
 
         return SimilarityResult.clean();
+    }
+
+    /**
+     * Bóc tách toàn bộ chuỗi văn bản của bài viết, tự động gộp cả nguyên liệu và các bước
+     * nấu ăn nếu bài viết có cấu trúc Recipe đi kèm (NB-97).
+     *
+     * @param content bài viết cần xử lý
+     * @return chuỗi văn bản gộp đã chuẩn hóa
+     */
+    public String resolveFullSearchableText(Content content) {
+        if (content == null) {
+            return "";
+        }
+        String body = content.getBody() != null ? content.getBody() : "";
+        if (recipePersistenceService == null || content.getContentId() == null) {
+            return body;
+        }
+        try {
+            var recipe = recipePersistenceService.read(content.getContentId());
+            return ContentTextNormalizer.buildSearchableText(body, recipe);
+        } catch (Exception e) {
+            log.debug("Không thể đọc công thức cho contentId {}: {}", content.getContentId(), e.getMessage());
+            return body;
+        }
     }
 
     /**

@@ -866,6 +866,39 @@ class AuthorContentServiceTest {
     }
 
     @Test
+    @DisplayName("NB-97.7: Tạo bài viết có Recipe trùng lặp 100% mã hash -> ném ConflictException")
+    void createContent_duplicateRecipeContentHash_throwsConflictException() {
+        ContentRecipeDto recipeDto = ContentRecipeDto.builder()
+                .ingredients(List.of(
+                        ContentRecipeDto.Ingredient.builder().name("Nấm đùi gà").build()
+                ))
+                .steps(List.of(
+                        ContentRecipeDto.Step.builder().instruction("Kho nấm đùi gà với nước tương").build()
+                ))
+                .build();
+
+        String body = "<p>Mô tả ngắn</p>";
+        String fullSearchable = ContentTextNormalizer.buildSearchableText(body, recipeDto);
+        String hash = ContentTextNormalizer.computeContentHash(fullSearchable);
+
+        ContentCreateRequest request = ContentCreateRequest.builder()
+                .title("Tiêu Đề Khác Biệt")
+                .body(body)
+                .recipe(recipeDto)
+                .categoryId(10)
+                .build();
+
+        when(userRepository.findByUsername("truong_author")).thenReturn(Optional.of(authorUser));
+        when(categoryRepository.findById(10)).thenReturn(Optional.of(validCategory));
+        when(contentRepository.existsByContentTypeAndTitleIgnoreCase(eq("BLOG"), anyString())).thenReturn(false);
+        when(contentRepository.findFirstByContentTypeAndContentHash("BLOG", hash))
+                .thenReturn(Optional.of(sampleContent));
+
+        assertThrows(ConflictException.class, () ->
+                authorContentService.createContent("truong_author", "BLOG", request));
+    }
+
+    @Test
     @DisplayName("Video: Tạo video có kèm recipe/ingredients -> Lưu vào ContentRecipePersistenceService")
     void createContent_videoWithRecipe_persistsRecipe() {
         ContentRecipeDto recipeDto = ContentRecipeDto.builder()

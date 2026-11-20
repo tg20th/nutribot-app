@@ -138,11 +138,12 @@ public class AuthorContentService {
             throw new ConflictException("This title already exists. Please choose a different title.");
         }
 
-        // NB-97: 2. Tính mã băm nội dung và kiểm tra sao chép nguyên văn 100%
+        // NB-97: 2. Tính mã băm nội dung (bao gồm cả công thức nếu có) và kiểm tra sao chép nguyên văn 100%
         String normalizedBody = normalizeBody(request.getBody());
-        String contentHash = ContentTextNormalizer.computeContentHash(normalizedBody);
+        String fullSearchableText = ContentTextNormalizer.buildSearchableText(normalizedBody, request.getRecipe());
+        String contentHash = ContentTextNormalizer.computeContentHash(fullSearchableText);
         if (!contentHash.isBlank() && contentRepository.findFirstByContentTypeAndContentHash(contentType, contentHash).isPresent()) {
-            throw new ConflictException("This content is a duplicate of an existing post.");
+            throw new ConflictException("This content or recipe is an exact duplicate of an existing post.");
         }
 
         boolean consentGranted = Boolean.TRUE.equals(request.getRecipeConsent());
@@ -249,18 +250,23 @@ public class AuthorContentService {
                 content.setSlug(generateSlug(normalizedTitle));
             }
         }
-        if (request.getBody() != null) {
-            String normalizedBody = normalizeBody(request.getBody());
-            String newHash = ContentTextNormalizer.computeContentHash(normalizedBody);
+        if (request.getBody() != null || request.getRecipe() != null) {
+            String normalizedBody = request.getBody() != null ? normalizeBody(request.getBody()) : content.getBody();
+            ContentRecipeDto recipeToUse = request.getRecipe() != null ? request.getRecipe()
+                    : (contentRecipePersistenceService != null ? contentRecipePersistenceService.read(contentId) : null);
+            String fullSearchableText = ContentTextNormalizer.buildSearchableText(normalizedBody, recipeToUse);
+            String newHash = ContentTextNormalizer.computeContentHash(fullSearchableText);
             String currentHash = content.getContentHash();
-            // NB-97: Chỉ kiểm tra trùng băm nội dung nếu nội dung bài viết thực sự thay đổi
+            // NB-97: Chỉ kiểm tra trùng băm nội dung nếu nội dung hoặc công thức bài viết thực sự thay đổi
             if (!newHash.isBlank() && !newHash.equals(currentHash)) {
                 if (contentRepository.findFirstByContentTypeAndContentHashAndContentIdNot(
                         content.getContentType(), newHash, contentId).isPresent()) {
-                    throw new ConflictException("This content is a duplicate of an existing post.");
+                    throw new ConflictException("This content or recipe is an exact duplicate of an existing post.");
                 }
             }
-            content.setBody(normalizedBody);
+            if (request.getBody() != null) {
+                content.setBody(normalizedBody);
+            }
             content.setContentHash(newHash.isBlank() ? null : newHash);
         }
         if (request.getMediaUrl() != null) {

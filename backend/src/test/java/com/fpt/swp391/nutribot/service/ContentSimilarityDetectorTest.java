@@ -1,5 +1,6 @@
 package com.fpt.swp391.nutribot.service;
 
+import com.fpt.swp391.nutribot.dto.ContentRecipeDto;
 import com.fpt.swp391.nutribot.entity.Content;
 import com.fpt.swp391.nutribot.repository.ContentRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +23,9 @@ class ContentSimilarityDetectorTest {
 
     @Mock
     private ContentRepository contentRepository;
+
+    @Mock
+    private ContentRecipePersistenceService recipePersistenceService;
 
     private ContentSimilarityDetector detector;
 
@@ -152,5 +156,74 @@ class ContentSimilarityDetectorTest {
 
         int match = ContentSimilarityDetector.findLongestContiguousMatchingWords(textA, textB);
         assertThat(match).isEqualTo(5); // "một hai ba bốn năm"
+    }
+
+    @Test
+    @DisplayName("Chuẩn hóa văn bản gộp cả nguyên liệu và các bước công thức nấu ăn")
+    void contentTextNormalizer_buildSearchableText_includesRecipe() {
+        ContentRecipeDto recipe = ContentRecipeDto.builder()
+                .ingredients(List.of(
+                        ContentRecipeDto.Ingredient.builder().name("Đậu hũ chiên").build(),
+                        ContentRecipeDto.Ingredient.builder().name("Cà chua chín").build()
+                ))
+                .steps(List.of(
+                        ContentRecipeDto.Step.builder().instruction("Đậu hũ cắt miếng vừa ăn chiên vàng đều").build(),
+                        ContentRecipeDto.Step.builder().instruction("Xào cà chua làm sốt rồi cho đậu hũ vào om").build()
+                ))
+                .build();
+
+        String full = ContentTextNormalizer.buildSearchableText("<p>Món chay gia đình</p>", recipe);
+        String plain = ContentTextNormalizer.extractPlainText(full);
+
+        assertThat(plain).contains("món chay gia đình");
+        assertThat(plain).contains("đậu hũ chiên");
+        assertThat(plain).contains("cà chua chín");
+        assertThat(plain).contains("đậu hũ cắt miếng vừa ăn chiên vàng đều");
+    }
+
+    @Test
+    @DisplayName("NB-97: Phát hiện gần trùng khi tác giả sao chép nguyên công thức dù thân bài viết khác nhau")
+    void detect_copiedRecipeSteps_detectedBySimilarityDetector() {
+        ContentSimilarityDetector detectorWithRecipe = new ContentSimilarityDetector(
+                contentRepository, recipePersistenceService, 0.80, 25);
+
+        ContentRecipeDto originalRecipe = ContentRecipeDto.builder()
+                .ingredients(List.of(
+                        ContentRecipeDto.Ingredient.builder().name("Đậu hũ non").build(),
+                        ContentRecipeDto.Ingredient.builder().name("Nấm rơm").build()
+                ))
+                .steps(List.of(
+                        ContentRecipeDto.Step.builder().instruction(
+                                "Bước một cắt đậu hũ thành từng khối vuông nhỏ vừa ăn sau đó chần sơ qua nước sôi để khử mùi chua "
+                                        + "và giúp đậu hũ săn chắc hơn khi nấu trên bếp lửa vừa").build()
+                ))
+                .build();
+
+        Content original = Content.builder()
+                .contentId(10)
+                .contentType("BLOG")
+                .title("Canh đậu hũ nấm rơm thanh đạm")
+                .body("<p>Hôm nay mình nấu món canh đậu hũ nấm rơm cho bữa cơm gia đình thanh nhẹ.</p>")
+                .status("published")
+                .build();
+
+        Content copyCandidate = Content.builder()
+                .contentId(99)
+                .contentType("BLOG")
+                .title("Bí quyết ăn chay khoẻ đẹp")
+                .body("<p>Chia sẻ thực đơn ăn chay dinh dưỡng giúp thanh lọc cơ thể mỗi ngày một cách tự nhiên.</p>")
+                .status("under_review")
+                .build();
+
+        when(recipePersistenceService.read(10)).thenReturn(originalRecipe);
+        when(recipePersistenceService.read(99)).thenReturn(originalRecipe);
+        when(contentRepository.findByContentTypeAndStatusAndContentIdNot(eq("BLOG"), eq("published"), eq(99)))
+                .thenReturn(List.of(original));
+
+        ContentSimilarityDetector.SimilarityResult result = detectorWithRecipe.detect(copyCandidate);
+
+        assertThat(result.isSuspected()).isTrue();
+        assertThat(result.getMatchedContentId()).isEqualTo(10);
+        assertThat(result.getLongestMatchingBlock()).isGreaterThanOrEqualTo(25);
     }
 }
