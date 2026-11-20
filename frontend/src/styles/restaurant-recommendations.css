@@ -28,10 +28,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--primary, #2d5a27);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  color: #54784d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .14em;
   text-transform: uppercase;
   font-family: var(--nutribot-user-font, 'Google Sans Text', sans-serif);
 }
@@ -39,9 +39,9 @@
 .restaurant-recommendations-head h2 {
   max-width: none;
   margin: 6px 0 0;
-  font: 500 clamp(18px, 2.1vw, 25px) / 1.25 var(--nutribot-brand-font, 'Playfair Display', Georgia, serif);
-  letter-spacing: -0.025em;
-  color: #1e281b;
+  color: #183c2c;
+  font: 600 clamp(24px, 2.7vw, 38px) / 1.08 'Playfair Display', Georgia, serif;
+  letter-spacing: -0.04em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
