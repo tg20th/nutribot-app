@@ -24,6 +24,17 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * =========================================================================================
+ * 🛡️ MODULE 7: ADMIN COMMENT MODERATION SERVICE (DÀNH CHO TRƯỜNG BE)
+ * =========================================================================================
+ * [Nhiệm vụ chính]:
+ * - API Quản trị dành cho Admin kiểm duyệt, lọc và xóa các bình luận vi phạm tiêu chuẩn cộng đồng.
+ * - Triệt tiêu hoàn toàn lỗi N+1 Query bằng kỹ thuật Batch In-memory Mapping (gom Set ID và findAllById 1 lần).
+ * - Sử dụng JPA Specification (CommentSpecifications) để lọc động theo từ khóa, trạng thái canonical.
+ * - Kẹp an toàn phân trang Bounded Pagination [1, 50] tránh tấn công DoS làm tràn RAM máy chủ.
+ * =========================================================================================
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

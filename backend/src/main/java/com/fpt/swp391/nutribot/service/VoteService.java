@@ -23,6 +23,18 @@ import com.fpt.swp391.nutribot.repository.VoteRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * =========================================================================================
+ * ❤️ MODULE 6: VOTE / LIKE SERVICE & CONCURRENCY CONTROL (DÀNH CHO TRƯỜNG BE)
+ * =========================================================================================
+ * [Nhiệm vụ chính]:
+ * - Xử lý tính năng Thả tim / Like (Vote Toggle) trên bài viết và video.
+ * - Triển khai cơ chế Khóa bi quan (Pessimistic Locking `SELECT ... FOR UPDATE`):
+ *   + Triệt tiêu hoàn toàn lỗi Race Condition khi 1 người dùng click spam nút Like liên tục,
+ *     hoặc nhiều người cùng Like tại một thời điểm (BL-001 & BL-024).
+ * - Cập nhật đồng bộ chính xác trường voteCount trên bảng contents để hiển thị tức thì.
+ * =========================================================================================
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

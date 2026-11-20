@@ -28,6 +28,20 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * =========================================================================================
+ * 💬 MODULE 5: COMMUNITY COMMENT SERVICE (DÀNH CHO TRƯỜNG BE)
+ * =========================================================================================
+ * [Nhiệm vụ chính]:
+ * - Quản lý bình luận và trả lời bình luận (threaded replies) trên bài viết và video.
+ * - Chuẩn hóa trạng thái bình luận canonical (BL-002): published, hidden, rejected.
+ * - Mô hình cây phân cấp 2 tầng (Facebook/Zalo style): Khi reply vào comment con, tự động remap về root comment.
+ * - Bảo vệ quyền sở hữu chống IDOR (BL-005): Chỉ tác giả bình luận mới có quyền sửa/xóa.
+ * - Cơ chế Soft-Delete bảo toàn dữ liệu (BL-024): Khi xóa bình luận cha có câu trả lời,
+ *   chuyển trạng thái sang 'hidden' thay vì xóa cứng (hard delete), tránh lỗi vi phạm khóa ngoại (FK)
+ *   và bảo toàn các câu trả lời của người dùng khác.
+ * =========================================================================================
+ */
 @Service
 @RequiredArgsConstructor
 public class CommentService {

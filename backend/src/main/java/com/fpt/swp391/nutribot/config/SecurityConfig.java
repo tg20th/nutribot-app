@@ -42,6 +42,18 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * =========================================================================================
+ * 🛡️ MODULE 2: SPRING SECURITY & AUTHORIZATION CONFIGURATION (DÀNH CHO TRƯỜNG BE)
+ * =========================================================================================
+ * [Nhiệm vụ chính]:
+ * - Cấu hình SecurityFilterChain phân quyền truy cập server-side.
+ * - Triển khai cơ chế Deny-by-default: Mọi request mặc định bắt buộc authenticate, chỉ allowlist những API thực sự public.
+ * - Tích hợp chuỗi Filter: JwtAuthenticationFilter -> GuestRateLimitFilter -> UsernamePasswordAuthenticationFilter.
+ * - Xử lý lỗi 401 Unauthorized và 403 Forbidden đồng nhất theo chuẩn JSON ApiResponse.
+ * - Xử lý đăng nhập Google OAuth2 redirect an toàn về Frontend.
+ * =========================================================================================
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -87,18 +99,22 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
-                // Filter order: JwtAuthenticationFilter → GuestRateLimitFilter → UsernamePasswordAuthenticationFilter
-                // Both filters are added before UsernamePasswordAuthenticationFilter
-                // HttpSecurity adds them in order, so JwtAuthenticationFilter runs first
+                // =================================================================================
+                // KHỐI 1: THỨ TỰ THỰC THI FILTER (FILTER CHAIN ORDER)
+                // JwtAuthenticationFilter (Xác thực Token) -> GuestRateLimitFilter -> UsernamePasswordAuthenticationFilter
+                // =================================================================================
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(guestRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // =================================================================================
+                // KHỐI 2: PHÂN QUYỀN TRUY CẬP (SERVER-SIDE AUTHORIZATION RULES)
+                // =================================================================================
                 .authorizeHttpRequests(auth -> auth
                         // CORS preflight requests must be handled before authentication.
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // Public Auth Endpoints
+                        // 1. Public Auth Endpoints (Đăng ký, Đăng nhập, OTP)
                         .requestMatchers(
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/register",
@@ -107,7 +123,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
 
-                        // Public Content Endpoints
+                        // 2. Public Content Endpoints (Xem blog, video, trang chủ, tìm kiếm công khai)
                         .requestMatchers(HttpMethod.GET, "/api/v1/blogs/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/videos/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/home/**").permitAll()
@@ -119,31 +135,31 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/contents/*/vote").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
 
-                        // NB-78: Public User Profile
-                        // Đặt trước permitAll để chặn anonymous truy cập own-profile:
-                        // pattern "/api/v1/users/*" sẽ match "/api/v1/users/profile" (1 segment)
-                        // nếu không exclude ở đây, GET /api/v1/users/profile sẽ permitAll → NPE (Principal null) → 500 thay vì 401
+                        // 3. User Profile: Chặn anonymous truy cập profile cá nhân (/api/v1/users/profile)
                         .requestMatchers("/api/v1/users/profile", "/api/v1/users/profile/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/*").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/*/posts").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/*/recipes").permitAll()
 
-                        // Public Chatbot query (hỗ trợ khách vãng lai)
+                        // 4. Chatbot query công khai (có hỗ trợ khách vãng lai dùng thử)
                         .requestMatchers(HttpMethod.POST, "/api/v1/chatbot/query").permitAll()
 
-                        // Actuator & OAuth
+                        // 5. Actuator & OAuth
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/login/oauth2/code/**").permitAll()
 
-                        // Admin APIs
+                        // 6. Admin APIs: Bắt buộc quyền ROLE_ADMIN
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/categories/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/categories/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/categories/**").hasRole("ADMIN")
 
-                        // Member/Authenticated endpoints (Deny-by-default)
+                        // 7. Mặc định mọi request còn lại bắt buộc đăng nhập (Deny-by-default)
                         .anyRequest().authenticated()
                 )
+                // =================================================================================
+                // KHỐI 3: XỬ LÝ LỖI XÁC THỰC VÀ PHÂN QUYỀN (401 UNAUTHORIZED & 403 FORBIDDEN)
+                // =================================================================================
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) -> {
                             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

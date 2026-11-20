@@ -15,6 +15,19 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
 
+/**
+ * =========================================================================================
+ * 📖 MODULE 4: PUBLIC CONTENT SERVICE (DÀNH CHO TRƯỜNG BE)
+ * =========================================================================================
+ * [Nhiệm vụ chính]:
+ * - Cung cấp API đọc nội dung công khai (Blog, Video nấu ăn, Community Highlights) cho người dùng và khách vãng lai.
+ * - Tuân thủ nghiêm ngặt quy tắc Public Visibility Guard (BL-011):
+ *   + Người dùng công khai CHỈ ĐƯỢC XEM các bài viết có status = 'published' VÀ tác giả đang ở trạng thái 'ACTIVE'.
+ *   + Tuyệt đối ngăn chặn rò rỉ bài nháp (draft) hoặc bài bị khóa: trả về HTTP 404 Not Found thay vì 403 để tránh lộ thông tin.
+ * - Sắp xếp kết quả phân trang mang tính tất định (Deterministic Ordering) với tie-breaker 'contentId DESC'.
+ * - Tự động tăng lượt xem (View Count) nguyên tử khi người dùng đọc bài chi tiết.
+ * =========================================================================================
+ */
 @Service
 @RequiredArgsConstructor
 public class ContentService {

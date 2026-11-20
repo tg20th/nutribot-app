@@ -21,6 +21,18 @@ import com.fpt.swp391.nutribot.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * =========================================================================================
+ * 🛡️ MODULE 1: AUTHENTICATION & IDENTITY SERVICE (DÀNH CHO TRƯỜNG BE)
+ * =========================================================================================
+ * [Nhiệm vụ chính]:
+ * - Đăng ký tài khoản mới kèm cơ chế gửi mã OTP xác thực email (2-step verification).
+ * - Xác thực đăng nhập an toàn, cấp phát Access Token (JWT) có thời hạn sử dụng.
+ * - Cơ chế đăng xuất bảo mật cao bằng Blacklist Token (BL-029).
+ * - Tuân thủ nghiêm ngặt các quy tắc bảo mật: BL-003 (Chống Account Enumeration),
+ *   BL-026 (Kiểm soát trạng thái tài khoản thời gian thực), BL-027 (Kiểm định khóa ký JWT).
+ * =========================================================================================
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -32,6 +44,17 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final OtpService otpService;
 
+    // =====================================================================================
+    // KHỐI 1: ĐĂNG KÝ TÀI KHOẢN (REGISTRATION & EMAIL OTP DISPATCH)
+    // =====================================================================================
+    /**
+     * Đăng ký tài khoản người dùng mới.
+     * [Business Rules]:
+     * - Username và Email phải là duy nhất (kiểm tra sau khi chuẩn hóa trim và lowercase).
+     * - Mật khẩu bắt buộc được mã hóa một chiều bằng thuật toán BCrypt trước khi lưu vào DB.
+     * - Trạng thái ban đầu luôn là PENDING_VERIFY (chưa được phép đăng nhập ngay).
+     * - Tự động tạo và gửi mã OTP 6 số qua email của người dùng.
+     */
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         if (userRepository.existsByNormalizedUsername(request.getUsername())) {
@@ -66,8 +89,14 @@ public class AuthService {
                 .build();
     }
 
+    // =====================================================================================
+    // KHỐI 2: XÁC THỰC MÃ OTP & KÍCH HOẠT TÀI KHOẢN (OTP VERIFICATION)
+    // =====================================================================================
     /**
-     * Verify OTP để kích hoạt tài khoản.
+     * Xác thực mã OTP 6 số gửi qua email để chuyển trạng thái tài khoản từ PENDING_VERIFY sang ACTIVE.
+     * [Business Rules]:
+     * - Chỉ tài khoản ở trạng thái PENDING_VERIFY mới được phép kích hoạt.
+     * - Khi kích hoạt thành công, tự động cấp ngay Access Token (JWT) để người dùng tự động đăng nhập.
      */
     @Transactional
     public AuthResponse verifyRegister(String email, String otpCode) {
@@ -120,6 +149,17 @@ public class AuthService {
         otpService.generateAndSendRegistrationOtp(email);
     }
 
+    // =====================================================================================
+    // KHỐI 3: XÁC THỰC ĐĂNG NHẬP & CẤP TOKEN (LOGIN & JWT GENERATION)
+    // =====================================================================================
+    /**
+     * Xác thực đăng nhập bằng Username hoặc Email và cấp JWT Token.
+     * [Business Rules & Security Standards]:
+     * - BL-003 (Chống Account Enumeration): Luôn trả về thông báo lỗi chung "Incorrect email or password."
+     *   kể cả khi sai username hay sai password, tránh kẻ tấn công dò quét email có tồn tại trong hệ thống.
+     * - BL-026 (Kiểm soát trạng thái tài khoản thời gian thực): Chỉ tài khoản ACTIVE mới được cấp token;
+     *   tài khoản PENDING_VERIFY hoặc BANNED/SUSPENDED bị chặn kèm lý do cụ thể.
+     */
     @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
         User user = userRepository.findByNormalizedUsernameOrEmail(request.getUsernameOrEmail())
@@ -168,6 +208,16 @@ public class AuthService {
                 .map(user -> user.getRole().getRoleName());
     }
 
+    // =====================================================================================
+    // KHỐI 4: ĐĂNG NHẬP GOOGLE OAUTH2 (SOCIAL LOGIN & FEDERATED IDENTITY)
+    // =====================================================================================
+    /**
+     * Xử lý đăng nhập thông qua Google OAuth2.
+     * [Business Rules]:
+     * - Nếu email đã tồn tại: Cập nhật thông tin avatar, tự động kích hoạt tài khoản nếu đang PENDING_VERIFY.
+     * - Nếu email chưa tồn tại: Tạo mới tài khoản với authProvider = "GOOGLE", hasPassword = false, status = ACTIVE.
+     * - Khóa truy cập ngay lập tức nếu tài khoản bị BANNED/SUSPENDED.
+     */
     @Transactional
     public AuthResponse handleOAuth2Login(String email, String fullName, String picture) {
         Optional<User> existingUser = userRepository.findByEmail(email);

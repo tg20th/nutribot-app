@@ -47,6 +47,18 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * =========================================================================================
+ * ✍️ MODULE 3: AUTHOR CONTENT SERVICE (DÀNH CHO TRƯỜNG BE)
+ * =========================================================================================
+ * [Nhiệm vụ chính]:
+ * - Quản lý toàn bộ chu trình bài viết và video từ phía tác giả (Tạo, Sửa, Xóa, Nộp kiểm duyệt, Thu hồi).
+ * - Kiểm soát quyền sở hữu chống tấn công IDOR từ JWT Principal (BL-005).
+ * - Máy trạng thái nội dung (Content State Machine) chặt chẽ (BL-006): draft -> under_review -> published / rejected.
+ * - Phát hiện trùng lặp tiêu đề và nội dung bằng mã băm SHA-256 + độ tương đồng Cosine/Jaccard (NB-97).
+ * - Tự động dọn dẹp orphan media trên Cloudinary khi cập nhật hoặc xóa bài viết (BL-020).
+ * =========================================================================================
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -97,6 +109,18 @@ public class AuthorContentService {
         return PagedResponse.of(responsePage);
     }
 
+    // =====================================================================================
+    // KHỐI 1: TẠO MỚI NỘI DUNG (CREATE CONTENT - BLOG / RECIPE / VIDEO)
+    // =====================================================================================
+    /**
+     * Tạo bài viết Blog hoặc Video mới cho tác giả.
+     * [Business Rules & Validation]:
+     * - BL-013: Validate danh mục phải tồn tại và đang hoạt động (active).
+     * - NB-97: Chống trùng lặp tiêu đề (Title duplicate check).
+     * - NB-97: Tính mã băm SHA-256 của nội dung (Content Hash) chống sao chép nguyên văn 100%.
+     * - NB-97: Phân tích độ tương đồng Jaccard/Cosine chống xào xáo đạo văn.
+     * - Trạng thái ban đầu luôn là 'draft' (Bản nháp).
+     */
     @Transactional
     public AuthorContentResponse createContent(String username, String contentType, ContentCreateRequest request) {
         User user = userRepository.findByUsername(username)
@@ -177,6 +201,18 @@ public class AuthorContentService {
         return updateContent(username, contentId, null, request);
     }
 
+    // =====================================================================================
+    // KHỐI 2: CẬP NHẬT NỘI DUNG (UPDATE CONTENT & STATE MACHINE REVERSION)
+    // =====================================================================================
+    /**
+     * Cập nhật thông tin bài viết.
+     * [Business Rules]:
+     * - BL-005 (Ownership Guard): Kiểm tra user đang đăng nhập có phải chính chủ tác giả bài viết hay không (chống IDOR).
+     * - BL-006 (Content State Machine): Tác giả không được phép tự ý đổi status sang published.
+     *   Nếu bài viết đang ở trạng thái PUBLISHED hoặc REJECTED mà tác giả chỉnh sửa nội dung,
+     *   hệ thống TỰ ĐỘNG HẠ TRẠNG THÁI VỀ DRAFT để đảm bảo nội dung mới phải được kiểm duyệt lại trước khi công khai.
+     * - Dọn dẹp ảnh thumbnail cũ trên Cloudinary nếu tác giả thay đổi thumbnail mới.
+     */
     @Transactional
     public AuthorContentResponse updateContent(String username, Integer contentId, String expectedContentType, ContentUpdateRequest request) {
         User user = userRepository.findByUsername(username)
@@ -451,6 +487,12 @@ public class AuthorContentService {
         return recallContent(username, contentId, null);
     }
 
+    // =====================================================================================
+    // KHỐI 3: THU HỒI BÀI VIẾT (RECALL CONTENT VỀ DRAFT)
+    // =====================================================================================
+    /**
+     * Tác giả chủ động rút bài viết đang nộp kiểm duyệt về lại trạng thái bản nháp (draft).
+     */
     @Transactional
     public AuthorContentResponse recallContent(String username, Integer contentId, String expectedContentType) {
         User user = userRepository.findByUsername(username)
@@ -478,6 +520,15 @@ public class AuthorContentService {
         deleteContent(username, contentId, null);
     }
 
+    // =====================================================================================
+    // KHỐI 4: XÓA NỘI DUNG & DỌN DẸP CLOUDINARY (DELETE CONTENT & ORPHAN MEDIA CLEANUP)
+    // =====================================================================================
+    /**
+     * Xóa hoàn toàn bài viết và tự động thu hồi tài nguyên ảnh thumbnail trên Cloudinary (BL-020).
+     * [Business Rules]:
+     * - Chỉ chính chủ tác giả mới có quyền xóa bài.
+     * - Xóa bài viết trong DB đồng thời kích hoạt dọn dẹp file ảnh trên đám mây để tránh tốn dung lượng lưu trữ rác.
+     */
     @Transactional
     public void deleteContent(String username, Integer contentId, String expectedContentType) {
         User user = userRepository.findByUsername(username)
