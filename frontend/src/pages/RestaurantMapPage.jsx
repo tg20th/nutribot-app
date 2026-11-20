@@ -116,15 +116,11 @@ export default function RestaurantMapPage() {
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
 
-    // Filter restaurants based on search query
+    // Filter restaurants based on search query (name only)
     const filtered = restaurants.filter((r) => {
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
-      return (
-        r.name?.toLowerCase().includes(q) ||
-        r.address?.toLowerCase().includes(q) ||
-        r.tags?.some((t) => t.toLowerCase().includes(q))
-      );
+      return r.name?.toLowerCase().includes(q);
     });
 
     filtered.forEach((restaurant) => {
@@ -152,9 +148,9 @@ export default function RestaurantMapPage() {
         <div class="map-popup-card">
           <h4>${restaurant.name}</h4>
           <p>${restaurant.address}</p>
-          ${restaurant.distanceKm != null ? `<div class="popup-distance">Cách bạn: ~${restaurant.distanceKm} km</div>` : ''}
+          ${restaurant.distanceKm != null ? `<div class="popup-distance">Distance: ~${restaurant.distanceKm} km</div>` : ''}
           <a href="${restaurant.googleMapUrl}" target="_blank" rel="noopener noreferrer" class="popup-btn">
-            Chỉ đường trên Google Maps
+            Get directions on Google Maps
           </a>
         </div>
       `;
@@ -221,7 +217,7 @@ export default function RestaurantMapPage() {
       if (currentRequestId !== latestLocationRequestIdRef.current) return;
 
       setUserLocation({ lat: pos.lat, lng: pos.lng });
-      setCenter({ lat: pos.lat, lng: pos.lng, city: 'Vị trí của bạn' });
+      setCenter({ lat: pos.lat, lng: pos.lng, city: 'Your Location' });
       try {
         sessionStorage.setItem('nutribot_user_coords', JSON.stringify({ lat: pos.lat, lng: pos.lng }));
       } catch {
@@ -239,7 +235,7 @@ export default function RestaurantMapPage() {
     } catch (err) {
       if (currentRequestId !== latestLocationRequestIdRef.current) return;
       console.warn('Geolocation rejected/failed:', err.message);
-      setLocationError(err.message || 'Không thể lấy vị trí hiện tại.');
+      setLocationError(err.message || 'Could not determine current location.');
     } finally {
       if (currentRequestId === latestLocationRequestIdRef.current) {
         setIsLocating(false);
@@ -287,15 +283,11 @@ export default function RestaurantMapPage() {
     }
   };
 
-  // Filter restaurants by search query
+  // Filter restaurants by search query (name only)
   const filteredRestaurants = restaurants.filter((r) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
-    return (
-      r.name?.toLowerCase().includes(q) ||
-      r.address?.toLowerCase().includes(q) ||
-      r.tags?.some((t) => t.toLowerCase().includes(q))
-    );
+    return r.name?.toLowerCase().includes(q);
   });
 
   return (
@@ -328,14 +320,13 @@ export default function RestaurantMapPage() {
                 
                 <select 
                   className="city-select" 
-                  value={center.city === 'Vị trí của bạn' || center.city === 'Your Location' ? 'Your Location' : center.city}
+                  value={center.city === 'Your Location' || center.city === 'Vị trí của bạn' ? 'Your Location' : center.city}
                   onChange={(e) => {
                     const city = VIETNAM_PROVINCES.find(c => c.name === e.target.value);
                     if (city) handleCityChange(city);
                   }}
                 >
                   <option value="Your Location" disabled hidden>Your Location</option>
-                  <option value="Vị trí của bạn" disabled hidden style={{display: 'none'}}>Vị trí của bạn</option>
                   {VIETNAM_PROVINCES.map(c => (
                     <option key={c.name} value={c.name}>
                       {c.name}
@@ -350,13 +341,13 @@ export default function RestaurantMapPage() {
                 <Search size={16} className="search-icon" />
                 <input
                   type="text"
-                  placeholder="Search by name, address, dish..."
+                  placeholder="Search by name"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
               <div className="radius-filter-row">
-                <span>Bán kính:</span>
+                <span>Radius:</span>
                 {[1, 3, 5, 10, 20].map((r) => (
                   <button
                     key={r}
@@ -381,7 +372,7 @@ export default function RestaurantMapPage() {
               {isLoading ? (
                 <div className="drawer-loading-indicator">
                   <div className="drawer-loading-spinner" />
-                  <p>Đang tìm quán ăn dinh dưỡng xung quanh...</p>
+                  <p>Finding nutritious dining places nearby...</p>
                 </div>
               ) : filteredRestaurants.length === 0 ? (
                 <div className="drawer-empty-state">
