@@ -331,6 +331,28 @@ export default function WeeklyMealPlannerPage() {
     }
   };
 
+  const persistAddMeals = async (selectedDishes, dayIndex, slot, dayLabel) => {
+    setHasUnsavedChanges(true);
+    setNotice({ type: 'saving', text: 'Saving your dishes...' });
+    try {
+      const menuId = await ensureMenu();
+      const failures = [];
+      for (const selectedDish of selectedDishes) {
+        try {
+          await addWeeklyMenuItem(menuId, { dayOfWeek: dayIndex + 1, mealType: mealSlotApiValue(slot), dishId: selectedDish.dishId, servings: 1, notes: '' });
+        } catch (error) {
+          failures.push({ dish: selectedDish, error });
+        }
+      }
+      await loadWeek(weekStart);
+      if (failures.length) setNotice({ type: 'error', text: `${selectedDishes.length - failures.length} dish(es) added. ${failures.length} could not be saved; the week was not fully synchronized.` });
+      else setNotice({ type: 'success', text: `Added ${selectedDishes.length} dishes in ${dayLabel}.` });
+    } catch (error) {
+      await loadWeek(weekStart);
+      setNotice({ type: 'error', text: error?.message || 'The backend could not save the selected dishes. Your week was not synchronized.' });
+    }
+  };
+
   const submitMeal = async ({ dish, dishes: selectedDishes = [], servings = 1, notes = '', isAddMode }) => {
     if (!editor) return;
     const dayIndex = editor.dayIndex;
@@ -345,26 +367,15 @@ export default function WeeklyMealPlannerPage() {
     }
 
     if (isAddMode && selectedDishes.length > 1) {
+      const newMeals = selectedDishes.map((item) => createLocalMeal(item, slot, 1, '', false));
+      const overflow = checkNutritionOverflow(menu, dayIndex, newMeals);
       setEditor(null);
-      setHasUnsavedChanges(true);
-      setNotice({ type: 'saving', text: 'Saving your dishes...' });
-      try {
-        const menuId = await ensureMenu();
-        const failures = [];
-        for (const selectedDish of selectedDishes) {
-          try {
-            await addWeeklyMenuItem(menuId, { dayOfWeek: dayIndex + 1, mealType: mealSlotApiValue(slot), dishId: selectedDish.dishId, servings: 1, notes: '' });
-          } catch (error) {
-            failures.push({ dish: selectedDish, error });
-          }
-        }
-        await loadWeek(weekStart);
-        if (failures.length) setNotice({ type: 'error', text: `${selectedDishes.length - failures.length} dish(es) added. ${failures.length} could not be saved; the week was not fully synchronized.` });
-        else setNotice({ type: 'success', text: `Added ${selectedDishes.length} dishes in ${editor.day.label}.` });
-      } catch (error) {
-        await loadWeek(weekStart);
-        setNotice({ type: 'error', text: error?.message || 'The backend could not save the selected dishes. Your week was not synchronized.' });
+      if (overflow) {
+        setPendingOverflowMeal({ newMeals, isAddMode, editor: { day: editor.day, dayIndex, slot } });
+        setPendingNutritionOverflow(overflow);
+        return;
       }
+      await persistAddMeals(selectedDishes, dayIndex, slot, editor.day.label);
       return;
     }
     if (isAddMode) dish = selectedDishes[0] ?? dish;
@@ -375,14 +386,8 @@ export default function WeeklyMealPlannerPage() {
     // Old meal key for REPLACE mode (to subtract old meal's nutrition)
     const oldMealKey = isAddMode ? null : editor.meal?.key;
 
-    // Build meals array after this change (for overflow check)
-    const dayMealsAfter = isAddMode
-      ? [...(menu.days[dayIndex]?.meals ?? []), newMeal]
-      : [...(menu.days[dayIndex]?.meals ?? []).filter((m) => m.key !== oldMealKey), newMeal];
-
-    // Check nutrition overflow
-    const tempMenu = { ...menu, days: menu.days.map((day, idx) => idx === dayIndex ? { ...day, meals: dayMealsAfter } : day) };
-    const overflow = checkNutritionOverflow(tempMenu, dayIndex, newMeal, oldMealKey);
+    // The checker adds the proposed meal and removes the replaced meal itself.
+    const overflow = checkNutritionOverflow(menu, dayIndex, newMeal, oldMealKey);
     if (overflow) {
       // Close editor, store overflow state for dialog
       setEditor(null);
@@ -456,10 +461,15 @@ export default function WeeklyMealPlannerPage() {
 
   const confirmOverflowKeep = async () => {
     if (!pendingOverflowMeal || !pendingNutritionOverflow) return;
-    const { newMeal, isAddMode, oldMealKey, editor: storedEditor } = pendingOverflowMeal;
+    const { newMeal, newMeals, isAddMode, oldMealKey, editor: storedEditor } = pendingOverflowMeal;
     const dayIndex = storedEditor.dayIndex;
     setPendingOverflowMeal(null);
     setPendingNutritionOverflow(null);
+
+    if (newMeals) {
+      await persistAddMeals(newMeals, dayIndex, storedEditor.slot, storedEditor.day.label);
+      return;
+    }
 
     // ADD mode: keep the dish anyway and append it
     if (isAddMode) {
@@ -899,6 +909,7 @@ export default function WeeklyMealPlannerPage() {
     {pendingNutritionOverflow && (
       <NutritionOverflowDialog
         overflow={pendingNutritionOverflow}
+        dishCount={pendingOverflowMeal?.newMeals?.length ?? 1}
         isAddMode={pendingOverflowMeal?.isAddMode ?? true}
         onKeep={confirmOverflowKeep}
         onCancel={() => { setPendingOverflowMeal(null); setPendingNutritionOverflow(null); setNotice(null); }}
