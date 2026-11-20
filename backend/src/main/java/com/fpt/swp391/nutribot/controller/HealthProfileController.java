@@ -22,7 +22,7 @@ public class HealthProfileController {
     @GetMapping("/api/v1/users/profile/health")
     public ResponseEntity<ApiResponse<HealthProfileResponse>> getHealthProfile(Principal principal) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Tải hồ sơ sức khỏe thành công",
+                "Health profile loaded successfully.",
                 healthProfileService.getHealthProfile(principal.getName())));
     }
 
@@ -31,14 +31,14 @@ public class HealthProfileController {
             Principal principal,
             @Valid @RequestBody HealthProfileUpdateRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Cập nhật hồ sơ sức khỏe thành công",
+                "Health profile updated successfully.",
                 healthProfileService.updateHealthProfile(principal.getName(), request)));
     }
 
     @GetMapping("/api/v1/ingredients")
     public ResponseEntity<ApiResponse<List<IngredientOptionResponse>>> getIngredients() {
         return ResponseEntity.ok(ApiResponse.success(
-                "Tải danh sách nguyên liệu thành công",
+                "Ingredients loaded successfully.",
                 healthProfileService.getActiveIngredients()));
     }
 }

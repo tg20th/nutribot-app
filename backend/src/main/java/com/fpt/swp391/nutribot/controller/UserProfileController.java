@@ -61,8 +61,8 @@ public class UserProfileController {
             @Valid @RequestBody PasswordUpdateRequest request) {
         UserProfileResponse response = userProfileService.changePassword(principal.getName(), request);
         String message = Boolean.TRUE.equals(response.getHasPassword()) && "GOOGLE".equals(response.getAuthProvider())
-                ? "Thiết lập mật khẩu thành công. Bạn có thể đăng nhập bằng Google hoặc mật khẩu."
-                : "Đổi mật khẩu thành công.";
+                ? "Password setup successfully. You can now sign in with Google or password."
+                : "Password changed successfully.";
         return ResponseEntity.ok(ApiResponse.success(message, response));
     }
 

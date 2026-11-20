@@ -31,14 +31,14 @@ public class AdminContentRecipeSuggestionController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         PagedResponse<ContentRecipeSuggestionResponse> result = reviewService.list(status, page, size);
-        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách đề xuất món ăn thành công", result));
+        return ResponseEntity.ok(ApiResponse.success("Recipe suggestions fetched successfully.", result));
     }
 
     @GetMapping("/{suggestionId}")
     public ResponseEntity<ApiResponse<ContentRecipeSuggestionResponse>> getSuggestion(
             @PathVariable Integer suggestionId) {
         ContentRecipeSuggestionResponse result = reviewService.getById(suggestionId);
-        return ResponseEntity.ok(ApiResponse.success("Lấy chi tiết đề xuất món ăn thành công", result));
+        return ResponseEntity.ok(ApiResponse.success("Recipe suggestion details fetched successfully.", result));
     }
 
     @PutMapping("/{suggestionId}/review")
@@ -48,7 +48,7 @@ public class AdminContentRecipeSuggestionController {
             Authentication authentication) {
         String adminUsername = authentication != null ? authentication.getName() : null;
         ContentRecipeSuggestionResponse result = reviewService.review(suggestionId, request, adminUsername);
-        return ResponseEntity.ok(ApiResponse.success("Xử lý đề xuất món ăn thành công", result));
+        return ResponseEntity.ok(ApiResponse.success("Recipe suggestion processed successfully.", result));
     }
 
     /**
@@ -58,6 +58,6 @@ public class AdminContentRecipeSuggestionController {
     public ResponseEntity<ApiResponse<List<RecipeSuggestionAuditResponse>>> getSuggestionAudit(
             @PathVariable Integer suggestionId) {
         List<RecipeSuggestionAuditResponse> result = auditService.listBySuggestion(suggestionId);
-        return ResponseEntity.ok(ApiResponse.success("Lấy nhật ký đề xuất món ăn thành công", result));
+        return ResponseEntity.ok(ApiResponse.success("Recipe suggestion audit logs fetched successfully.", result));
     }
 }

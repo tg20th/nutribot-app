@@ -26,7 +26,7 @@ public class DishCatalogController {
     @GetMapping
     public ResponseEntity<ApiResponse<List<DishOptionResponse>>> getDishCatalog() {
         return ResponseEntity.ok(ApiResponse.success(
-                "Lấy danh sách món ăn thành công",
+                "Dishes fetched successfully.",
                 weeklyMenuService.getDishCatalog()));
     }
 
@@ -37,10 +37,10 @@ public class DishCatalogController {
         // Authorized User - must be logged in
         if (authentication == null) {
             return ResponseEntity.status(401)
-                    .body(ApiResponse.error("Vui lòng đăng nhập để xem chi tiết món ăn"));
+                    .body(ApiResponse.error("Please sign in to view dish details."));
         }
         return ResponseEntity.ok(ApiResponse.success(
-                "Lấy chi tiết món ăn thành công",
+                "Dish details fetched successfully.",
                 dishService.getDishDetail(dishId)));
     }
 }

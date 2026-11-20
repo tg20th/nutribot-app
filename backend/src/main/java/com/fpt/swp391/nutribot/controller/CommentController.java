@@ -34,7 +34,7 @@ public class CommentController {
             @PathVariable Integer contentId,
             @Valid @RequestBody CommentCreateRequest request) {
         CommentResponse response = commentService.createComment(user.getUsername(), contentId, request);
-        return ResponseEntity.ok(ApiResponse.success("Bình luận thành công", response));
+        return ResponseEntity.ok(ApiResponse.success("Comment added successfully.", response));
     }
 
     @PutMapping("/api/v1/comments/{commentId}")
@@ -43,7 +43,7 @@ public class CommentController {
             @PathVariable Integer commentId,
             @Valid @RequestBody CommentUpdateRequest request) {
         CommentResponse response = commentService.updateComment(user.getUsername(), commentId, request);
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật bình luận thành công", response));
+        return ResponseEntity.ok(ApiResponse.success("Comment updated successfully.", response));
     }
 
     @DeleteMapping("/api/v1/comments/{commentId}")
@@ -51,6 +51,6 @@ public class CommentController {
             @AuthenticationPrincipal UserDetails user,
             @PathVariable Integer commentId) {
         commentService.deleteComment(user.getUsername(), commentId);
-        return ResponseEntity.ok(ApiResponse.success("Xóa bình luận thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("Comment deleted successfully.", null));
     }
 }

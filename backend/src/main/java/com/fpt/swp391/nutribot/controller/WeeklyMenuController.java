@@ -38,7 +38,7 @@ public class WeeklyMenuController {
             Principal principal,
             @Valid @RequestBody WeeklyMenuCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
-                "Tạo thực đơn tuần thành công",
+                "Weekly menu created successfully.",
                 weeklyMenuService.createWeeklyMenu(principal.getName(), request)));
     }
 
@@ -47,7 +47,7 @@ public class WeeklyMenuController {
             Principal principal,
             @Valid @RequestBody WeeklyMenuAiSaveRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Lưu thực đơn AI thành công",
+                "AI meal plan saved successfully.",
                 weeklyMenuService.saveAiGeneratedMenu(principal.getName(), request)));
     }
 
@@ -57,7 +57,7 @@ public class WeeklyMenuController {
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Lấy thực đơn tuần thành công",
+                "Weekly menu fetched successfully.",
                 weeklyMenuService.getCurrentWeeklyMenu(principal.getName(), startDate)));
     }
 
@@ -67,7 +67,7 @@ public class WeeklyMenuController {
             @PathVariable Integer menuId,
             @Valid @RequestBody WeeklyMenuItemCreateRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
-                "Thêm món vào thực đơn thành công",
+                "Item added to weekly menu successfully.",
                 weeklyMenuService.addWeeklyMenuItem(principal.getName(), menuId, request)));
     }
 
@@ -77,7 +77,7 @@ public class WeeklyMenuController {
             @PathVariable Integer menuId,
             @Valid @RequestBody WeeklyMenuUpdateRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
-                "Cập nhật thực đơn tuần thành công",
+                "Weekly menu updated successfully.",
                 weeklyMenuService.updateWeeklyMenu(principal.getName(), menuId, request)));
     }
 

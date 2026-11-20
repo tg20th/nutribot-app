@@ -23,6 +23,6 @@ public class AuthorNutritionController {
     public ResponseEntity<ApiResponse<NutritionCalculationResponse>> calculate(
             @Valid @RequestBody NutritionCalculationRequest request) {
         NutritionCalculationResponse response = nutritionCalculationGatewayService.calculateNutrition(request);
-        return ResponseEntity.ok(ApiResponse.success("Tính toán dinh dưỡng thành công", response));
+        return ResponseEntity.ok(ApiResponse.success("Nutrition calculated successfully.", response));
     }
 }

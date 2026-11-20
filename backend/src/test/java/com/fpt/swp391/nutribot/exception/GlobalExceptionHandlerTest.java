@@ -17,6 +17,6 @@ class GlobalExceptionHandlerTest {
 
         assertEquals(HttpStatus.PAYLOAD_TOO_LARGE, response.getStatusCode());
         ApiResponse<Void> body = response.getBody();
-        assertEquals("Dung lượng tệp tải lên không được vượt quá 25 MB.", body.getMessage());
+        assertEquals("Uploaded file size must not exceed 25 MB.", body.getMessage());
     }
 }

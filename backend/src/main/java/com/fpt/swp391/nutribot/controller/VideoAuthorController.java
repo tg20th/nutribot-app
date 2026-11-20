@@ -34,7 +34,7 @@ public class VideoAuthorController {
             @AuthenticationPrincipal UserDetails user,
             @Valid @RequestBody ContentCreateRequest request) {
         AuthorContentResponse response = authorContentService.createContent(user.getUsername(), "VIDEO", request);
-        return ResponseEntity.ok(ApiResponse.success("Tạo video thành công", response));
+        return ResponseEntity.ok(ApiResponse.success("Video created successfully.", response));
     }
 
     @GetMapping("/{id}")
@@ -51,7 +51,7 @@ public class VideoAuthorController {
             @PathVariable Integer id,
             @Valid @RequestBody ContentUpdateRequest request) {
         AuthorContentResponse response = authorContentService.updateContent(user.getUsername(), id, "VIDEO", request);
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật video thành công", response));
+        return ResponseEntity.ok(ApiResponse.success("Video updated successfully.", response));
     }
 
     @DeleteMapping("/{id}")
@@ -59,7 +59,7 @@ public class VideoAuthorController {
             @AuthenticationPrincipal UserDetails user,
             @PathVariable Integer id) {
         authorContentService.deleteContent(user.getUsername(), id, "VIDEO");
-        return ResponseEntity.ok(ApiResponse.success("Xóa video thành công", null));
+        return ResponseEntity.ok(ApiResponse.success("Video deleted successfully.", null));
     }
 
     @PostMapping("/{id}/submit")
@@ -68,8 +68,8 @@ public class VideoAuthorController {
             @PathVariable Integer id) {
         AuthorContentResponse response = authorContentService.submitContent(user.getUsername(), id, "VIDEO");
         String message = "published".equalsIgnoreCase(response.getStatus())
-                ? "Video đã được AI tự động kiểm duyệt và xuất bản thành công"
-                : "Nộp video chờ duyệt thành công";
+                ? "Video auto-moderated and published successfully."
+                : "Video submitted for review successfully.";
         return ResponseEntity.ok(ApiResponse.success(message, response));
     }
 
@@ -78,6 +78,6 @@ public class VideoAuthorController {
             @AuthenticationPrincipal UserDetails user,
             @PathVariable Integer id) {
         AuthorContentResponse response = authorContentService.recallContent(user.getUsername(), id, "VIDEO");
-        return ResponseEntity.ok(ApiResponse.success("Rút video về bản nháp thành công", response));
+        return ResponseEntity.ok(ApiResponse.success("Video recalled to draft successfully.", response));
     }
 }

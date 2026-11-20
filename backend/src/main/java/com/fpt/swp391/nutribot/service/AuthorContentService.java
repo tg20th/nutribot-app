@@ -135,14 +135,14 @@ public class AuthorContentService {
         // NB-97: 1. Kiểm tra tiêu đề trùng lặp (không phân biệt hoa thường, bỏ khoảng trắng thừa)
         String normalizedTitle = ContentTextNormalizer.normalizeTitle(request.getTitle());
         if (contentRepository.existsByContentTypeAndTitleIgnoreCase(contentType, normalizedTitle)) {
-            throw new ConflictException("Tiêu đề bài viết này đã tồn tại trong hệ thống. Vui lòng chọn tiêu đề khác.");
+            throw new ConflictException("This title already exists. Please choose a different title.");
         }
 
         // NB-97: 2. Tính mã băm nội dung và kiểm tra sao chép nguyên văn 100%
         String normalizedBody = normalizeBody(request.getBody());
         String contentHash = ContentTextNormalizer.computeContentHash(normalizedBody);
         if (!contentHash.isBlank() && contentRepository.findFirstByContentTypeAndContentHash(contentType, contentHash).isPresent()) {
-            throw new ConflictException("Nội dung bài viết trùng lặp hoàn toàn với một bài đăng đã có trong hệ thống.");
+            throw new ConflictException("This content is a duplicate of an existing post.");
         }
 
         boolean consentGranted = Boolean.TRUE.equals(request.getRecipeConsent());
@@ -190,7 +190,7 @@ public class AuthorContentService {
         }
 
         if (!content.getUser().getUserId().equals(user.getUserId())) {
-            throw new ForbiddenException("Bạn không có quyền xem nội dung này");
+            throw new ForbiddenException("You do not have permission to view this content.");
         }
 
         return toAuthorResponse(content);
@@ -226,7 +226,7 @@ public class AuthorContentService {
         }
 
         if (!content.getUser().getUserId().equals(user.getUserId())) {
-            throw new ForbiddenException("Bạn không có quyền chỉnh sửa nội dung này");
+            throw new ForbiddenException("You do not have permission to edit this content.");
         }
 
         validateVideoFields(content.getContentType(), request.getMediaUrl(), request.getDurationSec());
@@ -243,7 +243,7 @@ public class AuthorContentService {
             if (!normalizedTitle.equalsIgnoreCase(currentNormalizedTitle)) {
                 if (contentRepository.existsByContentTypeAndTitleIgnoreCaseAndContentIdNot(
                         content.getContentType(), normalizedTitle, contentId)) {
-                    throw new ConflictException("Tiêu đề bài viết này đã tồn tại trong hệ thống. Vui lòng chọn tiêu đề khác.");
+                    throw new ConflictException("This title already exists. Please choose a different title.");
                 }
                 content.setTitle(normalizedTitle);
                 content.setSlug(generateSlug(normalizedTitle));
@@ -257,7 +257,7 @@ public class AuthorContentService {
             if (!newHash.isBlank() && !newHash.equals(currentHash)) {
                 if (contentRepository.findFirstByContentTypeAndContentHashAndContentIdNot(
                         content.getContentType(), newHash, contentId).isPresent()) {
-                    throw new ConflictException("Nội dung bài viết trùng lặp hoàn toàn với một bài đăng đã có trong hệ thống.");
+                    throw new ConflictException("This content is a duplicate of an existing post.");
                 }
             }
             content.setBody(normalizedBody);
@@ -346,7 +346,7 @@ public class AuthorContentService {
         }
 
         if (!content.getUser().getUserId().equals(user.getUserId())) {
-            throw new ForbiddenException("Bạn không có quyền thao tác trên nội dung này");
+            throw new ForbiddenException("You do not have permission to perform this action.");
         }
 
         // NB-80 (sua nghiep vu): Bai co cong thuc nhung tac gia CHUA cho phep
@@ -506,7 +506,7 @@ public class AuthorContentService {
         }
 
         if (!content.getUser().getUserId().equals(user.getUserId())) {
-            throw new ForbiddenException("Bạn không có quyền thao tác trên nội dung này");
+            throw new ForbiddenException("You do not have permission to perform this action.");
         }
 
         content.setStatus(STATUS_DRAFT);
@@ -542,7 +542,7 @@ public class AuthorContentService {
         }
 
         if (!content.getUser().getUserId().equals(user.getUserId())) {
-            throw new ForbiddenException("Bạn không có quyền xóa nội dung này");
+            throw new ForbiddenException("You do not have permission to delete this content.");
         }
 
         String thumbnailUrl = content.getThumbnailUrl();

@@ -32,15 +32,15 @@ public class BlogThumbnailController {
             @RequestParam("file") MultipartFile file) {
 
         if (userDetails == null) {
-            throw new BadRequestException("Vui lòng đăng nhập để tải ảnh lên");
+            throw new BadRequestException("Please sign in to upload thumbnail.");
         }
 
         User user = userRepository.findByUsername(userDetails.getUsername())
-                .orElseThrow(() -> new BadRequestException("Người dùng không tồn tại"));
+                .orElseThrow(() -> new BadRequestException("User not found."));
 
         CloudinaryMediaService.MediaUploadResult result = cloudinaryMediaService.uploadThumbnail(file, user.getUserId());
         return ResponseEntity.ok(ApiResponse.success(
-                "Tải ảnh thu nhỏ lên thành công",
+                "Thumbnail uploaded successfully.",
                 Map.of("thumbnailUrl", result.secureUrl())
         ));
     }
