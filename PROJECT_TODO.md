@@ -278,7 +278,7 @@
     2. Thuật toán 3-Gram Shingling & Jaccard similarity bất đồng bộ phát hiện gần trùng >= 80%, gắn cờ SUSPECTED_DUPLICATE và lưu id bài gốc.
     3. UI Admin Moderation hiển thị cảnh báo gần trùng và Modal Side-by-side Diff 2 cột so sánh trực diện highlight câu văn trùng lặp.
   - *Tương thích:* Tương thích hoàn toàn API Blogs/Videos, Admin Moderation queue, SQLite/SQL Server schema.
-  - *File cần tạo/cập nhật:* `NutriBotV2_FULL_RELATIONAL_MODERATION_AUDIT.sql`, `add_content_duplicate_detection.sql`, `Content.java`, `ContentRepository.java`, `ContentTextNormalizer.java`, `ContentSimilarityDetector.java`, `AuthorContentService.java`, `ContentModerationListener.java`, `AdminModerationService.java`, `AdminModerationPage.jsx`, `ContentDiffModal.jsx`, các unit tests FE & BE.
+  - *File cần tạo/cập nhật:* `NutriBotV2_Database.sql`, `NutriBotV2_SampleData_FINAL.sql`, `Content.java`, `ContentRepository.java`, `ContentTextNormalizer.java`, `ContentSimilarityDetector.java`, `AuthorContentService.java`, `ContentModerationListener.java`, `AdminModerationService.java`, `AdminModerationPage.jsx`, `ContentDiffModal.jsx`, các unit tests FE & BE.
   - *Dependency:* NB-19, NB-38, NB-37, NB-64.
 
 ## NB-98 (Thống nhất thông báo Auth & OTP sang tiếng Anh)

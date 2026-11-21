@@ -1,12 +1,12 @@
--- WARNING: FULL REBUILD SCRIPT. DROPS NutriBotV2 AND ALL ITS DATA.
+﻿-- WARNING: FULL REBUILD SCRIPT. DROPS NutriBotV2 AND ALL ITS DATA.
 -- Run ONLY on a disposable/new environment after backup.
 -- Chatbot tables and contents media structure preserved from original.
 -- This is a fresh-install schema, NOT a migration for existing data.
 -- Application code must be updated for removed columns.
 
 -- =============================================
--- Database: NutriBot
--- Microsoft SQL Server (T-SQL) - CONSOLIDATED INIT 2026-09-28
+-- Database: NutriBotV2
+-- Microsoft SQL Server (T-SQL) - CONSOLIDATED SCHEMA
 -- Kiến trúc nghiệp vụ:
 --   INGREDIENT = Nguyên liệu
 --   DISH       = Món ăn (entity trung tâm)
@@ -16,8 +16,8 @@
 -- Added: vegetarian type + content dwell tracking + per-serving nutrition
 -- Consolidated: ai_processing status (CK_contents_status) + NB-80 recipe consent
 --               (contents.recipe_consent*, recipes.source_*, recipe_consent_audit_log)
--- NB-83: notifications.updated_at + index nhom vote (co migration idempotent o cuoi file)
--- Chi con 2 file SQL: NutriBotV2_Database.sql (schema) + NutriBotV2_SampleData_FINAL.sql (data)
+-- NB-83: notifications.updated_at + vote indexes are included in this schema.
+-- NB-97 duplicate-detection columns, constraints, and indexes are defined in this schema.
 -- =============================================
 
 IF DB_ID(N'NutriBotV2') IS NOT NULL
