@@ -351,4 +351,23 @@ describe('admin recipe suggestion review (NB-87)', () => {
     await waitFor(() => expect(contentRecipeSuggestionsApi.review)
       .toHaveBeenCalledWith(5, 'APPROVE', '', [{ proposalIndex: 0, ingredientId: 88 }]));
   });
+
+  it('shows ingredient mapping and creation controls for an unlisted vegetarian ingredient', async () => {
+    const unlistedVegetarian = suggestion({
+      dish: { name: 'Lupin sandwich', description: 'Valid vegan recipe' },
+      ingredients: [{ name: 'Lupin flour', quantity: 80, unit: 'g' }],
+      validation: {
+        ...validValidation,
+        ingredientResolutions: [{ proposalIndex: 0, proposedName: 'Lupin flour', ingredientId: null, status: 'OTHER' }],
+      },
+    });
+    contentRecipeSuggestionsApi.list.mockResolvedValue({ content: [unlistedVegetarian], totalElements: 1, totalPages: 1 });
+    contentRecipeSuggestionsApi.getById.mockResolvedValue(unlistedVegetarian);
+
+    render(<AdminContentRecipeSuggestionsPage />);
+
+    expect(await screen.findByRole('heading', { name: 'Match ingredients to catalog' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add ingredient' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Approve suggestion' }).disabled).toBe(true);
+  });
 });

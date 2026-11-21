@@ -22,6 +22,7 @@ const formatDate = (value) => {
 
 const statusLabels = { PENDING: 'Pending', APPROVED: 'Approved', REJECTED: 'Rejected' };
 const statusLabel = (status) => statusLabels[status] ?? status ?? 'Pending';
+const ingredientStatusesNeedingMapping = ['OTHER', 'UNRESOLVED', 'AMBIGUOUS', 'INVALID_CATEGORY', 'DUPLICATED'];
 const recipeRejectionReasons = [
   ['INCOMPLETE_RECIPE', 'Incomplete recipe information'],
   ['INCORRECT_INGREDIENTS', 'Incorrect ingredient information'],
@@ -137,7 +138,9 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, 
   const mappingCodes = ['INGREDIENT_MAPPING_REQUIRED', 'INGREDIENT_MAPPING_AMBIGUOUS', 'INGREDIENT_CATEGORY_INVALID', 'INGREDIENT_MAPPING_DUPLICATED', 'VEGETARIAN_TYPE_UNKNOWN'];
   const errors = (validation?.issues ?? []).filter((issue) => issue.severity === 'ERROR');
   const mappingOnlyBlocked = errors.length > 0 && errors.every((issue) => mappingCodes.includes(issue.code));
-  const approvalBlocked = !consentValid || (validation?.canApprove === false && !mappingOnlyBlocked);
+  const unresolved = validation?.ingredientResolutions?.filter((item) => ingredientStatusesNeedingMapping.includes(item.status)) ?? [];
+  const hasUnmappedIngredients = unresolved.some((item) => !ingredientMappings[item.proposalIndex]);
+  const approvalBlocked = !consentValid || hasUnmappedIngredients || (validation?.canApprove === false && !mappingOnlyBlocked);
   const blockedMessage = !consentValid
     ? (consentOutdated
       ? `Author consented to terms ${source.recipeConsentTermsVersion}; current terms are ${RECIPE_CONSENT_TERMS_VERSION}. The author must consent again.`
@@ -166,8 +169,8 @@ function RecipeDetail({ suggestion, showReviewControls, onReview, onOpenSource, 
 
       <ValidationPanel validation={validation} />
 
-      {validation?.ingredientResolutions?.some((item) => ['UNRESOLVED', 'AMBIGUOUS', 'INVALID_CATEGORY', 'DUPLICATED'].includes(item.status)) && <section ref={mappingSectionRef} className="recipe-suggestion-section recipe-suggestion-mapping-section" aria-label="Ingredient catalog matching">
-        {(() => { const unresolved = validation.ingredientResolutions.filter((item) => ['UNRESOLVED', 'AMBIGUOUS', 'INVALID_CATEGORY', 'DUPLICATED'].includes(item.status)); return <><div className="recipe-suggestion-section-title"><UtensilsCrossed size={17} /><h3>Match ingredients to catalog</h3><span>{unresolved.length} ingredient{unresolved.length === 1 ? '' : 's'} need attention</span></div><p className="recipe-suggestion-mapping-help">Choose an existing catalog ingredient, or create one without leaving this review.</p><div className="recipe-suggestion-mapping-list">{unresolved.map((item) => <div key={item.proposalIndex} className="recipe-suggestion-ingredient-match"><div className="recipe-suggestion-original-ingredient"><small>Original ingredient</small><strong>{item.proposedName}</strong></div><span className="recipe-suggestion-mapping-arrow">Convert to</span><IngredientMatcher proposalName={item.proposedName} ingredients={catalogIngredients} loading={catalogIngredientsLoading} value={ingredientMappings[item.proposalIndex] ?? ''} onChange={(id) => onIngredientMapping?.(item.proposalIndex, id)} /><button type="button" className="recipe-suggestion-create-ingredient" onClick={() => onCreateIngredient?.(item.proposalIndex, item.proposedName)}><Plus size={15} /> Add ingredient</button></div>)}</div></>; })()}
+      {validation?.ingredientResolutions?.some((item) => ingredientStatusesNeedingMapping.includes(item.status)) && <section ref={mappingSectionRef} className="recipe-suggestion-section recipe-suggestion-mapping-section" aria-label="Ingredient catalog matching">
+        {(() => { const unresolved = validation.ingredientResolutions.filter((item) => ingredientStatusesNeedingMapping.includes(item.status)); return <><div className="recipe-suggestion-section-title"><UtensilsCrossed size={17} /><h3>Match ingredients to catalog</h3><span>{unresolved.length} ingredient{unresolved.length === 1 ? '' : 's'} need attention</span></div><p className="recipe-suggestion-mapping-help">Choose an existing catalog ingredient, or create one without leaving this review.</p><div className="recipe-suggestion-mapping-list">{unresolved.map((item) => <div key={item.proposalIndex} className="recipe-suggestion-ingredient-match"><div className="recipe-suggestion-original-ingredient"><small>Original ingredient</small><strong>{item.proposedName}</strong></div><span className="recipe-suggestion-mapping-arrow">Convert to</span><IngredientMatcher proposalName={item.proposedName} ingredients={catalogIngredients} loading={catalogIngredientsLoading} value={ingredientMappings[item.proposalIndex] ?? ''} onChange={(id) => onIngredientMapping?.(item.proposalIndex, id)} /><button type="button" className="recipe-suggestion-create-ingredient" onClick={() => onCreateIngredient?.(item.proposalIndex, item.proposedName)}><Plus size={15} /> Add ingredient</button></div>)}</div></>; })()}
       </section>}
 
       <section className="recipe-suggestion-section">
@@ -223,9 +226,10 @@ function EditorialRecipeDetail({ suggestion, showReviewControls, onReview, onOpe
   const warnings = (validation?.issues ?? []).filter((issue) => issue.severity === 'WARNING');
   const mappingCodes = ['INGREDIENT_MAPPING_REQUIRED', 'INGREDIENT_MAPPING_AMBIGUOUS', 'INGREDIENT_CATEGORY_INVALID', 'INGREDIENT_MAPPING_DUPLICATED', 'VEGETARIAN_TYPE_UNKNOWN'];
   const mappingOnlyBlocked = errors.length > 0 && errors.every((issue) => mappingCodes.includes(issue.code));
-  const approvalBlocked = !consentValid || (validation?.canApprove === false && !mappingOnlyBlocked);
-  const blockedMessage = !consentValid ? (consentOutdated ? `Author consented to terms ${source.recipeConsentTermsVersion}; current terms are ${RECIPE_CONSENT_TERMS_VERSION}. The author must consent again.` : 'Author consent is required before this suggestion can be approved.') : 'Resolve the validation errors before approving this suggestion.';
-  const unresolved = validation?.ingredientResolutions?.filter((item) => ['UNRESOLVED', 'AMBIGUOUS', 'INVALID_CATEGORY', 'DUPLICATED'].includes(item.status)) ?? [];
+  const unresolved = validation?.ingredientResolutions?.filter((item) => ingredientStatusesNeedingMapping.includes(item.status)) ?? [];
+  const hasUnmappedIngredients = unresolved.some((item) => !ingredientMappings[item.proposalIndex]);
+  const approvalBlocked = !consentValid || hasUnmappedIngredients || (validation?.canApprove === false && !mappingOnlyBlocked);
+  const blockedMessage = !consentValid ? (consentOutdated ? `Author consented to terms ${source.recipeConsentTermsVersion}; current terms are ${RECIPE_CONSENT_TERMS_VERSION}. The author must consent again.` : 'Author consent is required before this suggestion can be approved.') : hasUnmappedIngredients ? 'Map an existing ingredient or add the missing ingredient before approving.' : 'Resolve the validation errors before approving this suggestion.';
   const totalMinutes = (recipe.prepTimeMin ?? 0) + (recipe.cookTimeMin ?? 0);
   const validationTone = errors.length ? 'is-blocked' : warnings.length ? 'is-warning' : 'is-ready';
   const validationIssues = (validation?.issues ?? []).filter((issue) => issue.field !== 'dish.serving');
@@ -535,7 +539,7 @@ export default function AdminContentRecipeSuggestionsPage() {
     const errors = (detail?.validation?.issues ?? []).filter((issue) => issue.severity === 'ERROR');
     const mappingOnlyBlocked = errors.length > 0 && errors.every((issue) => ['INGREDIENT_MAPPING_REQUIRED', 'INGREDIENT_MAPPING_AMBIGUOUS', 'INGREDIENT_CATEGORY_INVALID', 'INGREDIENT_MAPPING_DUPLICATED', 'VEGETARIAN_TYPE_UNKNOWN'].includes(issue.code));
     const unresolvedIngredients = (detail?.validation?.ingredientResolutions ?? [])
-      .filter((item) => ['UNRESOLVED', 'AMBIGUOUS', 'INVALID_CATEGORY', 'DUPLICATED'].includes(item.status));
+      .filter((item) => ingredientStatusesNeedingMapping.includes(item.status));
     const hasUnmappedIngredients = unresolvedIngredients.some((item) => !ingredientMappings[item.proposalIndex]);
     if (action === 'APPROVE' && hasUnmappedIngredients) {
       setToast('Map an existing ingredient or add the missing ingredient before approving.');
