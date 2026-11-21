@@ -267,7 +267,7 @@ INSERT INTO user_profiles (user_id, height_cm, weight_kg, gender, date_of_birth,
 GO
 
 ------------------------------------------------
--- INGREDIENTS  (63 rows)
+-- INGREDIENTS  (65 rows)
 ------------------------------------------------
 SET IDENTITY_INSERT ingredients ON;
 INSERT INTO ingredients (ingredient_id, name, slug, description, category_id, is_active, created_at) VALUES
@@ -333,7 +333,9 @@ INSERT INTO ingredients (ingredient_id, name, slug, description, category_id, is
 (60, N'Whole Wheat Bread', N'whole-wheat-bread', N'Plant-based ingredient: Whole Wheat Bread.', 22, 1, '2026-10-13T23:56:11.668'),
 (61, N'Broken Rice', N'broken-rice', N'Plant-based ingredient: Broken Rice.', 15, 1, '2026-10-14T09:59:44.077'),
 (62, N'Rice Noodle Sheets', N'rice-noodle-sheets', N'Plant-based ingredient: Rice Noodle Sheets.', 15, 1, '2026-10-14T10:00:56.718'),
-(63, N'Mixed Fresh Herbs', N'mixed-fresh-herbs', N'Plant-based ingredient: Mixed Fresh Herbs.', 15, 1, '2026-10-14T10:00:56.778');
+(63, N'Mixed Fresh Herbs', N'mixed-fresh-herbs', N'Plant-based ingredient: Mixed Fresh Herbs.', 15, 1, '2026-10-14T10:00:56.778'),
+(64, N'Rice Flour', N'rice-flour', N'Plant-based ingredient: Rice Flour.', 22, 1, '2026-10-18T10:00:00.000'),
+(65, N'Bean Sprouts', N'bean-sprouts', N'Plant-based ingredient: Bean Sprouts.', 4, 1, '2026-10-18T10:00:00.000');
 GO
 SET IDENTITY_INSERT ingredients OFF;
 GO
@@ -6476,18 +6478,18 @@ SELECT c.content_id, ROW_NUMBER() OVER (PARTITION BY c.content_id ORDER BY i.ing
 FROM @RecipeReviewFixtures f
 JOIN @InsertedContent c ON c.slug = f.slug
 CROSS APPLY (VALUES
- (1, N'Firm Tofu', N'200', N'g', 0), (1, N'Xà lách', N'100', N'g', 1),
+ (1, N'Firm Tofu', N'200', N'g', 0), (1, N'Spinach', N'100', N'g', 0),
  (1, N'White Sesame Seeds', N'1', N'muỗng canh', 0), (1, N'Soy Sauce', N'1', N'muỗng canh', 0),
- (2, N'Bột đậu lupin', N'80', N'g', 1), (2, N'Bánh mì nguyên cám', N'2', N'lát', 0),
- (2, N'Cà chua', N'1', N'quả', 0), (2, N'Rau xà lách', N'30', N'g', 0),
- (3, N'Yến mạch', N'100', N'g', 0), (3, N'Trứng gà', N'1', N'quả', 0),
- (3, N'Sữa tươi', N'100', N'ml', 0), (3, N'Chuối', N'1', N'quả', 0),
- (4, N'Bún tươi', N'200', N'g', 0), (4, N'Rau muống', N'80', N'g', 0),
- (4, N'Nước mắm cá cơm', N'1', N'muỗng canh', 1), (4, N'Đậu hũ', N'100', N'g', 0),
- (5, N'Cashews', N'100', N'g', 0), (5, N'Nước lọc', N'500', N'ml', 1),
- (5, N'Chà là', N'2', N'quả', 1),
- (6, N'Đậu tương lên men', N'100', N'g', 1), (6, N'Cải thìa', N'100', N'g', 0),
- (6, N'Gạo lứt', N'150', N'g', 0)
+ (2, N'Bột đậu lupin', N'80', N'g', 1), (2, N'Whole Wheat Bread', N'2', N'slices', 0),
+ (2, N'Tomato', N'1', N'piece', 0), (2, N'Spinach', N'30', N'g', 0),
+ (3, N'Oats', N'100', N'g', 0), (3, N'Trứng gà', N'1', N'quả', 1),
+ (3, N'Sữa tươi', N'100', N'ml', 1), (3, N'Banana', N'1', N'piece', 0),
+ (4, N'Rice Vermicelli', N'200', N'g', 0), (4, N'Rau muống', N'80', N'g', 1),
+ (4, N'Nước mắm cá cơm', N'1', N'muỗng canh', 1), (4, N'Firm Tofu', N'100', N'g', 0),
+ (5, N'Cashews', N'100', N'g', 0), (5, N'Oat Milk', N'500', N'ml', 0),
+ (5, N'Dates', N'2', N'quả', 1),
+ (6, N'Đậu tương lên men', N'100', N'g', 1), (6, N'Bok Choy', N'100', N'g', 0),
+ (6, N'Brown Rice', N'150', N'g', 0)
 ) i(fixture_no, ingredient_name, quantity, unit, is_custom)
 WHERE f.slug = CASE i.fixture_no
     WHEN 1 THEN N'ai-review-salad-dau-hu-2026'
@@ -6569,19 +6571,26 @@ FROM @SeededSuggestions s
 JOIN dbo.contents c ON c.content_id = s.content_id
 CROSS APPLY (VALUES
  (N'ai-review-salad-dau-hu-2026', N'Firm Tofu', 200.0, N'g', N'Nguyên liệu phổ biến'),
- (N'ai-review-salad-dau-hu-2026', N'Xà lách', 100.0, N'g', NULL),
- (N'ai-review-salad-dau-hu-2026', N'White Sesame Seeds', 1.0, N'muỗng canh', NULL),
+ (N'ai-review-salad-dau-hu-2026', N'Spinach', 100.0, N'g', NULL),
+ (N'ai-review-salad-dau-hu-2026', N'White Sesame Seeds', 1.0, N'tbsp', NULL),
+ (N'ai-review-salad-dau-hu-2026', N'Soy Sauce', 1.0, N'tbsp', NULL),
  (N'ai-review-banh-mi-dau-lupin-2026', N'Bột đậu lupin', 80.0, N'g', N'Chưa có trong danh mục; cần admin ánh xạ/bổ sung'),
- (N'ai-review-banh-mi-dau-lupin-2026', N'Bánh mì nguyên cám', 2.0, N'lát', NULL),
- (N'ai-review-banh-yen-mach-trung-sua-2026', N'Yến mạch', 100.0, N'g', NULL),
+ (N'ai-review-banh-mi-dau-lupin-2026', N'Whole Wheat Bread', 2.0, N'slices', NULL),
+ (N'ai-review-banh-mi-dau-lupin-2026', N'Tomato', 1.0, N'piece', NULL),
+ (N'ai-review-banh-mi-dau-lupin-2026', N'Spinach', 30.0, N'g', NULL),
+ (N'ai-review-banh-yen-mach-trung-sua-2026', N'Oats', 100.0, N'g', NULL),
  (N'ai-review-banh-yen-mach-trung-sua-2026', N'Trứng gà', 1.0, N'quả', N'Tình huống phân loại LACTO_OVO'),
  (N'ai-review-banh-yen-mach-trung-sua-2026', N'Sữa tươi', 100.0, N'ml', NULL),
+ (N'ai-review-banh-yen-mach-trung-sua-2026', N'Banana', 1.0, N'piece', NULL),
  (N'ai-review-bun-rau-nuoc-mam-2026', N'Nước mắm cá cơm', 1.0, N'muỗng canh', N'Nguyên liệu động vật cần cảnh báo'),
+ (N'ai-review-bun-rau-nuoc-mam-2026', N'Rice Vermicelli', 200.0, N'g', NULL),
  (N'ai-review-bun-rau-nuoc-mam-2026', N'Rau muống', 80.0, N'g', NULL),
+ (N'ai-review-bun-rau-nuoc-mam-2026', N'Firm Tofu', 100.0, N'g', NULL),
  (N'ai-review-video-sua-hat-dieu-2026', N'Cashews', 100.0, N'g', NULL),
- (N'ai-review-video-sua-hat-dieu-2026', N'Dates', 2.0, N'quả', N'Chưa có tên khớp trong danh mục hiện tại'),
+ (N'ai-review-video-sua-hat-dieu-2026', N'Oat Milk', 500.0, N'ml', NULL),
+ (N'ai-review-video-sua-hat-dieu-2026', N'Dates', 2.0, N'piece', N'Chưa có tên khớp trong danh mục hiện tại'),
  (N'ai-review-video-dau-tuong-len-men-2026', N'Đậu tương lên men', 100.0, N'g', N'Biến thể lên men cần kiểm tra ánh xạ'),
- (N'ai-review-video-dau-tuong-len-men-2026', N'Cải thìa', 100.0, N'g', NULL)
+ (N'ai-review-video-dau-tuong-len-men-2026', N'Bok Choy', 100.0, N'g', NULL)
 ) i(slug, ingredient_name, quantity, unit, notes)
 LEFT JOIN dbo.ingredients catalog ON LOWER(LTRIM(RTRIM(catalog.name))) = LOWER(LTRIM(RTRIM(i.ingredient_name)))
 WHERE c.slug = i.slug;
